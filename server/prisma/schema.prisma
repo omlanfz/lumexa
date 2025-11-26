@@ -1,0 +1,71 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User { // The Parent
+  id        String    @id @default(uuid())
+  email     String    @unique
+  password  String    // Hashed
+  fullName  String
+  role      Role      @default(PARENT)
+  createdAt DateTime  @default(now())
+  students  Student[]
+  teacherProfile TeacherProfile?
+}
+
+enum Role {
+  PARENT
+  TEACHER
+  ADMIN
+}
+
+model Student {
+  id        String   @id @default(uuid())
+  parentId  String
+  parent    User     @relation(fields: [parentId], references: [id])
+  name      String   // Display Name (e.g., "John D.")
+  age       Int
+  createdAt DateTime @default(now())
+  bookings  Booking[]
+}
+
+model TeacherProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  bio         String?
+  hourlyRate  Int      @default(25)
+  
+  shifts      Shift[]
+}
+
+// 4. NEW: Shifts (Availability Blocks)
+model Shift {
+  id        String   @id @default(uuid())
+  teacherId String
+  teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
+  
+  start     DateTime // Stored in UTC (e.g. 2025-11-27T10:00:00Z)
+  end       DateTime // Stored in UTC (e.g. 2025-11-27T14:00:00Z)
+  isBooked  Boolean  @default(false)
+  
+  createdAt DateTime @default(now())
+  booking   Booking?
+}
+
+model Booking {
+  id        String   @id @default(uuid())
+  
+  shiftId   String   @unique // One booking per shift
+  shift     Shift    @relation(fields: [shiftId], references: [id])
+  
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id])
+  
+  createdAt DateTime @default(now())
+}

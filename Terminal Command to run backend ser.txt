@@ -1,0 +1,11 @@
+Terminal Command to run backend server (run inside server folder):
+npm run start:dev
+
+Terminal Command to run frontend (run inside client folder):
+npm run dev
+
+
+
+users:
+Teacher: galaxy@email.com , 1234
+Parent: shepherd@gmail.com , 1234
