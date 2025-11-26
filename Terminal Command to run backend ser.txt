@@ -4,8 +4,10 @@ npm run start:dev
 Terminal Command to run frontend (run inside client folder):
 npm run dev
 
-
+JWT_SECRET : iuasrhio3w78slkdihfeuwrkjww3j45i785y68
 
 users:
 Teacher: galaxy@email.com , 1234
 Parent: shepherd@gmail.com , 1234
+
+wss://lumexa-qxpnw1fr.livekit.cloud
