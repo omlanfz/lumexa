@@ -20,7 +20,7 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      await axios.post("${process.env.NEXT_PUBLIC_API_URL}/auth/register", {
+      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
         ...formData,
         role, // <--- Send the role
       });

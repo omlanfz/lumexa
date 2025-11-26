@@ -44,7 +44,7 @@ export default function Dashboard() {
   const fetchCadets = async (token: string) => {
     try {
       const res = await axios.get(
-        "${process.env.NEXT_PUBLIC_API_URL}/students",
+        `${process.env.NEXT_PUBLIC_API_URL}/students`,
         {
           headers: { Authorization: `Bearer ${token}` }, // <--- The Security Key Card
         }
@@ -66,7 +66,7 @@ export default function Dashboard() {
 
     try {
       await axios.post(
-        "${process.env.NEXT_PUBLIC_API_URL}/students",
+        `${process.env.NEXT_PUBLIC_API_URL}/students`,
         { name: newCadetName, age: Number(newCadetAge) },
         { headers: { Authorization: `Bearer ${token}` } }
       );

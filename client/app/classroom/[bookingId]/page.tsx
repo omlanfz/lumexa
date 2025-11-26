@@ -29,7 +29,7 @@ export default function StarLabPage({ params }: PageProps) {
       try {
         // Request Entry Pass
         const res = await axios.post(
-          "${process.env.NEXT_PUBLIC_API_URL}/classroom/join",
+          `${process.env.NEXT_PUBLIC_API_URL}/classroom/join`,
           { bookingId: bookingId }, // <--- Use the unwrapped bookingId
           { headers: { Authorization: `Bearer ${authToken}` } }
         );

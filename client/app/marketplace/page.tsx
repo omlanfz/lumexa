@@ -42,7 +42,7 @@ export default function Marketplace() {
     try {
       // 1. Get Teachers & Available Shifts
       const marketRes = await axios.get(
-        "${process.env.NEXT_PUBLIC_API_URL}/bookings/marketplace",
+        `${process.env.NEXT_PUBLIC_API_URL}/bookings/marketplace`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -51,7 +51,7 @@ export default function Marketplace() {
 
       // 2. Get My Cadets (to know who to book for)
       const studentRes = await axios.get(
-        "${process.env.NEXT_PUBLIC_API_URL}/students",
+        `${process.env.NEXT_PUBLIC_API_URL}/students`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
@@ -71,7 +71,7 @@ export default function Marketplace() {
 
     try {
       await axios.post(
-        "${process.env.NEXT_PUBLIC_API_URL}/bookings",
+        `${process.env.NEXT_PUBLIC_API_URL}/bookings`,
         { shiftId, studentId: selectedCadet },
         { headers: { Authorization: `Bearer ${token}` } }
       );

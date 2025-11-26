@@ -39,7 +39,7 @@ export default function TeacherDashboard() {
 
   const fetchShifts = async (token: string) => {
     try {
-      const res = await axios.get("${process.env.NEXT_PUBLIC_API_URL}/shifts", {
+      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/shifts`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setShifts(res.data);
@@ -76,7 +76,7 @@ export default function TeacherDashboard() {
 
     try {
       await axios.post(
-        "${process.env.NEXT_PUBLIC_API_URL}/shifts",
+        `${process.env.NEXT_PUBLIC_API_URL}/shifts`,
         { start, end },
         { headers: { Authorization: `Bearer ${token}` } }
       );
