@@ -11,3 +11,14 @@ Teacher: galaxy@email.com , 1234
 Parent: shepherd@gmail.com , 1234
 
 wss://lumexa-qxpnw1fr.livekit.cloud
+
+backend: lumexa-production.up.railway.app
+
+
+
+Pooled connection string — toggle "Connection pooling" ON → copy this. This is your DATABASE_URL: 
+postgresql://neondb_owner:npg_FAfKbuD4qmj8@ep-icy-unit-aigjz9dg-pooler.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+
+Direct connection string — toggle "Connection pooling" OFF → copy this. This is your DIRECT_DATABASE_URL: 
+postgresql://neondb_owner:npg_FAfKbuD4qmj8@ep-icy-unit-aigjz9dg.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
