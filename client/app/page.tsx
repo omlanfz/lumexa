@@ -15,7 +15,7 @@ export default function HomePage() {
     }
   }, [router]);
 
-  return (
+  return ( 
     <div className="min-h-screen flex items-center justify-center">
       <div className="text-blue-400 font-mono tracking-widest animate-pulse">
         INITIALIZING...
