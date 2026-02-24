@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import axios from "axios";
 import { useRouter, useSearchParams } from "next/navigation";
 import { formatDate, formatTime, isClassJoinable } from "../../lib/time";
@@ -24,7 +24,8 @@ interface TeacherProfile {
   strikes: number;
 }
 
-export default function TeacherDashboard() {
+// ─── Inner component — uses useSearchParams, must be inside <Suspense> ────────
+function TeacherDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [shifts, setShifts] = useState<Shift[]>([]);
@@ -43,10 +44,8 @@ export default function TeacherDashboard() {
       return;
     }
 
-    // Handle Stripe onboarding return
     const stripeStatus = searchParams.get("stripe");
     if (stripeStatus === "success") {
-      // Verify onboarding completed
       axios
         .post(
           `${process.env.NEXT_PUBLIC_API_URL}/bookings/stripe/verify`,
@@ -124,7 +123,6 @@ export default function TeacherDashboard() {
         {},
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      // Redirect to Stripe hosted onboarding
       window.location.href = res.data.url;
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to start Stripe setup.");
@@ -168,7 +166,7 @@ export default function TeacherDashboard() {
         </div>
       )}
 
-      {/* Stripe Onboarding Banner — show if not yet onboarded */}
+      {/* Stripe Onboarding Banner */}
       {profile && !profile.stripeOnboarded && (
         <div className="max-w-6xl mx-auto mb-6 p-4 bg-yellow-900/20 border border-yellow-600/50 rounded-lg flex items-center justify-between">
           <div>
@@ -256,11 +254,9 @@ export default function TeacherDashboard() {
                   }`}
                 >
                   <div>
-                    {/* Date — uses user's local timezone */}
                     <p className="font-bold text-white text-lg">
                       {formatDate(shift.start)}
                     </p>
-                    {/* Times — with timezone abbreviation */}
                     <p className="text-sm text-gray-400 mt-1">
                       {formatTime(shift.start)} – {formatTime(shift.end)}
                     </p>
@@ -274,7 +270,6 @@ export default function TeacherDashboard() {
                             {shift.booking.student.name}
                           </span>
                         </div>
-                        {/* Only show join button when class is active */}
                         {joinable ? (
                           <button
                             onClick={() =>
@@ -314,5 +309,21 @@ export default function TeacherDashboard() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Default export — wraps inner component in Suspense ───────────────────────
+// Required by Next.js 15+ whenever useSearchParams() is used in a page component
+export default function TeacherDashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black text-white flex items-center justify-center font-mono">
+          Loading Flight Deck...
+        </div>
+      }
+    >
+      <TeacherDashboardContent />
+    </Suspense>
   );
 }
