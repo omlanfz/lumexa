@@ -1,18 +1,44 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { AllExceptionsFilter } from './filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS so Frontend can talk to Backend
+  // ─── CORS ───────────────────────────────────────────────────────────────────
+  // Restrict to known origins. Add localhost variants for local dev.
   app.enableCors({
-    origin: ['https://lumexa-mu.vercel.app', 'http://localhost:3000'],
+    origin: [
+      process.env.FRONTEND_URL || 'https://lumexa-mu.vercel.app',
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   });
 
-  // Render (and most cloud hosts) inject PORT dynamically
+  // ─── GLOBAL VALIDATION PIPE ─────────────────────────────────────────────────
+  // - whitelist: strips any properties not defined in the DTO
+  // - forbidNonWhitelisted: throws 400 if unexpected properties are sent
+  // - transform: auto-converts strings to numbers/booleans where typed
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  // ─── GLOBAL EXCEPTION FILTER ────────────────────────────────────────────────
+  // Prevents raw Prisma errors and stack traces from leaking to clients
+  app.useGlobalFilters(new AllExceptionsFilter());
+
+  // ─── PORT ───────────────────────────────────────────────────────────────────
+  // Render (and all cloud hosts) inject PORT dynamically at runtime
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  console.log(`Application is running on port ${port}`);
+  console.log(`🚀 Lumexa backend running on port ${port}`);
 }
+
 bootstrap();

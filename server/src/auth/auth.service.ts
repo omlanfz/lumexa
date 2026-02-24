@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -11,52 +15,71 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  // REGISTER LOGIC
   async register(
     email: string,
     password: string,
     fullName: string,
     role: Role = 'PARENT',
   ) {
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Check for existing email before hashing (saves compute on duplicates)
+    const existing = await this.usersService.findOne(email);
+    if (existing) {
+      throw new ConflictException('An account with this email already exists.');
+    }
 
-    // Create the User
+    const hashedPassword = await bcrypt.hash(password, 12); // 12 rounds for production
+
     const user = await this.usersService.createUser({
       email,
       password: hashedPassword,
       fullName,
-      role, // <--- Save the role
+      role,
     });
 
-    // If they are a TEACHER, create an empty profile for them automatically
     if (role === 'TEACHER') {
       await this.usersService.createTeacherProfile(user.id);
     }
 
-    return user;
+    // Return safe user data (never return the password hash)
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+    };
   }
 
-  // LOGIN LOGIC
   async login(email: string, pass: string) {
     const user = await this.usersService.findOne(email);
 
-    // Check if user exists AND password matches
-    if (!user || !(await bcrypt.compare(pass, user.password))) {
-      throw new UnauthorizedException('Invalid credentials');
+    // Use a constant-time comparison to prevent timing attacks
+    const passwordValid = user && (await bcrypt.compare(pass, user.password));
+
+    if (!user || !passwordValid) {
+      // Same message for both "user not found" and "wrong password"
+      // prevents email enumeration attacks
+      throw new UnauthorizedException('Invalid email or password.');
     }
 
-    // Generate the Token
-    const payload = { email: user.email, sub: user.id, role: user.role }; // <--- Add Role to Token
+    const payload = {
+      email: user.email,
+      sub: user.id,
+      role: user.role,
+    };
 
     return {
       access_token: this.jwtService.sign(payload),
       user: {
-        // <--- Send user details back too
         id: user.id,
         email: user.email,
         fullName: user.fullName,
         role: user.role,
+        coppaConsentAt: user.coppaConsentAt,
       },
     };
+  }
+
+  async recordCoppaConsent(userId: string) {
+    return this.usersService.updateCoppaConsent(userId);
   }
 }
