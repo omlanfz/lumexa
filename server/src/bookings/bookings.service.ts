@@ -18,10 +18,6 @@ export class BookingsService {
     private notifications: NotificationsService,
   ) {}
 
-  /**
-   * Marketplace: paginated list of teachers with upcoming open shifts.
-   * Excludes suspended teachers.
-   */
   async getMarketplace(page = 1, limit = 20) {
     const [teachers, total] = await Promise.all([
       this.prisma.teacherProfile.findMany({
@@ -34,7 +30,7 @@ export class BookingsService {
               start: { gt: new Date() },
             },
             orderBy: { start: 'asc' },
-            take: 10, // Cap shifts per teacher — don't load hundreds
+            take: 10,
           },
         },
         skip: (page - 1) * limit,
@@ -52,14 +48,8 @@ export class BookingsService {
     };
   }
 
-  /**
-   * Book a shift for a student.
-   * Uses a Prisma transaction with proper conflict detection.
-   * Creates a Stripe PaymentIntent if the teacher has a Stripe account.
-   */
   async bookShift(userId: string, shiftId: string, studentId: string) {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Lock and fetch the shift atomically to prevent double-bookings
       const shift = await tx.shift.findUnique({
         where: { id: shiftId },
         include: {
@@ -85,7 +75,6 @@ export class BookingsService {
         );
       }
 
-      // 2. Verify the student belongs to this parent
       const student = await tx.student.findFirst({
         where: { id: studentId, parentId: userId },
         include: { parent: { select: { email: true } } },
@@ -96,13 +85,11 @@ export class BookingsService {
         );
       }
 
-      // 3. Lock the shift immediately to prevent race conditions
       await tx.shift.update({
         where: { id: shiftId },
         data: { isBooked: true },
       });
 
-      // 4. Create the booking record
       const booking = await tx.booking.create({
         data: {
           shiftId,
@@ -112,7 +99,6 @@ export class BookingsService {
         },
       });
 
-      // 5. Create Stripe PaymentIntent if teacher is onboarded
       let clientSecret: string | null = null;
 
       if (
@@ -135,7 +121,6 @@ export class BookingsService {
         clientSecret = intent.client_secret;
       }
 
-      // 6. Send confirmation email (non-blocking — won't fail the transaction)
       this.notifications
         .sendBookingConfirmation(student.parent.email, {
           teacherName: shift.teacher.user.fullName,
@@ -143,29 +128,36 @@ export class BookingsService {
           classEnd: shift.end,
           bookingId: booking.id,
         })
-        .catch(() => {}); // Swallow email errors — booking already committed
+        .catch(() => {});
 
       return {
         bookingId: booking.id,
-        ...(clientSecret && { clientSecret }), // Only include if Stripe is configured
+        ...(clientSecret && { clientSecret }),
         message: 'Booking confirmed.',
       };
     });
   }
 
-  /**
-   * Cancel a booking and issue the appropriate refund per cancellation policy.
-   */
   async cancelBooking(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
         student: {
-          include: { parent: { select: { email: true } } },
+          include: {
+            parent: {
+              // ← fullName was missing here, causing TS2339 error
+              select: { email: true, fullName: true },
+            },
+          },
         },
         shift: {
           include: {
-            teacher: { include: { user: { select: { email: true } } } },
+            teacher: {
+              include: {
+                // ← fullName was missing here too
+                user: { select: { email: true, fullName: true } },
+              },
+            },
           },
         },
       },
@@ -173,7 +165,6 @@ export class BookingsService {
 
     if (!booking) throw new NotFoundException('Booking not found.');
 
-    // Only the parent who made the booking can cancel it
     if (booking.student.parentId !== userId) {
       throw new ForbiddenException('You can only cancel your own bookings.');
     }
@@ -187,7 +178,6 @@ export class BookingsService {
       booking.amountCents ?? 0,
     );
 
-    // Process Stripe refund if applicable
     if (booking.paymentIntentId && refundCents > 0) {
       if (booking.paymentStatus === 'CAPTURED') {
         await this.stripe.refundPartial(booking.paymentIntentId, refundCents);
@@ -196,7 +186,6 @@ export class BookingsService {
       }
     }
 
-    // Update booking status and free the shift
     await this.prisma.$transaction([
       this.prisma.booking.update({
         where: { id: bookingId },
@@ -208,7 +197,6 @@ export class BookingsService {
       }),
     ]);
 
-    // Notify both parties
     this.notifications
       .sendCancellationNotice(
         booking.student.parent.email,
@@ -226,9 +214,6 @@ export class BookingsService {
     return { message: 'Booking cancelled.', refundCents, reason };
   }
 
-  /**
-   * Stripe Connect: generate an onboarding link for a teacher.
-   */
   async getStripeOnboardingLink(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { userId },
@@ -239,7 +224,6 @@ export class BookingsService {
       teacher.id,
     );
 
-    // Save the account ID right away so we have it even before onboarding completes
     await this.prisma.teacherProfile.update({
       where: { id: teacher.id },
       data: { stripeAccountId: accountId },
@@ -248,10 +232,6 @@ export class BookingsService {
     return { url };
   }
 
-  /**
-   * Called after teacher returns from Stripe onboarding.
-   * Verifies and marks their account as onboarded.
-   */
   async verifyStripeOnboarding(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { userId },

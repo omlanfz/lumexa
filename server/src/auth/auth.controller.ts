@@ -1,4 +1,11 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  UseGuards,
+  Request,
+  BadRequestException,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -24,14 +31,16 @@ export class AuthController {
     return this.authService.login(dto.email, dto.password);
   }
 
-  /**
-   * Called after a parent has read and accepted the COPPA consent notice.
-   * Records the consent timestamp on their account.
-   * Must be called before a parent can add students or make bookings.
-   */
   @Post('coppa-consent')
   @UseGuards(AuthGuard('jwt'))
   recordCoppaConsent(@Request() req, @Body() dto: CoppaConsentDto) {
+    // The DTO only validates it is a boolean.
+    // We additionally require it to be true here — false means they declined.
+    if (!dto.consentGiven) {
+      throw new BadRequestException(
+        'You must accept the parental consent agreement.',
+      );
+    }
     return this.authService.recordCoppaConsent(req.user.userId);
   }
 }

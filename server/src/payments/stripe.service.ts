@@ -6,7 +6,6 @@ export class StripeService implements OnModuleInit {
   private stripe: Stripe;
   private readonly logger = new Logger(StripeService.name);
 
-  // 25% platform commission
   private readonly PLATFORM_FEE_PERCENT = 0.25;
 
   onModuleInit() {
@@ -17,7 +16,8 @@ export class StripeService implements OnModuleInit {
       return;
     }
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2024-06-20',
+      // stripe v20 requires this exact version string
+      apiVersion: '2026-01-28.clover',
     });
   }
 
@@ -30,11 +30,6 @@ export class StripeService implements OnModuleInit {
     return this.stripe;
   }
 
-  /**
-   * Create a PaymentIntent when a parent books a class.
-   * Uses capture_method: 'manual' — funds are held but NOT charged until
-   * the class is confirmed complete (via the LiveKit recording webhook).
-   */
   async createPaymentIntent(
     amountCents: number,
     teacherStripeAccountId: string,
@@ -53,39 +48,26 @@ export class StripeService implements OnModuleInit {
     });
   }
 
-  /**
-   * Capture funds AFTER the class is confirmed complete.
-   * Called by the LiveKit recording webhook.
-   */
   async capturePayment(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
     const stripe = this.ensureStripe();
     return stripe.paymentIntents.capture(paymentIntentId);
   }
 
-  /**
-   * Cancel a payment intent (full refund if already captured, or void if not).
-   * Called when a booking is cancelled.
-   */
   async cancelPayment(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
     const stripe = this.ensureStripe();
     return stripe.paymentIntents.cancel(paymentIntentId);
   }
 
-  /**
-   * Partial refund — used for late cancellations (50% back, etc.)
-   */
   async refundPartial(
     paymentIntentId: string,
     refundAmountCents: number,
   ): Promise<Stripe.Refund> {
     const stripe = this.ensureStripe();
-
-    // First get the charge from the PaymentIntent
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
     const chargeId =
       typeof intent.latest_charge === 'string'
         ? intent.latest_charge
-        : intent.latest_charge?.id;
+        : (intent.latest_charge as Stripe.Charge)?.id;
 
     if (!chargeId) throw new Error('No charge found on this PaymentIntent.');
 
@@ -95,10 +77,6 @@ export class StripeService implements OnModuleInit {
     });
   }
 
-  /**
-   * Onboard a teacher to Stripe Connect Express.
-   * Returns the hosted onboarding URL Stripe provides.
-   */
   async createConnectOnboardingLink(teacherId: string): Promise<{
     url: string;
     accountId: string;
@@ -124,20 +102,15 @@ export class StripeService implements OnModuleInit {
     return { url: accountLink.url, accountId: account.id };
   }
 
-  /**
-   * Check if a Connect account has completed onboarding.
-   */
   async isAccountOnboarded(stripeAccountId: string): Promise<boolean> {
     const stripe = this.ensureStripe();
     const account = await stripe.accounts.retrieve(stripeAccountId);
     return (
-      account.details_submitted && !account.requirements?.currently_due?.length
+      !!account.details_submitted &&
+      !(account.requirements?.currently_due?.length ?? 0)
     );
   }
 
-  /**
-   * Verify a Stripe webhook signature to ensure events are genuine.
-   */
   constructWebhookEvent(payload: Buffer, signature: string): Stripe.Event {
     const stripe = this.ensureStripe();
     return stripe.webhooks.constructEvent(

@@ -1,7 +1,6 @@
-import { IsBoolean, IsTrue } from 'class-validator';
+import { IsBoolean } from 'class-validator';
 
 export class CoppaConsentDto {
-  @IsBoolean()
-  @IsTrue({ message: 'You must accept the parental consent agreement.' })
+  @IsBoolean({ message: 'consentGiven must be a boolean value.' })
   consentGiven: boolean;
 }
