@@ -45,7 +45,7 @@ export class BookingsController {
   }
 
   @Post('stripe/onboard')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard) 
   @Roles(Role.TEACHER)
   getStripeOnboardingLink(@Request() req) {
     return this.bookingsService.getStripeOnboardingLink(req.user.userId);
