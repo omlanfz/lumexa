@@ -30,14 +30,13 @@ enum PaymentStatus {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
-  id             String    @id @default(uuid())
-  email          String    @unique
-  password       String    // bcrypt hash — never returned in API responses
+  id             String          @id @default(uuid())
+  email          String          @unique
+  password       String
   fullName       String
-  role           Role      @default(PARENT)
-  createdAt      DateTime  @default(now())
-  coppaConsentAt DateTime? // COPPA compliance timestamp
-
+  role           Role            @default(PARENT)
+  coppaConsentAt DateTime?
+  createdAt      DateTime        @default(now())
   students       Student[]
   teacherProfile TeacherProfile?
 }
@@ -47,13 +46,21 @@ model User {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Student {
-  id        String    @id @default(uuid())
-  parentId  String
-  parent    User      @relation(fields: [parentId], references: [id])
-  name      String    // First name only — COPPA data minimization
-  age       Int
-  createdAt DateTime  @default(now())
-  bookings  Booking[]
+  id         String    @id @default(uuid())
+  parentId   String
+  parent     User      @relation(fields: [parentId], references: [id])
+  name       String
+  age        Int
+  // ── NEW FIELDS (added in migration: add_student_fields_and_indexes) ──
+  grade      String? // e.g. "Grade 5", "Grade 8"
+  subject    String? // e.g. "Math", "Science", "Coding"
+  schoolName String? // COPPA-safe: school name only
+  timezone   String? // e.g. "Asia/Dhaka"
+  // ────────────────────────────────────────────────────────────────────
+  createdAt  DateTime  @default(now())
+  bookings   Booking[]
+
+  @@index([parentId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -61,29 +68,23 @@ model Student {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TeacherProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id])
-
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id])
   bio             String?
-  hourlyRate      Int      @default(25) // In USD
-
-  // Stripe Connect
-  stripeAccountId String?  // Stripe Express account ID
-  stripeOnboarded Boolean  @default(false)
-
-  // Quality management
-  strikes         Int      @default(0)
-  isSuspended     Boolean  @default(false)
-
-  // Denormalized rating fields — updated atomically in submitReview().
-  // Avoids slow AVG() aggregation on every marketplace query.
-  ratingAvg       Float    @default(0)
-  reviewCount     Int      @default(0)
-
-  createdAt       DateTime @default(now())
+  hourlyRate      Int       @default(25)
+  stripeAccountId String?
+  stripeOnboarded Boolean   @default(false)
+  strikes         Int       @default(0)
+  isSuspended     Boolean   @default(false)
+  ratingAvg       Float     @default(0)
+  reviewCount     Int       @default(0)
+  createdAt       DateTime  @default(now())
   shifts          Shift[]
   reviews         Review[]
+
+  @@index([ratingAvg(sort: Desc)])
+  @@index([isSuspended])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,11 +95,15 @@ model Shift {
   id        String         @id @default(uuid())
   teacherId String
   teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
-  start     DateTime       // Stored in UTC
-  end       DateTime       // Stored in UTC
+  start     DateTime
+  end       DateTime
   isBooked  Boolean        @default(false)
   createdAt DateTime       @default(now())
   booking   Booking?
+
+  @@index([teacherId, start])
+  @@index([start])
+  @@index([isBooked])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,10 +119,13 @@ model Booking {
   paymentIntentId String?
   paymentStatus   PaymentStatus @default(PENDING)
   amountCents     Int?
-  egressId        String?       // LiveKit Egress ID
-  recordingUrl    String?       // S3 URL after class recording
+  egressId        String?
+  recordingUrl    String?
   createdAt       DateTime      @default(now())
-  review          Review?       // One review per booking, submitted post-class
+  review          Review?
+
+  @@index([studentId])
+  @@index([paymentStatus])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,8 +142,11 @@ model Review {
   booking             Booking        @relation(fields: [bookingId], references: [id])
   teacherId           String
   teacher             TeacherProfile @relation(fields: [teacherId], references: [id])
-  rating              Int            // 1–5, validated at service layer
-  comment             String?        // Optional written feedback
-  submittedByParentId String         // Used for authorization checks
+  rating              Int
+  comment             String?
+  submittedByParentId String
   createdAt           DateTime       @default(now())
+
+  @@index([teacherId])
 }
+

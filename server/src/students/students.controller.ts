@@ -8,24 +8,29 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { StudentsService } from './students.service';
+import { CreateStudentDto } from './dto/create-student.dto';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
-import { CreateStudentDto } from './dto/create-student.dto';
 
 @Controller('students')
-@UseGuards(AuthGuard('jwt'), RolesGuard)
-@Roles(Role.PARENT) // Only parents can manage students
+@UseGuards(AuthGuard('jwt'))
 export class StudentsController {
   constructor(private readonly studentsService: StudentsService) {}
 
-  @Post()
-  create(@Request() req, @Body() dto: CreateStudentDto) {
-    return this.studentsService.create(req.user.userId, dto.name, dto.age);
+  // GET /students — returns all students for the authenticated parent
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(Role.PARENT)
+  findAll(@Request() req: any) {
+    return this.studentsService.findAllForParent(req.user.userId);
   }
 
-  @Get()
-  findAll(@Request() req) {
-    return this.studentsService.findAll(req.user.userId);
+  // POST /students — creates a new student under the authenticated parent
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(Role.PARENT)
+  create(@Request() req: any, @Body() dto: CreateStudentDto) {
+    return this.studentsService.create(req.user.userId, dto);
   }
 }

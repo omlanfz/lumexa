@@ -1,20 +1,38 @@
+// FILE PATH: server/src/students/dto/create-student.dto.ts
+// ACTION: REPLACE the existing file entirely.
+
 import {
   IsString,
-  MinLength,
-  MaxLength,
+  IsNotEmpty,
   IsInt,
   Min,
   Max,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateStudentDto {
   @IsString()
-  @MinLength(2, { message: 'Name must be at least 2 characters.' })
-  @MaxLength(50, { message: 'Name cannot exceed 50 characters.' })
+  @IsNotEmpty()
   name: string;
 
-  @IsInt({ message: 'Age must be a whole number.' })
-  @Min(4, { message: 'Student must be at least 4 years old.' })
-  @Max(18, { message: 'Student must be 18 or under.' })
+  @IsInt()
+  @Min(4)
+  @Max(18)
   age: number;
+
+  @IsOptional()
+  @IsString()
+  grade?: string; // e.g. "Grade 5"
+
+  @IsOptional()
+  @IsString()
+  subject?: string; // e.g. "Math", "Coding"
+
+  @IsOptional()
+  @IsString()
+  schoolName?: string; // COPPA-safe: school name only
+
+  @IsOptional()
+  @IsString()
+  timezone?: string; // e.g. "Asia/Dhaka" — auto-detected on frontend
 }

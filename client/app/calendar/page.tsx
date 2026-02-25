@@ -1,308 +1,273 @@
+// FILE PATH: client/app/calendar/page.tsx
+// ACTION: REPLACE the existing file entirely (or CREATE if it doesn't exist).
+
 "use client";
 
 import { useState, useEffect } from "react";
-import axios from "axios";
 import { useRouter } from "next/navigation";
-import { isClassJoinable } from "../../lib/time";
+import { Suspense } from "react";
+import axios from "axios";
+import TeacherNav from "@/components/TeacherNav";
 
-interface Booking {
-  id: string;
-  student: { name: string };
-  paymentStatus: string;
-}
+const API = process.env.NEXT_PUBLIC_API_URL;
 
 interface Shift {
   id: string;
   start: string;
   end: string;
   isBooked: boolean;
-  booking?: Booking;
+  booking?: {
+    id: string;
+    student: { name: string };
+    paymentStatus: string;
+  };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const HOURS = Array.from({ length: 16 }, (_, i) => i + 7); // 7am - 10pm
 
-function getWeekDays(anchorDate: Date): Date[] {
-  const start = new Date(anchorDate);
-  const day = start.getDay(); // 0 = Sun
-  start.setDate(start.getDate() - day); // rewind to Sunday
-  return Array.from({ length: 7 }, (_, i) => {
+function getWeekDates(baseDate: Date): Date[] {
+  const week: Date[] = [];
+  const day = baseDate.getDay();
+  const start = new Date(baseDate);
+  start.setDate(baseDate.getDate() - day);
+  for (let i = 0; i < 7; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    return d;
-  });
+    week.push(d);
+  }
+  return week;
 }
 
-function isSameDay(a: Date, b: Date) {
+function Spinner() {
   return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
+    <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
   );
 }
 
-function formatHour(hour: number) {
-  if (hour === 0) return "12 AM";
-  if (hour < 12) return `${hour} AM`;
-  if (hour === 12) return "12 PM";
-  return `${hour - 12} PM`;
-}
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0–23
-const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-export default function CalendarPage() {
+function CalendarContent() {
   const router = useRouter();
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"week" | "month">("week");
-  const [anchor, setAnchor] = useState(new Date());
+  const [currentWeek, setCurrentWeek] = useState(new Date());
+  const [view, setView] = useState<"week" | "list">("week");
+
+  const token =
+    typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  const headers = { Authorization: `Bearer ${token}` };
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
     if (!token) {
       router.push("/login");
       return;
     }
-    loadShifts(token);
+    axios
+      .get(`${API}/shifts`, { headers })
+      .then((res) => setShifts(res.data ?? []))
+      .catch(() => router.push("/login"))
+      .finally(() => setLoading(false));
   }, []);
 
-  const loadShifts = async (token: string) => {
-    try {
-      const res = await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/shifts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setShifts(res.data);
-    } catch {
-      console.error("Failed to load shifts");
-    } finally {
-      setLoading(false);
-    }
+  const weekDates = getWeekDates(currentWeek);
+  const weekStart = weekDates[0];
+  const weekEnd = weekDates[6];
+
+  const prevWeek = () => {
+    const d = new Date(currentWeek);
+    d.setDate(d.getDate() - 7);
+    setCurrentWeek(d);
   };
 
-  const navigate = (direction: -1 | 1) => {
-    const d = new Date(anchor);
-    if (view === "week") {
-      d.setDate(d.getDate() + direction * 7);
-    } else {
-      d.setMonth(d.getMonth() + direction);
-    }
-    setAnchor(d);
+  const nextWeek = () => {
+    const d = new Date(currentWeek);
+    d.setDate(d.getDate() + 7);
+    setCurrentWeek(d);
   };
 
-  const today = new Date();
-  const weekDays = getWeekDays(anchor);
+  const goToday = () => setCurrentWeek(new Date());
 
-  const shiftsOnDay = (day: Date) =>
-    shifts.filter((s) => isSameDay(new Date(s.start), day));
+  // Get shifts for the current week
+  const weekShifts = shifts.filter((s) => {
+    const start = new Date(s.start);
+    return start >= weekDates[0] && start <= weekDates[6];
+  });
 
-  // ── Week view title
-  const weekLabel = `${DAY_NAMES[weekDays[0].getDay()]} ${weekDays[0].getDate()} ${MONTH_NAMES[weekDays[0].getMonth()]} – ${DAY_NAMES[weekDays[6].getDay()]} ${weekDays[6].getDate()} ${MONTH_NAMES[weekDays[6].getMonth()]} ${weekDays[6].getFullYear()}`;
+  const fmt = (date: Date) =>
+    date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-  if (loading)
+  const fmtShiftTime = (dt: string) =>
+    new Date(dt).toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+
+  // Get shifts for a specific day and hour (for weekly grid)
+  const getShiftForCell = (dayDate: Date, hour: number) => {
+    return weekShifts.filter((s) => {
+      const start = new Date(s.start);
+      return (
+        start.getDate() === dayDate.getDate() &&
+        start.getMonth() === dayDate.getMonth() &&
+        start.getHours() === hour
+      );
+    });
+  };
+
+  const isToday = (d: Date) => {
+    const today = new Date();
     return (
-      <div className="min-h-screen flex items-center justify-center text-white font-mono">
-        <div className="animate-pulse text-blue-400">Loading Schedule...</div>
-      </div>
+      d.getDate() === today.getDate() &&
+      d.getMonth() === today.getMonth() &&
+      d.getFullYear() === today.getFullYear()
     );
+  };
 
   return (
-    <div className="min-h-screen text-white font-sans p-6">
-      {/* ── Header ── */}
-      <div className="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-blue-400 tracking-widest uppercase">
-            Schedule
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">Flight Log</p>
+    <div className="flex min-h-screen bg-black">
+      <TeacherNav />
+      <main className="flex-1 ml-56 p-6 lg:p-8 overflow-x-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Schedule</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Mission Timeline ✦</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* View toggle */}
+            <div className="flex gap-1 bg-gray-900 border border-gray-700 rounded-lg p-1">
+              <button
+                onClick={() => setView("week")}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                  view === "week"
+                    ? "bg-purple-600 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                Week
+              </button>
+              <button
+                onClick={() => setView("list")}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                  view === "list"
+                    ? "bg-purple-600 text-white"
+                    : "text-gray-400 hover:text-gray-200"
+                }`}
+              >
+                List
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Week/Month Toggle */}
-          <div className="flex bg-black border border-gray-700 rounded-lg p-1">
-            <button
-              onClick={() => setView("week")}
-              className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${
-                view === "week"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => setView("month")}
-              className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${
-                view === "month"
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Month
-            </button>
-          </div>
-
-          {/* Navigation */}
+        {/* Week navigation */}
+        <div className="flex items-center gap-3 mb-6">
           <button
-            onClick={() => navigate(-1)}
-            className="px-3 py-2 border border-gray-700 rounded-lg text-gray-400 hover:bg-gray-800 transition-all text-sm"
-          >
-            ←
-          </button>
-          <button
-            onClick={() => setAnchor(new Date())}
-            className="px-3 py-2 border border-gray-700 rounded-lg text-gray-400 hover:bg-gray-800 transition-all text-sm"
+            onClick={goToday}
+            className="px-3 py-1.5 text-xs bg-gray-800 border border-gray-700
+                       text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
           >
             Today
           </button>
           <button
-            onClick={() => navigate(1)}
-            className="px-3 py-2 border border-gray-700 rounded-lg text-gray-400 hover:bg-gray-800 transition-all text-sm"
+            onClick={prevWeek}
+            className="px-3 py-1.5 text-xs bg-gray-800 border border-gray-700
+                       text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+          >
+            ←
+          </button>
+          <button
+            onClick={nextWeek}
+            className="px-3 py-1.5 text-xs bg-gray-800 border border-gray-700
+                       text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
           >
             →
           </button>
-
-          <button
-            onClick={() => router.push("/teacher-dashboard")}
-            className="px-4 py-2 border border-gray-700 rounded-lg text-gray-400 hover:bg-gray-800 transition-all text-sm"
-          >
-            ← Dashboard
-          </button>
+          <h2 className="text-sm font-medium text-white">
+            {fmt(weekStart)} – {fmt(weekEnd)}, {weekEnd.getFullYear()}
+          </h2>
+          <span className="text-xs text-gray-500 ml-2">
+            {weekShifts.length} slot{weekShifts.length !== 1 ? "s" : ""} this
+            week
+          </span>
         </div>
-      </div>
 
-      {/* ── Period Title ── */}
-      <div className="max-w-7xl mx-auto mb-4">
-        <p className="text-lg font-bold text-white">
-          {view === "week"
-            ? weekLabel
-            : `${MONTH_NAMES[anchor.getMonth()]} ${anchor.getFullYear()}`}
-        </p>
-      </div>
-
-      {/* ── Week View ── */}
-      {view === "week" && (
-        <div className="max-w-7xl mx-auto overflow-x-auto">
-          <div className="min-w-[900px]">
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Spinner />
+          </div>
+        ) : view === "week" ? (
+          /* ── Week Grid ── */
+          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-auto">
             {/* Day headers */}
-            <div className="grid grid-cols-8 border-b border-gray-800 mb-1">
-              <div className="p-2" /> {/* Time column */}
-              {weekDays.map((day, i) => (
+            <div
+              className="grid border-b border-gray-800"
+              style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}
+            >
+              <div className="p-2 text-xs text-gray-600 text-center">UTC</div>
+              {weekDates.map((d, i) => (
                 <div
                   key={i}
-                  className={`p-3 text-center border-l border-gray-800 ${
-                    isSameDay(day, today) ? "bg-blue-900/20" : ""
+                  className={`p-2 text-center border-l border-gray-800 ${
+                    isToday(d) ? "bg-purple-900/20" : ""
                   }`}
                 >
-                  <p className="text-xs text-gray-500 font-bold uppercase">
-                    {DAY_NAMES[day.getDay()]}
-                  </p>
+                  <p className="text-xs text-gray-500">{DAYS[d.getDay()]}</p>
                   <p
-                    className={`text-xl font-bold mt-0.5 ${
-                      isSameDay(day, today) ? "text-blue-400" : "text-white"
+                    className={`text-sm font-semibold mt-0.5 ${
+                      isToday(d) ? "text-purple-300" : "text-white"
                     }`}
                   >
-                    {day.getDate()}
+                    {d.getDate()}
                   </p>
                 </div>
               ))}
             </div>
 
-            {/* Time rows — show hours 6am to midnight */}
-            <div className="relative">
-              {HOURS.filter((h) => h >= 6).map((hour) => (
-                <div key={hour} className="grid grid-cols-8 min-h-[60px]">
+            {/* Hour rows */}
+            <div>
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="grid border-b border-gray-800/50 min-h-[48px]"
+                  style={{ gridTemplateColumns: "60px repeat(7, 1fr)" }}
+                >
                   {/* Hour label */}
-                  <div className="p-2 text-right pr-3 border-r border-gray-800">
-                    <span className="text-xs text-gray-600 -mt-2 block">
-                      {formatHour(hour)}
-                    </span>
+                  <div className="p-1 text-xs text-gray-600 text-right pr-2 pt-1 flex-shrink-0">
+                    {hour === 12
+                      ? "12pm"
+                      : hour < 12
+                        ? `${hour}am`
+                        : `${hour - 12}pm`}
                   </div>
-
-                  {/* Day columns */}
-                  {weekDays.map((day, di) => {
-                    const dayShifts = shiftsOnDay(day).filter((s) => {
-                      const sh = new Date(s.start).getHours();
-                      return sh === hour;
-                    });
-
+                  {/* Day cells */}
+                  {weekDates.map((d, di) => {
+                    const cellShifts = getShiftForCell(d, hour);
                     return (
                       <div
                         key={di}
-                        className={`border-l border-b border-gray-800/50 p-1 min-h-[60px] relative ${
-                          isSameDay(day, today) ? "bg-blue-900/5" : ""
+                        className={`border-l border-gray-800/50 p-0.5 ${
+                          isToday(d) ? "bg-purple-900/5" : ""
                         }`}
                       >
-                        {dayShifts.map((shift) => {
-                          const startMin = new Date(shift.start).getMinutes();
-                          const endHour = new Date(shift.end).getHours();
-                          const endMin = new Date(shift.end).getMinutes();
-                          const durationMins =
-                            endHour * 60 + endMin - (hour * 60 + startMin);
-                          const heightPx = Math.max(
-                            24,
-                            (durationMins / 60) * 60,
-                          );
-
-                          const joinable = shift.isBooked
-                            ? isClassJoinable(shift.start, shift.end)
-                            : false;
-
-                          return (
-                            <div
-                              key={shift.id}
-                              onClick={() =>
-                                shift.booking &&
-                                router.push(`/classroom/${shift.booking.id}`)
-                              }
-                              style={{ minHeight: `${heightPx}px` }}
-                              className={`w-full rounded-md p-1.5 text-xs cursor-pointer transition-all hover:opacity-90 ${
-                                joinable
-                                  ? "bg-green-700/80 border border-green-500 animate-pulse"
-                                  : shift.isBooked
-                                    ? "bg-purple-800/70 border border-purple-500"
-                                    : "bg-blue-900/50 border border-blue-700"
-                              }`}
-                            >
-                              <p className="font-bold text-white truncate">
-                                {shift.isBooked && shift.booking
-                                  ? shift.booking.student.name
-                                  : "Available"}
-                              </p>
-                              <p className="text-gray-300 opacity-80">
-                                {new Date(shift.start).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                                {" – "}
-                                {new Date(shift.end).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
-                              {joinable && (
-                                <p className="text-green-300 font-bold mt-0.5">
-                                  🔴 LIVE
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {cellShifts.map((s) => (
+                          <div
+                            key={s.id}
+                            className={`text-xs p-1 rounded mb-0.5 cursor-default ${
+                              s.isBooked
+                                ? "bg-purple-600/40 text-purple-200 border border-purple-500/30"
+                                : "bg-gray-700/60 text-gray-300 border border-gray-600/30"
+                            }`}
+                          >
+                            <p className="font-medium truncate">
+                              {s.isBooked && s.booking
+                                ? s.booking.student.name
+                                : "Available"}
+                            </p>
+                            <p className="text-gray-400 text-xs">
+                              {fmtShiftTime(s.start)}
+                            </p>
+                          </div>
+                        ))}
                       </div>
                     );
                   })}
@@ -310,141 +275,92 @@ export default function CalendarPage() {
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ── Month View ── */}
-      {view === "month" && (
-        <div className="max-w-7xl mx-auto">
-          {/* Day header row */}
-          <div className="grid grid-cols-7 mb-1">
-            {DAY_NAMES.map((d) => (
-              <div
-                key={d}
-                className="p-2 text-center text-xs font-bold text-gray-500 uppercase"
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Month grid */}
-          {(() => {
-            const firstDay = new Date(
-              anchor.getFullYear(),
-              anchor.getMonth(),
-              1,
-            );
-            const startOffset = firstDay.getDay();
-            const daysInMonth = new Date(
-              anchor.getFullYear(),
-              anchor.getMonth() + 1,
-              0,
-            ).getDate();
-
-            const cells: (Date | null)[] = [
-              ...Array(startOffset).fill(null),
-              ...Array.from(
-                { length: daysInMonth },
-                (_, i) =>
-                  new Date(anchor.getFullYear(), anchor.getMonth(), i + 1),
-              ),
-            ];
-
-            // Pad to complete last row
-            while (cells.length % 7 !== 0) cells.push(null);
-
-            const rows: (Date | null)[][] = [];
-            for (let i = 0; i < cells.length; i += 7) {
-              rows.push(cells.slice(i, i + 7));
-            }
-
-            return rows.map((row, ri) => (
-              <div
-                key={ri}
-                className="grid grid-cols-7 border-t border-gray-800"
-              >
-                {row.map((day, di) => {
-                  if (!day) {
-                    return (
-                      <div
-                        key={di}
-                        className="min-h-[100px] border-l border-gray-800 bg-black/20"
-                      />
-                    );
-                  }
-
-                  const dayShifts = shiftsOnDay(day);
-                  const isToday = isSameDay(day, today);
-
-                  return (
-                    <div
-                      key={di}
-                      className={`min-h-[100px] border-l border-gray-800 p-2 ${
-                        isToday ? "bg-blue-900/10" : "hover:bg-gray-900/30"
-                      } transition-all`}
-                    >
-                      <p
-                        className={`text-sm font-bold mb-1 ${
-                          isToday ? "text-blue-400" : "text-gray-400"
-                        }`}
-                      >
-                        {day.getDate()}
+        ) : (
+          /* ── List View ── */
+          <div className="space-y-3">
+            {shifts
+              .filter((s) => new Date(s.start) > new Date())
+              .sort(
+                (a, b) =>
+                  new Date(a.start).getTime() - new Date(b.start).getTime(),
+              )
+              .slice(0, 50)
+              .map((s) => (
+                <div
+                  key={s.id}
+                  className={`flex items-center justify-between p-4 rounded-xl border ${
+                    s.isBooked
+                      ? "bg-purple-900/10 border-purple-500/20"
+                      : "bg-gray-900 border-gray-800"
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      {new Date(s.start).toLocaleDateString("en-US", {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {fmtShiftTime(s.start)} – {fmtShiftTime(s.end)}
+                    </p>
+                    {s.isBooked && s.booking && (
+                      <p className="text-xs text-purple-300 mt-0.5">
+                        👤 {s.booking.student.name}
                       </p>
-
-                      <div className="space-y-1">
-                        {dayShifts.slice(0, 3).map((shift) => (
-                          <div
-                            key={shift.id}
-                            onClick={() =>
-                              shift.booking &&
-                              router.push(`/classroom/${shift.booking!.id}`)
-                            }
-                            className={`text-xs rounded px-1.5 py-0.5 cursor-pointer truncate ${
-                              shift.isBooked
-                                ? "bg-purple-800/70 text-purple-200"
-                                : "bg-blue-900/50 text-blue-300"
-                            }`}
-                          >
-                            {new Date(shift.start).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}{" "}
-                            {shift.isBooked && shift.booking
-                              ? `· ${shift.booking.student.name}`
-                              : "· Open"}
-                          </div>
-                        ))}
-                        {dayShifts.length > 3 && (
-                          <p className="text-xs text-gray-600">
-                            +{dayShifts.length - 3} more
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    )}
+                  </div>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full ${
+                      s.isBooked
+                        ? "bg-purple-600/30 text-purple-300"
+                        : "bg-gray-700 text-gray-400"
+                    }`}
+                  >
+                    {s.isBooked ? "● Booked" : "○ Available"}
+                  </span>
+                </div>
+              ))}
+            {shifts.filter((s) => new Date(s.start) > new Date()).length ===
+              0 && (
+              <div className="text-center py-20">
+                <p className="text-4xl mb-3">📅</p>
+                <p className="text-gray-400">No upcoming slots.</p>
+                <p className="text-gray-600 text-sm mt-1">
+                  Add availability from the Dashboard.
+                </p>
               </div>
-            ));
-          })()}
-        </div>
-      )}
+            )}
+          </div>
+        )}
 
-      {/* ── Legend ── */}
-      <div className="max-w-7xl mx-auto mt-6 flex gap-6 text-xs text-gray-500">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-blue-900/50 border border-blue-700" />
-          <span>Available slot</span>
+        {/* Legend */}
+        <div className="flex gap-4 mt-4">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-purple-600/40 border border-purple-500/30" />
+            <span className="text-xs text-gray-500">Booked</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded bg-gray-700/60 border border-gray-600/30" />
+            <span className="text-xs text-gray-500">Available</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-purple-800/70 border border-purple-500" />
-          <span>Booked class</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded bg-green-700/80 border border-green-500" />
-          <span>Live now</span>
-        </div>
-      </div>
+      </main>
     </div>
+  );
+}
+
+export default function CalendarPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black flex items-center justify-center">
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      }
+    >
+      <CalendarContent />
+    </Suspense>
   );
 }
