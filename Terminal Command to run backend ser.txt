@@ -1,3 +1,15 @@
+NEXT_PUBLIC_API_URL: https://lumexa-backend.onrender.com
+
+
+
+STEP 1 — Fix VSCode import errors (run once in terminal):
+bashcd server
+npx prisma generate
+Then in VSCode press Ctrl+Shift+P → type TypeScript: Restart TS Server → Enter. The red squiggles will clear within a few seconds.
+
+
+
+
 Terminal Command to run backend server (run inside server folder):
 npm run start:dev
 
@@ -22,3 +34,6 @@ postgresql://neondb_owner:npg_FAfKbuD4qmj8@ep-icy-unit-aigjz9dg-pooler.c-4.us-ea
 
 Direct connection string — toggle "Connection pooling" OFF → copy this. This is your DIRECT_DATABASE_URL: 
 postgresql://neondb_owner:npg_FAfKbuD4qmj8@ep-icy-unit-aigjz9dg.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+
+analyze the github repo for all the files and find out the issues and provide full step by step guide to  fix the issue. provide full code if any file needs to be changed

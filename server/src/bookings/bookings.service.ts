@@ -173,9 +173,7 @@ export class BookingsService {
   }
 
   // ─── Mock Payment Confirmation ───────────────────────────────────────────────
-  // Used in development when Stripe is not configured.
-  // Simulates a successful payment by marking the booking as CAPTURED.
-  // This endpoint is only accessible when NODE_ENV !== 'production'.
+  // Development only — blocked in production.
 
   async mockConfirmBooking(bookingId: string, userId: string) {
     if (process.env.NODE_ENV === 'production') {
@@ -198,7 +196,6 @@ export class BookingsService {
       throw new ForbiddenException('You do not own this booking.');
     }
     if (booking.paymentStatus === 'CAPTURED') {
-      // Already confirmed — idempotent, return success
       return { message: 'Booking already confirmed.', bookingId };
     }
     if (booking.paymentStatus === 'REFUNDED') {
@@ -283,6 +280,108 @@ export class BookingsService {
       .catch(() => {});
 
     return { message: 'Booking cancelled.', refundCents, reason };
+  }
+
+  // ─── Submit Review ───────────────────────────────────────────────────────────
+  // Parent submits a 1–5 star rating + optional comment after class completes.
+  //
+  // Rules enforced here:
+  //   - Only the parent who owns the booking can submit
+  //   - Booking must be CAPTURED (class completed + paid)
+  //   - One review per booking (DB unique constraint catches duplicates)
+  //   - Rating must be 1–5
+  //
+  // After saving the review, we atomically recalculate the teacher's
+  // ratingAvg and reviewCount using an aggregate query + a single update.
+  // This keeps the denormalized fields accurate without a full table scan.
+
+  async submitReview(
+    bookingId: string,
+    userId: string,
+    rating: number,
+    comment: string | undefined,
+  ) {
+    // Validate rating range
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new BadRequestException(
+        'Rating must be a whole number from 1 to 5.',
+      );
+    }
+
+    // Load the booking with everything we need for authorization
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        student: {
+          include: { parent: { select: { id: true } } },
+        },
+        shift: {
+          include: {
+            teacher: { select: { id: true } },
+          },
+        },
+        review: true, // check if review already exists
+      },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found.');
+
+    // Authorization: only the parent who owns the booking can review
+    if (booking.student.parent.id !== userId) {
+      throw new ForbiddenException('You can only review your own bookings.');
+    }
+
+    // Only reviewable once the class is paid and complete
+    if (booking.paymentStatus !== 'CAPTURED') {
+      throw new BadRequestException(
+        'Reviews can only be submitted after the class has been completed and payment captured.',
+      );
+    }
+
+    // Prevent duplicate review (belt-and-suspenders — DB unique also enforces this)
+    if (booking.review) {
+      throw new ConflictException(
+        'You have already submitted a review for this class.',
+      );
+    }
+
+    const teacherId = booking.shift.teacher.id;
+
+    // Transaction: save the review, then recalculate ratingAvg and reviewCount atomically
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Create the review
+      const review = await tx.review.create({
+        data: {
+          bookingId,
+          teacherId,
+          rating,
+          comment: comment?.trim() || null,
+          submittedByParentId: userId,
+        },
+      });
+
+      // 2. Recalculate ratingAvg and reviewCount from all reviews for this teacher
+      const agg = await tx.review.aggregate({
+        where: { teacherId },
+        _avg: { rating: true },
+        _count: { rating: true },
+      });
+
+      // 3. Update the denormalized fields on TeacherProfile
+      await tx.teacherProfile.update({
+        where: { id: teacherId },
+        data: {
+          ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10, // round to 1 dp
+          reviewCount: agg._count.rating,
+        },
+      });
+
+      return {
+        message: 'Review submitted. Thank you for your feedback!',
+        reviewId: review.id,
+        rating: review.rating,
+      };
+    });
   }
 
   // ─── Stripe Connect ──────────────────────────────────────────────────────────

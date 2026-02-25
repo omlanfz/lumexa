@@ -5,11 +5,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma.module';
 import { UsersModule } from './users/users.module';
-import { TeachersModule } from './teachers/teachers.module';
 import { StudentsModule } from './students/students.module';
 import { AuthModule } from './auth/auth.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { BookingsModule } from './bookings/bookings.module';
+import { TeachersModule } from './teachers/teachers.module';
 import { ClassroomModule } from './classroom/classroom.module';
 import { PaymentsModule } from './payments/payments.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -18,8 +18,8 @@ import { AdminModule } from './admin/admin.module';
 @Module({
   imports: [
     // ─── Rate Limiting ──────────────────────────────────────────────────────
-    // 20 requests per minute per IP globally
-    // Individual endpoints can override this with @Throttle() decorator
+    // 20 requests per minute per IP globally.
+    // Individual endpoints can override with @Throttle() decorator.
     ThrottlerModule.forRoot([
       {
         ttl: 60 * 1000, // 1 minute window (in ms)
@@ -30,11 +30,11 @@ import { AdminModule } from './admin/admin.module';
     // ─── Core ───────────────────────────────────────────────────────────────
     PrismaModule,
     UsersModule,
-    TeachersModule,
     StudentsModule,
     AuthModule,
     ShiftsModule,
     BookingsModule,
+    TeachersModule, // ← NEW: teacher profile, stats, earnings, students
     ClassroomModule,
 
     // ─── Global Services (marked @Global in their modules) ──────────────────
