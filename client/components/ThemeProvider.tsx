@@ -1,5 +1,5 @@
+// FILE PATH: client/components/ThemeProvider.tsx
 "use client";
-
 import {
   createContext,
   useContext,
@@ -8,63 +8,76 @@ import {
   ReactNode,
 } from "react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type Theme = "dark" | "light";
-
-interface ThemeContextValue {
+interface ThemeCtx {
   theme: Theme;
-  toggle: () => void;
-  setTheme: (t: Theme) => void;
+  toggleTheme: () => void;
+  isDark: boolean;
 }
 
-// ─── Context ──────────────────────────────────────────────────────────────────
-
-const ThemeContext = createContext<ThemeContextValue>({
+const ThemeContext = createContext<ThemeCtx>({
   theme: "dark",
-  toggle: () => {},
-  setTheme: () => {},
+  toggleTheme: () => {},
+  isDark: true,
 });
 
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  // Default to 'dark' — matches the inline script in layout.tsx
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("dark");
+  const [mounted, setMounted] = useState(false);
 
-  // Sync from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
-    const saved = localStorage.getItem("lumexa-theme") as Theme | null;
-    if (saved === "light" || saved === "dark") {
-      applyTheme(saved);
-      setThemeState(saved);
-    }
+    const saved = (localStorage.getItem("lumexa-theme") as Theme) ?? "dark";
+    setTheme(saved);
+    setMounted(true);
   }, []);
 
-  function applyTheme(t: Theme) {
-    const root = document.documentElement;
-    root.classList.remove("dark", "light");
-    root.classList.add(t);
-    root.style.colorScheme = t;
-  }
-
-  const setTheme = (t: Theme) => {
-    localStorage.setItem("lumexa-theme", t);
-    applyTheme(t);
-    setThemeState(t);
+  const toggleTheme = () => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    try {
+      localStorage.setItem("lumexa-theme", next);
+    } catch (_) {}
+    const h = document.documentElement;
+    h.classList.remove("dark", "light");
+    h.classList.add(next);
+    h.style.colorScheme = next;
+    h.setAttribute("data-theme", next);
   };
 
-  const toggle = () => setTheme(theme === "dark" ? "light" : "dark");
-
   return (
-    <ThemeContext.Provider value={{ theme, toggle, setTheme }}>
+    <ThemeContext.Provider
+      value={{ theme, toggleTheme, isDark: mounted ? theme === "dark" : true }}
+    >
       {children}
     </ThemeContext.Provider>
   );
 }
 
-// ─── Hook ─────────────────────────────────────────────────────────────────────
+export const useTheme = () => useContext(ThemeContext);
 
-export function useTheme(): ThemeContextValue {
-  return useContext(ThemeContext);
+interface ThemeToggleProps {
+  variant?: "teacher" | "student";
+  className?: string;
+}
+
+export function ThemeToggle({
+  variant = "teacher",
+  className = "",
+}: ThemeToggleProps) {
+  const { toggleTheme, isDark } = useTheme();
+  const hover =
+    variant === "teacher"
+      ? "dark:hover:bg-purple-900/30 hover:bg-purple-100"
+      : "dark:hover:bg-blue-900/30 hover:bg-blue-100";
+  return (
+    <button
+      onClick={toggleTheme}
+      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
+      className={`w-9 h-9 rounded-xl flex items-center justify-center dark:bg-white/5 bg-black/5 border dark:border-white/10 border-black/10 dark:text-gray-400 text-gray-500 transition-colors ${hover} ${className}`}
+    >
+      <span className="text-base select-none leading-none">
+        {isDark ? "☀️" : "🌙"}
+      </span>
+    </button>
+  );
 }

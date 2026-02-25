@@ -1,101 +1,74 @@
-/* =============================================================================
-   LUMEXA — globals.css
-   Tailwind v4 setup via @tailwindcss/postcss (see postcss.config.mjs)
+/* FILE PATH: client/app/globals.css */
 
-   FIX APPLIED: Removed `@tailwind utilities;` (Tailwind v3 directive — causes
-   errors in v4). Also removed the commented-out `@tailwind base/components`.
-   v4 uses `@import "tailwindcss"` only. Dark mode is declared via
-   @custom-variant, not via tailwind.config.js darkMode: 'class'.
-   ============================================================================= */
-
+/* Tailwind v4 — single import replaces @tailwind base/components/utilities */
 @import "tailwindcss";
 
-/* ─── Dark / Light mode ───────────────────────────────────────────────────────
-   Tailwind v4 requires @custom-variant to make `dark:` prefix classes work.
-   This ties dark: prefix to the .dark class on <html>, set by ThemeProvider.
-   ─────────────────────────────────────────────────────────────────────────── */
+/*
+  Class-based dark mode (Tailwind v4 equivalent of darkMode:'class' in v3).
+  The .dark class is toggled on <html> by ThemeProvider.
+  @custom-variant makes dark: prefix work with that class selector.
+*/
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ─── Theme tokens ────────────────────────────────────────────────────────────
-   Used via var() in component CSS and as Tailwind arbitrary values.
-   ─────────────────────────────────────────────────────────────────────────── */
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Base ──────────────────────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark; /* default — tells Dark Reader to skip; overridden by JS */
 }
+html.light { color-scheme: light; }
+html.dark  { color-scheme: dark;  }
 
-:root {
-  color-scheme: dark;
-  --background: #0a0a0a;
-  --foreground: #ededed;
-
-  /* Lumexa space palette */
-  --space-deep:   #050D1A;  /* student area bg */
-  --space-dark:   #0A0714;  /* teacher area bg */
-  --space-navy:   #0D1B2A;
-  --space-purple: #7C3AED;
-  --space-cyan:   #06B6D4;
-  --space-blue:   #3B82F6;
-}
-
-/* Light mode overrides when .light class is on <html> */
-html.light {
-  color-scheme: light;
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-/* ─── Semantic bg helpers (used by dashboard layout wrappers) ─────────────── */
-.teacher-bg {
-  background-color: #0A0714;
-}
-html.light .teacher-bg {
-  background-color: #FAF5FF;
-}
-
-.student-bg {
-  background-color: #050D1A;
-}
-html.light .student-bg {
-  background-color: #F0F5FF;
-}
-
-/* ─── Smooth theme transitions ────────────────────────────────────────────── */
-*,
-*::before,
-*::after {
-  transition: background-color 0.2s ease, border-color 0.2s ease,
-    color 0.15s ease;
-}
-/* Disable transition slowdowns on interactive elements */
-button,
-a,
-[role='button'] {
-  transition: background-color 0.15s ease, color 0.1s ease,
-    border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
-}
-
-/* ─── Body ────────────────────────────────────────────────────────────────── */
 body {
-  background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #000000 100%);
-  color: white;
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-html.light body {
-  background: #f8f9ff;
-  color: #0f172a;
+/* ── Global smooth theme transitions ─────────────────────────────────────── */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}
+/* Faster for interactive elements */
+button, a, [role="button"], input, select, textarea {
+  transition-duration: 120ms;
 }
 
-/* ─── Date/time inputs — force dark picker icon ───────────────────────────── */
-input[type='date'],
-input[type='datetime-local'] {
-  color-scheme: dark;
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar          { width: 5px; height: 5px; }
+::-webkit-scrollbar-track    { background: transparent; }
+html.dark  ::-webkit-scrollbar-thumb { background: rgb(126 34 206 / 0.35); border-radius: 3px; }
+html.dark  ::-webkit-scrollbar-thumb:hover { background: rgb(147 51 234 / 0.55); }
+html.light ::-webkit-scrollbar-thumb { background: rgb(126 34 206 / 0.2);  border-radius: 3px; }
+html.light ::-webkit-scrollbar-thumb:hover { background: rgb(126 34 206 / 0.35); }
+
+/* Student blue scrollbar (add .student-scroll class to container) */
+.student-scroll::-webkit-scrollbar-thumb { background: rgb(37 99 235 / 0.3); }
+.student-scroll::-webkit-scrollbar-thumb:hover { background: rgb(59 130 246 / 0.5); }
+
+/* ── Animations ──────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.6; transform: scale(1.2); }
 }
-input[type='date']::-webkit-calendar-picker-indicator,
-input[type='datetime-local']::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 1;
+.pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.fade-in { animation: fade-in 0.35s ease-out forwards; }
+
+@keyframes badge-glow-purple {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%       { box-shadow: 0 0 10px 2px rgb(124 58 237 / 0.4); }
+}
+@keyframes badge-glow-blue {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%       { box-shadow: 0 0 10px 2px rgb(37 99 235 / 0.4); }
+}
+.badge-glow-purple { animation: badge-glow-purple 3s ease-in-out infinite; }
+.badge-glow-blue   { animation: badge-glow-blue   3s ease-in-out infinite; }

@@ -1,13 +1,10 @@
 // FILE PATH: client/app/calendar/page.tsx
 "use client";
-
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import TeacherNav from "../../components/TeacherNav";
 import { useTheme } from "../../components/ThemeProvider";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Shift {
   id: string;
@@ -21,58 +18,30 @@ interface Shift {
   } | null;
 }
 
-interface DayColumn {
-  date: Date;
-  label: string;
-  dateStr: string; // e.g. "Mon 26"
-  shifts: Shift[];
-}
+const HOUR_PX = 64;
+const TOTAL_H = HOUR_PX * 24;
+const H24 = Array.from({ length: 24 }, (_, i) => i);
+const DAY_LBLS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+const fmtHr = (h: number) =>
+  h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`;
+const fmtTime = (d: Date) =>
+  d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
+const timePct = (d: Date) => ((d.getHours() + d.getMinutes() / 60) / 24) * 100;
+const durPct = (s: Date, e: Date) =>
+  ((e.getTime() - s.getTime()) / 86400000) * 100;
 
-const HOUR_HEIGHT = 64; // px per hour — 24 * 64 = 1536px total
-const HOURS = Array.from({ length: 24 }, (_, i) => i); // 0..23
-
-function formatHour(h: number): string {
-  if (h === 0) return "12 AM";
-  if (h < 12) return `${h} AM`;
-  if (h === 12) return "12 PM";
-  return `${h - 12} PM`;
-}
-
-function getWeekDates(anchor: Date): Date[] {
-  const days: Date[] = [];
-  const monday = new Date(anchor);
-  const day = monday.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  monday.setDate(monday.getDate() + diff);
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function toTopPercent(date: Date): number {
-  const hours = date.getHours() + date.getMinutes() / 60;
-  return (hours / 24) * 100;
-}
-
-function toHeightPercent(start: Date, end: Date): number {
-  const diffMins = (end.getTime() - start.getTime()) / 60000;
-  return (diffMins / (24 * 60)) * 100;
-}
-
-// ─── Main Page ───────────────────────────────────────────────────────────────
+const weekDates = (anchor: Date) => {
+  const d = new Date(anchor);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return Array.from({ length: 7 }, (_, i) => {
+    const n = new Date(d);
+    n.setDate(d.getDate() + i);
+    return n;
+  });
+};
 
 function CalendarContent() {
   const router = useRouter();
@@ -81,345 +50,253 @@ function CalendarContent() {
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [anchorDate, setAnchorDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<"week" | "month">("week");
-  const [teacherName, setTeacherName] = useState("Pilot");
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [rankTier, setRankTier] = useState(0);
+  const [anchor, setAnchor] = useState(new Date());
+  const [profile, setProfile] = useState<{
+    fullName: string;
+    avatarUrl?: string | null;
+    rankTier?: number;
+  }>({ fullName: "Pilot" });
+  const today = new Date();
+  const week = weekDates(anchor);
 
-  // Fetch shifts
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
+    const tok = localStorage.getItem("token");
+    if (!tok) {
       router.push("/login");
       return;
     }
-
-    const fetchData = async () => {
+    (async () => {
       try {
-        const [shiftsRes, profileRes] = await Promise.all([
+        const [sR, pR] = await Promise.all([
           axios.get(`${process.env.NEXT_PUBLIC_API_URL}/shifts`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${tok}` },
           }),
           axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { Authorization: `Bearer ${tok}` },
           }),
         ]);
-        setShifts(shiftsRes.data);
-        setTeacherName(profileRes.data.user?.fullName ?? "Pilot");
-        setAvatarUrl(profileRes.data.user?.avatarUrl ?? null);
-        setRankTier(profileRes.data.rankTier ?? 0);
-      } catch (err: any) {
-        setError(err.response?.data?.message ?? "Failed to load calendar");
+        setShifts(sR.data);
+        setProfile({
+          fullName: pR.data.user?.fullName ?? "Pilot",
+          avatarUrl: pR.data.user?.avatarUrl ?? null,
+          rankTier: pR.data.rankTier ?? 0,
+        });
+      } catch (e: any) {
+        const m = e.response?.data?.message;
+        setError(Array.isArray(m) ? m.join(", ") : (m ?? "Failed"));
       } finally {
         setLoading(false);
       }
-    };
-    fetchData();
+    })();
   }, [router]);
 
-  // Auto-scroll to 7 AM (business hours) on initial load
   useEffect(() => {
     if (!loading && scrollRef.current) {
-      // 7 AM position: 7/24 * total_height
-      const scrollTarget = (7 / 24) * (HOUR_HEIGHT * 24) - 64;
-      scrollRef.current.scrollTop = Math.max(0, scrollTarget);
+      scrollRef.current.scrollTop = Math.max(0, (7 / 24) * TOTAL_H - 40);
     }
   }, [loading]);
 
-  const weekDates = getWeekDates(anchorDate);
-  const today = new Date();
+  const cols = week.map((date) => ({
+    date,
+    label: DAY_LBLS[date.getDay()],
+    num: String(date.getDate()),
+    shifts: shifts.filter((s) => sameDay(new Date(s.start), date)),
+  }));
 
-  // Map shifts to day columns
-  const columns: DayColumn[] = weekDates.map((date) => {
-    const dayShifts = shifts.filter((s) => isSameDay(new Date(s.start), date));
-    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    return {
-      date,
-      label: DAYS[date.getDay()],
-      dateStr: `${date.getDate()}`,
-      shifts: dayShifts,
-    };
-  });
-
-  const navigateWeek = (dir: -1 | 1) => {
-    const next = new Date(anchorDate);
-    next.setDate(next.getDate() + dir * 7);
-    setAnchorDate(next);
+  const nav = (dir: -1 | 1) => {
+    const n = new Date(anchor);
+    n.setDate(n.getDate() + dir * 7);
+    setAnchor(n);
   };
+  const weekLabel = `${week[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} — ${week[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  const inWeek = week.some((d) => sameDay(d, today));
 
-  const weekLabel = `${weekDates[0].toLocaleDateString("en-US", { month: "short", day: "numeric" })} — ${weekDates[6].toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
-
-  // Current time indicator position (%)
-  const nowPercent = toTopPercent(today);
-  const isCurrentWeek = weekDates.some((d) => isSameDay(d, today));
-
-  // Theme classes
-  const bg = isDark ? "bg-[#0A0714]" : "bg-[#FAF5FF]";
-  const cardBg = isDark
-    ? "bg-gray-900/50 border-purple-900/30"
-    : "bg-white border-purple-200";
-  const headerBg = isDark ? "bg-[#120A24]" : "bg-purple-50";
-  const textPrimary = isDark ? "text-purple-100" : "text-purple-900";
-  const textMuted = isDark ? "text-purple-400/60" : "text-purple-400";
-  const hourLineBg = isDark ? "border-purple-900/20" : "border-purple-100";
-  const colBorderBg = isDark ? "border-purple-900/20" : "border-purple-100";
-  const colHeaderBg = isDark ? "bg-purple-900/10" : "bg-purple-50";
-  const todayHeaderBg = isDark ? "bg-purple-600/20" : "bg-purple-100";
-  const buttonBg = isDark
-    ? "bg-purple-900/20 border border-purple-800/30 text-purple-300 hover:bg-purple-800/30"
-    : "bg-purple-100 border border-purple-200 text-purple-700 hover:bg-purple-200";
-
-  if (loading) {
+  if (loading)
     return (
-      <div className={`flex items-center justify-center h-screen ${bg}`}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-purple-400 text-sm">Loading your flight log...</p>
+      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="dark:text-purple-400 text-purple-500 text-sm mt-3">
+            Loading flight log…
+          </p>
         </div>
       </div>
     );
-  }
 
   return (
-    <div className={`min-h-screen ${bg} transition-colors duration-300`}>
+    <div className="min-h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
       <TeacherNav
-        teacherName={teacherName}
-        avatarUrl={avatarUrl}
-        rankTier={rankTier}
-        onAvatarUpdate={setAvatarUrl}
+        teacherName={profile.fullName}
+        avatarUrl={profile.avatarUrl}
+        rankTier={profile.rankTier ?? 0}
+        onAvatarUpdate={(u) => setProfile((p) => ({ ...p, avatarUrl: u }))}
       />
-
-      <div className="pl-64">
+      <div className="pl-64 flex flex-col h-screen overflow-hidden">
         {/* Header */}
-        <div
-          className={`sticky top-0 z-30 px-6 py-4 border-b ${isDark ? "border-purple-900/30 bg-[#0A0714]/95 backdrop-blur" : "border-purple-100 bg-[#FAF5FF]/95 backdrop-blur"}`}
-        >
-          <div className="flex items-center justify-between">
+        <div className="flex-shrink-0 px-6 py-4 border-b dark:border-purple-900/30 border-purple-100 dark:bg-[#0A0714] bg-[#FAF5FF]">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <h1 className={`text-2xl font-bold ${textPrimary}`}>Schedule</h1>
-              <p className={`text-sm ${textMuted}`}>Flight Log · {weekLabel}</p>
+              <h1 className="text-2xl font-bold dark:text-purple-100 text-purple-900">
+                Schedule
+              </h1>
+              <p className="text-sm dark:text-purple-400/60 text-purple-400">
+                Flight Log · {weekLabel}
+              </p>
             </div>
-
-            <div className="flex items-center gap-3">
-              {/* Week / Month toggle */}
-              <div
-                className={`flex rounded-xl overflow-hidden border ${isDark ? "border-purple-800/30" : "border-purple-200"}`}
-              >
-                {(["week", "month"] as const).map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setViewMode(m)}
-                    className={`px-4 py-2 text-sm font-medium transition-colors capitalize ${
-                      viewMode === m
-                        ? isDark
-                          ? "bg-purple-600 text-white"
-                          : "bg-purple-500 text-white"
-                        : isDark
-                          ? "text-purple-400 hover:bg-purple-900/20"
-                          : "text-purple-600 hover:bg-purple-50"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-
-              {/* Navigation */}
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs dark:text-purple-400/60 text-purple-400">
+                <span className="w-2.5 h-2.5 rounded dark:bg-purple-500 bg-purple-400 inline-block" />
+                Available
+              </span>
+              <span className="flex items-center gap-1.5 text-xs dark:text-purple-400/60 text-purple-400 ml-2">
+                <span className="w-2.5 h-2.5 rounded bg-green-500 inline-block" />
+                Booked
+              </span>
               <button
-                onClick={() => setAnchorDate(new Date())}
-                className={`px-3 py-2 rounded-xl text-sm ${buttonBg}`}
+                onClick={() => setAnchor(new Date())}
+                className="ml-4 px-3 py-1.5 text-sm rounded-xl dark:bg-purple-900/20 bg-purple-100 border dark:border-purple-800/30 border-purple-200 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-800/30 hover:bg-purple-200 transition-colors"
               >
                 Today
               </button>
               <button
-                onClick={() => navigateWeek(-1)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center ${buttonBg}`}
+                onClick={() => nav(-1)}
+                className="w-9 h-9 rounded-xl flex items-center justify-center dark:bg-purple-900/20 bg-purple-100 border dark:border-purple-800/30 border-purple-200 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-800/30 hover:bg-purple-200 transition-colors"
               >
                 ‹
               </button>
               <button
-                onClick={() => navigateWeek(1)}
-                className={`w-9 h-9 rounded-xl flex items-center justify-center ${buttonBg}`}
+                onClick={() => nav(1)}
+                className="w-9 h-9 rounded-xl flex items-center justify-center dark:bg-purple-900/20 bg-purple-100 border dark:border-purple-800/30 border-purple-200 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-800/30 hover:bg-purple-200 transition-colors"
               >
                 ›
               </button>
-
-              {/* Filters */}
-              <div className="flex items-center gap-2 ml-2">
-                <label
-                  className={`flex items-center gap-1.5 text-xs ${textMuted}`}
-                >
-                  <span className="w-3 h-3 rounded bg-purple-500 inline-block" />
-                  Available
-                </label>
-                <label
-                  className={`flex items-center gap-1.5 text-xs ${textMuted}`}
-                >
-                  <span className="w-3 h-3 rounded bg-green-500 inline-block" />
-                  Booked
-                </label>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Calendar Grid */}
-        <div className="flex">
+        {/* Grid */}
+        <div className="flex flex-1 overflow-hidden">
           {/* Time gutter */}
-          <div
-            className="w-16 flex-shrink-0 relative"
-            style={{ paddingTop: "48px" }}
-          >
-            {/* Fixed column header spacer */}
-            <div className="h-full" style={{ height: `${HOUR_HEIGHT * 24}px` }}>
-              {HOURS.map((hour) => (
+          <div className="flex-shrink-0 w-16 dark:bg-[#0A0714] bg-[#FAF5FF] border-r dark:border-purple-900/20 border-purple-100 flex flex-col">
+            <div className="h-12 flex-shrink-0 border-b dark:border-purple-900/20 border-purple-100" />
+            <div
+              className="flex-1 overflow-hidden relative"
+              style={{ height: TOTAL_H }}
+            >
+              {H24.map((h) => (
                 <div
-                  key={hour}
-                  className={`relative text-right pr-2 border-t ${hourLineBg}`}
-                  style={{ height: `${HOUR_HEIGHT}px` }}
+                  key={h}
+                  className="absolute left-0 right-0 border-t dark:border-purple-900/20 border-purple-100 flex items-start"
+                  style={{ top: `${(h / 24) * 100}%`, height: HOUR_PX }}
                 >
-                  <span
-                    className={`text-xs absolute -top-2.5 right-2 ${textMuted}`}
-                  >
-                    {formatHour(hour)}
+                  <span className="text-xs dark:text-purple-400/50 text-purple-400/60 pr-2 pt-0.5 text-right w-full whitespace-nowrap">
+                    {fmtHr(h)}
                   </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Day columns scroll wrapper */}
-          <div className="flex-1 overflow-x-auto">
+          {/* Days — horizontally scrollable if narrow, vertically scrollable for 24h */}
+          <div className="flex-1 overflow-x-auto flex flex-col">
             {/* Day headers — sticky */}
             <div
-              className={`sticky top-[73px] z-20 flex border-b ${isDark ? "border-purple-900/30 bg-[#0A0714]/95 backdrop-blur" : "border-purple-100 bg-[#FAF5FF]/95 backdrop-blur"}`}
+              className="flex flex-shrink-0 border-b dark:border-purple-900/30 border-purple-100 dark:bg-[#0A0714] bg-[#FAF5FF]"
+              style={{ height: 48 }}
             >
-              {columns.map((col, idx) => {
-                const isToday = isSameDay(col.date, today);
+              {cols.map((col, i) => {
+                const isToday = sameDay(col.date, today);
                 return (
                   <div
-                    key={idx}
-                    className={`flex-1 text-center py-3 border-r ${colBorderBg} ${isToday ? todayHeaderBg : colHeaderBg}`}
+                    key={i}
+                    className={`flex-1 min-w-28 text-center py-2 border-r dark:border-purple-900/20 border-purple-100 ${isToday ? "dark:bg-purple-900/10 bg-purple-50" : ""}`}
                   >
                     <p
-                      className={`text-xs font-medium uppercase tracking-wide ${isToday ? "text-purple-400" : textMuted}`}
+                      className={`text-xs font-semibold uppercase tracking-widest ${isToday ? "dark:text-purple-400 text-purple-600" : "dark:text-purple-400/50 text-purple-400/60"}`}
                     >
                       {col.label}
                     </p>
                     <div
-                      className={`inline-flex items-center justify-center w-8 h-8 rounded-full mt-0.5 text-sm font-bold ${
-                        isToday ? "bg-purple-600 text-white" : textPrimary
-                      }`}
+                      className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${isToday ? "bg-purple-600 text-white" : "dark:text-purple-100 text-purple-900"}`}
                     >
-                      {col.dateStr}
+                      {col.num}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {/* Scrollable grid body */}
+            {/* Scrollable 24h body */}
             <div
               ref={scrollRef}
-              className="overflow-y-auto"
-              style={{ maxHeight: "calc(100vh - 180px)" }}
+              className="flex-1 overflow-y-auto"
+              style={{ overscrollBehavior: "contain" }}
             >
-              <div
-                className="flex relative"
-                style={{ height: `${HOUR_HEIGHT * 24}px` }}
-              >
-                {/* Current time line */}
-                {isCurrentWeek && (
+              <div className="flex relative" style={{ height: TOTAL_H }}>
+                {/* Now line */}
+                {inWeek && (
                   <div
-                    className="absolute left-0 right-0 z-10 pointer-events-none"
-                    style={{ top: `${nowPercent}%` }}
+                    className="absolute left-0 right-0 z-10 pointer-events-none flex items-center"
+                    style={{ top: `${timePct(today)}%` }}
                   >
-                    <div className="flex items-center w-full">
-                      <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 -ml-1" />
-                      <div className="flex-1 h-px bg-red-500 opacity-70" />
-                    </div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0 -ml-1.5" />
+                    <div className="flex-1 h-px bg-red-500/70" />
                   </div>
                 )}
-
-                {/* Day columns */}
-                {columns.map((col, idx) => {
-                  const isToday = isSameDay(col.date, today);
+                {cols.map((col, ci) => {
+                  const isToday = sameDay(col.date, today);
                   return (
                     <div
-                      key={idx}
-                      className={`flex-1 relative border-r ${colBorderBg} ${isToday ? (isDark ? "bg-purple-900/5" : "bg-purple-50/50") : ""}`}
+                      key={ci}
+                      className={`flex-1 min-w-28 relative border-r dark:border-purple-900/20 border-purple-100 ${isToday ? "dark:bg-purple-900/5 bg-purple-50/20" : ""}`}
                     >
-                      {/* Hour grid lines */}
-                      {HOURS.map((hour) => (
+                      {H24.map((h) => (
                         <div
-                          key={hour}
-                          className={`absolute left-0 right-0 border-t ${hourLineBg}`}
-                          style={{
-                            top: `${(hour / 24) * 100}%`,
-                            height: `${HOUR_HEIGHT}px`,
-                          }}
+                          key={h}
+                          className="absolute left-0 right-0 border-t dark:border-purple-900/15 border-purple-100/80"
+                          style={{ top: `${(h / 24) * 100}%`, height: HOUR_PX }}
                         />
                       ))}
-
-                      {/* Half-hour dotted lines */}
-                      {HOURS.map((hour) => (
+                      {H24.map((h) => (
                         <div
-                          key={`h-${hour}`}
-                          className={`absolute left-0 right-0 border-t border-dashed ${isDark ? "border-purple-900/10" : "border-purple-100/60"}`}
-                          style={{ top: `${((hour + 0.5) / 24) * 100}%` }}
+                          key={`hh${h}`}
+                          className="absolute left-0 right-0 border-t border-dashed dark:border-purple-900/10 border-purple-100/50"
+                          style={{ top: `${((h + 0.5) / 24) * 100}%` }}
                         />
                       ))}
-
-                      {/* Shift blocks */}
-                      {col.shifts.map((shift) => {
-                        const start = new Date(shift.start);
-                        const end = new Date(shift.end);
-                        const topPct = toTopPercent(start);
-                        const heightPct = toHeightPercent(start, end);
-                        const isBooked = shift.isBooked;
-                        const isPast = end < today;
-
+                      {col.shifts.map((sh) => {
+                        const s = new Date(sh.start),
+                          e = new Date(sh.end);
+                        const top = timePct(s),
+                          ht = Math.max(durPct(s, e), 1.5),
+                          past = e < today;
                         return (
                           <div
-                            key={shift.id}
-                            className={`absolute left-0.5 right-0.5 rounded-lg overflow-hidden cursor-pointer transition-opacity ${
-                              isPast
-                                ? "opacity-50"
-                                : "opacity-100 hover:opacity-90"
-                            }`}
-                            style={{
-                              top: `${topPct}%`,
-                              height: `${Math.max(heightPct, 1.5)}%`,
-                            }}
+                            key={sh.id}
                             title={
-                              isBooked
-                                ? `Booked: ${shift.booking?.student.name}`
-                                : "Available slot"
+                              sh.isBooked
+                                ? `Booked: ${sh.booking?.student.name}`
+                                : "Available"
                             }
+                            className={`absolute left-0.5 right-0.5 rounded-lg overflow-hidden cursor-pointer transition-opacity ${past ? "opacity-40" : "opacity-100 hover:opacity-85"}`}
+                            style={{ top: `${top}%`, height: `${ht}%` }}
                           >
-                            {isBooked ? (
+                            {sh.isBooked ? (
                               <div className="h-full bg-green-600/80 border border-green-500/50 px-1.5 py-1">
-                                <p className="text-white text-xs font-medium leading-tight truncate">
-                                  {shift.booking?.student.name}
+                                <p className="text-white text-xs font-semibold leading-tight truncate">
+                                  {sh.booking?.student.name}
                                 </p>
-                                <p className="text-green-200 text-xs leading-tight">
-                                  {start.toLocaleTimeString("en-US", {
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  })}
+                                <p className="text-green-200 text-xs">
+                                  {fmtTime(s)}
                                 </p>
                               </div>
                             ) : (
-                              <div className="h-full bg-purple-600/60 border border-purple-500/40 px-1.5 py-1">
-                                <p className="text-purple-200 text-xs font-medium leading-tight">
+                              <div className="h-full dark:bg-purple-600/50 bg-purple-400/40 border dark:border-purple-500/40 border-purple-400/50 px-1.5 py-1">
+                                <p className="dark:text-purple-200 text-purple-700 text-xs font-medium">
                                   Available
                                 </p>
-                                <p className="text-purple-300/70 text-xs leading-tight">
-                                  {start.toLocaleTimeString("en-US", {
-                                    hour: "numeric",
-                                    minute: "2-digit",
-                                  })}
+                                <p className="dark:text-purple-300/70 text-purple-500 text-xs">
+                                  {fmtTime(s)}
                                 </p>
                               </div>
                             )}
@@ -433,8 +310,6 @@ function CalendarContent() {
             </div>
           </div>
         </div>
-
-        {/* Error state */}
         {error && (
           <div className="fixed bottom-4 right-4 bg-red-900/90 border border-red-700 text-red-200 px-4 py-3 rounded-xl text-sm">
             {error}
@@ -449,7 +324,7 @@ export default function CalendarPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen bg-[#0A0714]">
+        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
           <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

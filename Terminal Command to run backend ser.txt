@@ -1,3 +1,6 @@
+problems: 3a, 3b
+
+
 NEXT_PUBLIC_API_URL: https://lumexa-backend.onrender.com
 
 
@@ -36,4 +39,4 @@ Direct connection string — toggle "Connection pooling" OFF → copy this. This
 postgresql://neondb_owner:npg_FAfKbuD4qmj8@ep-icy-unit-aigjz9dg.c-4.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
 
 
-analyze the github repo for all the files and find out the issues and provide full step by step guide to  fix the issue. provide full code if any file needs to be changed
+analyze the github repo: "https://github.com/omlanfz/lumexa" for all the files and find out the issues and provide full step by step guide to  fix the issue. provide full code if any file needs to be changed/modified/new file creation along with proper file path

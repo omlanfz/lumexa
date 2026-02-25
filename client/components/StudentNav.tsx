@@ -1,15 +1,14 @@
 // FILE PATH: client/components/StudentNav.tsx
 "use client";
-
 import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle, useTheme } from "./ThemeProvider";
 
-interface StudentNavProps {
+export interface StudentNavProps {
   studentId: string;
   studentName?: string;
   grade?: string | null;
   parentName?: string;
-  isTeacherView?: boolean; // true when a teacher is viewing this student
+  isTeacherView?: boolean;
   onExitTeacherView?: () => void;
 }
 
@@ -24,8 +23,7 @@ export default function StudentNav({
   const pathname = usePathname();
   const router = useRouter();
   const { isDark } = useTheme();
-
-  const NAV_ITEMS = [
+  const NAV = [
     {
       path: `/student-dashboard/${studentId}`,
       label: "Dashboard",
@@ -51,27 +49,10 @@ export default function StudentNav({
       icon: "🏆",
     },
   ];
-
-  const bgNav = isDark
-    ? "bg-[#050D1A] border-blue-900/40"
-    : "bg-[#F0F5FF] border-blue-200";
-  const textPrimary = isDark ? "text-blue-100" : "text-blue-900";
-  const textSub = isDark ? "text-blue-400" : "text-blue-400";
-  const activeClass = isDark
-    ? "bg-blue-600/20 text-blue-300 border-l-2 border-blue-500"
-    : "bg-blue-100 text-blue-700 border-l-2 border-blue-500";
-  const inactiveClass = isDark
-    ? "text-blue-200/60 hover:bg-blue-900/20 hover:text-blue-200"
-    : "text-blue-700/60 hover:bg-blue-50 hover:text-blue-700";
-
   return (
-    <nav
-      className={`fixed left-0 top-0 h-full w-64 flex flex-col z-40 border-r ${bgNav}`}
-      style={{ transition: "background 0.3s, border-color 0.3s" }}
-    >
-      {/* Teacher view banner */}
+    <nav className="fixed left-0 top-0 h-full w-64 flex flex-col z-40 border-r dark:bg-[#050D1A] bg-[#F0F5FF] dark:border-blue-900/40 border-blue-200">
       {isTeacherView && (
-        <div className="bg-amber-500 px-4 py-2 flex items-center justify-between">
+        <div className="bg-amber-500 px-4 py-2 flex items-center justify-between flex-shrink-0">
           <p className="text-black text-xs font-bold">👁️ TEACHER VIEW</p>
           <button
             onClick={onExitTeacherView}
@@ -81,58 +62,51 @@ export default function StudentNav({
           </button>
         </div>
       )}
-
       {/* Logo */}
-      <div
-        className={`px-6 py-6 border-b ${isDark ? "border-blue-900/20" : "border-blue-200"}`}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
-            L
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-blue-400 leading-none">
-              Lumexa
-            </h1>
-            <p className={`text-xs leading-none mt-0.5 ${textSub}`}>
-              Mission Control
-            </p>
-          </div>
+      <div className="px-6 py-5 border-b dark:border-blue-900/20 border-blue-200 flex items-center gap-3 flex-shrink-0">
+        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
+          L
+        </div>
+        <div>
+          <h1 className="text-lg font-bold text-blue-500 leading-none">
+            Lumexa
+          </h1>
+          <p className="text-xs dark:text-blue-400/60 text-blue-400">
+            Mission Control
+          </p>
         </div>
       </div>
-
-      {/* Student profile section */}
-      <div
-        className={`px-4 py-4 border-b ${isDark ? "border-blue-900/20" : "border-blue-200"}`}
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-bold text-sm border-2 border-blue-500/40">
-            {studentName.charAt(0).toUpperCase()}
+      {/* Student info */}
+      <div className="px-4 py-4 border-b dark:border-blue-900/20 border-blue-200 flex-shrink-0">
+        <div className="flex items-center gap-3 px-2">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-bold text-sm border-2 border-blue-500/40 flex-shrink-0">
+            {studentName[0]?.toUpperCase() ?? "C"}
           </div>
-          <div className="min-w-0 flex-1">
-            <p
-              className={`text-sm font-medium leading-tight truncate ${textPrimary}`}
-            >
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate dark:text-blue-100 text-blue-900">
               {studentName}
             </p>
-            <p className={`text-xs leading-tight ${textSub}`}>
-              {grade ?? "Cadet"} {parentName ? `· ${parentName}` : ""}
+            <p className="text-xs dark:text-blue-400/70 text-blue-500">
+              {grade ?? "Cadet"}
+              {parentName ? ` · ${parentName}` : ""}
             </p>
           </div>
         </div>
       </div>
-
-      {/* Nav Items */}
+      {/* Nav */}
       <div className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
-        {NAV_ITEMS.map((item) => {
+        {NAV.map((item) => {
           const active = pathname === item.path;
           return (
             <button
               key={item.path}
               onClick={() => router.push(item.path)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-200 ${
-                active ? activeClass : inactiveClass
-              }`}
+              className={[
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors",
+                active
+                  ? "dark:bg-blue-600/20 bg-blue-100 dark:text-blue-300 text-blue-700 border-l-2 border-blue-500"
+                  : "dark:text-blue-200/60 text-blue-600/60 dark:hover:bg-blue-900/20 hover:bg-blue-50 dark:hover:text-blue-200 hover:text-blue-700",
+              ].join(" ")}
             >
               <span className="text-base w-6 text-center flex-shrink-0">
                 {item.icon}
@@ -141,42 +115,40 @@ export default function StudentNav({
                 <p className="text-sm font-medium leading-tight">
                   {item.label}
                 </p>
-                <p className={`text-xs leading-tight ${textSub}`}>{item.sub}</p>
+                <p className="text-xs dark:text-blue-400/60 text-blue-400 leading-tight">
+                  {item.sub}
+                </p>
               </div>
             </button>
           );
         })}
       </div>
-
-      {/* Back to parent dashboard */}
       {!isTeacherView && (
-        <div
-          className={`px-3 pb-2 border-t ${isDark ? "border-blue-900/20" : "border-blue-200"} pt-2`}
-        >
+        <div className="px-3 pt-2 pb-1 border-t dark:border-blue-900/20 border-blue-200">
           <button
             onClick={() => router.push("/dashboard")}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${inactiveClass}`}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left dark:text-blue-200/50 text-blue-500/70 dark:hover:bg-blue-900/20 hover:bg-blue-50 transition-colors"
           >
-            <span className="text-base w-6 text-center">← </span>
-            <div>
-              <p className="text-sm font-medium leading-tight">My Dashboard</p>
-              <p className={`text-xs leading-tight ${textSub}`}>Parent View</p>
+            <span className="text-sm w-6 text-center flex-shrink-0">←</span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium leading-tight">
+                Parent Dashboard
+              </p>
+              <p className="text-xs dark:text-blue-400/50 text-blue-400">
+                Commander View
+              </p>
             </div>
           </button>
         </div>
       )}
-
-      {/* Bottom: Theme toggle */}
-      <div
-        className={`px-4 py-4 border-t ${isDark ? "border-blue-900/20" : "border-blue-200"}`}
-      >
+      <div className="px-4 py-4 border-t dark:border-blue-900/20 border-blue-200 flex-shrink-0">
         <div className="flex items-center justify-between">
-          <span className={`text-xs ${textSub}`}>
+          <span className="text-xs dark:text-blue-400/50 text-blue-400">
             {isDark ? "🌌 Deep Space" : "☀️ Light Mode"}
           </span>
           <ThemeToggle variant="student" />
         </div>
-        <p className={`text-xs mt-2 ${textSub} opacity-40`}>
+        <p className="text-xs mt-2 dark:text-blue-400/30 text-blue-300">
           Lumexa v1.0 · Mission Control
         </p>
       </div>

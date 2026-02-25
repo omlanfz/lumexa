@@ -1,3 +1,4 @@
+// FILE PATH: client/app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -25,35 +26,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    /*
-     * suppressHydrationWarning is required because we modify the className
-     * via the inline script below BEFORE React hydrates. Without it, React
-     * warns about a mismatch between server-rendered HTML and the DOM.
-     */
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/*
-         * Anti-FOUC (Flash Of Unstyled Content) script.
-         * Runs synchronously before the browser paints — reads the stored
-         * theme from localStorage and immediately adds the correct class to
-         * <html>. This prevents a dark→light or light→dark flash on load.
-         *
-         * MUST be dangerouslySetInnerHTML (not a separate .js file) to
-         * guarantee it executes before the first paint.
-         */}
+        {/* Anti-flash: runs sync before React hydrates. Reads localStorage → adds class to <html>. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              (function () {
-                try {
-                  var t = localStorage.getItem('lumexa-theme') || 'dark';
-                  document.documentElement.classList.add(t);
-                  document.documentElement.style.colorScheme = t;
-                } catch (e) {
-                  document.documentElement.classList.add('dark');
-                }
-              })();
-            `,
+            __html: `(function(){try{var t=localStorage.getItem('lumexa-theme')||'dark';var h=document.documentElement;h.classList.remove('dark','light');h.classList.add(t);h.style.colorScheme=t;h.setAttribute('data-theme',t);}catch(e){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}})()`,
           }}
         />
       </head>

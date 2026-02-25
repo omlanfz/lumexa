@@ -1,3 +1,4 @@
+// FILE PATH: server/src/uploads/uploads.controller.ts
 import {
   Controller,
   Post,
@@ -14,13 +15,18 @@ import { PrismaService } from '../prisma.service';
 @Controller('uploads')
 @UseGuards(AuthGuard('jwt'))
 export class UploadsController {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * POST /uploads/avatar
+   * Uploads a profile picture and stores the URL on the User record.
+   * Accepts: multipart/form-data with field name "avatar"
+   */
   @Post('avatar')
   @UseInterceptors(FileInterceptor('avatar'))
   async uploadAvatar(
     @UploadedFile() file: Express.Multer.File,
-    @Request() req,
+    @Request() req: any,
   ) {
     if (!file) throw new BadRequestException('No file provided');
 

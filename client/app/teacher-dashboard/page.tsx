@@ -1,13 +1,13 @@
 // FILE PATH: client/app/teacher-dashboard/page.tsx
 "use client";
 
-import { Suspense, useEffect, useState, useRef } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import TeacherNav from "../../components/TeacherNav";
 import { useTheme } from "../../components/ThemeProvider";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Stats {
   completedClasses: number;
@@ -49,11 +49,13 @@ interface Profile {
   strikes: number;
   isSuspended: boolean;
   rankTier: number;
+  points?: number;
+  weeklyPoints?: number;
   subjects?: string[];
   grades?: string[];
 }
 
-// ─── Space-themed motivational messages (cycle daily by day of week) ─────────
+// ─── Daily Mission Briefs (rotate by day-of-week) ─────────────────────────────
 
 const MISSION_BRIEFS = [
   "🚀 Ready for launch. Your cadets are counting on you, Pilot.",
@@ -84,34 +86,13 @@ const RANK_COLORS = [
   "from-pink-500 to-rose-600",
 ];
 
-// ─── Countdown Hook ───────────────────────────────────────────────────────────
-
-function useCountdown(targetMs: number | null) {
-  const [remaining, setRemaining] = useState<number>(targetMs ?? 0);
-
-  useEffect(() => {
-    if (targetMs === null) return;
-    setRemaining(targetMs);
-    const interval = setInterval(() => {
-      setRemaining((prev) => Math.max(0, prev - 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [targetMs]);
-
-  const total = remaining;
-  const hours = Math.floor(total / 3600000);
-  const minutes = Math.floor((total % 3600000) / 60000);
-  const seconds = Math.floor((total % 60000) / 1000);
-  return { hours, minutes, seconds, total };
-}
-
-// ─── Achievement Badges ───────────────────────────────────────────────────────
+// ─── Achievements ─────────────────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [
   {
     id: "first_class",
     label: "First Launch",
-    desc: "Completed your first class",
+    desc: "First class completed",
     icon: "🚀",
     threshold: 1,
   },
@@ -152,23 +133,44 @@ const ACHIEVEMENTS = [
   },
 ];
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── Countdown hook ───────────────────────────────────────────────────────────
+
+function useCountdown(targetMs: number | null) {
+  const [remaining, setRemaining] = useState<number>(targetMs ?? 0);
+
+  useEffect(() => {
+    if (targetMs === null) return;
+    setRemaining(targetMs);
+    const id = setInterval(
+      () => setRemaining((p) => Math.max(0, p - 1000)),
+      1000,
+    );
+    return () => clearInterval(id);
+  }, [targetMs]);
+
+  const hours = Math.floor(remaining / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  return { hours, minutes, seconds, total: remaining };
+}
+
+// ─── Dashboard Content ────────────────────────────────────────────────────────
 
 function TeacherDashboardContent() {
   const router = useRouter();
   const { isDark } = useTheme();
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [nextClass, setNextClass] = useState<NextClass | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [rankInfo, setRankInfo] = useState<RankInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const { hours, minutes, seconds } = useCountdown(
     nextClass?.msUntilStart ?? null,
   );
-
-  const briefIndex = new Date().getDay();
-  const dailyBrief = MISSION_BRIEFS[briefIndex];
+  const dailyBrief = MISSION_BRIEFS[new Date().getDay()];
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -177,7 +179,7 @@ function TeacherDashboardContent() {
       return;
     }
 
-    const fetchAll = async () => {
+    (async () => {
       try {
         const [statsRes, nextRes, profileRes] = await Promise.all([
           axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/stats`, {
@@ -185,9 +187,7 @@ function TeacherDashboardContent() {
           }),
           axios.get(
             `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/next-class`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
+            { headers: { Authorization: `Bearer ${token}` } },
           ),
           axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -195,19 +195,20 @@ function TeacherDashboardContent() {
         ]);
 
         setStats(statsRes.data);
-        setNextClass(nextRes.data);
+        setNextClass(nextRes.data ?? null);
         setProfile(profileRes.data);
 
-        // Compute rank info from profile
+        // Compute rank from profile data
         const tier = profileRes.data.rankTier ?? 0;
         const pts = profileRes.data.points ?? 0;
-        const nextThreshold = RANK_THRESHOLDS[tier + 1] ?? RANK_THRESHOLDS[5];
-        const prevThreshold = RANK_THRESHOLDS[tier] ?? 0;
-        const progressPercent =
+        const next = RANK_THRESHOLDS[tier + 1] ?? RANK_THRESHOLDS[5];
+        const prev = RANK_THRESHOLDS[tier] ?? 0;
+        const pct =
           tier >= 5
             ? 100
-            : Math.round(
-                ((pts - prevThreshold) / (nextThreshold - prevThreshold)) * 100,
+            : Math.min(
+                100,
+                Math.max(0, Math.round(((pts - prev) / (next - prev)) * 100)),
               );
         setRankInfo({
           points: pts,
@@ -215,49 +216,36 @@ function TeacherDashboardContent() {
           rankTier: tier,
           rankName: RANK_NAMES[tier],
           rankIcon: RANK_ICONS[tier],
-          pointsToNext: Math.max(0, nextThreshold - pts),
-          progressPercent: Math.min(100, Math.max(0, progressPercent)),
+          pointsToNext: Math.max(0, next - pts),
+          progressPercent: pct,
         });
-      } catch (err: any) {
-        const msg = err.response?.data?.message;
+      } catch (e: any) {
+        const m = e.response?.data?.message;
         setError(
-          Array.isArray(msg)
-            ? msg.join(", ")
-            : (msg ?? "Failed to load dashboard"),
+          Array.isArray(m) ? m.join(", ") : (m ?? "Failed to load dashboard"),
         );
       } finally {
         setLoading(false);
       }
-    };
-    fetchAll();
+    })();
   }, [router]);
 
-  // Theme classes
-  const bg = isDark ? "bg-[#0A0714]" : "bg-[#FAF5FF]";
-  const cardBg = isDark
-    ? "bg-gray-900/40 border border-purple-900/30"
-    : "bg-white border border-purple-100 shadow-sm";
-  const textPrimary = isDark ? "text-purple-100" : "text-purple-900";
-  const textMuted = isDark ? "text-purple-300/60" : "text-purple-400";
-
-  if (loading) {
+  if (loading)
     return (
-      <div className={`flex items-center justify-center h-screen ${bg}`}>
+      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-purple-400 text-sm mt-4">
-            Preparing your flight deck...
+          <p className="dark:text-purple-400 text-purple-500 text-sm mt-4">
+            Preparing your flight deck…
           </p>
         </div>
       </div>
     );
-  }
 
-  const teacherEarningsDollars = (stats?.teacherEarningsCents ?? 0) / 100;
-  const isProfileIncomplete = !profile?.bio || !profile?.subjects?.length;
   const completedClasses = stats?.completedClasses ?? 0;
+  const teacherEarnings = (stats?.teacherEarningsCents ?? 0) / 100;
+  const isProfileIncomplete = !profile?.bio || !profile?.subjects?.length;
 
-  // Earned achievements
   const earnedAchievements = ACHIEVEMENTS.filter((a) => {
     if (a.id === "first_class") return completedClasses >= 1;
     if (a.id === "ten_classes") return completedClasses >= 10;
@@ -268,8 +256,14 @@ function TeacherDashboardContent() {
     return false;
   });
 
+  // ── Tailwind v4 class strings
+  // dark: works via @custom-variant dark in globals.css — no isDark ternaries needed.
+  // We use isDark ONLY where we genuinely need it (e.g. complex gradient decisions).
+  const card =
+    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+
   return (
-    <div className={`min-h-screen ${bg} transition-colors duration-300`}>
+    <div className="min-h-screen dark:bg-[#0A0714] bg-[#FAF5FF] transition-colors">
       <TeacherNav
         teacherName={profile?.user?.fullName ?? "Pilot"}
         avatarUrl={profile?.user?.avatarUrl ?? null}
@@ -283,184 +277,143 @@ function TeacherDashboardContent() {
 
       <div className="pl-64">
         <div className="max-w-6xl mx-auto px-6 py-8">
-          {/* Suspension warning */}
+          {/* ── Suspension warning ─────────────────────────────────────── */}
           {profile?.isSuspended && (
             <div className="mb-6 p-4 bg-red-900/30 border border-red-600/40 rounded-xl flex items-start gap-3">
               <span className="text-2xl">🚫</span>
               <div>
                 <p className="text-red-300 font-semibold">Mission Suspended</p>
                 <p className="text-red-400/70 text-sm">
-                  Your account is suspended. Contact mission support for
+                  Your account has been suspended. Contact mission support for
                   reinstatement.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Profile incomplete nudge */}
+          {/* ── Profile incomplete nudge ───────────────────────────────── */}
           {isProfileIncomplete && (
-            <div
-              className={`mb-6 p-4 rounded-xl border flex items-start gap-3 ${
-                isDark
-                  ? "bg-amber-900/20 border-amber-700/30"
-                  : "bg-amber-50 border-amber-200"
-              }`}
-            >
+            <div className="mb-6 p-4 rounded-xl border dark:bg-amber-900/20 dark:border-amber-700/30 bg-amber-50 border-amber-200 flex items-start gap-3">
               <span className="text-2xl">🛸</span>
               <div className="flex-1">
-                <p
-                  className={`font-semibold text-sm ${isDark ? "text-amber-300" : "text-amber-800"}`}
-                >
+                <p className="font-semibold text-sm dark:text-amber-300 text-amber-800">
                   Complete your pilot profile to attract more cadets
                 </p>
-                <p
-                  className={`text-xs mt-0.5 ${isDark ? "text-amber-400/70" : "text-amber-600"}`}
-                >
+                <p className="text-xs mt-0.5 dark:text-amber-400/70 text-amber-600">
                   Add your bio, subjects, and availability to appear in more
                   search results.
                 </p>
               </div>
               <button
                 onClick={() => router.push("/teacher-profile")}
-                className={`text-sm px-3 py-1.5 rounded-lg font-medium flex-shrink-0 ${
-                  isDark
-                    ? "bg-amber-600 hover:bg-amber-500 text-white"
-                    : "bg-amber-500 hover:bg-amber-400 text-white"
-                }`}
+                className="text-sm px-3 py-1.5 rounded-lg font-medium flex-shrink-0 bg-amber-600 hover:bg-amber-500 text-white transition-colors"
               >
                 Complete Profile
               </button>
             </div>
           )}
 
-          {/* Daily Mission Brief */}
-          <div
-            className={`mb-6 px-5 py-4 rounded-2xl border relative overflow-hidden ${
-              isDark
-                ? "bg-purple-900/20 border-purple-700/30"
-                : "bg-purple-50 border-purple-200"
-            }`}
-          >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-            <p
-              className={`text-sm font-medium ${isDark ? "text-purple-200" : "text-purple-700"}`}
-            >
+          {/* ── Daily Mission Brief ────────────────────────────────────── */}
+          <div className="mb-6 px-5 py-4 rounded-2xl border relative overflow-hidden dark:bg-purple-900/20 dark:border-purple-700/30 bg-purple-50 border-purple-200">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+            <p className="text-sm font-medium dark:text-purple-300 text-purple-600">
               Daily Mission Brief
             </p>
-            <p
-              className={`text-lg font-bold mt-1 ${isDark ? "text-white" : "text-purple-900"}`}
-            >
+            <p className="text-lg font-bold mt-1 dark:text-white text-purple-900">
               {dailyBrief}
             </p>
           </div>
 
-          {/* Rank Card + Stats Row */}
+          {/* ── Rank + Stats row (5 cols) ──────────────────────────────── */}
           <div className="grid grid-cols-5 gap-4 mb-6">
-            {/* Rank card — takes 2 columns */}
-            <div className={`col-span-2 ${cardBg} rounded-2xl p-5`}>
+            {/* Rank card — 2 cols */}
+            <div className={`col-span-2 ${card} p-5`}>
               <div className="flex items-start gap-4">
                 <div
                   className={`w-14 h-14 rounded-xl bg-gradient-to-br ${RANK_COLORS[rankInfo?.rankTier ?? 0]} flex items-center justify-center text-2xl flex-shrink-0`}
                 >
-                  {rankInfo?.rankIcon}
+                  {rankInfo?.rankIcon ?? "🌱"}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-xs uppercase tracking-wide font-medium ${textMuted}`}
-                  >
+                  <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
                     Space Rank
                   </p>
-                  <p
-                    className={`text-xl font-bold leading-tight mt-0.5 ${textPrimary}`}
-                  >
+                  <p className="text-xl font-bold leading-tight mt-0.5 dark:text-purple-100 text-purple-900">
                     {rankInfo?.rankName ?? "Cadet"}
                   </p>
-                  <p
-                    className={`text-sm ${isDark ? "text-purple-300" : "text-purple-600"}`}
-                  >
-                    {rankInfo?.points.toLocaleString() ?? 0} pts
+                  <p className="text-sm dark:text-purple-300 text-purple-600">
+                    {(rankInfo?.points ?? 0).toLocaleString()} pts
                   </p>
                 </div>
               </div>
+
               <div className="mt-4">
                 <div className="flex justify-between text-xs mb-1">
-                  <span className={textMuted}>Progress to next rank</span>
-                  <span className={textMuted}>
+                  <span className="dark:text-purple-300/60 text-purple-400">
+                    Progress to next rank
+                  </span>
+                  <span className="dark:text-purple-300/60 text-purple-400">
                     {rankInfo?.progressPercent ?? 0}%
                   </span>
                 </div>
-                <div
-                  className={`h-2 rounded-full ${isDark ? "bg-gray-800" : "bg-purple-100"}`}
-                >
+                <div className="h-2 rounded-full dark:bg-gray-800 bg-purple-100">
                   <div
                     className={`h-full rounded-full bg-gradient-to-r ${RANK_COLORS[rankInfo?.rankTier ?? 0]} transition-all duration-700`}
                     style={{ width: `${rankInfo?.progressPercent ?? 0}%` }}
                   />
                 </div>
-                <p className={`text-xs mt-1 ${textMuted}`}>
-                  {rankInfo?.pointsToNext.toLocaleString() ?? "—"} pts to{" "}
+                <p className="text-xs mt-1 dark:text-purple-300/60 text-purple-400">
+                  {(rankInfo?.pointsToNext ?? 0).toLocaleString()} pts to{" "}
                   {RANK_NAMES[(rankInfo?.rankTier ?? 0) + 1] ?? "max"}
                 </p>
               </div>
-              <div
-                className={`mt-3 pt-3 border-t ${isDark ? "border-purple-900/20" : "border-purple-100"} flex justify-between`}
-              >
+
+              <div className="mt-3 pt-3 border-t dark:border-purple-900/20 border-purple-100 flex items-center justify-between">
                 <div>
-                  <p className={`text-xs ${textMuted}`}>This week</p>
-                  <p
-                    className={`text-sm font-bold ${isDark ? "text-purple-300" : "text-purple-600"}`}
-                  >
+                  <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                    This week
+                  </p>
+                  <p className="text-sm font-bold dark:text-purple-300 text-purple-600">
                     +{rankInfo?.weeklyPoints ?? 0} pts
                   </p>
                 </div>
                 <button
                   onClick={() => router.push("/leaderboard")}
-                  className={`text-xs px-3 py-1.5 rounded-lg ${
-                    isDark
-                      ? "bg-purple-900/30 text-purple-300 hover:bg-purple-800/40"
-                      : "bg-purple-100 text-purple-600 hover:bg-purple-200"
-                  }`}
+                  className="text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-800/40 bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"
                 >
                   View Rankings
                 </button>
               </div>
             </div>
 
-            {/* Stats — 3 columns */}
-            <div
-              className={`${cardBg} rounded-2xl p-4 flex flex-col justify-between`}
-            >
+            {/* Classes stat */}
+            <div className={`${card} p-4 flex flex-col justify-between`}>
               <div>
                 <span className="text-2xl">📚</span>
-                <p
-                  className={`text-xs uppercase tracking-wide mt-2 ${textMuted}`}
-                >
+                <p className="text-xs uppercase tracking-wide mt-2 dark:text-purple-300/60 text-purple-400">
                   Classes Taught
                 </p>
-                <p className={`text-3xl font-bold mt-1 ${textPrimary}`}>
+                <p className="text-3xl font-bold mt-1 dark:text-purple-100 text-purple-900">
                   {completedClasses}
                 </p>
               </div>
-              <p className={`text-xs ${textMuted}`}>
+              <p className="text-xs dark:text-purple-300/60 text-purple-400">
                 {stats?.upcomingClasses ?? 0} upcoming
               </p>
             </div>
 
-            <div
-              className={`${cardBg} rounded-2xl p-4 flex flex-col justify-between`}
-            >
+            {/* Rating stat */}
+            <div className={`${card} p-4 flex flex-col justify-between`}>
               <div>
                 <span className="text-2xl">⭐</span>
-                <p
-                  className={`text-xs uppercase tracking-wide mt-2 ${textMuted}`}
-                >
+                <p className="text-xs uppercase tracking-wide mt-2 dark:text-purple-300/60 text-purple-400">
                   Rating
                 </p>
-                <p className={`text-3xl font-bold mt-1 ${textPrimary}`}>
+                <p className="text-3xl font-bold mt-1 dark:text-purple-100 text-purple-900">
                   {stats?.ratingAvg ? stats.ratingAvg.toFixed(1) : "—"}
                 </p>
               </div>
-              <p className={`text-xs ${textMuted}`}>
+              <p className="text-xs dark:text-purple-300/60 text-purple-400">
                 {stats?.reviewCount ?? 0} reviews
                 {(stats?.strikes ?? 0) > 0 && (
                   <span className="text-red-400 ml-2">
@@ -470,40 +423,33 @@ function TeacherDashboardContent() {
               </p>
             </div>
 
-            <div
-              className={`${cardBg} rounded-2xl p-4 flex flex-col justify-between`}
-            >
+            {/* Earnings stat */}
+            <div className={`${card} p-4 flex flex-col justify-between`}>
               <div>
                 <span className="text-2xl">💰</span>
-                <p
-                  className={`text-xs uppercase tracking-wide mt-2 ${textMuted}`}
-                >
+                <p className="text-xs uppercase tracking-wide mt-2 dark:text-purple-300/60 text-purple-400">
                   Earnings
                 </p>
-                <p
-                  className={`text-3xl font-bold mt-1 ${isDark ? "text-green-400" : "text-green-600"}`}
-                >
-                  ${teacherEarningsDollars.toFixed(0)}
+                <p className="text-3xl font-bold mt-1 dark:text-green-400 text-green-600">
+                  ${teacherEarnings.toFixed(0)}
                 </p>
               </div>
               <button
                 onClick={() => router.push("/teacher-earnings")}
-                className={`text-xs ${isDark ? "text-purple-400 hover:text-purple-300" : "text-purple-600 hover:text-purple-500"}`}
+                className="text-xs dark:text-purple-400 dark:hover:text-purple-300 text-purple-600 hover:text-purple-500 transition-colors text-left"
               >
                 View details →
               </button>
             </div>
           </div>
 
-          {/* Next Class + Achievements row */}
+          {/* ── Next Class + Achievements row ──────────────────────────── */}
           <div className="grid grid-cols-3 gap-4 mb-6">
-            {/* Next Class — 2 cols */}
+            {/* Next class — 2 cols */}
             <div className="col-span-2">
               {nextClass ? (
-                <div
-                  className={`${cardBg} rounded-2xl p-5 relative overflow-hidden`}
-                >
-                  {/* Animated pulse for soon classes */}
+                <div className={`${card} p-5 relative overflow-hidden`}>
+                  {/* Live indicator when < 10 min */}
                   {nextClass.msUntilStart < 600000 && (
                     <div className="absolute top-4 right-4">
                       <span className="relative flex h-3 w-3">
@@ -512,17 +458,16 @@ function TeacherDashboardContent() {
                       </span>
                     </div>
                   )}
+
                   <div className="flex items-start justify-between mb-4">
                     <div>
-                      <p
-                        className={`text-xs uppercase tracking-wide font-medium ${textMuted}`}
-                      >
+                      <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
                         Upcoming Mission
                       </p>
-                      <p className={`text-lg font-bold mt-0.5 ${textPrimary}`}>
+                      <p className="text-lg font-bold mt-0.5 dark:text-purple-100 text-purple-900">
                         Class with {nextClass.studentName}
                       </p>
-                      <p className={`text-sm ${textMuted}`}>
+                      <p className="text-sm dark:text-purple-300/60 text-purple-400">
                         {new Date(nextClass.start).toLocaleDateString("en-US", {
                           weekday: "short",
                           month: "short",
@@ -547,7 +492,9 @@ function TeacherDashboardContent() {
 
                   {/* Countdown */}
                   <div className="flex items-center gap-4">
-                    <p className={`text-xs ${textMuted} mr-2`}>Starts in:</p>
+                    <p className="text-xs dark:text-purple-300/60 text-purple-400 mr-2">
+                      Starts in:
+                    </p>
                     {[
                       { val: hours, label: "HRS" },
                       { val: minutes, label: "MIN" },
@@ -555,25 +502,21 @@ function TeacherDashboardContent() {
                     ].map(({ val, label }) => (
                       <div
                         key={label}
-                        className={`text-center px-3 py-2 rounded-xl ${isDark ? "bg-purple-900/30" : "bg-purple-100"}`}
+                        className="text-center px-3 py-2 rounded-xl dark:bg-purple-900/30 bg-purple-100"
                       >
-                        <p
-                          className={`text-2xl font-bold tabular-nums ${textPrimary}`}
-                        >
+                        <p className="text-2xl font-bold tabular-nums dark:text-purple-100 text-purple-900">
                           {String(val).padStart(2, "0")}
                         </p>
-                        <p className={`text-xs ${textMuted}`}>{label}</p>
+                        <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                          {label}
+                        </p>
                       </div>
                     ))}
                   </div>
 
-                  {/* Warning & Join */}
-                  <div
-                    className={`mt-4 pt-4 border-t ${isDark ? "border-purple-900/20" : "border-purple-100"} flex items-center justify-between`}
-                  >
-                    <p
-                      className={`text-xs ${isDark ? "text-amber-400/70" : "text-amber-600"}`}
-                    >
+                  {/* Warning + join */}
+                  <div className="mt-4 pt-4 border-t dark:border-purple-900/20 border-purple-100 flex items-center justify-between">
+                    <p className="text-xs dark:text-amber-400/70 text-amber-600">
                       ⚠️ Join on time to avoid a strike.
                     </p>
                     {nextClass.msUntilStart <= 600000 && (
@@ -590,13 +533,13 @@ function TeacherDashboardContent() {
                 </div>
               ) : (
                 <div
-                  className={`${cardBg} rounded-2xl p-5 flex flex-col items-center justify-center text-center min-h-[200px]`}
+                  className={`${card} p-5 flex flex-col items-center justify-center text-center min-h-[200px]`}
                 >
                   <span className="text-4xl mb-3">🌌</span>
-                  <p className={`font-semibold ${textPrimary}`}>
+                  <p className="font-semibold dark:text-purple-100 text-purple-900">
                     No upcoming missions
                   </p>
-                  <p className={`text-sm mt-1 ${textMuted}`}>
+                  <p className="text-sm mt-1 dark:text-purple-300/60 text-purple-400">
                     Add availability slots so cadets can book you.
                   </p>
                   <button
@@ -609,11 +552,9 @@ function TeacherDashboardContent() {
               )}
             </div>
 
-            {/* Achievements — 1 col */}
-            <div className={`${cardBg} rounded-2xl p-5`}>
-              <p
-                className={`text-xs uppercase tracking-wide font-medium mb-3 ${textMuted}`}
-              >
+            {/* Badges — 1 col */}
+            <div className={`${card} p-5`}>
+              <p className="text-xs uppercase tracking-wide font-medium mb-3 dark:text-purple-300/60 text-purple-400">
                 Mission Badges
               </p>
               <div className="grid grid-cols-3 gap-2">
@@ -625,28 +566,25 @@ function TeacherDashboardContent() {
                     <div
                       key={a.id}
                       title={`${a.label}: ${a.desc}`}
-                      className={`aspect-square rounded-xl flex items-center justify-center text-xl transition-all ${
+                      className={[
+                        "aspect-square rounded-xl flex items-center justify-center text-xl transition-all cursor-help",
                         earned
-                          ? isDark
-                            ? "bg-purple-600/30 border border-purple-500/40"
-                            : "bg-purple-100 border border-purple-300"
-                          : isDark
-                            ? "bg-gray-800/40 border border-gray-700/30 opacity-30 grayscale"
-                            : "bg-gray-100 border border-gray-200 opacity-40 grayscale"
-                      }`}
+                          ? "dark:bg-purple-600/30 dark:border dark:border-purple-500/40 bg-purple-100 border border-purple-300"
+                          : "dark:bg-gray-800/40 dark:border dark:border-gray-700/30 bg-gray-100 border border-gray-200 opacity-30 grayscale",
+                      ].join(" ")}
                     >
                       {a.icon}
                     </div>
                   );
                 })}
               </div>
-              <p className={`text-xs mt-3 ${textMuted}`}>
+              <p className="text-xs mt-3 dark:text-purple-300/60 text-purple-400">
                 {earnedAchievements.length}/{ACHIEVEMENTS.length} earned
               </p>
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* ── Quick Actions ──────────────────────────────────────────── */}
           <div className="grid grid-cols-4 gap-3 mb-6">
             {[
               {
@@ -677,60 +615,66 @@ function TeacherDashboardContent() {
               <button
                 key={item.path}
                 onClick={() => router.push(item.path)}
-                className={`${cardBg} rounded-xl p-4 text-left hover:border-purple-500/40 transition-all`}
+                className={`${card} p-4 text-left dark:hover:border-purple-500/40 hover:border-purple-300 transition-all`}
               >
                 <span className="text-2xl">{item.icon}</span>
-                <p className={`text-sm font-medium mt-2 ${textPrimary}`}>
+                <p className="text-sm font-medium mt-2 dark:text-purple-100 text-purple-900">
                   {item.label}
                 </p>
-                <p className={`text-xs ${textMuted}`}>{item.sub}</p>
+                <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                  {item.sub}
+                </p>
               </button>
             ))}
           </div>
 
-          {/* Profile summary row */}
-          <div className={`${cardBg} rounded-2xl p-5`}>
+          {/* ── Profile summary row ────────────────────────────────────── */}
+          <div className={`${card} p-5`}>
             <div className="flex items-center justify-between mb-3">
-              <p className={`font-semibold ${textPrimary}`}>
+              <p className="font-semibold dark:text-purple-100 text-purple-900">
                 Your Pilot Profile
               </p>
               <button
                 onClick={() => router.push("/teacher-profile")}
-                className={`text-xs px-3 py-1.5 rounded-lg ${
-                  isDark
-                    ? "bg-purple-900/30 text-purple-300 hover:bg-purple-800/40"
-                    : "bg-purple-100 text-purple-600 hover:bg-purple-200"
-                }`}
+                className="text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-800/40 bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"
               >
                 Edit
               </button>
             </div>
             <div className="grid grid-cols-4 gap-4">
               <div>
-                <p className={`text-xs ${textMuted}`}>Rate per hour</p>
-                <p className={`text-lg font-bold ${textPrimary}`}>
+                <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                  Rate per hour
+                </p>
+                <p className="text-lg font-bold dark:text-purple-100 text-purple-900">
                   ${profile?.hourlyRate ?? 25}
                 </p>
               </div>
               <div>
-                <p className={`text-xs ${textMuted}`}>Subjects</p>
-                <p className={`text-sm font-medium ${textPrimary}`}>
+                <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                  Subjects
+                </p>
+                <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
                   {profile?.subjects?.length
                     ? profile.subjects.join(", ")
                     : "Not set"}
                 </p>
               </div>
               <div>
-                <p className={`text-xs ${textMuted}`}>Grades</p>
-                <p className={`text-sm font-medium ${textPrimary}`}>
+                <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                  Grades
+                </p>
+                <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
                   {profile?.grades?.length
                     ? profile.grades.join(", ")
                     : "Not set"}
                 </p>
               </div>
               <div>
-                <p className={`text-xs ${textMuted}`}>Bio</p>
-                <p className={`text-sm ${textPrimary} truncate`}>
+                <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                  Bio
+                </p>
+                <p className="text-sm dark:text-purple-100 text-purple-900 truncate">
                   {profile?.bio ?? "No bio yet"}
                 </p>
               </div>
@@ -752,7 +696,7 @@ export default function TeacherDashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen bg-[#0A0714]">
+        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

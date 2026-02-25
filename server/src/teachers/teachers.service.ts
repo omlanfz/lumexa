@@ -393,22 +393,35 @@ export class TeachersService {
   // until gamification system is implemented in Phase B).
 
   async getLeaderboard(limit: number) {
-    const teachers = await this.prisma.teacherProfile.findMany({
+    const profiles = await this.prisma.teacherProfile.findMany({
       where: { isSuspended: false },
-      orderBy: [{ ratingAvg: 'desc' }, { reviewCount: 'desc' }],
-      take: Math.min(limit, 100),
-      include: {
-        user: { select: { fullName: true } },
-      },
+      orderBy: { points: 'desc' },
+      take: Math.min(limit, 50),
+      include: { user: { select: { fullName: true, avatarUrl: true } } },
     });
 
-    return teachers.map((t, idx) => ({
+    const NAMES = [
+      'Cadet',
+      'Navigator',
+      'Pilot',
+      'Commander',
+      'Admiral',
+      'Starmaster',
+    ];
+    const ICONS = ['🌱', '🧭', '✈️', '🎖️', '⭐', '🌟'];
+
+    return profiles.map((p, idx) => ({
       rank: idx + 1,
-      teacherId: t.id,
-      name: t.user.fullName,
-      ratingAvg: t.ratingAvg,
-      reviewCount: t.reviewCount,
-      completedClasses: 0, // populated client-side or via stats endpoint
+      teacherId: p.id,
+      name: p.user.fullName,
+      avatarUrl: p.user.avatarUrl,
+      points: p.points ?? 0,
+      weeklyPoints: p.weeklyPoints ?? 0,
+      rankTier: Math.min(p.rankTier, 5),
+      rankName: NAMES[Math.min(p.rankTier, 5)],
+      rankIcon: ICONS[Math.min(p.rankTier, 5)],
+      ratingAvg: p.ratingAvg,
+      reviewCount: p.reviewCount,
     }));
   }
 
@@ -418,27 +431,28 @@ export class TeachersService {
     });
     if (!profile) throw new NotFoundException('Teacher profile not found');
 
-    // Verify relationship: this student must have a booking with this teacher
-    const hasRelationship = await this.prisma.booking.findFirst({
+    // Verify this teacher has at least one booking with this student
+    const relationship = await this.prisma.booking.findFirst({
       where: {
         studentId,
         shift: { teacherId: profile.id },
+        paymentStatus: 'CAPTURED',
       },
     });
-    if (!hasRelationship)
-      throw new ForbiddenException('No booking relationship with this student');
+    if (!relationship) {
+      throw new ForbiddenException(
+        'No completed class relationship with this student',
+      );
+    }
 
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
       include: {
-        parent: { select: { fullName: true, email: true, avatarUrl: true } },
+        parent: { select: { fullName: true, email: true } },
         bookings: {
+          where: { shift: { teacherId: profile.id } },
           include: {
-            shift: {
-              include: {
-                teacher: { include: { user: { select: { fullName: true } } } },
-              },
-            },
+            shift: true,
             review: true,
           },
           orderBy: { createdAt: 'desc' },
@@ -446,39 +460,37 @@ export class TeachersService {
         },
       },
     });
-
     if (!student) throw new NotFoundException('Student not found');
 
     const completed = student.bookings.filter(
       (b) => b.paymentStatus === 'CAPTURED',
     );
-    const upcoming = student.bookings.filter(
-      (b) => b.paymentStatus === 'CAPTURED' && b.shift.start > new Date(),
-    );
+    const upcoming = completed.filter((b) => b.shift.start > new Date());
+    const ratings = completed.filter((b) => b.review);
     const avgRating =
-      completed.filter((b) => b.review).length > 0
-        ? completed
-            .filter((b) => b.review)
-            .reduce((s, b) => s + b.review!.rating, 0) /
-          completed.filter((b) => b.review).length
+      ratings.length > 0
+        ? ratings.reduce((s, b) => s + b.review!.rating, 0) / ratings.length
         : null;
 
     return {
       student: { id: student.id, name: student.name, age: student.age },
       parentName: student.parent.fullName,
       stats: {
-        totalClasses: completed.length,
+        totalClasses: completed.filter((b) => b.shift.end <= new Date()).length,
         upcomingClasses: upcoming.length,
-        averageRating: avgRating,
+        averageRating: avgRating ? Math.round(avgRating * 10) / 10 : null,
       },
-      recentBookings: completed.slice(0, 10).map((b) => ({
-        id: b.id,
-        start: b.shift.start,
-        end: b.shift.end,
-        teacherName: b.shift.teacher.user.fullName,
-        rating: b.review?.rating ?? null,
-        comment: b.review?.comment ?? null,
-      })),
+      recentBookings: completed
+        .filter((b) => b.shift.end <= new Date())
+        .slice(0, 10)
+        .map((b) => ({
+          id: b.id,
+          start: b.shift.start,
+          end: b.shift.end,
+          teacherName: '', // teacher is always this teacher in this context
+          rating: b.review?.rating ?? null,
+          comment: b.review?.comment ?? null,
+        })),
       nextClass: upcoming[0]
         ? {
             start: upcoming[0].shift.start,
@@ -486,6 +498,47 @@ export class TeachersService {
             bookingId: upcoming[0].id,
           }
         : null,
+    };
+  }
+
+  async getMyRank(userId: string) {
+    const profile = await this.prisma.teacherProfile.findUnique({
+      where: { userId },
+      select: { points: true, weeklyPoints: true, rankTier: true },
+    });
+    if (!profile) throw new NotFoundException('Profile not found');
+
+    const THRESHOLDS = [0, 1000, 5000, 15000, 40000, 100000];
+    const NAMES = [
+      'Cadet',
+      'Navigator',
+      'Pilot',
+      'Commander',
+      'Admiral',
+      'Starmaster',
+    ];
+    const ICONS = ['🌱', '🧭', '✈️', '🎖️', '⭐', '🌟'];
+
+    const tier = Math.min(profile.rankTier, 5);
+    const nextThreshold = THRESHOLDS[tier + 1] ?? THRESHOLDS[5];
+    const prevThreshold = THRESHOLDS[tier] ?? 0;
+    const progressPercent =
+      tier >= 5
+        ? 100
+        : Math.round(
+            ((profile.points - prevThreshold) /
+              (nextThreshold - prevThreshold)) *
+              100,
+          );
+
+    return {
+      points: profile.points ?? 0,
+      weeklyPoints: profile.weeklyPoints ?? 0,
+      rankTier: tier,
+      rankName: NAMES[tier],
+      rankIcon: ICONS[tier],
+      pointsToNext: Math.max(0, nextThreshold - (profile.points ?? 0)),
+      progressPercent: Math.min(100, Math.max(0, progressPercent)),
     };
   }
 }
