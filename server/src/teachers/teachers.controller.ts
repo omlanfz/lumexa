@@ -1,3 +1,5 @@
+// FILE PATH: server/src/teachers/teachers.controller.ts
+
 import {
   Controller,
   Get,
@@ -15,6 +17,7 @@ import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsNumber,
   IsOptional,
   IsString,
@@ -23,7 +26,7 @@ import {
   Min,
 } from 'class-validator';
 
-// ─── DTO ─────────────────────────────────────────────────────────────────────
+// ─── DTOs ─────────────────────────────────────────────────────────────────────
 
 class UpdateProfileDto {
   @IsOptional()
@@ -37,6 +40,40 @@ class UpdateProfileDto {
   @Min(5)
   @Max(500)
   hourlyRate?: number;
+
+  @IsOptional()
+  @IsString()
+  timezone?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  subjects?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  grades?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  experience?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  qualification?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  country?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  city?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,8 +99,8 @@ export class TeachersController {
 
   /**
    * PATCH /teachers/me/profile
-   * Update bio and/or hourlyRate.
-   * Body: { bio?: string, hourlyRate?: number }
+   * Update bio, hourlyRate, and extended profile fields.
+   * Body: UpdateProfileDto
    */
   @Patch('me/profile')
   @UseGuards(RolesGuard)
@@ -86,7 +123,7 @@ export class TeachersController {
 
   /**
    * GET /teachers/me/next-class
-   * Returns the nearest upcoming booked shift with student info.
+   * Returns the nearest upcoming booked shift with student info and countdown.
    * Used by the countdown timer on the teacher dashboard.
    * Returns null if no upcoming class exists.
    */
@@ -126,7 +163,42 @@ export class TeachersController {
     return this.teachersService.getMyStudents(req.user.userId);
   }
 
-  // ── PUBLIC endpoint — any authenticated user can view ─────────────────────
+  /**
+   * GET /teachers/me/students/:studentId/snapshot
+   * Returns a read-only view of a student's learning history with this teacher.
+   * Used by the "Login as Student" / teacher view-as-student feature.
+   * Only accessible if the teacher has at least one booking with this student.
+   */
+  @Get('me/students/:studentId/snapshot')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getStudentSnapshot(@Request() req, @Param('studentId') studentId: string) {
+    return this.teachersService.getStudentSnapshot(req.user.userId, studentId);
+  }
+
+  /**
+   * GET /teachers/me/rank
+   * Returns the teacher's current gamification rank, points, progress to next tier.
+   * Used by the dashboard rank card.
+   */
+  @Get('me/rank')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getMyRank(@Request() req) {
+    return this.teachersService.getMyRank(req.user.userId);
+  }
+
+  // ── PUBLIC endpoints — any authenticated user ──────────────────────────────
+
+  /**
+   * GET /teachers/leaderboard?limit=20
+   * Public leaderboard of teachers ranked by points.
+   * Used by the leaderboard page.
+   */
+  @Get('leaderboard')
+  getLeaderboard(@Query('limit') limit = '20') {
+    return this.teachersService.getLeaderboard(+limit);
+  }
 
   /**
    * GET /teachers/:teacherId/profile

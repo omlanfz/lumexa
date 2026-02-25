@@ -1,3 +1,46 @@
+
+/* @tailwind base;
+@tailwind components; */
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
+}
+
+/* // Teacher dashboard bg variables */
+.teacher-bg {
+  background-color: #0A0714;
+}
+html.light .teacher-bg {
+  background-color: #FAF5FF;
+}
+
+/* // Student dashboard bg variables */
+.student-bg {
+  background-color: #050D1A;
+}
+html.light .student-bg {
+  background-color: #F0F5FF;
+}
+
+/* // Smooth theme transitions */
+*, *::before, *::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
+}
+/* // Exception: disable transition for elements that should not animate */
+button, a, [role="button"] {
+  transition: background-color 0.15s ease, color 0.1s ease, border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+
+
 @import "tailwindcss";
 
 :root {

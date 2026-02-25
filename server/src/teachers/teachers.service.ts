@@ -411,4 +411,81 @@ export class TeachersService {
       completedClasses: 0, // populated client-side or via stats endpoint
     }));
   }
+
+  async getStudentSnapshot(teacherUserId: string, studentId: string) {
+    const profile = await this.prisma.teacherProfile.findUnique({
+      where: { userId: teacherUserId },
+    });
+    if (!profile) throw new NotFoundException('Teacher profile not found');
+
+    // Verify relationship: this student must have a booking with this teacher
+    const hasRelationship = await this.prisma.booking.findFirst({
+      where: {
+        studentId,
+        shift: { teacherId: profile.id },
+      },
+    });
+    if (!hasRelationship)
+      throw new ForbiddenException('No booking relationship with this student');
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        parent: { select: { fullName: true, email: true, avatarUrl: true } },
+        bookings: {
+          include: {
+            shift: {
+              include: {
+                teacher: { include: { user: { select: { fullName: true } } } },
+              },
+            },
+            review: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+      },
+    });
+
+    if (!student) throw new NotFoundException('Student not found');
+
+    const completed = student.bookings.filter(
+      (b) => b.paymentStatus === 'CAPTURED',
+    );
+    const upcoming = student.bookings.filter(
+      (b) => b.paymentStatus === 'CAPTURED' && b.shift.start > new Date(),
+    );
+    const avgRating =
+      completed.filter((b) => b.review).length > 0
+        ? completed
+            .filter((b) => b.review)
+            .reduce((s, b) => s + b.review!.rating, 0) /
+          completed.filter((b) => b.review).length
+        : null;
+
+    return {
+      student: { id: student.id, name: student.name, age: student.age },
+      parentName: student.parent.fullName,
+      stats: {
+        totalClasses: completed.length,
+        upcomingClasses: upcoming.length,
+        averageRating: avgRating,
+      },
+      recentBookings: completed.slice(0, 10).map((b) => ({
+        id: b.id,
+        start: b.shift.start,
+        end: b.shift.end,
+        teacherName: b.shift.teacher.user.fullName,
+        rating: b.review?.rating ?? null,
+        comment: b.review?.comment ?? null,
+      })),
+      nextClass: upcoming[0]
+        ? {
+            start: upcoming[0].shift.start,
+            end: upcoming[0].shift.end,
+            bookingId: upcoming[0].id,
+          }
+        : null,
+    };
+  }
 }

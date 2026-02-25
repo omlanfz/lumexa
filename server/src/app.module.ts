@@ -14,6 +14,9 @@ import { ClassroomModule } from './classroom/classroom.module';
 import { PaymentsModule } from './payments/payments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { UploadsModule } from './uploads/uploads.module';
+import { join } from 'path';
 
 @Module({
   imports: [
@@ -26,6 +29,11 @@ import { AdminModule } from './admin/admin.module';
         limit: 20, // max 20 requests per window
       },
     ]),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
+    UploadsModule,
 
     // ─── Core ───────────────────────────────────────────────────────────────
     PrismaModule,
