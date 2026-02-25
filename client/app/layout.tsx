@@ -25,21 +25,34 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+    /*
+     * suppressHydrationWarning is required because we modify the className
+     * via the inline script below BEFORE React hydrates. Without it, React
+     * warns about a mismatch between server-rendered HTML and the DOM.
+     */
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Prevent flash of wrong theme — runs synchronously before React hydration */}
+        {/*
+         * Anti-FOUC (Flash Of Unstyled Content) script.
+         * Runs synchronously before the browser paints — reads the stored
+         * theme from localStorage and immediately adds the correct class to
+         * <html>. This prevents a dark→light or light→dark flash on load.
+         *
+         * MUST be dangerouslySetInnerHTML (not a separate .js file) to
+         * guarantee it executes before the first paint.
+         */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              (function() {
+              (function () {
                 try {
-                  var theme = localStorage.getItem('lumexa-theme') || 'dark';
-                  document.documentElement.classList.add(theme);
-                  document.documentElement.style.colorScheme = theme;
-                } catch(e) {
+                  var t = localStorage.getItem('lumexa-theme') || 'dark';
+                  document.documentElement.classList.add(t);
+                  document.documentElement.style.colorScheme = t;
+                } catch (e) {
                   document.documentElement.classList.add('dark');
                 }
-              })()
+              })();
             `,
           }}
         />
@@ -50,19 +63,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-// export default function RootLayout({
-//   children,
-// }: Readonly<{
-//   children: React.ReactNode;
-// }>) {
-//   return (
-//     <html lang="en">
-//       <body
-//         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-//       >
-//         {children}
-//       </body>
-//     </html>
-//   );
-// }

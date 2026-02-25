@@ -1,4 +1,3 @@
-// FILE PATH: client/components/ThemeProvider.tsx
 "use client";
 
 import {
@@ -9,104 +8,63 @@ import {
   ReactNode,
 } from "react";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 type Theme = "dark" | "light";
 
 interface ThemeContextValue {
   theme: Theme;
-  toggleTheme: () => void;
-  isDark: boolean;
+  toggle: () => void;
+  setTheme: (t: Theme) => void;
 }
+
+// ─── Context ──────────────────────────────────────────────────────────────────
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: "dark",
-  toggleTheme: () => {},
-  isDark: true,
+  toggle: () => {},
+  setTheme: () => {},
 });
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
-  const [mounted, setMounted] = useState(false);
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  // Default to 'dark' — matches the inline script in layout.tsx
+  const [theme, setThemeState] = useState<Theme>("dark");
+
+  // Sync from localStorage after mount (avoids SSR mismatch)
   useEffect(() => {
-    // Read from localStorage (already applied synchronously via layout.tsx script)
-    const saved = (localStorage.getItem("lumexa-theme") as Theme) ?? "dark";
-    setTheme(saved);
-    setMounted(true);
+    const saved = localStorage.getItem("lumexa-theme") as Theme | null;
+    if (saved === "light" || saved === "dark") {
+      applyTheme(saved);
+      setThemeState(saved);
+    }
   }, []);
 
-  const toggleTheme = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("lumexa-theme", next);
-
-    // Apply to <html> for Tailwind 'class' dark mode
-    const html = document.documentElement;
-    html.classList.remove("dark", "light");
-    html.classList.add(next);
-
-    // color-scheme tells browsers and extensions (Dark Reader, etc.) the intent.
-    // When set to 'dark', Dark Reader skips the page. When 'light', system adapts.
-    html.style.colorScheme = next;
-
-    // data-theme attribute for any CSS variable selectors
-    html.setAttribute("data-theme", next);
-  };
-
-  // Avoid hydration mismatch — render children only after mount
-  if (!mounted) {
-    return (
-      <ThemeContext.Provider
-        value={{ theme: "dark", toggleTheme, isDark: true }}
-      >
-        {children}
-      </ThemeContext.Provider>
-    );
+  function applyTheme(t: Theme) {
+    const root = document.documentElement;
+    root.classList.remove("dark", "light");
+    root.classList.add(t);
+    root.style.colorScheme = t;
   }
 
+  const setTheme = (t: Theme) => {
+    localStorage.setItem("lumexa-theme", t);
+    applyTheme(t);
+    setThemeState(t);
+  };
+
+  const toggle = () => setTheme(theme === "dark" ? "light" : "dark");
+
   return (
-    <ThemeContext.Provider
-      value={{ theme, toggleTheme, isDark: theme === "dark" }}
-    >
+    <ThemeContext.Provider value={{ theme, toggle, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
-export const useTheme = () => useContext(ThemeContext);
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
-// ─── Theme Toggle Button Component ────────────────────────────────────────────
-// Import and use anywhere: <ThemeToggle variant="teacher" />
-
-interface ThemeToggleProps {
-  variant?: "teacher" | "student";
-  className?: string;
-}
-
-export function ThemeToggle({
-  variant = "teacher",
-  className = "",
-}: ThemeToggleProps) {
-  const { theme, toggleTheme, isDark } = useTheme();
-  const accentColor =
-    variant === "teacher" ? "hover:text-purple-400" : "hover:text-blue-400";
-
-  return (
-    <button
-      onClick={toggleTheme}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-      title={`Switch to ${isDark ? "light" : "dark"} mode`}
-      className={`
-        relative w-10 h-10 rounded-xl flex items-center justify-center
-        transition-all duration-300 ease-in-out
-        text-gray-400 ${accentColor}
-        dark:bg-white/5 bg-black/5
-        dark:hover:bg-white/10 hover:bg-black/10
-        border dark:border-white/10 border-black/10
-        ${className}
-      `}
-    >
-      {/* Sun icon for light mode, Moon for dark mode */}
-      <span className="text-lg select-none">{isDark ? "☀️" : "🌙"}</span>
-    </button>
-  );
+export function useTheme(): ThemeContextValue {
+  return useContext(ThemeContext);
 }

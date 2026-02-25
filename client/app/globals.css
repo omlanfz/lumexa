@@ -1,53 +1,24 @@
+/* =============================================================================
+   LUMEXA — globals.css
+   Tailwind v4 setup via @tailwindcss/postcss (see postcss.config.mjs)
 
-/* @tailwind base;
-@tailwind components; */
-@tailwind utilities;
-
-:root {
-  color-scheme: dark;
-}
-
-html.dark {
-  color-scheme: dark;
-}
-
-html.light {
-  color-scheme: light;
-}
-
-/* // Teacher dashboard bg variables */
-.teacher-bg {
-  background-color: #0A0714;
-}
-html.light .teacher-bg {
-  background-color: #FAF5FF;
-}
-
-/* // Student dashboard bg variables */
-.student-bg {
-  background-color: #050D1A;
-}
-html.light .student-bg {
-  background-color: #F0F5FF;
-}
-
-/* // Smooth theme transitions */
-*, *::before, *::after {
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
-}
-/* // Exception: disable transition for elements that should not animate */
-button, a, [role="button"] {
-  transition: background-color 0.15s ease, color 0.1s ease, border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
-}
-
+   FIX APPLIED: Removed `@tailwind utilities;` (Tailwind v3 directive — causes
+   errors in v4). Also removed the commented-out `@tailwind base/components`.
+   v4 uses `@import "tailwindcss"` only. Dark mode is declared via
+   @custom-variant, not via tailwind.config.js darkMode: 'class'.
+   ============================================================================= */
 
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ─── Dark / Light mode ───────────────────────────────────────────────────────
+   Tailwind v4 requires @custom-variant to make `dark:` prefix classes work.
+   This ties dark: prefix to the .dark class on <html>, set by ThemeProvider.
+   ─────────────────────────────────────────────────────────────────────────── */
+@custom-variant dark (&:where(.dark, .dark *));
 
+/* ─── Theme tokens ────────────────────────────────────────────────────────────
+   Used via var() in component CSS and as Tailwind arbitrary values.
+   ─────────────────────────────────────────────────────────────────────────── */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -55,31 +26,76 @@ button, a, [role="button"] {
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: dark;
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Lumexa space palette */
+  --space-deep:   #050D1A;  /* student area bg */
+  --space-dark:   #0A0714;  /* teacher area bg */
+  --space-navy:   #0D1B2A;
+  --space-purple: #7C3AED;
+  --space-cyan:   #06B6D4;
+  --space-blue:   #3B82F6;
 }
 
+/* Light mode overrides when .light class is on <html> */
+html.light {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+/* ─── Semantic bg helpers (used by dashboard layout wrappers) ─────────────── */
+.teacher-bg {
+  background-color: #0A0714;
+}
+html.light .teacher-bg {
+  background-color: #FAF5FF;
+}
+
+.student-bg {
+  background-color: #050D1A;
+}
+html.light .student-bg {
+  background-color: #F0F5FF;
+}
+
+/* ─── Smooth theme transitions ────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  transition: background-color 0.2s ease, border-color 0.2s ease,
+    color 0.15s ease;
+}
+/* Disable transition slowdowns on interactive elements */
+button,
+a,
+[role='button'] {
+  transition: background-color 0.15s ease, color 0.1s ease,
+    border-color 0.15s ease, opacity 0.15s ease, transform 0.15s ease;
+}
+
+/* ─── Body ────────────────────────────────────────────────────────────────── */
 body {
-  /* background: var(--background);
-  color: var(--foreground); */
   background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #000000 100%);
   color: white;
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Tell the browser this input is Dark Mode native */
-/* This forces the calendar icon to be white without using filters */
-input[type="date"],
-input[type="datetime-local"] {
-    color-scheme: dark;
+html.light body {
+  background: #f8f9ff;
+  color: #0f172a;
 }
 
-/* Ensure the icon is fully opaque and clickable */
-input[type="date"]::-webkit-calendar-picker-indicator,
-input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-    cursor: pointer;
-    opacity: 1;
+/* ─── Date/time inputs — force dark picker icon ───────────────────────────── */
+input[type='date'],
+input[type='datetime-local'] {
+  color-scheme: dark;
+}
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
 }

@@ -426,3 +426,370 @@ export default function TeacherNav({
     </>
   );
 }
+
+// "use client";
+
+// import { useState, useEffect, useRef } from "react";
+// import { useRouter, usePathname } from "next/navigation";
+// import Link from "next/link";
+// import { useTheme } from "./ThemeProvider";
+
+// // ─── Types ────────────────────────────────────────────────────────────────────
+
+// interface TeacherProfile {
+//   fullName: string;
+//   email: string;
+//   avatarUrl?: string | null;
+//   ratingAvg: number;
+//   isSuspended: boolean;
+// }
+
+// interface StudentItem {
+//   studentId: string;
+//   studentName: string;
+//   studentAge: number;
+// }
+
+// // ─── Nav items ────────────────────────────────────────────────────────────────
+
+// const NAV_ITEMS = [
+//   {
+//     href: "/teacher-dashboard",
+//     label: "Dashboard",
+//     sublabel: "Mission Control",
+//     icon: "🛸",
+//   },
+//   {
+//     href: "/teacher-students",
+//     label: "My Students",
+//     sublabel: "Cadet Roster",
+//     icon: "👨‍🚀",
+//   },
+//   {
+//     href: "/calendar",
+//     label: "Calendar",
+//     sublabel: "Flight Schedule",
+//     icon: "📅",
+//   },
+//   {
+//     href: "/teacher-earnings",
+//     label: "Earnings",
+//     sublabel: "Mission Rewards",
+//     icon: "💰",
+//   },
+//   {
+//     href: "/teacher-profile",
+//     label: "Profile",
+//     sublabel: "Pilot File",
+//     icon: "🪐",
+//   },
+// ];
+
+// // ─── Component ────────────────────────────────────────────────────────────────
+
+// export default function TeacherNav() {
+//   const router = useRouter();
+//   const pathname = usePathname();
+//   const { theme, toggle } = useTheme();
+
+//   const [profile, setProfile] = useState<TeacherProfile | null>(null);
+//   const [students, setStudents] = useState<StudentItem[]>([]);
+//   const [dropdownOpen, setDropdownOpen] = useState(false);
+//   const [studentModalOpen, setStudentModalOpen] = useState(false);
+
+//   const dropdownRef = useRef<HTMLDivElement>(null);
+
+//   const token =
+//     typeof window !== "undefined" ? localStorage.getItem("token") : null;
+//   const headers = { Authorization: `Bearer ${token}` };
+//   const API = process.env.NEXT_PUBLIC_API_URL;
+
+//   useEffect(() => {
+//     if (!token) return;
+//     fetch(`${API}/teachers/me/profile`, {
+//       headers: { Authorization: `Bearer ${token}` },
+//     })
+//       .then((r) => r.json())
+//       .then((d) => setProfile(d))
+//       .catch(() => {});
+//   }, []);
+
+//   // Close dropdown on outside click
+//   useEffect(() => {
+//     function handleClick(e: MouseEvent) {
+//       if (
+//         dropdownRef.current &&
+//         !dropdownRef.current.contains(e.target as Node)
+//       ) {
+//         setDropdownOpen(false);
+//       }
+//     }
+//     document.addEventListener("mousedown", handleClick);
+//     return () => document.removeEventListener("mousedown", handleClick);
+//   }, []);
+
+//   const handleLoginAsStudent = async () => {
+//     setDropdownOpen(false);
+//     if (!token) return;
+//     try {
+//       const res = await fetch(`${API}/teachers/me/students`, {
+//         headers: { Authorization: `Bearer ${token}` },
+//       });
+//       const data = await res.json();
+//       setStudents(data ?? []);
+//       setStudentModalOpen(true);
+//     } catch {
+//       router.push("/teacher-students");
+//     }
+//   };
+
+//   const handleLogout = () => {
+//     localStorage.removeItem("token");
+//     router.push("/login");
+//   };
+
+//   const handleUploadAvatar = () => {
+//     setDropdownOpen(false);
+//     // Trigger file picker
+//     const input = document.createElement("input");
+//     input.type = "file";
+//     input.accept = "image/jpeg,image/png,image/webp";
+//     input.onchange = async () => {
+//       const file = input.files?.[0];
+//       if (!file || !token) return;
+//       const form = new FormData();
+//       form.append("avatar", file);
+//       try {
+//         const res = await fetch(`${API}/uploads/avatar`, {
+//           method: "POST",
+//           headers: { Authorization: `Bearer ${token}` },
+//           body: form,
+//         });
+//         const data = await res.json();
+//         if (data.avatarUrl) {
+//           setProfile((p) => (p ? { ...p, avatarUrl: data.avatarUrl } : p));
+//         }
+//       } catch {}
+//     };
+//     input.click();
+//   };
+
+//   const initials = profile?.fullName
+//     ?.split(" ")
+//     .map((p) => p[0])
+//     .join("")
+//     .toUpperCase()
+//     .slice(0, 2);
+
+//   return (
+//     <>
+//       {/* ── Sidebar ──────────────────────────────────────────────────────── */}
+//       <aside className="fixed top-0 left-0 h-screen w-64 flex flex-col z-40 teacher-bg border-r border-gray-800">
+//         {/* Logo */}
+//         <div className="px-6 py-5 border-b border-gray-800 flex items-center gap-3">
+//           <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white font-black text-sm">
+//             L
+//           </div>
+//           <div>
+//             <p className="text-white font-bold text-sm tracking-wider">
+//               LUMEXA
+//             </p>
+//             <p className="text-purple-400 text-[10px] uppercase tracking-widest">
+//               Pilot Mode
+//             </p>
+//           </div>
+//         </div>
+
+//         {/* Nav links */}
+//         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+//           {NAV_ITEMS.map(({ href, label, sublabel, icon }) => {
+//             const active =
+//               pathname === href || pathname?.startsWith(href + "/");
+//             return (
+//               <Link
+//                 key={href}
+//                 href={href}
+//                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-all ${
+//                   active
+//                     ? "bg-purple-900/60 border border-purple-700/50"
+//                     : "hover:bg-gray-800/50"
+//                 }`}
+//               >
+//                 <span className="text-lg">{icon}</span>
+//                 <div className="min-w-0">
+//                   <p
+//                     className={`text-sm font-medium ${
+//                       active
+//                         ? "text-purple-300"
+//                         : "text-gray-300 group-hover:text-white"
+//                     }`}
+//                   >
+//                     {label}
+//                   </p>
+//                   <p className="text-[10px] text-gray-600 truncate">
+//                     {sublabel}
+//                   </p>
+//                 </div>
+//                 {active && (
+//                   <div className="ml-auto w-1.5 h-1.5 rounded-full bg-purple-400" />
+//                 )}
+//               </Link>
+//             );
+//           })}
+//         </nav>
+
+//         {/* Bottom: theme toggle + profile */}
+//         <div className="border-t border-gray-800 p-3 space-y-2">
+//           {/* Theme toggle */}
+//           <button
+//             onClick={toggle}
+//             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/50 transition-all"
+//           >
+//             <span className="text-lg">{theme === "dark" ? "☀️" : "🌙"}</span>
+//             <span className="text-xs text-gray-400">
+//               {theme === "dark" ? "Light Mode" : "Dark Mode"}
+//             </span>
+//           </button>
+
+//           {/* Profile dropdown trigger */}
+//           <div ref={dropdownRef} className="relative">
+//             <button
+//               onClick={() => setDropdownOpen((v) => !v)}
+//               className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-800/50 transition-all"
+//             >
+//               {/* Avatar */}
+//               <div className="w-8 h-8 rounded-full overflow-hidden shrink-0">
+//                 {profile?.avatarUrl ? (
+//                   <img
+//                     src={`${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ?? ""}${profile.avatarUrl}`}
+//                     alt="avatar"
+//                     className="w-full h-full object-cover"
+//                   />
+//                 ) : (
+//                   <div className="w-full h-full bg-purple-700 flex items-center justify-center text-white text-xs font-bold">
+//                     {initials ?? "?"}
+//                   </div>
+//                 )}
+//               </div>
+//               <div className="flex-1 min-w-0 text-left">
+//                 <p className="text-xs font-medium text-gray-200 truncate">
+//                   {profile?.fullName ?? "Teacher"}
+//                 </p>
+//                 <p className="text-[10px] text-gray-500 truncate">
+//                   {profile?.ratingAvg
+//                     ? `★ ${profile.ratingAvg.toFixed(1)}`
+//                     : "Pilot"}
+//                 </p>
+//               </div>
+//               <svg
+//                 className={`w-3 h-3 text-gray-500 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+//                 fill="none"
+//                 viewBox="0 0 24 24"
+//                 stroke="currentColor"
+//               >
+//                 <path
+//                   strokeLinecap="round"
+//                   strokeLinejoin="round"
+//                   strokeWidth={2}
+//                   d="M19 9l-7 7-7-7"
+//                 />
+//               </svg>
+//             </button>
+
+//             {/* Dropdown menu */}
+//             {dropdownOpen && (
+//               <div className="absolute bottom-full left-0 mb-1 w-full bg-gray-900 border border-gray-700 rounded-lg overflow-hidden shadow-xl">
+//                 <button
+//                   onClick={handleLoginAsStudent}
+//                   className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-gray-800 transition-colors flex items-center gap-2"
+//                 >
+//                   <span>👤</span> Login as Student
+//                 </button>
+//                 <button
+//                   onClick={handleUploadAvatar}
+//                   className="w-full px-4 py-2.5 text-left text-sm text-gray-300 hover:bg-gray-800 transition-colors flex items-center gap-2"
+//                 >
+//                   <span>📷</span> Upload Profile Picture
+//                 </button>
+//                 <div className="border-t border-gray-800" />
+//                 <button
+//                   onClick={handleLogout}
+//                   className="w-full px-4 py-2.5 text-left text-sm text-red-400 hover:bg-gray-800 transition-colors flex items-center gap-2"
+//                 >
+//                   <span>🚪</span> Logout
+//                 </button>
+//               </div>
+//             )}
+//           </div>
+//         </div>
+//       </aside>
+
+//       {/* ── Login as Student modal ────────────────────────────────────────── */}
+//       {studentModalOpen && (
+//         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+//           <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+//             <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+//               <div>
+//                 <h3 className="text-white font-bold text-base">
+//                   View as Student
+//                 </h3>
+//                 <p className="text-gray-500 text-xs mt-0.5">
+//                   Select a cadet to inspect
+//                 </p>
+//               </div>
+//               <button
+//                 onClick={() => setStudentModalOpen(false)}
+//                 className="text-gray-500 hover:text-white text-lg"
+//               >
+//                 ×
+//               </button>
+//             </div>
+//             <div className="max-h-72 overflow-y-auto p-3">
+//               {students.length === 0 ? (
+//                 <p className="text-gray-500 text-sm text-center py-6">
+//                   No students found.
+//                 </p>
+//               ) : (
+//                 students.map((s) => (
+//                   <button
+//                     key={s.studentId}
+//                     onClick={() => {
+//                       setStudentModalOpen(false);
+//                       router.push(`/student-view/${s.studentId}`);
+//                     }}
+//                     className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-800 transition-all text-left"
+//                   >
+//                     <div className="w-8 h-8 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+//                       {s.studentName[0]?.toUpperCase()}
+//                     </div>
+//                     <div>
+//                       <p className="text-white text-sm font-medium">
+//                         {s.studentName}
+//                       </p>
+//                       <p className="text-gray-500 text-xs">
+//                         Age {s.studentAge}
+//                       </p>
+//                     </div>
+//                     <svg
+//                       className="ml-auto w-4 h-4 text-gray-600"
+//                       fill="none"
+//                       viewBox="0 0 24 24"
+//                       stroke="currentColor"
+//                     >
+//                       <path
+//                         strokeLinecap="round"
+//                         strokeLinejoin="round"
+//                         strokeWidth={2}
+//                         d="M9 5l7 7-7 7"
+//                       />
+//                     </svg>
+//                   </button>
+//                 ))
+//               )}
+//             </div>
+//           </div>
+//         </div>
+//       )}
+//     </>
+//   );
+// }
