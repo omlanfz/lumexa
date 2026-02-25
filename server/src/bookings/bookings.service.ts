@@ -18,6 +18,8 @@ export class BookingsService {
     private notifications: NotificationsService,
   ) {}
 
+  // ─── Marketplace ────────────────────────────────────────────────────────────
+
   async getMarketplace(page = 1, limit = 20) {
     const [teachers, total] = await Promise.all([
       this.prisma.teacherProfile.findMany({
@@ -47,6 +49,39 @@ export class BookingsService {
       totalPages: Math.ceil(total / limit),
     };
   }
+
+  // ─── Get Single Booking (for mock payment page) ──────────────────────────────
+
+  async getBookingById(bookingId: string, userId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        student: {
+          include: {
+            parent: { select: { id: true, email: true } },
+          },
+        },
+        shift: {
+          include: {
+            teacher: {
+              include: {
+                user: { select: { fullName: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found.');
+    if (booking.student.parent.id !== userId) {
+      throw new ForbiddenException('Access denied.');
+    }
+
+    return booking;
+  }
+
+  // ─── Book Shift ──────────────────────────────────────────────────────────────
 
   async bookShift(userId: string, shiftId: string, studentId: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -106,9 +141,8 @@ export class BookingsService {
         shift.teacher.stripeOnboarded &&
         process.env.STRIPE_SECRET_KEY
       ) {
-        const amountCents = shift.teacher.hourlyRate * 100;
         const intent = await this.stripe.createPaymentIntent(
-          amountCents,
+          shift.teacher.hourlyRate * 100,
           shift.teacher.stripeAccountId,
           booking.id,
         );
@@ -138,23 +172,62 @@ export class BookingsService {
     });
   }
 
+  // ─── Mock Payment Confirmation ───────────────────────────────────────────────
+  // Used in development when Stripe is not configured.
+  // Simulates a successful payment by marking the booking as CAPTURED.
+  // This endpoint is only accessible when NODE_ENV !== 'production'.
+
+  async mockConfirmBooking(bookingId: string, userId: string) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new BadRequestException(
+        'Mock payments are not available in production.',
+      );
+    }
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        student: {
+          include: { parent: { select: { id: true } } },
+        },
+      },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found.');
+    if (booking.student.parent.id !== userId) {
+      throw new ForbiddenException('You do not own this booking.');
+    }
+    if (booking.paymentStatus === 'CAPTURED') {
+      // Already confirmed — idempotent, return success
+      return { message: 'Booking already confirmed.', bookingId };
+    }
+    if (booking.paymentStatus === 'REFUNDED') {
+      throw new BadRequestException('This booking has been cancelled.');
+    }
+
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { paymentStatus: 'CAPTURED' },
+    });
+
+    return { message: 'Payment confirmed (mock).', bookingId };
+  }
+
+  // ─── Cancel Booking ──────────────────────────────────────────────────────────
+
   async cancelBooking(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
         student: {
           include: {
-            parent: {
-              // ← fullName was missing here, causing TS2339 error
-              select: { email: true, fullName: true },
-            },
+            parent: { select: { email: true, fullName: true } },
           },
         },
         shift: {
           include: {
             teacher: {
               include: {
-                // ← fullName was missing here too
                 user: { select: { email: true, fullName: true } },
               },
             },
@@ -164,11 +237,9 @@ export class BookingsService {
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
-
     if (booking.student.parentId !== userId) {
       throw new ForbiddenException('You can only cancel your own bookings.');
     }
-
     if (booking.paymentStatus === 'REFUNDED') {
       throw new BadRequestException('This booking is already cancelled.');
     }
@@ -213,6 +284,8 @@ export class BookingsService {
 
     return { message: 'Booking cancelled.', refundCents, reason };
   }
+
+  // ─── Stripe Connect ──────────────────────────────────────────────────────────
 
   async getStripeOnboardingLink(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
