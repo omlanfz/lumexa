@@ -26,7 +26,7 @@ enum PaymentStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// USER (Parent, Teacher, or Admin — differentiated by Role)
+// USER
 // ─────────────────────────────────────────────────────────────────────────────
 
 model User {
@@ -36,94 +36,106 @@ model User {
   fullName       String
   role           Role      @default(PARENT)
   createdAt      DateTime  @default(now())
-
-  // COPPA compliance: timestamp of verified parental consent
-  // null = consent not yet given. Required before parent can book classes.
-  coppaConsentAt DateTime?
+  coppaConsentAt DateTime? // COPPA compliance timestamp
 
   students       Student[]
   teacherProfile TeacherProfile?
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT (Child profile linked to a Parent user)
+// STUDENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Student {
   id        String    @id @default(uuid())
   parentId  String
   parent    User      @relation(fields: [parentId], references: [id])
-
-  // Display name only — we do NOT store the child's full legal name (COPPA data minimization)
-  name      String    // e.g., "Alex K." — no last name required
+  name      String    // First name only — COPPA data minimization
   age       Int
-
   createdAt DateTime  @default(now())
   bookings  Booking[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEACHER PROFILE (Extended profile for users with Role = TEACHER)
+// TEACHER PROFILE
 // ─────────────────────────────────────────────────────────────────────────────
 
 model TeacherProfile {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id])
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id])
 
-  bio         String?
-  hourlyRate  Int      @default(25) // In USD
+  bio             String?
+  hourlyRate      Int      @default(25) // In USD
 
   // Stripe Connect
   stripeAccountId String?  // Stripe Express account ID
-  stripeOnboarded Boolean  @default(false) // true when they've completed KYC
+  stripeOnboarded Boolean  @default(false)
 
   // Quality management
-  strikes     Int      @default(0)   // Incremented on no-shows
-  isSuspended Boolean  @default(false) // Auto-set at 3 strikes, admin can reset
+  strikes         Int      @default(0)
+  isSuspended     Boolean  @default(false)
 
-  createdAt   DateTime @default(now())
-  shifts      Shift[]
+  // Denormalized rating fields — updated atomically in submitReview().
+  // Avoids slow AVG() aggregation on every marketplace query.
+  ratingAvg       Float    @default(0)
+  reviewCount     Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  shifts          Shift[]
+  reviews         Review[]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SHIFT (Availability block set by a teacher)
+// SHIFT
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Shift {
   id        String         @id @default(uuid())
   teacherId String
   teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
-
-  start     DateTime // Stored in UTC
-  end       DateTime // Stored in UTC
-  isBooked  Boolean  @default(false)
-
-  createdAt DateTime @default(now())
+  start     DateTime       // Stored in UTC
+  end       DateTime       // Stored in UTC
+  isBooked  Boolean        @default(false)
+  createdAt DateTime       @default(now())
   booking   Booking?
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BOOKING (A confirmed reservation between a Student and a Teacher Shift)
+// BOOKING
 // ─────────────────────────────────────────────────────────────────────────────
 
 model Booking {
-  id        String   @id @default(uuid())
+  id              String        @id @default(uuid())
+  shiftId         String        @unique
+  shift           Shift         @relation(fields: [shiftId], references: [id])
+  studentId       String
+  student         Student       @relation(fields: [studentId], references: [id])
+  paymentIntentId String?
+  paymentStatus   PaymentStatus @default(PENDING)
+  amountCents     Int?
+  egressId        String?       // LiveKit Egress ID
+  recordingUrl    String?       // S3 URL after class recording
+  createdAt       DateTime      @default(now())
+  review          Review?       // One review per booking, submitted post-class
+}
 
-  shiftId   String   @unique // One booking per shift (enforced at DB level)
-  shift     Shift    @relation(fields: [shiftId], references: [id])
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEW
+// Submitted by parent after class completes (paymentStatus = CAPTURED).
+// Unique constraint on bookingId enforces one review per class at DB level.
+// After each insert, TeacherProfile.ratingAvg and reviewCount are recalculated
+// atomically inside BookingsService.submitReview().
+// ─────────────────────────────────────────────────────────────────────────────
 
-  studentId String
-  student   Student  @relation(fields: [studentId], references: [id])
-
-  // Payment
-  paymentIntentId String?        // Stripe PaymentIntent ID
-  paymentStatus   PaymentStatus  @default(PENDING)
-  amountCents     Int?           // Total charged in cents (e.g., 2500 = $25.00)
-
-  // Recording
-  egressId     String?  // LiveKit Egress ID (set when recording starts)
-  recordingUrl String?  // S3 URL (set via webhook when recording finishes)
-
-  createdAt DateTime @default(now())
+model Review {
+  id                  String         @id @default(uuid())
+  bookingId           String         @unique
+  booking             Booking        @relation(fields: [bookingId], references: [id])
+  teacherId           String
+  teacher             TeacherProfile @relation(fields: [teacherId], references: [id])
+  rating              Int            // 1–5, validated at service layer
+  comment             String?        // Optional written feedback
+  submittedByParentId String         // Used for authorization checks
+  createdAt           DateTime       @default(now())
 }
