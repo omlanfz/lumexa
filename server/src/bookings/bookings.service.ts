@@ -50,6 +50,26 @@ export class BookingsService {
     };
   }
 
+  async getMyBookings(parentId: string): Promise<any[]> {
+    return this.prisma.booking.findMany({
+      where: {
+        student: { parentId },
+      },
+      include: {
+        shift: {
+          include: {
+            teacher: {
+              include: { user: true },
+            },
+          },
+        },
+        student: true,
+        review: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   // ─── Get Single Booking (for mock payment page) ──────────────────────────────
 
   async getBookingById(bookingId: string, userId: string) {

@@ -4,13 +4,136 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")       // Pooled connection (runtime)
-  directUrl = env("DIRECT_DATABASE_URL") // Direct connection (migrations)
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ENUMS
-// ─────────────────────────────────────────────────────────────────────────────
+model User {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  password       String
+  fullName       String
+  createdAt      DateTime        @default(now())
+  role           Role            @default(PARENT)
+  coppaConsentAt DateTime?
+  avatarUrl      String?
+  students       Student[]
+  teacherProfile TeacherProfile?
+}
+
+model Student {
+  id         String    @id @default(uuid())
+  parentId   String
+  name       String
+  age        Int
+  createdAt  DateTime  @default(now())
+  grade      String?
+  schoolName String?
+  subject    String?
+  timezone   String?
+  bookings   Booking[]
+  parent     User      @relation(fields: [parentId], references: [id])
+
+  @@index([parentId])
+}
+
+model TeacherProfile {
+  id              String                @id @default(uuid())
+  userId          String                @unique
+  bio             String?
+  hourlyRate      Int                   @default(25)
+  createdAt       DateTime              @default(now())
+  isSuspended     Boolean               @default(false)
+  strikes         Int                   @default(0)
+  stripeAccountId String?
+  stripeOnboarded Boolean               @default(false)
+  ratingAvg       Float                 @default(0)
+  reviewCount     Int                   @default(0)
+  grades          String[]              @default([])
+  points          Int                   @default(0)
+  rankTier        Int                   @default(0)
+  subjects        String[]              @default([])
+  timezone        String?
+  weeklyPoints    Int                   @default(0)
+  reviews         Review[]
+  shifts          Shift[]
+  cancellations   TeacherCancellation[]
+  user            User                  @relation(fields: [userId], references: [id])
+
+  @@index([ratingAvg(sort: Desc)])
+  @@index([isSuspended])
+}
+
+model Shift {
+  id        String         @id @default(uuid())
+  teacherId String
+  start     DateTime
+  end       DateTime
+  isBooked  Boolean        @default(false)
+  createdAt DateTime       @default(now())
+  booking   Booking?
+  teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId, start])
+  @@index([start])
+  @@index([isBooked])
+}
+
+model Booking {
+  id                String             @id @default(uuid())
+  shiftId           String             @unique
+  studentId         String
+  createdAt         DateTime           @default(now())
+  amountCents       Int?
+  egressId          String?
+  paymentIntentId   String?
+  paymentStatus     PaymentStatus      @default(PENDING)
+  recordingUrl      String?
+  shift             Shift              @relation(fields: [shiftId], references: [id])
+  student           Student            @relation(fields: [studentId], references: [id])
+  rescheduleRequest RescheduleRequest?
+  review            Review?
+
+  @@index([studentId])
+  @@index([paymentStatus])
+}
+
+model RescheduleRequest {
+  id          String   @id @default(uuid())
+  bookingId   String   @unique
+  requestedBy String
+  newStart    DateTime
+  newEnd      DateTime
+  reason      String?
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  booking     Booking  @relation(fields: [bookingId], references: [id])
+}
+
+model TeacherCancellation {
+  id        String         @id @default(uuid())
+  teacherId String
+  month     Int
+  year      Int
+  count     Int            @default(0)
+  teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, month, year])
+}
+
+model Review {
+  id                  String         @id @default(uuid())
+  bookingId           String         @unique
+  teacherId           String
+  rating              Int
+  comment             String?
+  submittedByParentId String
+  createdAt           DateTime       @default(now())
+  booking             Booking        @relation(fields: [bookingId], references: [id])
+  teacher             TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId])
+}
 
 enum Role {
   PARENT
@@ -19,142 +142,8 @@ enum Role {
 }
 
 enum PaymentStatus {
-  PENDING    // Booking created, PaymentIntent created but not captured
-  CAPTURED   // Class completed, funds transferred to teacher
-  REFUNDED   // Booking cancelled, funds returned to parent
-  FAILED     // Payment failed
+  PENDING
+  CAPTURED
+  REFUNDED
+  FAILED
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// USER
-// ─────────────────────────────────────────────────────────────────────────────
-
-model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
-  password       String
-  fullName       String
-  role           Role            @default(PARENT)
-  avatarUrl      String?         // NEW — profile picture URL
-  coppaConsentAt DateTime?
-  createdAt      DateTime        @default(now())
-  students       Student[]
-  teacherProfile TeacherProfile?
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// STUDENT
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Student {
-  id         String    @id @default(uuid())
-  parentId   String
-  parent     User      @relation(fields: [parentId], references: [id])
-  name       String
-  age        Int
-  // ── NEW FIELDS (added in migration: add_student_fields_and_indexes) ──
-  grade      String? // e.g. "Grade 5", "Grade 8"
-  subject    String? // e.g. "Math", "Science", "Coding"
-  schoolName String? // COPPA-safe: school name only
-  timezone   String? // e.g. "Asia/Dhaka"
-  // ────────────────────────────────────────────────────────────────────
-  createdAt  DateTime  @default(now())
-  bookings   Booking[]
-
-  @@index([parentId])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TEACHER PROFILE
-// ─────────────────────────────────────────────────────────────────────────────
-
-model TeacherProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id])
-  bio             String?
-  hourlyRate      Int      @default(25)
-  stripeAccountId String?
-  stripeOnboarded Boolean  @default(false)
-  strikes         Int      @default(0)
-  isSuspended     Boolean  @default(false)
-  ratingAvg       Float    @default(0)
-  reviewCount     Int      @default(0)
-  // NEW fields:
-  points          Int      @default(0)
-  weeklyPoints    Int      @default(0)
-  rankTier        Int      @default(0)   // 0=Cadet,1=Navigator,2=Pilot,3=Commander,4=Admiral,5=Starmaster
-  subjects        String[] @default([])
-  grades          String[] @default([])
-  timezone        String?
-  createdAt       DateTime @default(now())
-  shifts          Shift[]
-  reviews         Review[]
-
-  @@index([ratingAvg(sort: Desc)])
-  @@index([isSuspended])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SHIFT
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Shift {
-  id        String         @id @default(uuid())
-  teacherId String
-  teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
-  start     DateTime
-  end       DateTime
-  isBooked  Boolean        @default(false)
-  createdAt DateTime       @default(now())
-  booking   Booking?
-
-  @@index([teacherId, start])
-  @@index([start])
-  @@index([isBooked])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BOOKING
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Booking {
-  id              String        @id @default(uuid())
-  shiftId         String        @unique
-  shift           Shift         @relation(fields: [shiftId], references: [id])
-  studentId       String
-  student         Student       @relation(fields: [studentId], references: [id])
-  paymentIntentId String?
-  paymentStatus   PaymentStatus @default(PENDING)
-  amountCents     Int?
-  egressId        String?
-  recordingUrl    String?
-  createdAt       DateTime      @default(now())
-  review          Review?
-
-  @@index([studentId])
-  @@index([paymentStatus])
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// REVIEW
-// Submitted by parent after class completes (paymentStatus = CAPTURED).
-// Unique constraint on bookingId enforces one review per class at DB level.
-// After each insert, TeacherProfile.ratingAvg and reviewCount are recalculated
-// atomically inside BookingsService.submitReview().
-// ─────────────────────────────────────────────────────────────────────────────
-
-model Review {
-  id                  String         @id @default(uuid())
-  bookingId           String         @unique
-  booking             Booking        @relation(fields: [bookingId], references: [id])
-  teacherId           String
-  teacher             TeacherProfile @relation(fields: [teacherId], references: [id])
-  rating              Int
-  comment             String?
-  submittedByParentId String
-  createdAt           DateTime       @default(now())
-
-  @@index([teacherId])
-}
-

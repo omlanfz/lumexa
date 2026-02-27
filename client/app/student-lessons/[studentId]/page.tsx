@@ -12,8 +12,15 @@ interface Booking {
   student?: { id: string };
   shift: { start: string; end: string };
   paymentStatus: string;
-  teacher?: { fullName: string };
+  teacher?: { fullName?: string } | null;
   review?: { rating: number; comment?: string | null } | null;
+}
+
+interface StudentData {
+  id: string;
+  name: string;
+  grade?: string | null;
+  parent?: { fullName?: string } | null;
 }
 
 function Stars({ r }: { r: number }) {
@@ -35,11 +42,7 @@ function LessonsContent() {
   const { studentId } = useParams<{ studentId: string }>();
   const router = useRouter();
   const { isDark } = useTheme();
-  const [student, setStudent] = useState<{
-    name: string;
-    grade?: string | null;
-    parent: { fullName: string };
-  } | null>(null);
+  const [student, setStudent]         = useState<StudentData | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "upcoming" | "completed">("all");
@@ -64,7 +67,7 @@ function LessonsContent() {
             headers: { Authorization: `Bearer ${tok}` },
           }),
           axios
-            .get(`${process.env.NEXT_PUBLIC_API_URL}/bookings`, {
+            .get(`${process.env.NEXT_PUBLIC_API_URL}/bookings/my`, {
               headers: { Authorization: `Bearer ${tok}` },
             })
             .catch(() => ({ data: [] })),
@@ -158,9 +161,9 @@ function LessonsContent() {
     <div className="min-h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
       <StudentNav
         studentId={studentId}
-        studentName={student?.name}
-        grade={student?.grade}
-        parentName={student?.parent.fullName}
+        studentName={student?.name ?? null}
+        grade={student?.grade ?? null}
+        parentName={student?.parent?.fullName ?? null}
       />
       <div className="pl-64">
         <div className="max-w-4xl mx-auto px-6 py-8">

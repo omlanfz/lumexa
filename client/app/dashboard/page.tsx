@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useTheme } from "../../components/ThemeProvider";
 import { ThemeToggle } from "../../components/ThemeProvider";
+import Image from "next/image";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -435,7 +436,12 @@ function DashboardContent() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm font-bold select-none">
-              L
+              <Image
+                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                width={32}
+                height={32}
+                alt="Lumexa"
+              />
             </div>
             <div>
               <h1 className="text-lg font-bold text-blue-500 leading-none">

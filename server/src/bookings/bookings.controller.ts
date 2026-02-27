@@ -66,7 +66,12 @@ export class BookingsController {
       dto.studentId,
     );
   }
-
+  @Get()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.PARENT)
+  getMyBookings(@Request() req) {
+    return this.bookingsService.getMyBookings(req.user.userId);
+  }
   // ─── Get Single Booking (for mock payment page) ───────────────────────────────
   // IMPORTANT: This route must come BEFORE :bookingId/review and :bookingId/mock-confirm
   // because Express matches routes top-to-bottom. If you add a new route like
