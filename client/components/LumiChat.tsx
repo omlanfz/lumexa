@@ -34,6 +34,7 @@ interface Message {
 
 export interface LumiChatProps {
   variant?: "teacher" | "student" | "parent";
+  context?: string;
 }
 
 // ── Greeting per variant ───────────────────────────────────────────────────────
