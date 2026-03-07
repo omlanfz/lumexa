@@ -20,6 +20,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { LumiModule } from './lumi/lumi.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { UploadsModule } from './uploads/uploads.module';
     NotificationsModule,
     TeachersModule,
     UploadsModule,
+    LumiModule,
 
     // ─── Admin ──────────────────────────────────────────────────────────────
     AdminModule,

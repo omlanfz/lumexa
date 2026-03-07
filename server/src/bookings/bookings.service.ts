@@ -25,7 +25,7 @@ export class BookingsService {
       this.prisma.teacherProfile.findMany({
         where: { isSuspended: false },
         include: {
-          user: { select: { fullName: true } },
+          user: { select: { fullName: true, avatarUrl: true, email: true } },
           shifts: {
             where: {
               isBooked: false,

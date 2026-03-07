@@ -1,11 +1,4 @@
 // FILE PATH: client/components/TeacherNav.tsx
-// Changes:
-// 1. Added sidebar collapse toggle (chevron button)
-// 2. Fixed dark/light mode to use Tailwind v4 dark: classes
-// 3. Removed redundant nav items (consolidated duplicates)
-// 4. Added "Conduct" page link (new rules page)
-// 5. Made responsive for mobile with overlay behavior
-
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -82,11 +75,21 @@ export default function TeacherNav({
   const { isDark } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("sidebar_collapsed") === "true";
+    }
+    return false;
+  });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("sidebar_collapsed", String(next));
+  };
 
   // Close profile menu on outside click
   useEffect(() => {
@@ -105,22 +108,17 @@ export default function TeacherNav({
       setUploadError("Max 5MB");
       return;
     }
-
     setUploading(true);
     setUploadError(null);
     try {
       const token = localStorage.getItem("token");
       const fd = new FormData();
-      fd.append("file", file);
+      // CHANGE: field name changed from "file" to "avatar" to match backend FileInterceptor
+      fd.append("avatar", file);
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/uploads/avatar`,
         fd,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-          },
-        },
+        { headers: { Authorization: `Bearer ${token}` } },
       );
       onAvatarUpdate?.(res.data.avatarUrl);
     } catch (err: any) {
@@ -141,106 +139,87 @@ export default function TeacherNav({
   const rankName = RANK_NAMES[rankTier] ?? "Cadet";
   const rankIcon = RANK_ICONS[rankTier] ?? "🌱";
 
-  // ── Sidebar width classes ────────────────────────────────────────────────────
-  const sidebarW = collapsed ? "w-16" : "w-64";
-  const sidebarWMobile = mobileOpen ? "translate-x-0" : "-translate-x-full";
-
-  const sidebarBase = `
-    h-screen flex flex-col overflow-hidden transition-all duration-300 z-40
-    dark:bg-[#0A0714] bg-white
-    dark:border-purple-900/30 border-purple-100 border-r
-  `;
-
-  const NavContent = () => (
+  // Shared sidebar content
+  const SidebarContent = () => (
     <>
-      {/* ── Header ────────────────────────────────────────────────────────── */}
+      {/* Header — FIX: Logo always visible, just scaled in collapsed mode */}
       <div
-        className={`flex items-center justify-between px-4 py-5 border-b dark:border-purple-900/20 border-purple-100 flex-shrink-0 ${collapsed ? "justify-center px-2" : ""}`}
+        className={`flex items-center border-b dark:border-purple-900/20 border-purple-100 flex-shrink-0 transition-all duration-300 ${collapsed ? "justify-center px-2 py-4" : "justify-between px-4 py-5"}`}
       >
-        {!collapsed && (
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-              <Image
-                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
-                width={32}
-                height={32}
-                alt="Lumexa"
-              />
-            </div>
-            <div className="min-w-0">
-              <p className="font-bold text-purple-500 text-sm leading-none truncate">
+        {/* CHANGE: Logo never hidden — shows icon only when collapsed */}
+        <div
+          className={`flex items-center gap-2 min-w-0 ${collapsed ? "justify-center" : ""}`}
+        >
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold">
+            L
+          </div>
+          {!collapsed && (
+            <div className="overflow-hidden">
+              <p className="font-bold dark:text-white text-purple-900 text-sm leading-tight truncate">
                 Lumexa
               </p>
-              <p className="text-xs dark:text-purple-400/50 text-purple-400 leading-none">
+              <p className="text-xs dark:text-purple-400 text-purple-400 truncate">
                 Flight Deck
               </p>
             </div>
-          </div>
-        )}
-        {collapsed && (
-          <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center text-white text-sm font-bold">
-            L
-          </div>
-        )}
+          )}
+        </div>
         {/* Collapse toggle — desktop only */}
         <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="hidden lg:flex ml-auto w-7 h-7 rounded-lg dark:bg-purple-900/30 bg-purple-100 dark:text-purple-400 text-purple-600 items-center justify-center dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors flex-shrink-0"
+          onClick={toggleCollapsed}
+          className="hidden lg:flex items-center justify-center w-6 h-6 rounded-md dark:text-purple-400 text-purple-400 dark:hover:bg-purple-900/30 hover:bg-purple-100 transition-colors flex-shrink-0"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? "→" : "←"}
+          <span className="text-xs">{collapsed ? "→" : "←"}</span>
         </button>
       </div>
 
-      {/* ── Profile area ──────────────────────────────────────────────────── */}
+      {/* Profile section */}
       <div
+        className={`relative border-b dark:border-purple-900/20 border-purple-100 flex-shrink-0 ${collapsed ? "px-2 py-3" : "px-4 py-3"}`}
         data-profile-menu
-        className={`relative flex-shrink-0 px-3 py-4 border-b dark:border-purple-900/20 border-purple-100 ${collapsed ? "flex justify-center" : ""}`}
       >
         <button
           onClick={() => setShowProfileMenu((p) => !p)}
-          className={`flex items-center gap-3 w-full rounded-xl p-2 dark:hover:bg-purple-900/20 hover:bg-purple-50 transition-colors ${collapsed ? "justify-center" : ""}`}
+          className={`flex items-center gap-3 w-full rounded-xl cursor-pointer transition-colors dark:hover:bg-purple-900/20 hover:bg-purple-50 p-2 ${collapsed ? "justify-center" : ""}`}
+          aria-expanded={showProfileMenu}
+          aria-haspopup="true"
         >
-          {/* Avatar */}
           <div className="relative flex-shrink-0">
             {avatarUrl ? (
-              <img
+              <Image
                 src={avatarUrl}
-                alt="avatar"
-                className="w-10 h-10 rounded-full object-cover border-2 dark:border-purple-700/40 border-purple-200"
+                alt={teacherName}
+                width={36}
+                height={36}
+                className="rounded-full object-cover w-9 h-9 ring-2 ring-purple-500/30"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white font-bold">
-                {teacherName?.charAt(0)?.toUpperCase() ?? "P"}
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold text-sm">
+                {teacherName.charAt(0).toUpperCase()}
               </div>
             )}
             {uploading && (
-              <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
               </div>
             )}
           </div>
-
           {!collapsed && (
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-semibold dark:text-purple-100 text-purple-900 truncate">
+              <p className="text-sm font-medium dark:text-purple-100 text-purple-900 truncate">
                 {teacherName}
               </p>
-              <p className="text-xs dark:text-purple-400/60 text-purple-400">
+              <p className="text-xs dark:text-purple-400 text-purple-500 truncate">
                 {rankIcon} {rankName}
               </p>
             </div>
           )}
-          {!collapsed && (
-            <span className="dark:text-purple-400/40 text-purple-300 text-xs">
-              ▾
-            </span>
-          )}
         </button>
 
-        {/* Profile dropdown */}
-        {showProfileMenu && !collapsed && (
-          <div className="absolute left-3 right-3 top-full mt-1 rounded-xl border shadow-xl z-50 dark:bg-[#160C24] dark:border-purple-900/40 bg-white border-purple-100 overflow-hidden">
+        {showProfileMenu && (
+          <div className="absolute left-2 right-2 top-full mt-1 rounded-xl border dark:border-purple-900/40 bg-white dark:bg-[#12082a] border-purple-100 overflow-hidden shadow-xl z-50">
             <button
               onClick={() => {
                 fileInputRef.current?.click();
@@ -268,7 +247,6 @@ export default function TeacherNav({
             </button>
           </div>
         )}
-
         {uploadError && !collapsed && (
           <p className="text-xs text-red-400 px-2 mt-1">{uploadError}</p>
         )}
@@ -281,8 +259,12 @@ export default function TeacherNav({
         />
       </div>
 
-      {/* ── Nav items ─────────────────────────────────────────────────────── */}
-      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+      {/* Nav items */}
+      <nav
+        className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5"
+        role="navigation"
+        aria-label="Teacher navigation"
+      >
         {NAV_ITEMS.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -295,22 +277,25 @@ export default function TeacherNav({
                 router.push(item.href);
                 setMobileOpen(false);
               }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
+              className={`w-full flex items-center gap-3 rounded-xl text-left transition-all cursor-pointer ${
                 isActive
                   ? "dark:bg-purple-600/20 bg-purple-100 dark:text-purple-200 text-purple-700 dark:border dark:border-purple-600/30"
                   : "dark:text-purple-300/70 text-purple-500 dark:hover:bg-purple-900/20 hover:bg-purple-50"
-              } ${collapsed ? "justify-center px-2" : ""}`}
+              } ${collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"}`}
               title={collapsed ? `${item.label} · ${item.sub}` : undefined}
+              aria-current={isActive ? "page" : undefined}
             >
-              <span className="text-lg flex-shrink-0">{item.icon}</span>
+              <span
+                className="text-lg flex-shrink-0"
+                role="img"
+                aria-label={item.label}
+              >
+                {item.icon}
+              </span>
               {!collapsed && (
-                <div className="min-w-0">
-                  <p className="text-sm font-medium leading-tight truncate">
-                    {item.label}
-                  </p>
-                  <p className="text-xs dark:text-purple-400/50 text-purple-400 leading-none truncate">
-                    {item.sub}
-                  </p>
+                <div className="overflow-hidden">
+                  <p className="text-sm font-medium truncate">{item.label}</p>
+                  <p className="text-xs opacity-60 truncate">{item.sub}</p>
                 </div>
               )}
             </button>
@@ -318,60 +303,66 @@ export default function TeacherNav({
         })}
       </nav>
 
-      {/* ── Footer ────────────────────────────────────────────────────────── */}
+      {/* Bottom */}
       <div
-        className={`flex-shrink-0 px-3 py-4 border-t dark:border-purple-900/20 border-purple-100 ${collapsed ? "flex justify-center" : "flex items-center justify-between"}`}
+        className={`flex-shrink-0 border-t dark:border-purple-900/20 border-purple-100 ${collapsed ? "p-2" : "p-3"}`}
       >
-        {!collapsed && <ThemeToggle variant="teacher" />}
-        {collapsed && <ThemeToggle variant="teacher" />}
-        {!collapsed && (
-          <p className="text-xs dark:text-purple-900/60 text-purple-300">
-            Lumexa v1.0
-          </p>
-        )}
+        <ThemeToggle />
+        <p
+          className={`text-xs dark:text-purple-800 text-purple-300 text-center mt-2 ${collapsed ? "hidden" : ""}`}
+        >
+          Lumexa v1.0
+        </p>
       </div>
     </>
   );
 
   return (
     <>
-      {/* ── Mobile hamburger ──────────────────────────────────────────────── */}
+      {/* Mobile hamburger */}
       <button
-        onClick={() => setMobileOpen((o) => !o)}
-        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-xl dark:bg-purple-900/60 bg-purple-100 dark:text-purple-300 text-purple-700 flex items-center justify-center shadow-lg"
+        onClick={() => setMobileOpen(true)}
+        className="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 flex items-center justify-center rounded-xl dark:bg-[#0A0714] bg-white border dark:border-purple-900/40 border-purple-100 shadow-lg cursor-pointer"
+        aria-label="Open navigation menu"
       >
-        {mobileOpen ? "✕" : "☰"}
+        <span className="text-purple-500">☰</span>
       </button>
 
-      {/* ── Mobile overlay ────────────────────────────────────────────────── */}
+      {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-30 backdrop-blur-sm"
+          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm"
           onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
         />
       )}
 
-      {/* ── Mobile sidebar ────────────────────────────────────────────────── */}
+      {/* Mobile sidebar */}
       <aside
-        className={`lg:hidden fixed left-0 top-0 h-full w-64 ${sidebarWMobile} ${sidebarBase} shadow-2xl transition-transform duration-300`}
+        className={`fixed top-0 left-0 h-screen w-64 flex flex-col z-50 lg:hidden transition-transform duration-300 dark:bg-[#0A0714] bg-white border-r dark:border-purple-900/30 border-purple-100 ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+        aria-label="Mobile navigation"
       >
-        <NavContent />
+        <button
+          onClick={() => setMobileOpen(false)}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg dark:text-purple-400 text-purple-500 dark:hover:bg-purple-900/30 hover:bg-purple-100 transition-colors cursor-pointer"
+          aria-label="Close navigation menu"
+        >
+          ✕
+        </button>
+        <SidebarContent />
       </aside>
 
-      {/* ── Desktop sidebar ───────────────────────────────────────────────── */}
+      {/* Desktop sidebar — CHANGE: flex-shrink-0 prevents content crush */}
       <aside
-        className={`hidden lg:flex fixed left-0 top-0 ${sidebarW} ${sidebarBase} flex-col shadow-xl`}
+        className={`hidden lg:flex flex-col flex-shrink-0 h-screen sticky top-0 transition-all duration-300 dark:bg-[#0A0714] bg-white border-r dark:border-purple-900/30 border-purple-100 ${
+          collapsed ? "w-[72px]" : "w-64"
+        }`}
+        aria-label="Desktop navigation"
       >
-        <NavContent />
+        <SidebarContent />
       </aside>
-
-      {/* ── Content offset spacer ─────────────────────────────────────────── */}
-      {/* Apply this class to the page content wrapper: lg:pl-64 or lg:pl-16 */}
     </>
   );
 }
-
-// ── Hook to get sidebar width for page layout ─────────────────────────────────
-// Usage in pages: const { sidebarClass } = useSidebarWidth();
-// export function useSidebarWidth() { ... }
-// Simpler: pages use "lg:pl-64" and sidebar collapse is visual-only at this scale.

@@ -33,6 +33,7 @@ model Student {
   timezone   String?
   bookings   Booking[]
   parent     User      @relation(fields: [parentId], references: [id])
+  avatarUrl  String?
 
   @@index([parentId])
 }
@@ -59,6 +60,7 @@ model TeacherProfile {
   shifts          Shift[]
   cancellations   TeacherCancellation[]
   user            User                  @relation(fields: [userId], references: [id])
+  verificationDocs  Json?    @default("[]")  // Array of { type, url, name, uploadedAt }
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -73,6 +75,7 @@ model Shift {
   createdAt DateTime       @default(now())
   booking   Booking?
   teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
+  recurringGroupId  String?
 
   @@index([teacherId, start])
   @@index([start])

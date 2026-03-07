@@ -1,4 +1,5 @@
 // FILE PATH: server/src/teachers/teachers.controller.ts
+
 import {
   Controller,
   Get,
@@ -77,7 +78,7 @@ export class TeachersController {
     return this.teachersService.getMyStats(req.user.userId);
   }
 
-  /** GET /teachers/me/next-class — nearest upcoming booking with countdown */
+  /** GET /teachers/me/next-class — nearest upcoming booking */
   @Get('me/next-class')
   @UseGuards(RolesGuard)
   @Roles(Role.TEACHER)
@@ -107,9 +108,10 @@ export class TeachersController {
 
   /**
    * GET /teachers/me/students/:studentId/snapshot
-   * Read-only view of a student's history with this teacher.
-   * Used by the "View as Student" feature.
-   * Only works if teacher has at least one booking with this student.
+   *
+   * Compact read-only view of a student's history with this teacher.
+   * Used by the inline side-panel in teacher-students page.
+   * Requires at least one CAPTURED booking relationship.
    */
   @Get('me/students/:studentId/snapshot')
   @UseGuards(RolesGuard)
@@ -119,6 +121,31 @@ export class TeachersController {
     @Param('studentId') studentId: string,
   ) {
     return this.teachersService.getStudentSnapshot(req.user.userId, studentId);
+  }
+
+  /**
+   * GET /teachers/me/students/:studentId/dashboard
+   *
+   * Issue 10 — Teacher "Login as Student":
+   *   Returns the full dashboard payload shaped to match what
+   *   client/app/student-dashboard/[studentId]/page.tsx expects, so the
+   *   same UI can render for both PARENT and TEACHER viewers.
+   *
+   *   Authorization guard (in service):
+   *     • Verifies teacher has ≥1 PENDING or CAPTURED booking with the student
+   *     • 403 Forbidden if no class relationship exists
+   */
+  @Get('me/students/:studentId/dashboard')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getStudentDashboard(
+    @Request() req: any,
+    @Param('studentId') studentId: string,
+  ) {
+    return this.teachersService.getStudentDashboardForTeacher(
+      req.user.userId,
+      studentId,
+    );
   }
 
   /** GET /teachers/me/rank — gamification rank info */
@@ -131,16 +158,26 @@ export class TeachersController {
 
   // ── PUBLIC ────────────────────────────────────────────────────────────────
 
-  /** GET /teachers/leaderboard?limit=20 — top teachers by points */
+  /**
+   * GET /teachers/leaderboard?filter=all&limit=20
+   *
+   * FIX: Added `filter` query param. Previously omitted, so the service always
+   * defaulted to 'all' AND the numeric limit was erroneously passed as the
+   * first positional arg (the filter slot). Now correctly forwards both params.
+   */
   @Get('leaderboard')
-  getLeaderboard(@Query('limit') limit = '20') {
-    return this.teachersService.getLeaderboard(+limit);
+  getLeaderboard(
+    @Query('filter') filter: 'all' | 'week' = 'all',
+    @Query('limit') limit = '20',
+  ) {
+    const safeFilter: 'all' | 'week' = filter === 'week' ? 'week' : 'all';
+    return this.teachersService.getLeaderboard(safeFilter, +limit);
   }
 
   /**
    * GET /teachers/:teacherId/profile
    * Public profile for marketplace detail view.
-   * Must be last to avoid matching me/* routes.
+   * Must be declared last to avoid matching me/* routes.
    */
   @Get(':teacherId/profile')
   getPublicProfile(@Param('teacherId') teacherId: string) {

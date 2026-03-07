@@ -3,8 +3,11 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
-import StudentNav from "../../components/StudentNav";
-import { useTheme } from "../../components/ThemeProvider";
+import StudentNav from "../../../components/StudentNav";
+import { useTheme } from "../../../components/ThemeProvider";
+// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
+import LumiChat from "../../../components/LumiChat";
+// ──────────────────────────────────────────────────────────────────────────────
 
 interface LeaderEntry {
   id: string;
@@ -45,7 +48,6 @@ function LeaderboardContent() {
   const [studentGrade, setStudentGrade] = useState<string | null>(null);
   const [parentName, setParentName] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
-  // Simulated leaderboard (real impl would need a /leaderboard endpoint)
   const [entries, setEntries] = useState<LeaderEntry[]>([]);
   const [myEntry, setMyEntry] = useState<LeaderEntry | null>(null);
 
@@ -70,7 +72,6 @@ function LeaderboardContent() {
         const myStudents = sRes.data;
         const allBookings: any[] = Array.isArray(bRes.data) ? bRes.data : [];
 
-        // Build per-student stats for THIS parent's students (only data we have access to)
         const studentEntries: LeaderEntry[] = myStudents.map((s: any) => {
           const sb = allBookings.filter(
             (b: any) => b.studentId === s.id || b.student?.id === s.id,
@@ -111,7 +112,6 @@ function LeaderboardContent() {
           };
         });
 
-        // Sort by totalClasses desc
         studentEntries.sort((a, b) => b.totalClasses - a.totalClasses);
         setEntries(studentEntries);
 
@@ -290,6 +290,16 @@ function LeaderboardContent() {
           </div>
         </div>
       </div>
+
+      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
+          Fixed bottom-right. variant="student" → blue theme, Cadet persona.
+          context tells Lumi the student is viewing their leaderboard rankings.
+      ─────────────────────────────────────────────────────────────────────── */}
+      <LumiChat
+        variant="student"
+        context={`Student leaderboard — showing galaxy rank tiers${studentName !== "Cadet" ? ` for ${studentName}` : ""}`}
+      />
+      {/* ──────────────────────────────────────────────────────────────────── */}
     </div>
   );
 }

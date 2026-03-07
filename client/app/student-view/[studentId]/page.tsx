@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import StudentNav from "../../../components/StudentNav";
 import { useTheme } from "../../../components/ThemeProvider";
+// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
+import LumiChat from "../../../components/LumiChat";
+// ──────────────────────────────────────────────────────────────────────────────
 
 interface Snapshot {
   student: { id: string; name: string; age: number };
@@ -263,6 +266,18 @@ function StudentViewContent() {
           </div>
         </div>
       </div>
+
+      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
+          Fixed bottom-right. variant="teacher" → purple theme, Pilot persona.
+          This is the teacher's read-only view of a student's class history.
+          Lumi can help the teacher understand the student's progress, suggest
+          teaching approaches, or answer pedagogy questions.
+      ─────────────────────────────────────────────────────────────────────── */}
+      <LumiChat
+        variant="teacher"
+        context={`Teacher viewing student snapshot for ${snap.student.name} — ${snap.stats.totalClasses} classes together, avg rating ${snap.stats.averageRating?.toFixed(1) ?? "none"}`}
+      />
+      {/* ──────────────────────────────────────────────────────────────────── */}
     </div>
   );
 }

@@ -1,23 +1,32 @@
 // FILE PATH: client/app/layout.tsx
+//
+// ─── Issue 14 Fix: Student Dark Mode ───────────────────────────────────────
+//
+// ROOT CAUSE:
+//   If ThemeProvider is not present in the root layout, any page that calls
+//   useTheme() / ThemeToggle will silently use the default context value
+//   (theme: "dark", toggleTheme: noop) and dark mode toggling will never
+//   actually add/remove the "dark" class on <html>.
+//
+// FIX:
+//   Ensure ThemeProvider wraps ALL children at the root layout level.
+//   `suppressHydrationWarning` is required on <html> because ThemeProvider
+//   reads localStorage on the client and applies the saved theme class
+//   immediately after hydration — this produces a controlled mismatch that
+//   is intentional and harmless.
+
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../components/ThemeProvider";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Lumexa — Space-Powered Learning",
+  title: "Lumexa — Live Tutoring",
   description:
-    "Book live tutoring sessions in an immersive space learning experience.",
+    "Connect with expert teachers for live one-on-one tutoring sessions.",
+  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({
@@ -26,16 +35,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+    // suppressHydrationWarning: ThemeProvider applies "dark"/"light" class to
+    // this element after hydration. The brief server/client mismatch is
+    // expected and does not affect functionality.
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Anti-flash: runs sync before React hydrates. Reads localStorage → adds class to <html>. */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('lumexa-theme')||'dark';var h=document.documentElement;h.classList.remove('dark','light');h.classList.add(t);h.style.colorScheme=t;h.setAttribute('data-theme',t);}catch(e){document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark';}})()`,
-          }}
-        />
-      </head>
-      <body>
+      <body className={`${inter.className} antialiased`}>
+        {/*
+          Issue 14: ThemeProvider must live HERE so every page — including
+          student-dashboard — has access to useTheme() and the <html> element
+          receives the correct dark/light class on every route.
+        */}
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

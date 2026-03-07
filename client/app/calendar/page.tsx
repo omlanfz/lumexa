@@ -1,16 +1,22 @@
 // FILE PATH: client/app/calendar/page.tsx
-// Major additions:
-// 1. "Add Availability" modal — POST /shifts to create time slots
-// 2. Reschedule/Cancel modal with rules enforcement
-// 3. Student-request verification flow
-// 4. Full light/dark mode
-// 5. Responsive layout
+//
+// CHANGES vs previous version:
+//
+// 1. AddSlotModal — added "Repeat weekly" toggle + recurWeeks selector (1–12).
+//    Sends { start, end, recurring, recurWeeks } to POST /shifts.
+//    The backend returns Shift[] for recurring (N > 1) or Shift for single.
+//    onAdded() callback now accepts Shift | Shift[] so CalendarContent can
+//    append all copies with a single setShifts call.
+//
+// 2. CalendarContent — onAdded handler normalised to always spread an array.
+//    No other logic changes.
+
 "use client";
 
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import TeacherNav from "../../components/TeacherNav";
+import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
 
 const HOUR_PX = 60;
@@ -36,7 +42,7 @@ interface Profile {
 
 interface AddSlotModalProps {
   onClose: () => void;
-  onAdded: (shift: Shift) => void;
+  onAdded: (shift: Shift | Shift[]) => void;
   defaultDate: Date;
 }
 
@@ -44,6 +50,8 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
   const [date, setDate] = useState(defaultDate.toISOString().split("T")[0]);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
+  const [recurring, setRecurring] = useState(false);
+  const [recurWeeks, setRecurWeeks] = useState(4);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,9 +83,15 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
       const token = localStorage.getItem("token");
       const res = await axios.post(
         `${process.env.NEXT_PUBLIC_API_URL}/shifts`,
-        { start: startDt.toISOString(), end: endDt.toISOString() },
+        {
+          start: startDt.toISOString(),
+          end: endDt.toISOString(),
+          recurring,
+          recurWeeks: recurring ? recurWeeks : 1,
+        },
         { headers: { Authorization: `Bearer ${token}` } },
       );
+      // Backend returns Shift[] for recurring, Shift for single
       onAdded(res.data);
       onClose();
     } catch (e: any) {
@@ -143,15 +157,73 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
               </div>
             </div>
 
-            <div className="p-3 rounded-xl dark:bg-purple-900/20 bg-purple-50 border dark:border-purple-800/30 border-purple-200">
-              <p className="text-xs dark:text-purple-300/70 text-purple-600">
-                📋 Rules: 30min–4hr sessions. Must be at least 24h in advance
-                for best visibility. Overlapping slots are not allowed.
+            {/* ── Recurring toggle ──────────────────────────────────────── */}
+            <div className="p-3 rounded-xl dark:bg-purple-900/20 bg-purple-50 border dark:border-purple-800/30 border-purple-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium dark:text-purple-200 text-purple-800">
+                    🔁 Repeat weekly
+                  </p>
+                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                    Auto-create this slot every week
+                  </p>
+                </div>
+                <button
+                  onClick={() => setRecurring((r) => !r)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${
+                    recurring ? "bg-purple-600" : "dark:bg-gray-700 bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      recurring ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {recurring && (
+                <div>
+                  <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+                    Repeat for how many weeks?
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    {[2, 4, 6, 8, 12].map((w) => (
+                      <button
+                        key={w}
+                        onClick={() => setRecurWeeks(w)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          recurWeeks === w
+                            ? "bg-purple-600 text-white"
+                            : "dark:bg-gray-800/60 bg-white dark:text-purple-300 text-purple-700 border dark:border-purple-800/40 border-purple-200"
+                        }`}
+                      >
+                        {w}w
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs dark:text-purple-400/50 text-purple-400 mt-2">
+                    Will create {recurWeeks} slots — one per week starting{" "}
+                    {date}.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 rounded-xl dark:bg-blue-900/10 bg-blue-50 border dark:border-blue-900/20 border-blue-200">
+              <p className="text-xs dark:text-blue-300/70 text-blue-600">
+                📋 Rules: 30min–4hr sessions. Overlapping slots are rejected.
+                All copies in a recurring batch are validated before any are
+                saved.
               </p>
             </div>
           </div>
 
-          {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm mt-3 whitespace-pre-wrap">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-3 mt-5">
             <button
@@ -165,7 +237,11 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
               disabled={submitting}
               className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
             >
-              {submitting ? "Saving…" : "Add Slot 📅"}
+              {submitting
+                ? "Saving…"
+                : recurring
+                  ? `Add ${recurWeeks} Slots 🔁`
+                  : "Add Slot 📅"}
             </button>
           </div>
         </div>
@@ -179,7 +255,11 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
 interface CancelModalProps {
   shift: Shift;
   onClose: () => void;
-  onDone: (shiftId: string, action: "cancel" | "reschedule") => void;
+  onDone: (
+    shiftId: string,
+    action: "cancel" | "reschedule",
+    updatedShift?: Shift,
+  ) => void;
 }
 
 function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
@@ -192,9 +272,6 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState<"info" | "confirm">(
-    initiator === "teacher" ? "info" : "info",
-  );
 
   const hoursUntil = (new Date(shift.start).getTime() - Date.now()) / 3600000;
   const isTeacherInitiated = initiator === "teacher";
@@ -217,7 +294,6 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
     setError(null);
     try {
       const token = localStorage.getItem("token");
-      // For cancellation: delete the booking if booked, or the shift if unbooked
       if (action === "cancel") {
         if (shift.isBooked && shift.booking) {
           await axios.delete(
@@ -232,19 +308,18 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
             },
           );
         } else {
+          // DELETE /shifts/:id — now exists in the controller (Issue 9 fix)
           await axios.delete(
             `${process.env.NEXT_PUBLIC_API_URL}/shifts/${shift.id}`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            },
+            { headers: { Authorization: `Bearer ${token}` } },
           );
         }
         onDone(shift.id, "cancel");
       } else {
-        // Reschedule — update shift times (endpoint may need to be added)
+        // PATCH /shifts/:id — also now exists in the controller
         const newStartDt = new Date(`${newDate}T${newStart}:00`);
         const newEndDt = new Date(`${newDate}T${newEnd}:00`);
-        await axios.patch(
+        const res = await axios.patch(
           `${process.env.NEXT_PUBLIC_API_URL}/shifts/${shift.id}`,
           {
             start: newStartDt.toISOString(),
@@ -254,7 +329,7 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
           },
           { headers: { Authorization: `Bearer ${token}` } },
         );
-        onDone(shift.id, "reschedule");
+        onDone(shift.id, "reschedule", res.data);
       }
     } catch (e: any) {
       const m = e.response?.data?.message;
@@ -490,7 +565,6 @@ function CalendarContent() {
   const [cancelShift, setCancelShift] = useState<Shift | null>(null);
   const [view, setView] = useState<"week" | "list">("week");
 
-  // Get week start (Monday) for the current offset
   const getWeekStart = (offset: number) => {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
@@ -534,7 +608,6 @@ function CalendarContent() {
     })();
   }, [router]);
 
-  // Scroll to 7AM on mount
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 7 * HOUR_PX - 20;
@@ -547,7 +620,7 @@ function CalendarContent() {
       return sd.toDateString() === day.toDateString();
     });
 
-  const shiftStyle = (shift: Shift, day: Date) => {
+  const shiftStyle = (shift: Shift) => {
     const start = new Date(shift.start);
     const end = new Date(shift.end);
     const topMin = start.getHours() * 60 + start.getMinutes();
@@ -568,320 +641,313 @@ function CalendarContent() {
     );
 
   return (
-    <div className="min-h-screen dark:bg-[#0A0714] bg-[#FAF5FF] transition-colors">
-      <TeacherNav
-        teacherName={profile?.user?.fullName ?? "Pilot"}
-        avatarUrl={profile?.user?.avatarUrl ?? null}
-        rankTier={profile?.rankTier ?? 0}
-      />
-
-      <div className="lg:pl-64 transition-all duration-300">
-        <div className="px-3 sm:px-6 py-4 sm:py-6">
-          {/* Header */}
-          <div className="flex items-center justify-between flex-wrap gap-3 mb-4 sm:mb-6">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold dark:text-purple-100 text-purple-900">
-                Schedule
-              </h1>
-              <p className="text-sm dark:text-purple-400/60 text-purple-400">
-                Flight Log ✦
-              </p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* View toggle */}
-              <div className={`${card} p-1 flex rounded-xl`}>
-                {(["week", "list"] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
-                      view === v
-                        ? "bg-purple-600 text-white"
-                        : "dark:text-purple-300/70 text-purple-500"
-                    }`}
-                  >
-                    {v === "week" ? "📅 Week" : "📋 List"}
-                  </button>
-                ))}
-              </div>
-
-              {/* Add slot button */}
-              <button
-                onClick={() => {
-                  setAddDefaultDate(new Date());
-                  setShowAddModal(true);
-                }}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
-              >
-                + Add Availability
-                <span className="hidden sm:inline ml-1 text-xs opacity-70">
-                  Log Flight Slot
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-900/20 border border-red-700/30 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          {/* Week navigation */}
-          <div className="flex items-center gap-3 mb-4">
-            <button
-              onClick={() => setWeekOffset((o) => o - 1)}
-              className="p-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
-            >
-              ←
-            </button>
-            <p className="text-sm font-medium dark:text-purple-200 text-purple-800 flex-1 text-center">
-              {weekDays[0].toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}{" "}
-              –{" "}
-              {weekDays[6].toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}
+    <TeacherLayout
+      teacherName={profile?.user?.fullName ?? "Pilot"}
+      avatarUrl={profile?.user?.avatarUrl ?? null}
+      rankTier={profile?.rankTier ?? 0}
+    >
+      <div className="p-6 lg:p-8">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4 sm:mb-6">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold dark:text-purple-100 text-purple-900">
+              Schedule
+            </h1>
+            <p className="text-sm dark:text-purple-400/60 text-purple-400">
+              Flight Log ✦
             </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className={`${card} p-1 flex rounded-xl`}>
+              {(["week", "list"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize ${
+                    view === v
+                      ? "bg-purple-600 text-white"
+                      : "dark:text-purple-300/70 text-purple-500"
+                  }`}
+                >
+                  {v === "week" ? "📅 Week" : "📋 List"}
+                </button>
+              ))}
+            </div>
+
             <button
-              onClick={() => setWeekOffset((o) => o + 1)}
-              className="p-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
+              onClick={() => {
+                setAddDefaultDate(new Date());
+                setShowAddModal(true);
+              }}
+              className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
             >
-              →
+              + Add Availability
+              <span className="hidden sm:inline ml-1 text-xs opacity-70">
+                Log Flight Slot
+              </span>
             </button>
-            {weekOffset !== 0 && (
-              <button
-                onClick={() => setWeekOffset(0)}
-                className="text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 transition-colors"
-              >
-                Today
-              </button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-red-900/20 border border-red-700/30 text-red-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        {/* Week navigation */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={() => setWeekOffset((o) => o - 1)}
+            className="p-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
+          >
+            ←
+          </button>
+          <p className="text-sm font-medium dark:text-purple-200 text-purple-800 flex-1 text-center">
+            {weekDays[0].toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}{" "}
+            –{" "}
+            {weekDays[6].toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </p>
+          <button
+            onClick={() => setWeekOffset((o) => o + 1)}
+            className="p-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
+          >
+            →
+          </button>
+          {weekOffset !== 0 && (
+            <button
+              onClick={() => setWeekOffset(0)}
+              className="text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 transition-colors"
+            >
+              Today
+            </button>
+          )}
+        </div>
+
+        {view === "list" ? (
+          /* ── List View ────────────────────────────────────────────────────── */
+          <div className={`${card} overflow-hidden`}>
+            {shifts.length === 0 ? (
+              <div className="p-10 text-center">
+                <p className="text-3xl mb-3">📅</p>
+                <p className="font-semibold dark:text-purple-100 text-purple-900">
+                  No availability slots yet
+                </p>
+                <p className="text-sm dark:text-purple-400/60 text-purple-400 mt-1 mb-4">
+                  Add time slots so cadets can book your classes
+                </p>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+                >
+                  Add First Slot
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y dark:divide-purple-900/20 divide-purple-100">
+                {[...shifts]
+                  .sort(
+                    (a, b) =>
+                      new Date(a.start).getTime() - new Date(b.start).getTime(),
+                  )
+                  .map((shift) => {
+                    const start = new Date(shift.start);
+                    const end = new Date(shift.end);
+                    const isPast = end < new Date();
+                    return (
+                      <div
+                        key={shift.id}
+                        className="px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4 dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
+                      >
+                        <div
+                          className={`w-2 h-10 rounded-full flex-shrink-0 ${isPast ? "dark:bg-gray-700 bg-gray-300" : shift.isBooked ? "bg-green-500" : "bg-purple-500"}`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
+                            {start.toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </p>
+                          <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                            {start.toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}{" "}
+                            –{" "}
+                            {end.toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                        {shift.isBooked && shift.booking && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30 flex-shrink-0">
+                            {shift.booking.student.name}
+                          </span>
+                        )}
+                        {!isPast && (
+                          <button
+                            onClick={() => setCancelShift(shift)}
+                            className="text-xs px-2.5 py-1.5 rounded-lg dark:bg-red-900/20 bg-red-50 dark:text-red-400 text-red-600 dark:hover:bg-red-900/30 hover:bg-red-100 transition-colors flex-shrink-0"
+                          >
+                            {shift.isBooked ? "Modify" : "Remove"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             )}
           </div>
-
-          {view === "list" ? (
-            /* ── List View ────────────────────────────────────────────────────── */
-            <div className={`${card} overflow-hidden`}>
-              {shifts.length === 0 ? (
-                <div className="p-10 text-center">
-                  <p className="text-3xl mb-3">📅</p>
-                  <p className="font-semibold dark:text-purple-100 text-purple-900">
-                    No availability slots yet
-                  </p>
-                  <p className="text-sm dark:text-purple-400/60 text-purple-400 mt-1 mb-4">
-                    Add time slots so cadets can book your classes
-                  </p>
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+        ) : (
+          /* ── Week Calendar View ───────────────────────────────────────────── */
+          <div className={`${card} overflow-hidden`}>
+            {/* Day headers */}
+            <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b dark:border-purple-900/20 border-purple-100">
+              <div />
+              {weekDays.map((day) => {
+                const isToday =
+                  day.toDateString() === new Date().toDateString();
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className="py-3 text-center border-l dark:border-purple-900/20 border-purple-100"
                   >
-                    Add First Slot
-                  </button>
-                </div>
-              ) : (
-                <div className="divide-y dark:divide-purple-900/20 divide-purple-100">
-                  {[...shifts]
-                    .sort(
-                      (a, b) =>
-                        new Date(a.start).getTime() -
-                        new Date(b.start).getTime(),
-                    )
-                    .map((shift) => {
-                      const start = new Date(shift.start);
-                      const end = new Date(shift.end);
-                      const isPast = end < new Date();
-                      return (
-                        <div
-                          key={shift.id}
-                          className="px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4 dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
-                        >
-                          <div
-                            className={`w-2 h-10 rounded-full flex-shrink-0 ${isPast ? "dark:bg-gray-700 bg-gray-300" : shift.isBooked ? "bg-green-500" : "bg-purple-500"}`}
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
-                              {start.toLocaleDateString("en-US", {
-                                weekday: "short",
-                                month: "short",
-                                day: "numeric",
-                              })}
-                            </p>
-                            <p className="text-xs dark:text-purple-400/60 text-purple-400">
-                              {start.toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}{" "}
-                              –{" "}
-                              {end.toLocaleTimeString("en-US", {
-                                hour: "numeric",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                          </div>
-                          {shift.isBooked && shift.booking && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-900/30 text-green-400 border border-green-800/30 flex-shrink-0">
-                              {shift.booking.student.name}
-                            </span>
-                          )}
-                          {!isPast && (
-                            <button
-                              onClick={() => setCancelShift(shift)}
-                              className="text-xs px-2.5 py-1.5 rounded-lg dark:bg-red-900/20 bg-red-50 dark:text-red-400 text-red-600 dark:hover:bg-red-900/30 hover:bg-red-100 transition-colors flex-shrink-0"
-                            >
-                              {shift.isBooked ? "Modify" : "Remove"}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
+                    <p className="text-xs dark:text-purple-400/60 text-purple-400 uppercase">
+                      {day.toLocaleDateString("en-US", { weekday: "short" })}
+                    </p>
+                    <p
+                      className={`text-sm font-bold mt-0.5 ${isToday ? "w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center mx-auto" : "dark:text-purple-100 text-purple-900"}`}
+                    >
+                      {day.getDate()}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            /* ── Week Calendar View ───────────────────────────────────────────── */
-            <div className={`${card} overflow-hidden`}>
-              {/* Day headers */}
-              <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b dark:border-purple-900/20 border-purple-100">
-                <div />
+
+            {/* Scrollable grid */}
+            <div
+              ref={scrollRef}
+              className="overflow-y-auto"
+              style={{ maxHeight: "60vh" }}
+            >
+              <div className="grid grid-cols-[48px_repeat(7,1fr)] relative">
+                {/* Hours */}
+                <div>
+                  {Array.from({ length: 24 }, (_, h) => (
+                    <div
+                      key={h}
+                      style={{ height: HOUR_PX }}
+                      className="border-b dark:border-purple-900/10 border-purple-100/60 flex items-start pt-1"
+                    >
+                      <span className="text-xs dark:text-purple-400/30 text-purple-300 pr-2 w-full text-right">
+                        {h === 0
+                          ? "12 AM"
+                          : h < 12
+                            ? `${h} AM`
+                            : h === 12
+                              ? "12 PM"
+                              : `${h - 12} PM`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Day columns */}
                 {weekDays.map((day) => {
-                  const isToday =
-                    day.toDateString() === new Date().toDateString();
+                  const dayShifts = getShiftsForDay(day);
                   return (
                     <div
                       key={day.toISOString()}
-                      className="py-3 text-center border-l dark:border-purple-900/20 border-purple-100"
+                      className="relative border-l dark:border-purple-900/20 border-purple-100 cursor-pointer"
+                      style={{ height: 24 * HOUR_PX }}
+                      onClick={() => {
+                        setAddDefaultDate(day);
+                        setShowAddModal(true);
+                      }}
                     >
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400 uppercase">
-                        {day.toLocaleDateString("en-US", { weekday: "short" })}
-                      </p>
-                      <p
-                        className={`text-sm font-bold mt-0.5 ${isToday ? "w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center mx-auto" : "dark:text-purple-100 text-purple-900"}`}
-                      >
-                        {day.getDate()}
-                      </p>
+                      {/* Hour lines */}
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <div
+                          key={h}
+                          style={{ top: h * HOUR_PX, height: HOUR_PX }}
+                          className="absolute inset-x-0 border-b dark:border-purple-900/10 border-purple-100/40"
+                        />
+                      ))}
+
+                      {/* Current time line */}
+                      {day.toDateString() === new Date().toDateString() && (
+                        <div
+                          className="absolute inset-x-0 z-10 pointer-events-none"
+                          style={{
+                            top:
+                              ((new Date().getHours() * 60 +
+                                new Date().getMinutes()) /
+                                60) *
+                              HOUR_PX,
+                          }}
+                        >
+                          <div className="h-0.5 bg-red-500 relative">
+                            <div className="absolute -left-1 -top-1.5 w-3 h-3 rounded-full bg-red-500" />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Shifts */}
+                      {dayShifts.map((shift) => {
+                        const { top, height } = shiftStyle(shift);
+                        const isPast = new Date(shift.end) < new Date();
+                        return (
+                          <div
+                            key={shift.id}
+                            className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity ${isPast ? "opacity-40" : "opacity-100"}`}
+                            style={{ top: top + 1, height: height - 2 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isPast) setCancelShift(shift);
+                            }}
+                          >
+                            <div
+                              className={`h-full px-1.5 py-1 text-xs text-white cursor-pointer ${
+                                shift.isBooked
+                                  ? "bg-green-600 hover:bg-green-500"
+                                  : "bg-purple-600 hover:bg-purple-500"
+                              }`}
+                            >
+                              <p className="font-semibold truncate leading-tight">
+                                {shift.isBooked
+                                  ? `📗 ${shift.booking?.student.name}`
+                                  : "📅 Open"}
+                              </p>
+                              {height > 30 && (
+                                <p className="opacity-80 truncate">
+                                  {new Date(shift.start).toLocaleTimeString(
+                                    "en-US",
+                                    { hour: "numeric", minute: "2-digit" },
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}
               </div>
-
-              {/* Scrollable grid */}
-              <div
-                ref={scrollRef}
-                className="overflow-y-auto"
-                style={{ maxHeight: "60vh" }}
-              >
-                <div className="grid grid-cols-[48px_repeat(7,1fr)] relative">
-                  {/* Hours */}
-                  <div>
-                    {Array.from({ length: 24 }, (_, h) => (
-                      <div
-                        key={h}
-                        style={{ height: HOUR_PX }}
-                        className="border-b dark:border-purple-900/10 border-purple-100/60 flex items-start pt-1"
-                      >
-                        <span className="text-xs dark:text-purple-400/30 text-purple-300 pr-2 w-full text-right">
-                          {h === 0
-                            ? "12 AM"
-                            : h < 12
-                              ? `${h} AM`
-                              : h === 12
-                                ? "12 PM"
-                                : `${h - 12} PM`}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Day columns */}
-                  {weekDays.map((day) => {
-                    const dayShifts = getShiftsForDay(day);
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        className="relative border-l dark:border-purple-900/20 border-purple-100 cursor-pointer"
-                        style={{ height: 24 * HOUR_PX }}
-                        onClick={() => {
-                          setAddDefaultDate(day);
-                          setShowAddModal(true);
-                        }}
-                      >
-                        {/* Hour lines */}
-                        {Array.from({ length: 24 }, (_, h) => (
-                          <div
-                            key={h}
-                            style={{ top: h * HOUR_PX, height: HOUR_PX }}
-                            className="absolute inset-x-0 border-b dark:border-purple-900/10 border-purple-100/40"
-                          />
-                        ))}
-
-                        {/* Current time line */}
-                        {day.toDateString() === new Date().toDateString() && (
-                          <div
-                            className="absolute inset-x-0 z-10 pointer-events-none"
-                            style={{
-                              top:
-                                ((new Date().getHours() * 60 +
-                                  new Date().getMinutes()) /
-                                  60) *
-                                HOUR_PX,
-                            }}
-                          >
-                            <div className="h-0.5 bg-red-500 relative">
-                              <div className="absolute -left-1 -top-1.5 w-3 h-3 rounded-full bg-red-500" />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Shifts */}
-                        {dayShifts.map((shift) => {
-                          const { top, height } = shiftStyle(shift, day);
-                          const isPast = new Date(shift.end) < new Date();
-                          return (
-                            <div
-                              key={shift.id}
-                              className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity ${isPast ? "opacity-40" : "opacity-100"}`}
-                              style={{ top: top + 1, height: height - 2 }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (!isPast) setCancelShift(shift);
-                              }}
-                            >
-                              <div
-                                className={`h-full px-1.5 py-1 text-xs text-white cursor-pointer ${
-                                  shift.isBooked
-                                    ? "bg-green-600 hover:bg-green-500"
-                                    : "bg-purple-600 hover:bg-purple-500"
-                                }`}
-                              >
-                                <p className="font-semibold truncate leading-tight">
-                                  {shift.isBooked
-                                    ? `📗 ${shift.booking?.student.name}`
-                                    : "📅 Open"}
-                                </p>
-                                {height > 30 && (
-                                  <p className="opacity-80 truncate">
-                                    {new Date(shift.start).toLocaleTimeString(
-                                      "en-US",
-                                      { hour: "numeric", minute: "2-digit" },
-                                    )}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Modals */}
@@ -889,21 +955,30 @@ function CalendarContent() {
         <AddSlotModal
           defaultDate={addDefaultDate}
           onClose={() => setShowAddModal(false)}
-          onAdded={(shift) => setShifts((prev) => [...prev, shift])}
+          onAdded={(result) => {
+            // Backend returns Shift[] for recurring, Shift for single
+            const newShifts = Array.isArray(result) ? result : [result];
+            setShifts((prev) => [...prev, ...newShifts]);
+          }}
         />
       )}
       {cancelShift && (
         <CancelModal
           shift={cancelShift}
           onClose={() => setCancelShift(null)}
-          onDone={(id, action) => {
-            if (action === "cancel")
+          onDone={(id, action, updatedShift) => {
+            if (action === "cancel") {
               setShifts((prev) => prev.filter((s) => s.id !== id));
+            } else if (action === "reschedule" && updatedShift) {
+              setShifts((prev) =>
+                prev.map((s) => (s.id === id ? updatedShift : s)),
+              );
+            }
             setCancelShift(null);
           }}
         />
       )}
-    </div>
+    </TeacherLayout>
   );
 }
 

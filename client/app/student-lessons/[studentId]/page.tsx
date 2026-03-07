@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
 import StudentNav from "../../../components/StudentNav";
 import { useTheme } from "../../../components/ThemeProvider";
+// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
+import LumiChat from "../../../components/LumiChat";
+// ──────────────────────────────────────────────────────────────────────────────
 
 interface Booking {
   id: string;
@@ -42,7 +45,7 @@ function LessonsContent() {
   const { studentId } = useParams<{ studentId: string }>();
   const router = useRouter();
   const { isDark } = useTheme();
-  const [student, setStudent]         = useState<StudentData | null>(null);
+  const [student, setStudent] = useState<StudentData | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "upcoming" | "completed">("all");
@@ -98,7 +101,6 @@ function LessonsContent() {
         { rating, comment: comment || undefined },
         { headers: { Authorization: `Bearer ${tok}` } },
       );
-      // Update local state
       setBookings((prev) =>
         prev.map((b) =>
           b.id === reviewModal.bookingId
@@ -347,6 +349,18 @@ function LessonsContent() {
           </div>
         </div>
       )}
+
+      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
+          Fixed bottom-right. variant="student" → blue theme, Cadet persona.
+          z-index is 50, safely below the review modal (z-50 but modal renders
+          on top due to DOM order). Lumi can help cadets understand their
+          lesson history, ratings, or how to book more classes.
+      ─────────────────────────────────────────────────────────────────────── */}
+      <LumiChat
+        variant="student"
+        context={`Student lessons page — showing ${upcoming.length} upcoming and ${completed.length} completed classes`}
+      />
+      {/* ──────────────────────────────────────────────────────────────────── */}
     </div>
   );
 }

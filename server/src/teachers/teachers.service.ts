@@ -1,16 +1,72 @@
 // FILE PATH: server/src/teachers/teachers.service.ts
-// ACTION: REPLACE the existing file entirely.
-// NOTE: getMyStudents() was already implemented — kept exactly as-is.
-// ADDED: getLeaderboard() method at the bottom.
 
 import {
   Injectable,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+
+// ─── Badge Tier Definitions ───────────────────────────────────────────────────
+
+export const BADGE_TIERS = [
+  {
+    id: 'cadet',
+    minPts: 0,
+    icon: '🌱',
+    label: 'Cadet',
+    desc: 'Just getting started. Complete your first class to begin your journey.',
+  },
+  {
+    id: 'navigator',
+    minPts: 1000,
+    icon: '🧭',
+    label: 'Navigator',
+    desc: 'Earned 1,000 pts. Complete 10+ classes consistently.',
+  },
+  {
+    id: 'pilot',
+    minPts: 3000,
+    icon: '✈️',
+    label: 'Pilot',
+    desc: 'Earned 3,000 pts. Maintain a 4.5+ star rating.',
+  },
+  {
+    id: 'commander',
+    minPts: 7000,
+    icon: '🎖️',
+    label: 'Commander',
+    desc: 'Earned 7,000 pts. Top 25% of platform teachers.',
+  },
+  {
+    id: 'admiral',
+    minPts: 15000,
+    icon: '⭐',
+    label: 'Admiral',
+    desc: 'Earned 15,000 pts. Top 10% of platform teachers.',
+  },
+  {
+    id: 'starmaster',
+    minPts: 30000,
+    icon: '🌟',
+    label: 'Starmaster',
+    desc: 'Earned 30,000 pts. Elite status. Top 1% of platform.',
+  },
+];
+
+// ─── Badge Tier Helper ────────────────────────────────────────────────────────
+
+export function getBadgeTier(
+  pts: number,
+): (typeof BADGE_TIERS)[0] & { tierIndex: number } {
+  for (let i = BADGE_TIERS.length - 1; i >= 0; i--) {
+    if (pts >= BADGE_TIERS[i].minPts) {
+      return { ...BADGE_TIERS[i], tierIndex: i };
+    }
+  }
+  return { ...BADGE_TIERS[0], tierIndex: 0 };
+}
 
 @Injectable()
 export class TeachersService {
@@ -234,7 +290,6 @@ export class TeachersService {
   }
 
   // ─── Get My Students ──────────────────────────────────────────────────────
-  // Already implemented — kept exactly as provided.
 
   async getMyStudents(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
@@ -391,41 +446,76 @@ export class TeachersService {
   }
 
   // ─── Leaderboard ──────────────────────────────────────────────────────────
-  // Returns top N teachers ranked by review count and rating (proxy for points
-  // until gamification system is implemented in Phase B).
+  //
+  // FIX: replaced groupBy({ by: ['shift'] }) with findMany + JS Map counter.
+  // Prisma groupBy only accepts scalar fields on the queried model; 'shift'
+  // is a relation on Booking, causing both a TS compile error and a runtime
+  // error. The replacement is fully supported and identically behaved.
 
-  async getLeaderboard(limit: number) {
+  async getLeaderboard(filter: 'all' | 'week' = 'all', limit = 50) {
+    const orderByField =
+      filter === 'week'
+        ? { weeklyPoints: 'desc' as const }
+        : { points: 'desc' as const };
+
     const profiles = await this.prisma.teacherProfile.findMany({
       where: { isSuspended: false },
-      orderBy: { points: 'desc' },
+      orderBy: orderByField,
       take: Math.min(limit, 50),
-      include: { user: { select: { fullName: true, avatarUrl: true } } },
+      include: {
+        user: { select: { fullName: true, avatarUrl: true } },
+      },
     });
 
-    const NAMES = [
-      'Cadet',
-      'Navigator',
-      'Pilot',
-      'Commander',
-      'Admiral',
-      'Starmaster',
-    ];
-    const ICONS = ['🌱', '🧭', '✈️', '🎖️', '⭐', '🌟'];
+    const teacherIds = profiles.map((p) => p.id);
 
-    return profiles.map((p, idx) => ({
-      rank: idx + 1,
-      teacherId: p.id,
-      name: p.user.fullName,
-      avatarUrl: p.user.avatarUrl,
-      points: p.points ?? 0,
-      weeklyPoints: p.weeklyPoints ?? 0,
-      rankTier: Math.min(p.rankTier, 5),
-      rankName: NAMES[Math.min(p.rankTier, 5)],
-      rankIcon: ICONS[Math.min(p.rankTier, 5)],
-      ratingAvg: p.ratingAvg,
-      reviewCount: p.reviewCount,
-    }));
+    // FIXED: findMany with relational select — Prisma fully supports this.
+    // groupBy on a relation field ('shift') is not supported and caused errors.
+    const capturedBookings = await this.prisma.booking.findMany({
+      where: {
+        shift: { teacherId: { in: teacherIds } },
+        paymentStatus: 'CAPTURED',
+      },
+      select: {
+        shift: { select: { teacherId: true } },
+      },
+    });
+
+    // Count per teacher in a single O(n) pass
+    const completedByTeacher = new Map<string, number>();
+    for (const booking of capturedBookings) {
+      const tid = booking.shift.teacherId;
+      completedByTeacher.set(tid, (completedByTeacher.get(tid) ?? 0) + 1);
+    }
+
+    const teachers = profiles.map((p, idx) => {
+      const pts = filter === 'week' ? (p.weeklyPoints ?? 0) : (p.points ?? 0);
+      const badge = getBadgeTier(p.points ?? 0);
+
+      return {
+        rank: idx + 1,
+        teacherId: p.id,
+        name: p.user.fullName,
+        avatarUrl: p.user.avatarUrl,
+        points: pts,
+        allTimePoints: p.points ?? 0,
+        weeklyPoints: p.weeklyPoints ?? 0,
+        classesCompleted: completedByTeacher.get(p.id) ?? 0,
+        ratingAvg: p.ratingAvg,
+        reviewCount: p.reviewCount,
+        badge,
+      };
+    });
+
+    return {
+      teachers,
+      tiers: BADGE_TIERS,
+    };
   }
+
+  // ─── Get Student Snapshot ─────────────────────────────────────────────────
+  //
+  // Read-only side-panel summary for teacher viewing a single student.
 
   async getStudentSnapshot(teacherUserId: string, studentId: string) {
     const profile = await this.prisma.teacherProfile.findUnique({
@@ -433,7 +523,6 @@ export class TeachersService {
     });
     if (!profile) throw new NotFoundException('Teacher profile not found');
 
-    // Verify this teacher has at least one booking with this student
     const relationship = await this.prisma.booking.findFirst({
       where: {
         studentId,
@@ -489,7 +578,6 @@ export class TeachersService {
           id: b.id,
           start: b.shift.start,
           end: b.shift.end,
-          teacherName: '', // teacher is always this teacher in this context
           rating: b.review?.rating ?? null,
           comment: b.review?.comment ?? null,
         })),
@@ -503,6 +591,128 @@ export class TeachersService {
     };
   }
 
+  // ─── Get Student Dashboard (Teacher View) ─────────────────────────────────
+  //
+  // Issue 10 — Teacher "Login as Student":
+  //   Returns a full dashboard payload shaped to match what
+  //   student-dashboard/[studentId]/page.tsx expects, so the same UI works
+  //   for both PARENT and TEACHER viewers without a separate page.
+  //
+  // Authorization guard (inline):
+  //   The teacher must have at least one PENDING or CAPTURED booking with
+  //   this student. No relationship → 403 Forbidden.
+
+  async getStudentDashboardForTeacher(
+    teacherUserId: string,
+    studentId: string,
+  ) {
+    // 1. Resolve teacher profile
+    const profile = await this.prisma.teacherProfile.findUnique({
+      where: { userId: teacherUserId },
+      include: { user: { select: { fullName: true, avatarUrl: true } } },
+    });
+    if (!profile) throw new NotFoundException('Teacher profile not found');
+
+    // 2. Authorization guard
+    const relationship = await this.prisma.booking.findFirst({
+      where: {
+        studentId,
+        shift: { teacherId: profile.id },
+        paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+      },
+    });
+    if (!relationship) {
+      throw new ForbiddenException(
+        'You have no class relationship with this student.',
+      );
+    }
+
+    // 3. Load student record
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        parent: { select: { fullName: true, email: true } },
+      },
+    });
+    if (!student) throw new NotFoundException('Student not found');
+
+    // 4. Load all bookings between this teacher and student
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        studentId,
+        shift: { teacherId: profile.id },
+      },
+      include: {
+        shift: { select: { start: true, end: true } },
+        review: { select: { rating: true, comment: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // 5. Compute stats
+    const now = new Date();
+    const completed = bookings.filter(
+      (b) => b.paymentStatus === 'CAPTURED' && new Date(b.shift.end) < now,
+    );
+    const upcoming = bookings.filter(
+      (b) =>
+        new Date(b.shift.start) > now &&
+        b.paymentStatus !== 'REFUNDED' &&
+        b.paymentStatus !== 'FAILED',
+    );
+    const hoursLearned = completed.reduce((sum, b) => {
+      const ms =
+        new Date(b.shift.end).getTime() - new Date(b.shift.start).getTime();
+      return sum + ms / 3_600_000;
+    }, 0);
+    const ratings = completed.filter((b) => b.review);
+    const avgRating =
+      ratings.length > 0
+        ? ratings.reduce((s, b) => s + b.review!.rating, 0) / ratings.length
+        : null;
+
+    // 6. Return payload shaped to match student-dashboard page state
+    return {
+      student: {
+        id: student.id,
+        name: student.name,
+        age: student.age,
+        grade: (student as any).grade ?? null,
+        subject: (student as any).subject ?? null,
+        avatarUrl: (student as any).avatarUrl ?? null,
+      },
+      parentInfo: {
+        fullName: student.parent.fullName,
+        email: student.parent.email,
+      },
+      // Tells the frontend this is a read-only teacher-view session
+      viewingTeacher: {
+        id: profile.id,
+        fullName: profile.user.fullName,
+        avatarUrl: profile.user.avatarUrl,
+      },
+      stats: {
+        total: bookings.length,
+        completed: completed.length,
+        upcoming: upcoming.length,
+        hoursLearned: Math.round(hoursLearned * 10) / 10,
+      },
+      avgRating: avgRating ? Math.round(avgRating * 10) / 10 : null,
+      bookings: bookings.map((b) => ({
+        id: b.id,
+        paymentStatus: b.paymentStatus,
+        shift: { start: b.shift.start, end: b.shift.end },
+        teacher: {
+          fullName: profile.user.fullName,
+          avatarUrl: profile.user.avatarUrl,
+        },
+        review: b.review ?? null,
+      })),
+    };
+  }
+
+  // ─── Get My Rank ──────────────────────────────────────────────────────────
+
   async getMyRank(userId: string) {
     const profile = await this.prisma.teacherProfile.findUnique({
       where: { userId },
@@ -510,16 +720,7 @@ export class TeachersService {
     });
     if (!profile) throw new NotFoundException('Profile not found');
 
-    const THRESHOLDS = [0, 1000, 5000, 15000, 40000, 100000];
-    const NAMES = [
-      'Cadet',
-      'Navigator',
-      'Pilot',
-      'Commander',
-      'Admiral',
-      'Starmaster',
-    ];
-    const ICONS = ['🌱', '🧭', '✈️', '🎖️', '⭐', '🌟'];
+    const THRESHOLDS = BADGE_TIERS.map((t) => t.minPts);
 
     const tier = Math.min(profile.rankTier, 5);
     const nextThreshold = THRESHOLDS[tier + 1] ?? THRESHOLDS[5];
@@ -533,12 +734,15 @@ export class TeachersService {
               100,
           );
 
+    const badge = getBadgeTier(profile.points ?? 0);
+
     return {
       points: profile.points ?? 0,
       weeklyPoints: profile.weeklyPoints ?? 0,
       rankTier: tier,
-      rankName: NAMES[tier],
-      rankIcon: ICONS[tier],
+      rankName: badge.label,
+      rankIcon: badge.icon,
+      badge,
       pointsToNext: Math.max(0, nextThreshold - (profile.points ?? 0)),
       progressPercent: Math.min(100, Math.max(0, progressPercent)),
     };

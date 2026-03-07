@@ -1,3 +1,5 @@
+// FILE PATH: server/src/students/students.controller.ts
+ 
 import {
   Controller,
   Get,

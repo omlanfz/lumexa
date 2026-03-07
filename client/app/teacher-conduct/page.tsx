@@ -1,13 +1,14 @@
 // FILE PATH: client/app/teacher-conduct/page.tsx
-// New page: Pilot Guidelines (Rules, Penalties, Strike Policy)
-// Combined with Earnings impact visualization for best UX context.
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import TeacherNav from "../../components/TeacherNav";
+import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
+// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
+import LumiChat from "../../components/LumiChat";
+// ──────────────────────────────────────────────────────────────────────────────
 
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
@@ -131,252 +132,260 @@ function TeacherConductContent() {
           : "bg-red-500";
 
   return (
-    <div className="min-h-screen dark:bg-[#0A0714] bg-[#FAF5FF] transition-colors">
-      <TeacherNav
-        teacherName={profile?.user?.fullName ?? "Pilot"}
-        avatarUrl={profile?.user?.avatarUrl ?? null}
-        rankTier={profile?.rankTier ?? 0}
-      />
+    <TeacherLayout
+      teacherName={profile?.user?.fullName ?? "Pilot"}
+      avatarUrl={profile?.user?.avatarUrl ?? null}
+      rankTier={profile?.rankTier ?? 0}
+    >
+      <div className="p-6 lg:p-8">
+        {/* Header */}
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold dark:text-purple-100 text-purple-900">
+            Pilot Guidelines
+          </h1>
+          <p className="text-sm dark:text-purple-400/60 text-purple-400">
+            Pilot Code · Know the Rules, Fly with Integrity
+          </p>
+        </div>
 
-      <div className="lg:pl-64 transition-all duration-300">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-          {/* Header */}
-          <div className="mb-6 sm:mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold dark:text-purple-100 text-purple-900">
-              Pilot Guidelines
-            </h1>
-            <p className="text-sm dark:text-purple-400/60 text-purple-400">
-              Pilot Code · Know the Rules, Fly with Integrity
-            </p>
-          </div>
-
-          {/* Suspension warning */}
-          {profile?.isSuspended && (
-            <div className="mb-6 p-4 bg-red-900/30 border border-red-600/40 rounded-2xl flex items-start gap-3">
-              <span className="text-2xl">🚫</span>
-              <div>
-                <p className="text-red-300 font-bold">
-                  Your account is suspended
-                </p>
-                <p className="text-red-400/70 text-sm mt-1">
-                  You have reached 3 strikes. Contact Lumexa support for
-                  reinstatement review. During suspension, you cannot accept new
-                  bookings and all pending payouts are held.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Strike status card */}
-          <div className={`${card} p-5 mb-6`}>
-            <div className="flex items-start justify-between flex-wrap gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
-                  Your Strike Status
-                </p>
-                <p className="text-2xl font-bold mt-1 dark:text-purple-100 text-purple-900">
-                  {strikes} / 3 strikes
-                </p>
-                <p
-                  className={`text-sm mt-0.5 ${
-                    strikes === 0
-                      ? "text-green-500"
-                      : strikes < 3
-                        ? "text-amber-500"
-                        : "text-red-500"
-                  }`}
-                >
-                  {strikes === 0
-                    ? "✅ Clean record — keep it up!"
-                    : strikes === 1
-                      ? "⚡ First warning"
-                      : strikes === 2
-                        ? "⚠️ One more strike = suspension"
-                        : "🚫 Suspended"}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-4xl font-black dark:text-purple-100 text-purple-900">
-                  {3 - strikes}
-                </p>
-                <p className="text-xs dark:text-purple-400/60 text-purple-400">
-                  strikes remaining
-                </p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <div className="h-3 rounded-full dark:bg-gray-800 bg-gray-200 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${strikeColor}`}
-                  style={{ width: `${strikePct}%` }}
-                />
-              </div>
-              <div className="flex justify-between mt-1">
-                <span className="text-xs dark:text-purple-400/50 text-purple-400">
-                  Clean
-                </span>
-                <span className="text-xs text-red-400">Suspended</span>
-              </div>
+        {/* Suspension warning */}
+        {profile?.isSuspended && (
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-600/40 rounded-2xl flex items-start gap-3">
+            <span className="text-2xl">🚫</span>
+            <div>
+              <p className="text-red-300 font-bold">
+                Your account is suspended
+              </p>
+              <p className="text-red-400/70 text-sm mt-1">
+                You have reached 3 strikes. Contact Lumexa support for
+                reinstatement review. During suspension, you cannot accept new
+                bookings and all pending payouts are held.
+              </p>
             </div>
           </div>
+        )}
 
-          {/* Quick reference */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-            {[
-              {
-                icon: "✅",
-                label: "Student request",
-                desc: "No penalty",
-                color: "green",
-              },
-              {
-                icon: "⚠️",
-                label: "Your cancellation",
-                desc: "2 free/month",
-                color: "amber",
-              },
-              {
-                icon: "❌",
-                label: "No-show",
-                desc: "1 strike immediately",
-                color: "red",
-              },
-            ].map((item) => (
-              <div key={item.label} className={`${card} p-4 text-center`}>
-                <p className="text-2xl mb-2">{item.icon}</p>
-                <p className="text-sm font-semibold dark:text-purple-100 text-purple-900">
-                  {item.label}
-                </p>
-                <p
-                  className={`text-xs mt-0.5 ${
-                    item.color === "green"
-                      ? "text-green-500"
-                      : item.color === "amber"
-                        ? "text-amber-500"
-                        : "text-red-500"
-                  }`}
-                >
-                  {item.desc}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {/* Rules sections */}
-          <div className="space-y-4">
-            {RULES.map((rule) => (
-              <div
-                key={rule.section}
-                className={`rounded-2xl border p-5 ${COLOR_MAP[rule.color]}`}
+        {/* Strike status card */}
+        <div className={`${card} p-5 mb-6`}>
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
+                Your Strike Status
+              </p>
+              <p className="text-2xl font-bold mt-1 dark:text-purple-100 text-purple-900">
+                {strikes} / 3 strikes
+              </p>
+              <p
+                className={`text-sm mt-0.5 ${
+                  strikes === 0
+                    ? "text-green-500"
+                    : strikes < 3
+                      ? "text-amber-500"
+                      : "text-red-500"
+                }`}
               >
-                <h3 className="font-bold text-base mb-3">{rule.section}</h3>
-                <ul className="space-y-2">
-                  {rule.items.map((item, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="mt-0.5 flex-shrink-0">•</span>
-                      <span className="opacity-90">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          {/* Earnings impact table */}
-          <div className={`${card} mt-6 overflow-hidden`}>
-            <div className="px-5 py-4 border-b dark:border-purple-900/20 border-purple-100">
-              <p className="font-semibold dark:text-purple-100 text-purple-900">
-                Earnings Impact Summary
+                {strikes === 0
+                  ? "✅ Clean record — keep it up!"
+                  : strikes === 1
+                    ? "⚡ First warning"
+                    : strikes === 2
+                      ? "⚠️ One more strike = suspension"
+                      : "🚫 Suspended"}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-4xl font-black dark:text-purple-100 text-purple-900">
+                {3 - strikes}
               </p>
               <p className="text-xs dark:text-purple-400/60 text-purple-400">
-                How rule violations affect your payout
+                strikes remaining
               </p>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b dark:border-purple-900/20 border-purple-100">
-                    <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
-                      Violation
-                    </th>
-                    <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
-                      Strike
-                    </th>
-                    <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
-                      Earnings Impact
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y dark:divide-purple-900/20 divide-purple-100">
-                  {[
-                    {
-                      violation: "No-show",
-                      strike: "1",
-                      earnings: "Class fee forfeited + $5 penalty",
-                    },
-                    {
-                      violation: "Late cancel (<2h notice)",
-                      strike: "1",
-                      earnings: "No earnings for that session",
-                    },
-                    {
-                      violation: "3rd+ cancel this month",
-                      strike: "1 each",
-                      earnings: "$5 deducted per extra cancellation",
-                    },
-                    {
-                      violation: "Student-requested reschedule",
-                      strike: "None",
-                      earnings: "No impact",
-                    },
-                    {
-                      violation: "3rd strike (suspension)",
-                      strike: "Account",
-                      earnings: "All pending payouts held",
-                    },
-                  ].map((row) => (
-                    <tr
-                      key={row.violation}
-                      className="dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
-                    >
-                      <td className="px-5 py-3 dark:text-purple-100 text-purple-900">
-                        {row.violation}
-                      </td>
-                      <td
-                        className={`px-5 py-3 ${row.strike === "None" ? "text-green-500" : "text-red-400"}`}
-                      >
-                        {row.strike}
-                      </td>
-                      <td className="px-5 py-3 dark:text-purple-300/70 text-purple-600">
-                        {row.earnings}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          </div>
+          <div className="mt-4">
+            <div className="h-3 rounded-full dark:bg-gray-800 bg-gray-200 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${strikeColor}`}
+                style={{ width: `${strikePct}%` }}
+              />
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-xs dark:text-purple-400/50 text-purple-400">
+                Clean
+              </span>
+              <span className="text-xs text-red-400">Suspended</span>
             </div>
           </div>
+        </div>
 
-          {/* Support */}
-          <div className={`${card} mt-6 p-5 text-center`}>
-            <p className="text-lg mb-2">❓</p>
-            <p className="font-semibold dark:text-purple-100 text-purple-900 text-sm">
-              Have a question about these guidelines?
-            </p>
-            <p className="text-xs dark:text-purple-400/60 text-purple-400 mt-1 mb-3">
-              Contact Lumexa Mission Support. We're here to help all pilots
-              succeed.
-            </p>
-            <a
-              href="mailto:support@lumexa.app"
-              className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+        {/* Quick reference */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+          {[
+            {
+              icon: "✅",
+              label: "Student request",
+              desc: "No penalty",
+              color: "green",
+            },
+            {
+              icon: "⚠️",
+              label: "Your cancellation",
+              desc: "2 free/month",
+              color: "amber",
+            },
+            {
+              icon: "❌",
+              label: "No-show",
+              desc: "1 strike immediately",
+              color: "red",
+            },
+          ].map((item) => (
+            <div key={item.label} className={`${card} p-4 text-center`}>
+              <p className="text-2xl mb-2">{item.icon}</p>
+              <p className="text-sm font-semibold dark:text-purple-100 text-purple-900">
+                {item.label}
+              </p>
+              <p
+                className={`text-xs mt-0.5 ${
+                  item.color === "green"
+                    ? "text-green-500"
+                    : item.color === "amber"
+                      ? "text-amber-500"
+                      : "text-red-500"
+                }`}
+              >
+                {item.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Rules sections */}
+        <div className="space-y-4">
+          {RULES.map((rule) => (
+            <div
+              key={rule.section}
+              className={`rounded-2xl border p-5 ${COLOR_MAP[rule.color]}`}
             >
-              Contact Support →
-            </a>
+              <h3 className="font-bold text-base mb-3">{rule.section}</h3>
+              <ul className="space-y-2">
+                {rule.items.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm">
+                    <span className="mt-0.5 flex-shrink-0">•</span>
+                    <span className="opacity-90">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+
+        {/* Earnings impact table */}
+        <div className={`${card} mt-6 overflow-hidden`}>
+          <div className="px-5 py-4 border-b dark:border-purple-900/20 border-purple-100">
+            <p className="font-semibold dark:text-purple-100 text-purple-900">
+              Earnings Impact Summary
+            </p>
+            <p className="text-xs dark:text-purple-400/60 text-purple-400">
+              How rule violations affect your payout
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b dark:border-purple-900/20 border-purple-100">
+                  <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
+                    Violation
+                  </th>
+                  <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
+                    Strike
+                  </th>
+                  <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
+                    Earnings Impact
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y dark:divide-purple-900/20 divide-purple-100">
+                {[
+                  {
+                    violation: "No-show",
+                    strike: "1",
+                    earnings: "Class fee forfeited + $5 penalty",
+                  },
+                  {
+                    violation: "Late cancel (<2h notice)",
+                    strike: "1",
+                    earnings: "No earnings for that session",
+                  },
+                  {
+                    violation: "3rd+ cancel this month",
+                    strike: "1 each",
+                    earnings: "$5 deducted per extra cancellation",
+                  },
+                  {
+                    violation: "Student-requested reschedule",
+                    strike: "None",
+                    earnings: "No impact",
+                  },
+                  {
+                    violation: "3rd strike (suspension)",
+                    strike: "Account",
+                    earnings: "All pending payouts held",
+                  },
+                ].map((row) => (
+                  <tr
+                    key={row.violation}
+                    className="dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
+                  >
+                    <td className="px-5 py-3 dark:text-purple-100 text-purple-900">
+                      {row.violation}
+                    </td>
+                    <td
+                      className={`px-5 py-3 ${row.strike === "None" ? "text-green-500" : "text-red-400"}`}
+                    >
+                      {row.strike}
+                    </td>
+                    <td className="px-5 py-3 dark:text-purple-300/70 text-purple-600">
+                      {row.earnings}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
+
+        {/* Support */}
+        <div className={`${card} mt-6 p-5 text-center`}>
+          <p className="text-lg mb-2">❓</p>
+          <p className="font-semibold dark:text-purple-100 text-purple-900 text-sm">
+            Have a question about these guidelines?
+          </p>
+          <p className="text-xs dark:text-purple-400/60 text-purple-400 mt-1 mb-3">
+            Contact Lumexa Mission Support. We're here to help all pilots
+            succeed.
+          </p>
+          <a
+            href="mailto:support@lumexa.app"
+            className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+          >
+            Contact Support →
+          </a>
+        </div>
       </div>
-    </div>
+
+      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
+          Fixed bottom-right. variant="teacher" → purple theme, Pilot persona.
+          Particularly useful here: Lumi can clarify strike rules, explain
+          cancellation policies, or answer questions about earnings deductions
+          in plain language — saving teachers a trip to support.
+      ─────────────────────────────────────────────────────────────────────── */}
+      <LumiChat
+        variant="teacher"
+        context={`Pilot guidelines / conduct page — teacher has ${profile?.strikes ?? 0} strike(s), ${profile?.isSuspended ? "account suspended" : "account active"}`}
+      />
+      {/* ──────────────────────────────────────────────────────────────────── */}
+    </TeacherLayout>
   );
 }
 
