@@ -357,7 +357,13 @@ function TypingDots() {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function LumiChat({ variant = "student" }: LumiChatProps) {
+// FIX 1: Destructure `context` from props so it is available in the component.
+// Previously, `context` was declared in LumiChatProps but never destructured,
+// meaning it was silently discarded and never forwarded to the backend.
+export default function LumiChat({
+  variant = "student",
+  context,
+}: LumiChatProps) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -409,7 +415,10 @@ export default function LumiChat({ variant = "student" }: LumiChatProps) {
     try {
       const res = await axios.post(
         `${API}/lumi/chat`,
-        { message: text, history, variant },
+        // FIX 2: Include `context` in the request body so the backend receives
+        // the page-level context string passed via the <LumiChat context="..." /> prop.
+        // Previously this field was accepted as a prop but never forwarded here.
+        { message: text, history, variant, context },
         tok ? { headers: { Authorization: `Bearer ${tok}` } } : {},
       );
 
@@ -422,20 +431,32 @@ export default function LumiChat({ variant = "student" }: LumiChatProps) {
       setMessages((prev) => [...prev, reply]);
       setIsSpeaking(true);
       setTimeout(() => setIsSpeaking(false), 2000);
-    } catch {
+    } catch (err: unknown) {
+      // FIX 3: Distinguish 401 auth failures from generic network/server errors
+      // so the user gets an actionable message instead of a vague "signal lost" note.
+      const status =
+        err &&
+        typeof err === "object" &&
+        "response" in err &&
+        (err as { response?: { status?: number } }).response?.status;
+
+      const errorContent =
+        status === 401
+          ? "🔐 Authentication error — please log out and log back in, then try again!\nIf this keeps happening, contact **support@lumexa.app**."
+          : "Oops! My signal got lost in space 🛸\nPlease try again — or email **support@lumexa.app** if this keeps happening!";
+
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            "Oops! My signal got lost in space 🛸\nPlease try again — or email **support@lumexa.app** if this keeps happening!",
+          content: errorContent,
           source: "fallback",
         },
       ]);
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, variant]);
+  }, [input, loading, messages, variant, context]);
 
   const handleKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {

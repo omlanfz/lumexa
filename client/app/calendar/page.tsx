@@ -2,6 +2,9 @@
 //
 // CHANGES vs previous version:
 //
+// FIX Issue 5 — Added LumiChat import + <LumiChat variant="teacher" ... /> at
+//   the bottom of CalendarContent, consistent placement with other teacher pages.
+//
 // 1. AddSlotModal — added "Repeat weekly" toggle + recurWeeks selector (1–12).
 //    Sends { start, end, recurring, recurWeeks } to POST /shifts.
 //    The backend returns Shift[] for recurring (N > 1) or Shift for single.
@@ -18,6 +21,8 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
+// FIX Issue 5 — import LumiChat
+import LumiChat from "../../components/LumiChat";
 
 const HOUR_PX = 60;
 
@@ -308,7 +313,6 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
             },
           );
         } else {
-          // DELETE /shifts/:id — now exists in the controller (Issue 9 fix)
           await axios.delete(
             `${process.env.NEXT_PUBLIC_API_URL}/shifts/${shift.id}`,
             { headers: { Authorization: `Bearer ${token}` } },
@@ -316,7 +320,6 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
         }
         onDone(shift.id, "cancel");
       } else {
-        // PATCH /shifts/:id — also now exists in the controller
         const newStartDt = new Date(`${newDate}T${newStart}:00`);
         const newEndDt = new Date(`${newDate}T${newEnd}:00`);
         const res = await axios.patch(
@@ -978,6 +981,12 @@ function CalendarContent() {
           }}
         />
       )}
+
+      {/* FIX Issue 5 — Lumi chatbot on calendar/schedule page */}
+      <LumiChat
+        variant="teacher"
+        context="Teacher schedule/calendar page — managing availability slots, bookings, and weekly schedule"
+      />
     </TeacherLayout>
   );
 }

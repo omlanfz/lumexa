@@ -1,4 +1,20 @@
 // FILE PATH: client/app/teacher-dashboard/page.tsx
+//
+// CHANGES vs previous version:
+//
+// FIX Issue 5 — Added LumiChat import + <LumiChat variant="teacher" ... /> at
+//   the bottom of TeacherDashboardContent, consistent with other pages.
+//
+// FIX Issue 6 (Responsiveness) — Updated grid layouts for mobile/tablet:
+//   - Rank + Stats row: grid-cols-5 → grid-cols-1 sm:grid-cols-2 lg:grid-cols-5
+//     with rank card spanning full width on mobile, col-span-2 on desktop only.
+//   - Next Class + Badges row: grid-cols-3 → grid-cols-1 lg:grid-cols-3
+//     with next class col-span-2 only on lg+.
+//   - Quick Actions: grid-cols-4 → grid-cols-2 sm:grid-cols-4
+//   - Profile summary grid: grid-cols-4 → grid-cols-2 sm:grid-cols-4
+//
+// Everything else is unchanged.
+
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
@@ -7,6 +23,8 @@ import axios from "axios";
 import TeacherNav from "../../components/TeacherNav";
 import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
+// FIX Issue 5 — import LumiChat
+import LumiChat from "../../components/LumiChat";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -257,19 +275,16 @@ function TeacherDashboardContent() {
     return false;
   });
 
-  // ── Tailwind v4 class strings
-  // dark: works via @custom-variant dark in globals.css — no isDark ternaries needed.
-  // We use isDark ONLY where we genuinely need it (e.g. complex gradient decisions).
   const card =
     "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
 
   return (
-    <TeacherLayout // ← NEW
+    <TeacherLayout
       teacherName={profile?.user?.fullName ?? "Pilot"}
       avatarUrl={profile?.user?.avatarUrl ?? null}
       rankTier={profile?.rankTier ?? 0}
     >
-      <div className="p-6 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* ── Suspension warning ─────────────────────────────────────── */}
         {profile?.isSuspended && (
           <div className="mb-6 p-4 bg-red-900/30 border border-red-600/40 rounded-xl flex items-start gap-3">
@@ -287,7 +302,7 @@ function TeacherDashboardContent() {
         {/* ── Profile incomplete nudge ───────────────────────────────── */}
         {isProfileIncomplete && (
           <div className="mb-6 p-4 rounded-xl border dark:bg-amber-900/20 dark:border-amber-700/30 bg-amber-50 border-amber-200 flex items-start gap-3">
-            <span className="text-2xl">🛸</span>
+            <span className="text-2xl flex-shrink-0">🛸</span>
             <div className="flex-1">
               <p className="font-semibold text-sm dark:text-amber-300 text-amber-800">
                 Complete your pilot profile to attract more cadets
@@ -312,15 +327,16 @@ function TeacherDashboardContent() {
           <p className="text-sm font-medium dark:text-purple-300 text-purple-600">
             Daily Mission Brief
           </p>
-          <p className="text-lg font-bold mt-1 dark:text-white text-purple-900">
+          <p className="text-base sm:text-lg font-bold mt-1 dark:text-white text-purple-900">
             {dailyBrief}
           </p>
         </div>
 
-        {/* ── Rank + Stats row (5 cols) ──────────────────────────────── */}
-        <div className="grid grid-cols-5 gap-4 mb-6">
-          {/* Rank card — 2 cols */}
-          <div className={`col-span-2 ${card} p-5`}>
+        {/* ── Rank + Stats row ───────────────────────────────────────── */}
+        {/* FIX Issue 6 (mobile): was grid-cols-5 — now stacks on mobile */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+          {/* Rank card — full width on mobile, 2 cols on desktop */}
+          <div className={`col-span-1 sm:col-span-2 ${card} p-5`}>
             <div className="flex items-start gap-4">
               <div
                 className={`w-14 h-14 rounded-xl bg-gradient-to-br ${RANK_COLORS[rankInfo?.rankTier ?? 0]} flex items-center justify-center text-2xl flex-shrink-0`}
@@ -437,9 +453,10 @@ function TeacherDashboardContent() {
         </div>
 
         {/* ── Next Class + Achievements row ──────────────────────────── */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {/* Next class — 2 cols */}
-          <div className="col-span-2">
+        {/* FIX Issue 6 (mobile): was grid-cols-3 — stacks on mobile/tablet */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          {/* Next class — full width on mobile, 2 cols on desktop */}
+          <div className="col-span-1 lg:col-span-2">
             {nextClass ? (
               <div className={`${card} p-5 relative overflow-hidden`}>
                 {/* Live indicator when < 10 min */}
@@ -452,7 +469,7 @@ function TeacherDashboardContent() {
                   </div>
                 )}
 
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
                       Upcoming Mission
@@ -484,8 +501,8 @@ function TeacherDashboardContent() {
                 </div>
 
                 {/* Countdown */}
-                <div className="flex items-center gap-4">
-                  <p className="text-xs dark:text-purple-300/60 text-purple-400 mr-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <p className="text-xs dark:text-purple-300/60 text-purple-400 mr-1">
                     Starts in:
                   </p>
                   {[
@@ -508,7 +525,7 @@ function TeacherDashboardContent() {
                 </div>
 
                 {/* Warning + join */}
-                <div className="mt-4 pt-4 border-t dark:border-purple-900/20 border-purple-100 flex items-center justify-between">
+                <div className="mt-4 pt-4 border-t dark:border-purple-900/20 border-purple-100 flex items-center justify-between flex-wrap gap-2">
                   <p className="text-xs dark:text-amber-400/70 text-amber-600">
                     ⚠️ Join on time to avoid a strike.
                   </p>
@@ -545,7 +562,7 @@ function TeacherDashboardContent() {
             )}
           </div>
 
-          {/* Badges — 1 col */}
+          {/* Badges */}
           <div className={`${card} p-5`}>
             <p className="text-xs uppercase tracking-wide font-medium mb-3 dark:text-purple-300/60 text-purple-400">
               Mission Badges
@@ -576,7 +593,8 @@ function TeacherDashboardContent() {
         </div>
 
         {/* ── Quick Actions ──────────────────────────────────────────── */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        {/* FIX Issue 6 (mobile): was grid-cols-4 — 2 cols on mobile */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
             {
               label: "Add Availability",
@@ -632,7 +650,8 @@ function TeacherDashboardContent() {
               Edit
             </button>
           </div>
-          <div className="grid grid-cols-4 gap-4">
+          {/* FIX Issue 6 (mobile): was grid-cols-4 — 2 cols on mobile */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
               <p className="text-xs dark:text-purple-300/60 text-purple-400">
                 Rate per hour
@@ -678,6 +697,12 @@ function TeacherDashboardContent() {
           </div>
         )}
       </div>
+
+      {/* FIX Issue 5 — Lumi chatbot on teacher dashboard */}
+      <LumiChat
+        variant="teacher"
+        context="Teacher dashboard — viewing stats, upcoming classes, rank, earnings, and achievements"
+      />
     </TeacherLayout>
   );
 }

@@ -1,6 +1,11 @@
 // FILE PATH: client/app/teacher-profile/page.tsx
 //
-// THREE BUGS FIXED vs Document 3 (the current file you provided):
+// CHANGES vs previous version:
+//
+// FIX Issue 5 — Added LumiChat import + <LumiChat variant="teacher" ... /> at
+//   the bottom of TeacherProfileContent, consistent with other teacher pages.
+//
+// THREE BUGS FIXED vs Document 3 (the original file):
 //
 // BUG 1 — `req` is not defined inside .map((doc) => ...)
 //   The map callback variable is `doc`, not `req`.
@@ -20,8 +25,6 @@
 // BUG 3 — `docUploading` state was used in JSX but `uploadingDoc` was declared
 //   The current file declares `uploadingDoc` but the JSX references `docUploading`.
 //   AFTER:  Renamed to `docUploading` throughout (state + setDocUploading).
-//
-// Everything else is unchanged from Document 3.
 
 "use client";
 
@@ -30,6 +33,8 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
+// FIX Issue 5 — import LumiChat
+import LumiChat from "../../components/LumiChat";
 
 interface Profile {
   id: string;
@@ -571,9 +576,6 @@ function TeacherProfileContent() {
   const router = useRouter();
   const { isDark } = useTheme();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // BUG 2 FIX: removed docInputRef + activeDocTypeRef — dead code.
-  // The JSX uses the dynamic input.click() approach (Step 7), not the hidden
-  // input approach, so those refs were never actually used.
 
   const [profile, setProfile] = useState<Profile | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
@@ -591,7 +593,6 @@ function TeacherProfileContent() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // BUG 3 FIX: was `uploadingDoc` — renamed to `docUploading` to match JSX usage.
   const [docUploading, setDocUploading] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -626,7 +627,7 @@ function TeacherProfileContent() {
     })();
   }, [router]);
 
-  // Sync form fields whenever profile is replaced (initial load + after save)
+  // Sync form fields whenever profile is replaced
   useEffect(() => {
     if (!profile) return;
     setBio(profile.bio ?? "");
@@ -707,9 +708,6 @@ function TeacherProfileContent() {
     }
   };
 
-  // BUG 2 FIX: handleDocUpload added (Step 7). Was called in JSX but never defined.
-  // BUG 2 FIX: triggerDocUpload + handleDocFileSelected removed — dead code that
-  //   was never reachable because the JSX already used the dynamic input approach.
   const handleDocUpload = async (docType: string, file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       setDocError("Max file size is 10MB");
@@ -737,7 +735,6 @@ function TeacherProfileContent() {
         fd,
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      // setDocs triggers the completion bar useEffect → +15% for id_doc or cert_doc
       setDocs((prev) => {
         const filtered = prev.filter((d) => d.type !== docType);
         return [
@@ -1163,8 +1160,6 @@ function TeacherProfileContent() {
 
               <div className="space-y-3">
                 {DOC_REQUIREMENTS.map((doc) => {
-                  // BUG 1 FIX: map variable is `doc`, not `req`.
-                  // All three references below were `req.key` → `doc.key`.
                   const uploaded = docs.find((d) => d.type === doc.key);
                   return (
                     <div
@@ -1229,16 +1224,13 @@ function TeacherProfileContent() {
                               input.onchange = (e) => {
                                 const file = (e.target as HTMLInputElement)
                                   .files?.[0];
-                                // BUG 1 FIX: was req.key → doc.key
                                 if (file) handleDocUpload(doc.key, file);
                               };
                               input.click();
                             }}
-                            // BUG 1+3 FIX: was docUploading === req.key (req undefined)
                             disabled={docUploading === doc.key}
                             className="text-xs px-2.5 py-1.5 rounded-lg dark:bg-purple-600/20 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-600/30 hover:bg-purple-200 transition-colors cursor-pointer disabled:opacity-50"
                           >
-                            {/* BUG 1+3 FIX: was docUploading === req.key (req undefined) */}
                             {docUploading === doc.key
                               ? "Uploading..."
                               : "Upload"}
@@ -1327,6 +1319,12 @@ function TeacherProfileContent() {
           </div>
         )}
       </div>
+
+      {/* FIX Issue 5 — Lumi chatbot on teacher profile/settings page */}
+      <LumiChat
+        variant="teacher"
+        context="Teacher profile/settings page — editing bio, hourly rate, subjects, grades, timezone, documents, and payout setup"
+      />
     </TeacherLayout>
   );
 }

@@ -1,5 +1,6 @@
-problems: 3a, 3b
+problems: 
 
+run Ollama inside Lumexa root terminal: ollama serve
 
 NEXT_PUBLIC_API_URL: https://lumexa-backend.onrender.com
 
