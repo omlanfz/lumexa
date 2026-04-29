@@ -21,6 +21,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { LumiModule } from './lumi/lumi.module';
+import { TrialModule } from './trial/trial.module';
+import { GemsModule } from './gems/gems.module';
+import { CoursesModule } from './courses/courses.module';
 
 @Module({
   imports: [
@@ -56,6 +59,11 @@ import { LumiModule } from './lumi/lumi.module';
 
     // ─── Admin ──────────────────────────────────────────────────────────────
     AdminModule,
+
+    // ─── Lumexa Platform: Courses, Gems, Trial Leads ────────────────────────
+    CoursesModule,
+    GemsModule,
+    TrialModule,
   ],
   controllers: [AppController],
   providers: [
