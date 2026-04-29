@@ -19,6 +19,7 @@ model User {
   avatarUrl      String?
   students       Student[]
   teacherProfile TeacherProfile?
+  gemWallet      GemWallet?
 }
 
 model Student {
@@ -138,6 +139,83 @@ model Review {
   @@index([teacherId])
 }
 
+// ─── Lumexa Platform: Courses, Gems & Trial Leads ────────────────────────────
+
+model Course {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  title       String
+  description String?
+  emoji       String?
+  category    String   // e.g. "Python", "AI", "Web"
+  level       String   // "STARTER" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
+  ageMin      Int      @default(6)
+  ageMax      Int      @default(18)
+  sessions    Int      @default(12)
+  gemCost     Int      @default(1) // gems per session
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  lessons     Lesson[]
+
+  @@index([isActive])
+  @@index([category])
+}
+
+model Lesson {
+  id        String   @id @default(uuid())
+  courseId  String
+  title     String
+  order     Int
+  duration  Int      @default(60) // minutes
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id])
+
+  @@index([courseId])
+}
+
+model GemWallet {
+  id        String         @id @default(uuid())
+  userId    String         @unique
+  balance   Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  user      User           @relation(fields: [userId], references: [id])
+  purchases GemPurchase[]
+}
+
+model GemPurchase {
+  id            String        @id @default(uuid())
+  walletId      String
+  gems          Int
+  amountCents   Int
+  currency      String        @default("USD") // "USD" | "BDT"
+  paymentMethod String        // "STRIPE" | "BKASH" | "BANK_TRANSFER"
+  status        PurchaseStatus @default(PENDING)
+  externalRef   String?       // Stripe PI id, bKash trxID, or bank ref
+  proofUrl      String?       // bank transfer proof image URL
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  wallet        GemWallet     @relation(fields: [walletId], references: [id])
+
+  @@index([walletId])
+  @@index([status])
+}
+
+model TrialLead {
+  id          String   @id @default(uuid())
+  parentName  String
+  parentEmail String
+  childName   String
+  childAge    Int
+  subject     String
+  timezone    String?
+  message     String?
+  status      String   @default("NEW") // "NEW" | "CONTACTED" | "BOOKED" | "CONVERTED"
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+}
+
 enum Role {
   PARENT
   TEACHER
@@ -149,4 +227,11 @@ enum PaymentStatus {
   CAPTURED
   REFUNDED
   FAILED
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
 }

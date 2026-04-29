@@ -1,71 +1,82 @@
 // FILE PATH: client/app/page.tsx
 //
-// ─── Issue 13 Fix: Remove Parent Root Layer — Direct Student Login ──────────
+// Landing page for unauthenticated visitors.
+// Authenticated users are redirected to their dashboard by role.
 //
-// ROOT CAUSE:
-//   Every time a returning parent logs in they land on /dashboard, must find
-//   their child in the student list, and then click "Open Dashboard". This is
-//   friction for a user who always manages one student and just wants to get
-//   to their dashboard immediately.
-//
-// DECISION:
-//   COPPA compliance is preserved — parental authentication is still required.
-//   We do NOT remove parental auth. Instead we add a "Remember Last Student"
-//   feature: when a parent opens a student's dashboard we persist the
-//   student's id to localStorage under the key "last_student_id". On the next
-//   visit the root redirect checks for that key and jumps straight to the
-//   student's dashboard, skipping the selector screen entirely.
-//
-// ROUTING TABLE:
-//   Not logged in          → /login
+// ROUTING TABLE (same as before — no behaviour change for logged-in users):
+//   Not logged in          → show landing page
 //   TEACHER                → /teacher-dashboard
 //   ADMIN                  → /admin
 //   PARENT + remembered    → /student-dashboard/:last_student_id
-//   PARENT + no memory     → /dashboard   (normal selector screen)
+//   PARENT + no memory     → /dashboard
 //   Unknown role           → /login
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import MarketingNav from "../components/marketing/MarketingNav";
+import MarketingFooter from "../components/marketing/MarketingFooter";
+import HeroSection from "../components/marketing/HeroSection";
+import CoursesSection from "../components/marketing/CoursesSection";
+import TracksSection from "../components/marketing/TracksSection";
+import ShowcaseSection from "../components/marketing/ShowcaseSection";
+import HowItWorksSection from "../components/marketing/HowItWorksSection";
+import PricingSection from "../components/marketing/PricingSection";
+import TestimonialsSection from "../components/marketing/TestimonialsSection";
+import FinalCTASection from "../components/marketing/FinalCTASection";
 
 export default function RootPage() {
   const router = useRouter();
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     const user = JSON.parse(localStorage.getItem("user") ?? "null");
 
     if (!token || !user) {
-      router.replace("/login");
+      // Not logged in — show the landing page
+      setReady(true);
       return;
     }
 
+    // Logged in — redirect by role (same logic as before)
     if (user.role === "TEACHER") {
       router.replace("/teacher-dashboard");
       return;
     }
-
     if (user.role === "ADMIN") {
       router.replace("/admin");
       return;
     }
-
     if (user.role === "PARENT") {
-      // Issue 13: skip the student selector for returning users
       const lastStudentId = localStorage.getItem("last_student_id");
-      if (lastStudentId) {
-        router.replace(`/student-dashboard/${lastStudentId}`);
-      } else {
-        router.replace("/dashboard");
-      }
+      router.replace(lastStudentId ? `/student-dashboard/${lastStudentId}` : "/dashboard");
       return;
     }
-
-    // Unknown role – force re-login
     router.replace("/login");
   }, [router]);
 
-  // Blank splash while redirect is in flight
-  return <div className="min-h-screen bg-[#050D1A]" />;
+  // Blank splash while checking auth (prevents flash of landing page for logged-in users)
+  if (!ready) {
+    return <div className="min-h-screen bg-[#050D1A]" />;
+  }
+
+  return (
+    <div className="bg-[#050D1A] min-h-screen">
+      <MarketingNav />
+      <main>
+        <HeroSection />
+        <CoursesSection />
+        <TracksSection />
+        <ShowcaseSection />
+        <HowItWorksSection />
+        <PricingSection />
+        <TestimonialsSection />
+        <FinalCTASection />
+      </main>
+      <MarketingFooter />
+    </div>
+  );
 }
