@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 
 export default function MarketingNav() {
@@ -41,18 +42,25 @@ export default function MarketingNav() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-purple-900/50 group-hover:shadow-purple-700/60 transition-shadow">
-              L
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-lg shadow-purple-900/40 group-hover:shadow-purple-700/60 transition-shadow">
+              <Image
+                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                alt="Lumexa AI School"
+                width={36}
+                height={36}
+                className="object-cover w-full h-full"
+              />
             </div>
-            <span className="text-white font-bold text-xl tracking-tight">
-              Lume<span className="text-purple-400">xa</span>
+            <span className="text-white font-black text-lg tracking-tight leading-tight">
+              Lumexa{" "}
+              <span className="text-purple-400 font-bold">AI School</span>
             </span>
           </Link>
 
           {/* Desktop Links */}
           <div className="hidden md:flex items-center gap-6">
-            <NavLink href="/courses">Courses</NavLink>
+            <NavLink href="/courses">Pathways</NavLink>
             <NavLink href="/pricing">Pricing</NavLink>
             <NavLink href="/about">About</NavLink>
           </div>
@@ -76,7 +84,7 @@ export default function MarketingNav() {
                 </Link>
                 <Link
                   href="/trial"
-                  className="px-4 py-2 text-sm font-semibold bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-lg shadow-purple-900/40 hover:shadow-purple-700/50 transition-all"
+                  className="px-4 py-2 text-sm font-bold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg shadow-lg shadow-purple-900/40 hover:shadow-purple-700/50 transition-all"
                 >
                   Book Free Trial
                 </Link>
@@ -105,7 +113,7 @@ export default function MarketingNav() {
         {/* Mobile menu */}
         {mobileOpen && (
           <div className="md:hidden bg-[#050D1A]/98 border-t border-gray-800 py-4 space-y-1">
-            <MobileNavLink href="/courses" onClick={() => setMobileOpen(false)}>Courses</MobileNavLink>
+            <MobileNavLink href="/courses" onClick={() => setMobileOpen(false)}>Pathways</MobileNavLink>
             <MobileNavLink href="/pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
             <MobileNavLink href="/about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
             <div className="pt-3 border-t border-gray-800 mt-3 flex flex-col gap-2 px-4">
@@ -121,7 +129,7 @@ export default function MarketingNav() {
                   <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-gray-300 border border-gray-700 rounded-lg">
                     Sign In
                   </Link>
-                  <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-semibold text-center bg-purple-600 hover:bg-purple-500 text-white rounded-lg">
+                  <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-bold text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg">
                     Book Free Trial
                   </Link>
                 </>

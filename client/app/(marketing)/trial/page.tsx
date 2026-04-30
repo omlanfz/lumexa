@@ -3,6 +3,7 @@
 // Free trial booking form. No auth required.
 // Submits to POST /trial on the backend.
 // On success: shows confirmation with next steps.
+// On error: shows inline error + fallback contact options (WhatsApp / email).
 
 "use client";
 
@@ -11,14 +12,12 @@ import Link from "next/link";
 import axios from "axios";
 
 const subjects = [
-  "Python",
-  "AI & Machine Learning",
-  "Roblox Game Dev",
-  "Web Development",
-  "Scratch & Animation",
-  "Data Science",
-  "App Development",
-  "Not sure yet",
+  "Game Creator Path (Roblox / Python games)",
+  "AI Builder Path (Python + machine learning)",
+  "Web Developer Path (HTML / CSS / React)",
+  "Little Coders Path (Scratch, ages 6–11)",
+  "Data Scientist Path (Python + data)",
+  "Not sure yet — help me choose",
 ];
 
 interface FormState {
@@ -37,12 +36,18 @@ const initial: FormState = {
   childName: "",
   childAge: "",
   subject: "",
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+  timezone: "",
   message: "",
 };
 
 export default function TrialPage() {
-  const [form, setForm] = useState<FormState>(initial);
+  const [form, setForm] = useState<FormState>(() => ({
+    ...initial,
+    timezone:
+      typeof window !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone
+        : "",
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -68,7 +73,11 @@ export default function TrialPage() {
       setSubmitted(true);
     } catch (err: any) {
       const msg = err.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(", ") : msg ?? "Something went wrong. Please try again.");
+      setError(
+        Array.isArray(msg)
+          ? msg.join(", ")
+          : msg ?? "We couldn't process your request right now."
+      );
     } finally {
       setLoading(false);
     }
@@ -116,7 +125,7 @@ export default function TrialPage() {
         {/* Left: Info */}
         <div className="lg:sticky lg:top-24">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-700/40 bg-purple-900/20 text-purple-300 text-xs font-medium mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 pulse-dot" />
+            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             100% Free · No credit card needed
           </div>
 
@@ -128,12 +137,12 @@ export default function TrialPage() {
             The first class is completely free — no strings attached.
           </p>
 
-          <div className="space-y-4">
+          <div className="space-y-4 mb-8">
             {[
-              { icon: "👩‍🏫", title: "Verified Expert Teachers", desc: "Background-checked, degree-qualified, and trained in child-focused pedagogy." },
+              { icon: "👩‍🏫", title: "Verified Expert Teachers", desc: "Background-checked, degree-qualified, and trained in child-focused teaching." },
               { icon: "📅", title: "Flexible Scheduling", desc: "Pick any time that works for your family — weekdays, evenings, or weekends." },
               { icon: "🎯", title: "Personalized Learning", desc: "The teacher adapts every lesson to your child's pace, goals, and learning style." },
-              { icon: "🏆", title: "Real Portfolio Projects", desc: "By the end of the course, your child will have built something real to show off." },
+              { icon: "🏆", title: "Real Portfolio Projects", desc: "By the end of the course, your child will have built 3+ real things to show off." },
             ].map((item) => (
               <div key={item.title} className="flex gap-3">
                 <span className="text-xl flex-shrink-0 mt-0.5">{item.icon}</span>
@@ -144,12 +153,35 @@ export default function TrialPage() {
               </div>
             ))}
           </div>
+
+          {/* Fallback contact — always visible */}
+          <div className="p-4 bg-gray-900/40 border border-gray-800 rounded-xl">
+            <p className="text-gray-500 text-xs mb-2 font-semibold">Prefer to reach us directly?</p>
+            <div className="flex flex-col gap-2">
+              <a
+                href="mailto:hello@lumexa.app"
+                className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
+              >
+                <span>📧</span>
+                <span>hello@lumexa.app</span>
+              </a>
+              <a
+                href="https://wa.me/8801700000000"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-xs text-green-400 hover:text-green-300 transition-colors"
+              >
+                <span>💬</span>
+                <span>WhatsApp: +880 1700 000000</span>
+              </a>
+            </div>
+          </div>
         </div>
 
         {/* Right: Form */}
         <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
           <h2 className="text-xl font-bold text-white mb-1">Trial Request Form</h2>
-          <p className="text-gray-600 text-xs mb-6">Recruit New Cadet · Mission Start</p>
+          <p className="text-gray-600 text-xs mb-6">First class 100% free · No card required</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Parent */}
@@ -218,7 +250,7 @@ export default function TrialPage() {
 
             <div>
               <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
-                Subject of Interest
+                Learning Path of Interest
               </label>
               <select
                 value={form.subject}
@@ -226,7 +258,7 @@ export default function TrialPage() {
                 required
                 className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm transition-colors"
               >
-                <option value="">Select a subject…</option>
+                <option value="">Select a path…</option>
                 {subjects.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -247,10 +279,32 @@ export default function TrialPage() {
               />
             </div>
 
+            {/* Error with fallback */}
             {error && (
-              <p className="text-red-400 text-xs bg-red-900/20 border border-red-900/40 rounded-lg p-2">
-                ⚠️ {error}
-              </p>
+              <div className="bg-red-900/20 border border-red-900/40 rounded-xl p-4">
+                <p className="text-red-400 text-xs font-semibold mb-2">
+                  ⚠️ {error}
+                </p>
+                <p className="text-gray-500 text-xs mb-2">
+                  You can also reach us directly:
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  <a
+                    href="mailto:hello@lumexa.app"
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    📧 hello@lumexa.app
+                  </a>
+                  <a
+                    href="https://wa.me/8801700000000"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-green-400 hover:text-green-300 transition-colors"
+                  >
+                    💬 WhatsApp us directly
+                  </a>
+                </div>
+              </div>
             )}
 
             <button
@@ -265,7 +319,7 @@ export default function TrialPage() {
                 </span>
               ) : (
                 <>
-                  Book Free Trial
+                  Book Free Trial Class
                   <span className="block text-xs font-normal opacity-70">
                     We'll confirm via email within a few hours
                   </span>

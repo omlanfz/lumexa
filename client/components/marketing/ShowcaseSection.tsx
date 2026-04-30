@@ -4,19 +4,19 @@ const projects = [
     title: "Galactic Shooter",
     student: "Rafi, age 12",
     tech: "Roblox · Lua",
-    desc: "A full multiplayer space shooter with leaderboards, built in 10 sessions.",
+    desc: "A full multiplayer space shooter with leaderboards, built in 10 sessions. Rafi's friends play it every day.",
     color: "border-red-700/30",
-    tag: "Game",
+    tag: "Game Creator Path",
     tagColor: "bg-red-900/40 text-red-400 border-red-800",
   },
   {
     emoji: "🌐",
-    title: "Portfolio Website",
+    title: "Photography Portfolio",
     student: "Priya, age 15",
     tech: "HTML · CSS · JavaScript",
-    desc: "A responsive portfolio showcasing her art — deployed live on Vercel.",
+    desc: "A responsive portfolio site showcasing her photography — deployed live on Vercel and shared at her school exhibition.",
     color: "border-blue-700/30",
-    tag: "Website",
+    tag: "Web Developer Path",
     tagColor: "bg-blue-900/40 text-blue-400 border-blue-800",
   },
   {
@@ -24,57 +24,56 @@ const projects = [
     title: "Mood Detector AI",
     student: "Tanvir, age 16",
     tech: "Python · TensorFlow",
-    desc: "A computer vision model that detects emotions from webcam in real time.",
+    desc: "A computer vision model that detects emotions from webcam in real time. Built in the AI Builder Path — in just 24 sessions.",
     color: "border-purple-700/30",
-    tag: "AI Project",
+    tag: "AI Builder Path",
     tagColor: "bg-purple-900/40 text-purple-400 border-purple-800",
   },
   {
     emoji: "📊",
-    title: "COVID Data Visualizer",
+    title: "Climate Data Dashboard",
     student: "Emma, age 17",
     tech: "Python · Pandas · Plotly",
-    desc: "An interactive dashboard analyzing global COVID trends — used in her school presentation.",
+    desc: "An interactive dashboard visualizing 30 years of global climate data — presented at her school's science fair and won first place.",
     color: "border-teal-700/30",
-    tag: "Data Science",
+    tag: "Data Scientist Path",
     tagColor: "bg-teal-900/40 text-teal-400 border-teal-800",
   },
   {
     emoji: "🦁",
-    title: "Safari Adventure",
+    title: "Safari Adventure Game",
     student: "Lucas, age 9",
     tech: "Scratch",
-    desc: "An animated interactive story about a lion's journey. 40+ sprites, 3 levels.",
-    color: "border-orange-700/30",
-    tag: "Animation",
-    tagColor: "bg-orange-900/40 text-orange-400 border-orange-800",
+    desc: "An animated interactive story with 40+ sprites and 3 playable levels. Lucas's first-ever coding project, built in the Little Coders Path.",
+    color: "border-yellow-700/30",
+    tag: "Little Coders Path",
+    tagColor: "bg-yellow-900/40 text-yellow-400 border-yellow-800",
   },
   {
-    emoji: "🛒",
-    title: "E-Commerce Store",
+    emoji: "🤖",
+    title: "Recipe Chatbot",
     student: "Nadia, age 16",
-    tech: "React · Next.js",
-    desc: "A fully functional online store with cart, checkout, and product management.",
+    tech: "Python · OpenAI API",
+    desc: "A conversational AI chatbot that suggests recipes based on what's in your fridge — using the OpenAI API and a custom backend.",
     color: "border-green-700/30",
-    tag: "Full-Stack",
+    tag: "AI Builder Path",
     tagColor: "bg-green-900/40 text-green-400 border-green-800",
   },
 ];
 
 export default function ShowcaseSection() {
   return (
-    <section className="py-20 bg-[#050D1A]">
+    <section className="py-20 bg-gradient-to-b from-[#07101F] to-[#050D1A]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <p className="text-orange-400 text-sm font-semibold uppercase tracking-widest mb-2">
-            Student Projects
+          <p className="text-orange-400 text-sm font-bold uppercase tracking-widest mb-2">
+            Real Student Projects
           </p>
           <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">
-            Real Projects by Real Kids
+            These Kids Built This. Yours Can Too.
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Our students don't just learn theory — they ship real software.
-            Here's what some of our learners built during their courses.
+            Every Lumexa AI School student graduates with a real portfolio project — not a certificate, not a quiz score. Something they actually built.
           </p>
         </div>
 
@@ -98,9 +97,15 @@ export default function ShowcaseSection() {
         </div>
 
         <div className="mt-10 text-center">
-          <p className="text-gray-600 text-sm">
-            Every Lumexa student graduates with at least one project in their portfolio.
+          <p className="text-gray-600 text-sm mb-4">
+            Every Lumexa AI School student graduates with at least 3 projects in their portfolio.
           </p>
+          <a
+            href="/trial"
+            className="inline-flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 font-semibold transition-colors"
+          >
+            Start building with a free class →
+          </a>
         </div>
       </div>
     </section>
