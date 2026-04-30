@@ -132,7 +132,7 @@ export default function PricingSection() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-10">
           <p className="text-purple-400 text-sm font-bold uppercase tracking-widest mb-2">
-            Simple Gem Pricing — 1 Gem = 1 Class
+            Simple Gem Pricing: 1 Gem = 1 Class
           </p>
           <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">
             Pay for Classes,{" "}
@@ -141,7 +141,7 @@ export default function PricingSection() {
             </span>
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto mb-8">
-            Buy a gem pack — each gem = one live 1-on-1 class. Use them whenever your child is ready. No monthly fees, no lock-ins.
+            Buy a gem pack. Each gem = one live 1-on-1 class. Use them whenever your child is ready. No monthly fees, no lock-ins.
           </p>
 
           {/* Region selector */}

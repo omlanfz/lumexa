@@ -18,7 +18,7 @@ const milestones = [
     emoji: "🔨",
     weeks: "Weeks 5–12",
     tagline: "Ship your first real project",
-    description: "From concept to code to finished product. Your child builds their first complete project — a game, website, or Python app — and shares it.",
+    description: "From concept to code to finished product. Your child builds their first complete project: a game, website, or Python app, and shares it.",
     skills: ["Complete a real project", "Debugging & testing", "Version control basics"],
     color: "text-blue-400",
     border: "border-blue-700/30",
@@ -31,7 +31,7 @@ const milestones = [
     emoji: "⚡",
     weeks: "Weeks 13–20",
     tagline: "Build a portfolio of 3 projects",
-    description: "Your child now works like a junior developer — planning features, writing clean code, and iterating based on feedback. Three finished projects, ready to show.",
+    description: "Your child now works like a junior developer: planning features, writing clean code, and iterating based on feedback. Three finished projects, ready to show.",
     skills: ["Advanced project architecture", "APIs & databases", "3 portfolio projects done"],
     color: "text-purple-400",
     border: "border-purple-700/30",
@@ -44,7 +44,7 @@ const milestones = [
     emoji: "🚀",
     weeks: "Week 21+",
     tagline: "Use AI to solve real problems",
-    description: "The top tier — your child integrates AI into their own projects. They're now building tools that would impress most adults. College-level thinking, at any age.",
+    description: "The top tier. Your child integrates AI into their own projects. They're now building tools that would impress most adults. College-level thinking, at any age.",
     skills: ["Machine learning models", "AI API integration", "Real-world impact projects"],
     color: "text-teal-400",
     border: "border-teal-700/30",
@@ -68,7 +68,7 @@ export default function JourneySection() {
             </span>
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Every student progresses through 4 milestone levels. You see exactly where they are — and where they're headed.
+            Every student progresses through 4 milestone levels. You see exactly where they are and where they're headed.
           </p>
         </div>
 

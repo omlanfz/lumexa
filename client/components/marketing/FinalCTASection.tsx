@@ -24,7 +24,7 @@ export default function FinalCTASection() {
         </h2>
 
         <p className="text-lg text-gray-400 mb-10 max-w-xl mx-auto">
-          Join 1,200+ families at Lumexa AI School. One free trial class — no commitment, no credit card.
+          Join 1,200+ families at Lumexa AI School. One free trial class, no commitment, no credit card.
           If it's not the right fit, you owe nothing.
         </p>
 

@@ -23,7 +23,7 @@ const steps = [
     step: "03",
     icon: "🏆",
     title: "Build Real Projects",
-    desc: "Students finish each course with a portfolio-ready project — a game, website, or AI model.",
+    desc: "Students finish each course with a portfolio-ready project: a game, website, or AI model.",
     color: "text-teal-400",
     border: "border-teal-700/40",
     bg: "bg-teal-900/10",
@@ -42,7 +42,7 @@ export default function HowItWorksSection() {
             From Zero to Builder in 3 Steps
           </h2>
           <p className="text-gray-400 max-w-lg mx-auto">
-            No experience needed. We take care of everything — from matching
+            No experience needed. We take care of everything, from matching
             the right teacher to tracking progress.
           </p>
         </div>

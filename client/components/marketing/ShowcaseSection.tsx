@@ -14,7 +14,7 @@ const projects = [
     title: "Photography Portfolio",
     student: "Priya, age 15",
     tech: "HTML · CSS · JavaScript",
-    desc: "A responsive portfolio site showcasing her photography — deployed live on Vercel and shared at her school exhibition.",
+    desc: "A responsive portfolio site showcasing her photography, deployed live on Vercel and shared at her school exhibition.",
     color: "border-blue-700/30",
     tag: "Web Developer Path",
     tagColor: "bg-blue-900/40 text-blue-400 border-blue-800",
@@ -24,7 +24,7 @@ const projects = [
     title: "Mood Detector AI",
     student: "Tanvir, age 16",
     tech: "Python · TensorFlow",
-    desc: "A computer vision model that detects emotions from webcam in real time. Built in the AI Builder Path — in just 24 sessions.",
+    desc: "A computer vision model that detects emotions from webcam in real time. Built in the AI Builder Path, in just 24 sessions.",
     color: "border-purple-700/30",
     tag: "AI Builder Path",
     tagColor: "bg-purple-900/40 text-purple-400 border-purple-800",
@@ -34,7 +34,7 @@ const projects = [
     title: "Climate Data Dashboard",
     student: "Emma, age 17",
     tech: "Python · Pandas · Plotly",
-    desc: "An interactive dashboard visualizing 30 years of global climate data — presented at her school's science fair and won first place.",
+    desc: "An interactive dashboard visualizing 30 years of global climate data, presented at her school's science fair and won first place.",
     color: "border-teal-700/30",
     tag: "Data Scientist Path",
     tagColor: "bg-teal-900/40 text-teal-400 border-teal-800",
@@ -54,7 +54,7 @@ const projects = [
     title: "Recipe Chatbot",
     student: "Nadia, age 16",
     tech: "Python · OpenAI API",
-    desc: "A conversational AI chatbot that suggests recipes based on what's in your fridge — using the OpenAI API and a custom backend.",
+    desc: "A conversational AI chatbot that suggests recipes based on what's in your fridge, using the OpenAI API and a custom backend.",
     color: "border-green-700/30",
     tag: "AI Builder Path",
     tagColor: "bg-green-900/40 text-green-400 border-green-800",
@@ -73,7 +73,7 @@ export default function ShowcaseSection() {
             These Kids Built This. Yours Can Too.
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Every Lumexa AI School student graduates with a real portfolio project — not a certificate, not a quiz score. Something they actually built.
+            Every Lumexa AI School student graduates with a real portfolio project. Not a certificate, not a quiz score. Something they actually built.
           </p>
         </div>
 

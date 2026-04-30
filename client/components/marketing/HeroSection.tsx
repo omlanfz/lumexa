@@ -26,19 +26,18 @@ export default function HeroSection() {
 
         {/* Headline — parent-focused emotional hook */}
         <h1 className="text-4xl sm:text-5xl lg:text-[64px] font-black text-white leading-[1.08] tracking-tight mb-6">
-          Turn Your Child Into an{" "}
+          Turn Your Child Into an
+          <br />
           <span className="bg-gradient-to-r from-purple-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
             AI Builder
           </span>
-          <br />
-          — Not Just a User.
         </h1>
 
         {/* Sub-headline */}
         <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-4 leading-relaxed">
           While other kids scroll through AI tools,{" "}
           <span className="text-white font-semibold">yours will build them.</span>
-          {" "}Live 1-on-1 coding classes that go from Scratch to real AI apps — designed for ages 6–18.
+          {" "}Live 1-on-1 coding classes from Scratch to real AI apps, designed for ages 6–18.
         </p>
 
         <p className="text-sm text-gray-600 mb-10">
@@ -87,6 +86,7 @@ export default function HeroSection() {
             { label: "🌐 Web Developer", color: "bg-blue-900/30 border-blue-700/40 text-blue-400" },
             { label: "🌟 Little Coders", color: "bg-yellow-900/30 border-yellow-700/40 text-yellow-400" },
             { label: "📊 Data Scientist", color: "bg-teal-900/30 border-teal-700/40 text-teal-400" },
+            { label: "💼 Digital Independence", color: "bg-green-900/30 border-green-700/40 text-green-400" },
           ].map((tag) => (
             <span
               key={tag.label}

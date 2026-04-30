@@ -37,7 +37,7 @@ const tracks = [
     tagline: "Ace Pilots",
     ages: "Ages 15–18",
     description:
-      "Machine learning, data science, and AI engineering. Build the future — literally.",
+      "Machine learning, data science, and AI engineering. Build the future, literally.",
     color: "from-teal-600/20 to-teal-900/10",
     border: "border-teal-700/30 hover:border-teal-500/50",
     badge: "bg-teal-900/50 text-teal-300 border-teal-700",

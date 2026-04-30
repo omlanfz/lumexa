@@ -7,7 +7,7 @@ const trustItems = [
   {
     icon: "⚡",
     title: "Progress Visible After Lesson 1",
-    description: "Your child writes and runs real code in the very first session. You'll see something working — not just theory.",
+    description: "Your child writes and runs real code in the very first session. You'll see something working, not just theory.",
   },
   {
     icon: "🛡️",
@@ -17,7 +17,7 @@ const trustItems = [
   {
     icon: "📹",
     title: "Class Recordings Available",
-    description: "Every live session is recorded. Your child can rewatch any lesson — and you can review what was taught.",
+    description: "Every live session is recorded. Your child can rewatch any lesson, and you can review what was taught.",
   },
   {
     icon: "🔒",
@@ -27,7 +27,7 @@ const trustItems = [
   {
     icon: "↩️",
     title: "Cancel Anytime",
-    description: "No annual contracts. No cancellation fees. Stop whenever you want — unused gems are refunded within 7 days.",
+    description: "No annual contracts. No cancellation fees. Stop whenever you want. Unused gems are refunded within 7 days.",
   },
 ];
 
