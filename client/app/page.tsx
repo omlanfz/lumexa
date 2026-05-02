@@ -19,10 +19,11 @@ import { useRouter } from "next/navigation";
 import MarketingNav from "../components/marketing/MarketingNav";
 import MarketingFooter from "../components/marketing/MarketingFooter";
 import HeroSection from "../components/marketing/HeroSection";
-import CoursesSection from "../components/marketing/CoursesSection";
-import TracksSection from "../components/marketing/TracksSection";
+import PathwaysSection from "../components/marketing/PathwaysSection";
+import JourneySection from "../components/marketing/JourneySection";
+import OutcomesSection from "../components/marketing/OutcomesSection";
 import ShowcaseSection from "../components/marketing/ShowcaseSection";
-import HowItWorksSection from "../components/marketing/HowItWorksSection";
+import TrustSection from "../components/marketing/TrustSection";
 import PricingSection from "../components/marketing/PricingSection";
 import TestimonialsSection from "../components/marketing/TestimonialsSection";
 import FinalCTASection from "../components/marketing/FinalCTASection";
@@ -68,10 +69,11 @@ export default function RootPage() {
       <MarketingNav />
       <main>
         <HeroSection />
-        <CoursesSection />
-        <TracksSection />
+        <PathwaysSection />
+        <JourneySection />
+        <OutcomesSection />
         <ShowcaseSection />
-        <HowItWorksSection />
+        <TrustSection />
         <PricingSection />
         <TestimonialsSection />
         <FinalCTASection />
