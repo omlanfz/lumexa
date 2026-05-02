@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const pathways = [
@@ -14,13 +15,15 @@ const pathways = [
     border: "border-red-700/40",
     badge: "bg-red-900/30 text-red-300",
     accent: "text-red-400",
+    dot: "bg-red-400",
     courses: [
       {
         number: "01",
         title: "Roblox World Builder",
         lessons: 8,
         outcome: "Build and publish a multiplayer Roblox game from scratch",
-        description: "Your child goes from zero to a working multiplayer Roblox game. They design the world, write the Lua code, set up game logic, and publish it so friends can actually play it.",
+        description:
+          "Your child goes from zero to a working multiplayer Roblox game. They design the world, write the Lua code, set up game logic, and publish it so friends can actually play it.",
         projects: ["Obstacle course with scoring", "Multiplayer arena with teams", "Custom game world with NPCs"],
         tools: ["Roblox Studio", "Lua scripting", "Roblox DevHub"],
         lessonBreakdown: [
@@ -39,7 +42,8 @@ const pathways = [
         title: "Python Arcade Games",
         lessons: 8,
         outcome: "Build 2D games using Python and Pygame",
-        description: "After Roblox, your child levels up to Python — the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
+        description:
+          "After Roblox, your child levels up to Python — the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
         projects: ["Space shooter with enemies", "Maze runner with timer", "Brick-breaker clone"],
         tools: ["Python 3", "Pygame", "VS Code"],
         lessonBreakdown: [
@@ -58,7 +62,8 @@ const pathways = [
         title: "Advanced Game Design",
         lessons: 8,
         outcome: "Design, polish, and publish a complete game with professional quality",
-        description: "The capstone course. Your child applies everything they know to design and ship a complete game — with proper level design, a polished UI, and real playtesters giving feedback.",
+        description:
+          "The capstone course. Your child applies everything they know to design and ship a complete game — with proper level design, a polished UI, and real playtesters giving feedback.",
         projects: ["RPG adventure with storyline", "Physics-based puzzle game", "Published portfolio game"],
         tools: ["Python / Pygame", "Unity Basics", "Game Design frameworks"],
         lessonBreakdown: [
@@ -84,6 +89,7 @@ const pathways = [
     border: "border-purple-700/40",
     badge: "bg-purple-900/30 text-purple-300",
     accent: "text-purple-400",
+    dot: "bg-purple-400",
     featured: true,
     courses: [
       {
@@ -91,7 +97,8 @@ const pathways = [
         title: "Python and AI Foundations",
         lessons: 8,
         outcome: "Write Python scripts and understand how machine learning really works",
-        description: "The foundation of everything. Your child learns Python from scratch — variables, loops, functions, data — then builds their first machine learning model. No fluff, just real code.",
+        description:
+          "The foundation of everything. Your child learns Python from scratch — variables, loops, functions, data — then builds their first machine learning model. No fluff, just real code.",
         projects: ["Number prediction model", "Simple image classifier", "Data pattern finder"],
         tools: ["Python 3", "Jupyter Notebooks", "scikit-learn", "NumPy"],
         lessonBreakdown: [
@@ -110,7 +117,8 @@ const pathways = [
         title: "Computer Vision Projects",
         lessons: 8,
         outcome: "Build apps that see, detect, and recognize the real world",
-        description: "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions — the same technology used in self-driving cars and medical diagnostics.",
+        description:
+          "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions — the same technology used in self-driving cars and medical diagnostics.",
         projects: ["Real-time emotion detector", "Object recognition app", "Motion-activated security cam"],
         tools: ["Python", "OpenCV", "TensorFlow / Keras", "Webcam API"],
         lessonBreakdown: [
@@ -129,7 +137,8 @@ const pathways = [
         title: "Language Models and Chatbots",
         lessons: 8,
         outcome: "Build conversational AI apps using real LLM APIs",
-        description: "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API — complete with memory, personality, and real-world purpose.",
+        description:
+          "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API — complete with memory, personality, and real-world purpose.",
         projects: ["Recipe chatbot with memory", "Study assistant bot", "Creative story generator"],
         tools: ["Python", "OpenAI API", "LangChain", "Streamlit"],
         lessonBreakdown: [
@@ -155,13 +164,15 @@ const pathways = [
     border: "border-blue-700/40",
     badge: "bg-blue-900/30 text-blue-300",
     accent: "text-blue-400",
+    dot: "bg-blue-400",
     courses: [
       {
         number: "07",
         title: "HTML and CSS Mastery",
         lessons: 8,
         outcome: "Build beautiful, responsive websites that look great on any device",
-        description: "Your child learns the fundamentals of the web — HTML structure and CSS styling — and builds their first real, deployed website that anyone can visit.",
+        description:
+          "Your child learns the fundamentals of the web — HTML structure and CSS styling — and builds their first real, deployed website that anyone can visit.",
         projects: ["Personal landing page", "Responsive portfolio layout", "Product showcase site"],
         tools: ["HTML5", "CSS3", "Flexbox", "CSS Grid", "Vercel"],
         lessonBreakdown: [
@@ -180,7 +191,8 @@ const pathways = [
         title: "JavaScript and Interactivity",
         lessons: 8,
         outcome: "Add dynamic, interactive behavior to any webpage",
-        description: "Static websites are just the beginning. Your child learns JavaScript to make pages that react to clicks, fetch live data, and behave like real apps.",
+        description:
+          "Static websites are just the beginning. Your child learns JavaScript to make pages that react to clicks, fetch live data, and behave like real apps.",
         projects: ["Interactive to-do app", "Live weather dashboard", "Memory card game"],
         tools: ["JavaScript (ES6+)", "DOM API", "Fetch API", "Local Storage"],
         lessonBreakdown: [
@@ -199,7 +211,8 @@ const pathways = [
         title: "React and Full-Stack Web",
         lessons: 8,
         outcome: "Build and deploy modern React applications used in real companies",
-        description: "React is the most in-demand frontend framework in the world. Your child builds reusable components, manages state, fetches data from APIs, and deploys a full React app live on the internet.",
+        description:
+          "React is the most in-demand frontend framework in the world. Your child builds reusable components, manages state, fetches data from APIs, and deploys a full React app live.",
         projects: ["E-commerce product page", "Social media feed clone", "Full portfolio React app"],
         tools: ["React 18", "Next.js", "Vercel", "REST APIs"],
         lessonBreakdown: [
@@ -219,19 +232,21 @@ const pathways = [
     id: "little",
     emoji: "🌟",
     title: "Little Coders Path",
-    tagline: "First 3 Real Projects",
+    tagline: "Build 3 Real Projects",
     ages: "Ages 6–11",
     color: "from-yellow-500 to-orange-500",
     border: "border-yellow-700/40",
     badge: "bg-yellow-900/30 text-yellow-300",
     accent: "text-yellow-400",
+    dot: "bg-yellow-400",
     courses: [
       {
         number: "10",
         title: "Scratch Adventures",
         lessons: 8,
         outcome: "Create animated stories, games, and interactive projects visually",
-        description: "The perfect first step for young learners. Scratch uses visual blocks instead of text — so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
+        description:
+          "The perfect first step for young learners. Scratch uses visual blocks instead of text — so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
         projects: ["Animated animal story", "Interactive quiz game", "Creative music maker"],
         tools: ["Scratch (MIT)", "Scratch Editor", "Scratch community"],
         lessonBreakdown: [
@@ -250,7 +265,8 @@ const pathways = [
         title: "Python for Young Builders",
         lessons: 8,
         outcome: "Write first real Python programs — the same language used by NASA and Google",
-        description: "The bridge from visual to text-based coding. Your child writes their first Python programs: variables, loops, and their very own mini projects. Taught slowly, with patience, and lots of fun.",
+        description:
+          "The bridge from visual to text-based coding. Your child writes their first Python programs: variables, loops, and their very own mini projects. Taught slowly, with patience, and lots of fun.",
         projects: ["Personal quiz app", "Simple calculator", "Word guessing game"],
         tools: ["Python 3", "Thonny IDE", "Repl.it"],
         lessonBreakdown: [
@@ -262,6 +278,26 @@ const pathways = [
           "Lists and simple data",
           "Building a mini quiz app",
           "Final project: our own mini game",
+        ],
+      },
+      {
+        number: "12",
+        title: "AI for Kids: Smart Projects",
+        lessons: 8,
+        outcome: "Train your own AI models and build apps that see, listen, and respond",
+        description:
+          "Your child discovers how AI actually works — not by reading about it, but by building with it. Using Google's Teachable Machine and ML4Kids, they train machine learning models that recognize images and sounds, then connect them to Scratch to build interactive AI-powered projects any parent will be amazed by.",
+        projects: ["AI rock-paper-scissors game", "Voice-activated Scratch story", "Emotion-recognition virtual pet"],
+        tools: ["Scratch", "Teachable Machine", "ML4Kids", "Google AI Tools"],
+        lessonBreakdown: [
+          "What is AI and how do machines actually learn",
+          "Training your first image recognition model",
+          "Connecting an AI model to Scratch with ML4Kids",
+          "Building an AI rock-paper-scissors game",
+          "Voice commands: training a sound recognizer",
+          "Creating a voice-activated story in Scratch",
+          "Facial expression recognition and virtual pets",
+          "Showcase: presenting your AI project to the world",
         ],
       },
     ],
@@ -276,13 +312,15 @@ const pathways = [
     border: "border-teal-700/40",
     badge: "bg-teal-900/30 text-teal-300",
     accent: "text-teal-400",
+    dot: "bg-teal-400",
     courses: [
       {
-        number: "12",
+        number: "13",
         title: "Python for Data",
         lessons: 8,
-        outcome: "Load, clean, and analyze real-world datasets using Python",
-        description: "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful — finding patterns, calculating stats, and drawing conclusions.",
+        outcome: "Load, clean, and analyse real-world datasets using Python",
+        description:
+          "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful — finding patterns, calculating stats, and drawing conclusions.",
         projects: ["Sports performance analysis", "School grade analysis", "City population trends"],
         tools: ["Python 3", "Pandas", "NumPy", "Jupyter Notebooks"],
         lessonBreakdown: [
@@ -297,17 +335,18 @@ const pathways = [
         ],
       },
       {
-        number: "13",
-        title: "Data Visualization",
+        number: "14",
+        title: "Data Visualisation",
         lessons: 8,
         outcome: "Turn raw data into compelling, interactive charts and dashboards",
-        description: "Data without visuals is just numbers. Your child learns to create charts that tell stories — the kind that make people say 'I never knew that' when they look at the data.",
-        projects: ["Climate change dashboard", "Market trends chart", "Sports comparison visualizer"],
+        description:
+          "Data without visuals is just numbers. Your child learns to create charts that tell stories — the kind that make people say 'I never knew that' when they look at the data.",
+        projects: ["Climate change dashboard", "Market trends chart", "Sports comparison visualiser"],
         tools: ["Python", "Matplotlib", "Seaborn", "Plotly", "Dash"],
         lessonBreakdown: [
-          "The science of good data visualization",
+          "The science of good data visualisation",
           "Matplotlib: line, bar, scatter plots",
-          "Seaborn: statistical visualizations",
+          "Seaborn: statistical visualisations",
           "Choosing the right chart for your data",
           "Color, labels, and storytelling",
           "Interactive charts with Plotly",
@@ -316,11 +355,12 @@ const pathways = [
         ],
       },
       {
-        number: "14",
+        number: "15",
         title: "Machine Learning Projects",
         lessons: 8,
         outcome: "Build predictive models that make real decisions from real data",
-        description: "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models — the same technology behind Netflix recommendations and fraud detection.",
+        description:
+          "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models — the same technology behind Netflix recommendations and fraud detection.",
         projects: ["House price predictor", "Customer churn predictor", "Movie recommendation engine"],
         tools: ["Python", "scikit-learn", "XGBoost", "Joblib"],
         lessonBreakdown: [
@@ -346,13 +386,15 @@ const pathways = [
     border: "border-green-700/40",
     badge: "bg-green-900/30 text-green-300",
     accent: "text-green-400",
+    dot: "bg-green-400",
     courses: [
       {
-        number: "15",
+        number: "16",
         title: "Build Your Digital Identity",
         lessons: 8,
         outcome: "A live portfolio website and polished personal brand ready to attract clients",
-        description: "Before you can earn online, you need to exist online. Your teen builds a professional portfolio website from scratch, defines their niche, and creates a brand identity that positions them as a credible service provider.",
+        description:
+          "Before you can earn online, you need to exist online. Your teen builds a professional portfolio website from scratch, defines their niche, and creates a brand identity that positions them as a credible service provider.",
         projects: ["Live portfolio website", "Personal brand kit (logo, colors, bio)", "Service offerings page"],
         tools: ["HTML / CSS", "Vercel", "Canva", "GitHub"],
         lessonBreakdown: [
@@ -367,12 +409,13 @@ const pathways = [
         ],
       },
       {
-        number: "16",
+        number: "17",
         title: "Freelancing Fundamentals",
         lessons: 8,
         outcome: "Active Fiverr and Upwork profiles with a real gig and first client strategy",
-        description: "Freelancing is the fastest path to earning online as a teen. Your child learns to package their skills as a service, create compelling gig listings, write winning proposals, and land their first client.",
-        projects: ["Fiverr gig setup and optimization", "Upwork profile and first proposal", "Service package + pricing strategy"],
+        description:
+          "Freelancing is the fastest path to earning online as a teen. Your child learns to package their skills as a service, create compelling gig listings, write winning proposals, and land their first client.",
+        projects: ["Fiverr gig setup and optimisation", "Upwork profile and first proposal", "Service package + pricing strategy"],
         tools: ["Fiverr", "Upwork", "Canva", "Google Docs"],
         lessonBreakdown: [
           "The freelance economy: how teens can compete",
@@ -386,11 +429,12 @@ const pathways = [
         ],
       },
       {
-        number: "17",
+        number: "18",
         title: "LinkedIn and Professional Presence",
         lessons: 8,
-        outcome: "An optimized LinkedIn profile and a published content strategy that builds credibility",
-        description: "LinkedIn is where opportunities find you. Your teen builds a professional LinkedIn presence that showcases their skills, attracts potential clients, and positions them as a young expert in their field.",
+        outcome: "An optimised LinkedIn profile and a published content strategy that builds credibility",
+        description:
+          "LinkedIn is where opportunities find you. Your teen builds a professional LinkedIn presence that showcases their skills, attracts potential clients, and positions them as a young expert in their field.",
         projects: ["Complete LinkedIn profile", "5 published LinkedIn posts", "90-day content calendar"],
         tools: ["LinkedIn", "Canva", "ChatGPT for content ideation", "Buffer"],
         lessonBreakdown: [
@@ -408,14 +452,34 @@ const pathways = [
   },
 ];
 
-export default function CoursesPage() {
-  const [activePathway, setActivePathway] = useState<string>("all");
+function CoursesContent() {
+  const searchParams = useSearchParams();
+  const pathwayParam = searchParams.get("pathway");
+
+  const [activePathway, setActivePathway] = useState<string>(pathwayParam || "all");
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+
+  // Auto-scroll to pathway section when coming from a direct link
+  useEffect(() => {
+    if (pathwayParam) {
+      setActivePathway(pathwayParam);
+      setTimeout(() => {
+        const el = document.getElementById(`pathway-${pathwayParam}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    }
+  }, [pathwayParam]);
 
   const visiblePathways =
     activePathway === "all"
       ? pathways
       : pathways.filter((p) => p.id === activePathway);
+
+  const totalCourses = pathways.reduce((a, p) => a + p.courses.length, 0);
+  const totalLessons = pathways.reduce(
+    (a, p) => a + p.courses.reduce((b, c) => b + c.lessons, 0),
+    0
+  );
 
   return (
     <div className="bg-[#050D1A] text-white">
@@ -428,13 +492,14 @@ export default function CoursesPage() {
         <div className="relative max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-700/40 bg-purple-900/20 text-purple-300 text-xs font-medium mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            6 Pathways · 17 Courses · 136 Lessons
+            {pathways.length} Pathways · {totalCourses} Courses · {totalLessons} Lessons
           </div>
           <h1 className="text-4xl sm:text-5xl font-black text-white leading-tight mb-4">
             Full Curriculum Catalog
           </h1>
           <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-6">
-            Every course is taught live, 1-on-1, by a verified expert teacher. Every lesson ends with something your child built. Every course ends with a real portfolio project.
+            Every course is taught live by a verified expert teacher across all learning formats.
+            Every lesson ends with something your child built. Every course ends with a real portfolio project.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -486,7 +551,7 @@ export default function CoursesPage() {
       {/* Courses */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
         {visiblePathways.map((pathway) => (
-          <div key={pathway.id}>
+          <div key={pathway.id} id={`pathway-${pathway.id}`}>
             {/* Pathway header */}
             <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-8 pb-6 border-b ${pathway.border}`}>
               <div className="flex items-center gap-4 flex-1">
@@ -504,7 +569,10 @@ export default function CoursesPage() {
                     )}
                   </div>
                   <p className={`font-bold text-sm ${pathway.accent}`}>{pathway.tagline}</p>
-                  <p className="text-gray-500 text-xs mt-0.5">{pathway.courses.length} courses · {pathway.courses.reduce((a, c) => a + c.lessons, 0)} lessons total</p>
+                  <p className="text-gray-500 text-xs mt-0.5">
+                    {pathway.courses.length} courses ·{" "}
+                    {pathway.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2 flex-shrink-0">
@@ -550,14 +618,19 @@ export default function CoursesPage() {
                             <span className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 whitespace-nowrap">
                               {course.lessons} lessons
                             </span>
-                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-gray-500`}>▾</span>
+                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-gray-500`}>
+                              ▾
+                            </span>
                           </div>
                         </div>
 
-                        {/* Tools preview (always visible) */}
+                        {/* Tools preview */}
                         <div className="flex flex-wrap gap-1.5 mt-3">
                           {course.tools.map((t) => (
-                            <span key={t} className="text-[10px] font-mono px-2 py-0.5 rounded border border-gray-700 text-gray-500">
+                            <span
+                              key={t}
+                              className="text-[10px] font-mono px-2 py-0.5 rounded border border-gray-700 text-gray-500"
+                            >
                               {t}
                             </span>
                           ))}
@@ -570,17 +643,16 @@ export default function CoursesPage() {
                         <div className="pt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
                           {/* Description + Projects */}
                           <div className="lg:col-span-2 space-y-5">
-                            <div>
-                              <p className="text-sm text-gray-400 leading-relaxed">{course.description}</p>
-                            </div>
+                            <p className="text-sm text-gray-400 leading-relaxed">{course.description}</p>
 
                             <div>
-                              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Portfolio Projects</p>
+                              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+                                Portfolio Projects
+                              </p>
                               <ul className="space-y-1.5">
                                 {course.projects.map((proj) => (
                                   <li key={proj} className="flex items-center gap-2 text-sm text-gray-300">
-                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 bg-gradient-to-r ${pathway.color}`} style={{background: "currentColor"}} />
-                                    <span className={pathway.accent.replace("text-", "text-")}></span>
+                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathway.dot}`} />
                                     {proj}
                                   </li>
                                 ))}
@@ -590,7 +662,9 @@ export default function CoursesPage() {
 
                           {/* Lesson breakdown */}
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">Lesson Breakdown</p>
+                            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+                              Lesson Breakdown
+                            </p>
                             <ol className="space-y-1.5">
                               {course.lessonBreakdown.map((lesson, i) => (
                                 <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
@@ -630,21 +704,36 @@ export default function CoursesPage() {
       {/* Bottom CTA */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[#07101F] to-[#050D1A]">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-black text-white mb-4">
-            Not Sure Where to Start?
-          </h2>
+          <h2 className="text-3xl font-black text-white mb-4">Not Sure Where to Start?</h2>
           <p className="text-gray-400 mb-8">
-            Book a free trial and we'll recommend the perfect pathway for your child's age, interests, and goals.
+            Book a free trial and we&apos;ll recommend the perfect pathway for your child&apos;s age,
+            interests, and goals.
           </p>
           <Link
             href="/trial"
             className="inline-block px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black rounded-xl shadow-xl shadow-purple-900/40 transition-all hover:scale-[1.02]"
           >
             Book Free Trial Class
-            <span className="block text-xs font-normal opacity-70 mt-0.5">We'll match your child with the perfect pathway</span>
+            <span className="block text-xs font-normal opacity-70 mt-0.5">
+              We&apos;ll match your child with the perfect pathway
+            </span>
           </Link>
         </div>
       </section>
     </div>
+  );
+}
+
+export default function CoursesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#050D1A] flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400" />
+        </div>
+      }
+    >
+      <CoursesContent />
+    </Suspense>
   );
 }

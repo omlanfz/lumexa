@@ -82,7 +82,7 @@ export default function CoursesSection() {
             Learn What the Future Demands
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto">
-            Every course is taught live, 1-on-1 by a verified teacher, not pre-recorded videos.
+            Every course is taught live by a verified teacher in your preferred format: batch sessions, 1-on-1, or group learning. Never pre-recorded.
           </p>
         </div>
 

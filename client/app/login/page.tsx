@@ -5,6 +5,7 @@ import { Suspense, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Image from "next/image";
+import Link from "next/link";
 
 // ─── Inline theme logic (no ThemeProvider dependency on auth pages) ───────────
 function useAuthTheme() {
@@ -117,14 +118,20 @@ function LoginContent() {
       <div className={`w-full max-w-md ${card} rounded-2xl p-8 relative z-10`}>
         {/* Logo + Title */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 shadow-lg shadow-blue-600/30">
-            <Image
+          <Link href="/" className="inline-block">
+            <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 shadow-lg shadow-blue-600/30 overflow-hidden hover:shadow-blue-500/50 transition-shadow">
+              <Image
                 src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
-                width={32}
-                height={32}
-                alt="Lumexa"
+                width={56}
+                height={56}
+                alt="Lumexa AI School"
+                className="object-cover w-full h-full"
               />
-          </div>
+            </div>
+          </Link>
+          <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${subtitleCls}`}>
+            Lumexa AI School
+          </p>
           <h1
             className={`text-3xl font-bold tracking-tight uppercase ${titleCls}`}
           >
@@ -219,7 +226,7 @@ function LoginContent() {
         <p
           className={`text-center text-xs mt-4 ${isDark ? "text-blue-900/60" : "text-blue-200"}`}
         >
-          🚀 Lumexa · Mission Control
+          🚀 Lumexa AI School · Mission Control
         </p>
       </div>
     </div>

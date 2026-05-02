@@ -13,8 +13,8 @@ const steps = [
   {
     step: "02",
     icon: "📚",
-    title: "Learn Live, 1-on-1",
-    desc: "Real-time classes with a dedicated teacher who adapts to your child's pace and learning style.",
+    title: "Learn Live with Expert Teachers",
+    desc: "Real-time classes in your preferred format: batch sessions, live 1-on-1, or group learning. Your teacher adapts to your child's pace and goals.",
     color: "text-blue-400",
     border: "border-blue-700/40",
     bg: "bg-blue-900/10",

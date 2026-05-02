@@ -1,7 +1,6 @@
 "use client"; 
 
 import Link from "next/link";
-import Image from "next/image";
 
 const values = [
   {
@@ -47,9 +46,9 @@ const stats = [
 
 const team = [
   {
-    name: "Omlan Faiz",
+    name: "Fairooz Omlan",
     role: "Founder & CEO",
-    bio: "Former software engineer turned education entrepreneur. Built Lumexa after watching his younger cousins struggle to find quality coding teachers who understood kids.",
+    bio: "Former software engineer turned education entrepreneur. Built Lumexa to raise a generation of AI-native creators, equipped to build, innovate, and lead in a rapidly evolving digital world.",
   },
   {
     name: "Our Teacher Network",
@@ -87,7 +86,7 @@ export default function AboutPage() {
             Lumexa AI School was built for one reason: the world is being redesigned by people who can code, and we refuse to let your child be left on the sidelines.
           </p>
           <p className="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
-            Every class is live, one-on-one, taught by a verified expert who adapts the lesson to your child specifically. Not a YouTube video. Not a pre-recorded course. A real teacher who knows your child's name.
+            Every class is live — batch, 1-on-1, or group — taught by a verified expert who adapts to your child specifically. Not a YouTube video. Not a pre-recorded course. A real teacher who knows your child's name.
           </p>
         </div>
       </section>
@@ -131,7 +130,7 @@ export default function AboutPage() {
             <div className="space-y-4">
               {[
                 { label: "The Problem", text: "Generic, passive, pre-recorded content that doesn't adapt to the child.", color: "border-red-700/40 bg-red-900/10" },
-                { label: "Our Solution", text: "Live 1-on-1 classes with expert teachers. Every lesson adapted to your child's pace, goals, and personality.", color: "border-green-700/40 bg-green-900/10" },
+                { label: "Our Solution", text: "Live classes with expert teachers (batch, 1-on-1, and group formats). Every lesson adapted to your child's pace, goals, and personality.", color: "border-green-700/40 bg-green-900/10" },
                 { label: "The Outcome", text: "A real portfolio of projects. Skills that will matter in 2030 and beyond. A child who builds, not just consumes.", color: "border-purple-700/40 bg-purple-900/10" },
               ].map((item) => (
                 <div key={item.label} className={`p-5 rounded-xl border ${item.color}`}>
@@ -174,7 +173,7 @@ export default function AboutPage() {
             {team.map((t) => (
               <div key={t.name} className="p-6 bg-gray-900/50 border border-gray-800 rounded-2xl text-center">
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 mx-auto mb-4 flex items-center justify-center text-2xl">
-                  {t.name === "Omlan Faiz" ? "👨‍💻" : t.name === "Our Teacher Network" ? "👩‍🏫" : "🚀"}
+                  {t.name === "Fairooz Omlan" ? "👨‍💻" : t.name === "Our Teacher Network" ? "👩‍🏫" : "🚀"}
                 </div>
                 <h3 className="text-white font-bold mb-1">{t.name}</h3>
                 <p className="text-purple-400 text-xs font-semibold mb-3">{t.role}</p>

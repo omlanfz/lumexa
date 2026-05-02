@@ -1,16 +1,37 @@
 import Link from "next/link";
 
-const pathways = [
+interface Pathway {
+  id: string;
+  emoji: string;
+  title: string;
+  outcome: string;
+  description: string;
+  tools: string[];
+  ages: string;
+  sessions: string;
+  level: string;
+  projects: string[];
+  accent: string;
+  border: string;
+  badge: string;
+  glow: string;
+  tag?: string;
+  featured?: boolean;
+}
+
+const pathways: Pathway[] = [
   {
+    id: "game",
     emoji: "🎮",
     title: "Game Creator Path",
     outcome: "Build 3 Real Games",
-    description: "From Roblox worlds to Python arcade games. Your child will design, code, and ship games friends can actually play.",
+    description:
+      "From Roblox worlds to Python arcade games. Your child designs, codes, and ships games that friends can actually play — not just a certificate saying they could.",
     tools: ["Roblox / Lua", "Python", "Unity Basics"],
     ages: "Ages 10–18",
     sessions: "24 sessions",
     level: "Beginner to Creator",
-    projects: ["Multiplayer shooter", "Platform adventure", "Custom RPG world"],
+    projects: ["Multiplayer Roblox shooter", "Python arcade game", "Custom RPG world"],
     accent: "from-red-600 to-orange-600",
     border: "border-red-700/30 hover:border-red-500/50",
     badge: "bg-red-900/30 text-red-300",
@@ -18,15 +39,17 @@ const pathways = [
     tag: "Most Popular",
   },
   {
+    id: "ai",
     emoji: "🤖",
     title: "AI Builder Path",
     outcome: "Build 3 AI Projects",
-    description: "Not just using AI. Building it. Your child learns Python and machine learning and creates real AI tools that solve real problems.",
+    description:
+      "Not just using AI — building it. Your child learns Python and machine learning, then creates real AI tools that detect emotions, recognize objects, and hold conversations.",
     tools: ["Python", "TensorFlow / PyTorch", "OpenAI API"],
     ages: "Ages 12–18",
     sessions: "24 sessions",
     level: "Builder to Innovator",
-    projects: ["Emotion detector", "Chatbot with GPT API", "Image classifier"],
+    projects: ["Real-time emotion detector", "Chatbot with GPT API", "Computer vision classifier"],
     accent: "from-purple-600 to-blue-600",
     border: "border-purple-600/40 hover:border-purple-400/60",
     badge: "bg-purple-900/40 text-purple-300",
@@ -35,15 +58,17 @@ const pathways = [
     featured: true,
   },
   {
+    id: "web",
     emoji: "🌐",
     title: "Web Developer Path",
     outcome: "Build 3 Live Websites",
-    description: "From first HTML tag to a deployed full-stack app. Your child will have real websites on the internet, not just screenshots.",
+    description:
+      "From first HTML tag to a deployed full-stack React app. Your child will have real websites on the internet — with working code, not just screenshots.",
     tools: ["HTML / CSS", "JavaScript", "React / Next.js"],
     ages: "Ages 12–18",
     sessions: "24 sessions",
     level: "Beginner to Creator",
-    projects: ["Portfolio site", "Interactive web app", "E-commerce store"],
+    projects: ["Live portfolio site", "Interactive web app", "Full-stack React project"],
     accent: "from-blue-600 to-cyan-600",
     border: "border-blue-700/30 hover:border-blue-500/50",
     badge: "bg-blue-900/30 text-blue-300",
@@ -51,15 +76,17 @@ const pathways = [
     tag: "High Demand",
   },
   {
+    id: "little",
     emoji: "🌟",
     title: "Little Coders Path",
-    outcome: "First 3 Real Projects",
-    description: "Designed for younger kids. Starts with Scratch stories and animations, then moves to Python basics. All at their pace, all fun.",
-    tools: ["Scratch", "Python Basics", "Animations"],
+    outcome: "Build 3 Real Projects",
+    description:
+      "Designed for younger kids. Starts with Scratch animations, moves to Python basics, then introduces AI — all at their pace, all hands-on, all genuinely fun.",
+    tools: ["Scratch", "Python Basics", "Teachable Machine"],
     ages: "Ages 6–11",
-    sessions: "16 sessions",
+    sessions: "24 sessions",
     level: "Explorer to Builder",
-    projects: ["Animated story", "Mini quiz game", "First Python program"],
+    projects: ["Animated Scratch story", "Python mini-game", "AI-powered project"],
     accent: "from-yellow-500 to-orange-500",
     border: "border-yellow-700/30 hover:border-yellow-500/50",
     badge: "bg-yellow-900/30 text-yellow-300",
@@ -67,15 +94,17 @@ const pathways = [
     tag: "Best for Beginners",
   },
   {
+    id: "data",
     emoji: "📊",
     title: "Data Scientist Path",
     outcome: "Build 3 Data Projects",
-    description: "The skill every company needs. Your child learns to find patterns in real-world data and build dashboards that tell stories.",
+    description:
+      "The skill every company needs. Your child learns to find patterns in real-world data and build dashboards and prediction models that tell stories people care about.",
     tools: ["Python", "Pandas / NumPy", "Plotly / Matplotlib"],
     ages: "Ages 13–18",
-    sessions: "20 sessions",
+    sessions: "24 sessions",
     level: "Builder to Innovator",
-    projects: ["Sports stats analyzer", "Climate data dashboard", "Market trends predictor"],
+    projects: ["Sports stats analyser", "Climate data dashboard", "Market trends predictor"],
     accent: "from-teal-600 to-green-600",
     border: "border-teal-700/30 hover:border-teal-500/50",
     badge: "bg-teal-900/30 text-teal-300",
@@ -83,15 +112,17 @@ const pathways = [
     tag: "Career Ready",
   },
   {
+    id: "digital",
     emoji: "💼",
     title: "Digital Independence Path",
     outcome: "Start Earning Online",
-    description: "Don't just let your child learn. Help them start earning. Teens build a portfolio, set up freelance profiles, and attract their first real clients.",
-    tools: ["HTML / CSS", "Canva", "Fiverr / Upwork", "LinkedIn"],
+    description:
+      "The only pathway where your teen doesn't just learn a skill — they launch a real income stream. By the end they have a live portfolio, active freelancing profiles, and a professional LinkedIn that attracts clients.",
+    tools: ["Canva", "Fiverr / Upwork", "LinkedIn", "GitHub / Vercel"],
     ages: "Ages 15–18",
     sessions: "24 sessions",
     level: "Builder to Earner",
-    projects: ["Live portfolio website", "Fiverr gig + Upwork profile", "LinkedIn personal brand"],
+    projects: ["Live portfolio + personal brand", "Active Fiverr gig + proposal kit", "Professional LinkedIn + content strategy"],
     accent: "from-green-600 to-emerald-600",
     border: "border-green-700/30 hover:border-green-500/50",
     badge: "bg-green-900/30 text-green-300",
@@ -109,13 +140,14 @@ export default function PathwaysSection() {
             6 Flagship Learning Pathways
           </p>
           <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-4 leading-tight">
-            Your Child Doesn't Just Learn.{" "}
+            Your Child Doesn&apos;t Just Learn.{" "}
             <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
               They Build.
             </span>
           </h2>
           <p className="text-gray-400 max-w-2xl mx-auto text-lg">
-            Every pathway ends with 3+ real projects in your child's portfolio. Not certificates, not badges. Actual things they built.
+            Every pathway ends with 3+ real projects in your child&apos;s portfolio.
+            Not certificates, not badges. Actual things they built.
           </p>
         </div>
 
@@ -150,9 +182,11 @@ export default function PathwaysSection() {
 
               <p className="relative text-gray-400 text-sm leading-relaxed mb-4">{p.description}</p>
 
-              {/* Projects */}
+              {/* What they'll build */}
               <div className="relative mb-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">What they'll build:</p>
+                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">
+                  What they&apos;ll build:
+                </p>
                 <ul className="space-y-1">
                   {p.projects.map((proj) => (
                     <li key={proj} className="flex items-center gap-2 text-xs text-gray-400">
@@ -179,7 +213,7 @@ export default function PathwaysSection() {
                 ))}
               </div>
 
-              {/* Dual CTAs */}
+              {/* CTAs */}
               <div className="relative mt-auto flex flex-col gap-2">
                 <Link
                   href="/trial"
@@ -188,8 +222,14 @@ export default function PathwaysSection() {
                   Book Free Trial
                 </Link>
                 <Link
+                  href={`/courses?pathway=${p.id}`}
+                  className="w-full py-2.5 text-center text-xs font-semibold text-gray-300 hover:text-white border border-gray-700 hover:border-gray-500 bg-gray-800/40 hover:bg-gray-800 rounded-xl transition-all"
+                >
+                  View Full Curriculum →
+                </Link>
+                <Link
                   href="/pricing"
-                  className="w-full py-2.5 text-center text-xs font-semibold text-white border border-gray-600 hover:border-gray-400 bg-gray-800/60 hover:bg-gray-800 rounded-xl transition-all"
+                  className="w-full py-2 text-center text-xs font-semibold text-gray-600 hover:text-gray-400 transition-colors"
                 >
                   Buy Now
                 </Link>
@@ -198,16 +238,16 @@ export default function PathwaysSection() {
           ))}
         </div>
 
-        {/* Browse All Courses */}
+        {/* Browse All */}
         <div className="mt-10 text-center">
           <p className="text-gray-500 text-sm mb-4">
-            Not sure which path is right? Start with a free trial and we'll recommend the perfect one.
+            Not sure which path is right? Start with a free trial and we&apos;ll recommend the perfect one.
           </p>
           <Link
             href="/courses"
             className="inline-flex items-center gap-2 px-6 py-3 border border-gray-700 hover:border-purple-600/60 text-gray-300 hover:text-white rounded-xl text-sm font-semibold transition-all hover:bg-purple-900/10"
           >
-            Browse All 17 Courses and Lesson Breakdowns →
+            Browse All Courses and Lesson Breakdowns →
           </Link>
         </div>
       </div>
