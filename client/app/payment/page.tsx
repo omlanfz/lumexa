@@ -14,21 +14,22 @@ const TIMEZONE_TO_REGION: Record<string, Region> = {
   "Europe/London": "UK",
 };
 
-const PACK_INFO: Record<string, {
-  name: string;
-  classes: number;
-  subtitle: string;
-  discount: number | null;
-  courses: { code: string; name: string }[] | null;
-  prices: Record<Region, string>;
-  perLesson: Record<Region, string>;
-}> = {
+const PACK_INFO: Record<
+  string,
+  {
+    name: string;
+    classes: number;
+    subtitle: string;
+    discount: number | null;
+    prices: Record<Region, string>;
+    perLesson: Record<Region, string>;
+  }
+> = {
   starter: {
     name: "Starter Pack",
     classes: 8,
     subtitle: "Explorer Bundle",
     discount: null,
-    courses: null,
     prices: { BD: "৳2,800", IN: "₹2,200", UK: "£20", US: "$25" },
     perLesson: { BD: "৳350/class", IN: "₹275/class", UK: "£2.50/class", US: "$3.13/class" },
   },
@@ -37,10 +38,6 @@ const PACK_INFO: Record<string, {
     classes: 16,
     subtitle: "Builder Bundle",
     discount: 5,
-    courses: [
-      { code: "Course 1", name: "Your chosen pathway, Course 1" },
-      { code: "Course 2", name: "Your chosen pathway, Course 2" },
-    ],
     prices: { BD: "৳4,940", IN: "₹3,800", UK: "£34", US: "$43" },
     perLesson: { BD: "৳309/class", IN: "₹238/class", UK: "£2.13/class", US: "$2.66/class" },
   },
@@ -49,51 +46,83 @@ const PACK_INFO: Record<string, {
     classes: 24,
     subtitle: "Creator Bundle",
     discount: 12,
-    courses: [
-      { code: "Course 1", name: "Your chosen pathway, Course 1" },
-      { code: "Course 2", name: "Your chosen pathway, Course 2" },
-      { code: "Course 3", name: "Your chosen pathway, Course 3" },
-    ],
     prices: { BD: "৳6,336", IN: "₹4,840", UK: "£44", US: "$55" },
     perLesson: { BD: "৳264/class", IN: "₹202/class", UK: "£1.83/class", US: "$2.29/class" },
   },
 };
 
+// Courses exactly matching the curriculum catalog
 const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
+  game: [
+    { code: "Course 1", name: "Roblox World Builder" },
+    { code: "Course 2", name: "Python Arcade Games" },
+    { code: "Course 3", name: "Advanced Game Design" },
+  ],
+  ai: [
+    { code: "Course 1", name: "Python and AI Foundations" },
+    { code: "Course 2", name: "Computer Vision Projects" },
+    { code: "Course 3", name: "Language Models and Chatbots" },
+  ],
+  web: [
+    { code: "Course 1", name: "HTML and CSS Mastery" },
+    { code: "Course 2", name: "JavaScript and Interactivity" },
+    { code: "Course 3", name: "React and Full-Stack Web" },
+  ],
+  little: [
+    { code: "Course 1", name: "Scratch Adventures" },
+    { code: "Course 2", name: "Python for Young Builders" },
+    { code: "Course 3", name: "AI for Kids: Smart Projects" },
+  ],
+  data: [
+    { code: "Course 1", name: "Python for Data" },
+    { code: "Course 2", name: "Data Visualisation" },
+    { code: "Course 3", name: "Machine Learning Projects" },
+  ],
+  digital: [
+    { code: "Course 1", name: "Build Your Digital Identity" },
+    { code: "Course 2", name: "Freelancing Fundamentals" },
+    { code: "Course 3", name: "LinkedIn and Professional Presence" },
+  ],
+  // Legacy slug support
   "game-creator": [
-    { code: "C1", name: "Roblox & Lua Foundations" },
-    { code: "C2", name: "Python Game Development" },
-    { code: "C3", name: "Unity Basics" },
+    { code: "Course 1", name: "Roblox World Builder" },
+    { code: "Course 2", name: "Python Arcade Games" },
+    { code: "Course 3", name: "Advanced Game Design" },
   ],
   "ai-builder": [
-    { code: "C1", name: "Python for AI" },
-    { code: "C2", name: "Machine Learning Fundamentals" },
-    { code: "C3", name: "Building with OpenAI API" },
+    { code: "Course 1", name: "Python and AI Foundations" },
+    { code: "Course 2", name: "Computer Vision Projects" },
+    { code: "Course 3", name: "Language Models and Chatbots" },
   ],
   "web-developer": [
-    { code: "C1", name: "HTML & CSS Mastery" },
-    { code: "C2", name: "JavaScript & Interactivity" },
-    { code: "C3", name: "React & Next.js" },
+    { code: "Course 1", name: "HTML and CSS Mastery" },
+    { code: "Course 2", name: "JavaScript and Interactivity" },
+    { code: "Course 3", name: "React and Full-Stack Web" },
   ],
   "little-coders": [
-    { code: "C1", name: "Scratch Storytelling" },
-    { code: "C2", name: "Python Basics" },
+    { code: "Course 1", name: "Scratch Adventures" },
+    { code: "Course 2", name: "Python for Young Builders" },
+    { code: "Course 3", name: "AI for Kids: Smart Projects" },
   ],
   "data-scientist": [
-    { code: "C1", name: "Python & Pandas" },
-    { code: "C2", name: "Data Visualization" },
-    { code: "C3", name: "Machine Learning Projects" },
+    { code: "Course 1", name: "Python for Data" },
+    { code: "Course 2", name: "Data Visualisation" },
+    { code: "Course 3", name: "Machine Learning Projects" },
   ],
   "digital-independence": [
-    { code: "C1", name: "Build Your Digital Identity" },
-    { code: "C2", name: "Freelancing Fundamentals" },
-    { code: "C3", name: "LinkedIn & Professional Presence" },
-    { code: "C4", name: "Communication & Confidence" },
-    { code: "C5", name: "Mini Entrepreneurship Lab" },
+    { code: "Course 1", name: "Build Your Digital Identity" },
+    { code: "Course 2", name: "Freelancing Fundamentals" },
+    { code: "Course 3", name: "LinkedIn and Professional Presence" },
   ],
 };
 
 const PATHWAY_LABELS: Record<string, string> = {
+  game: "Game Creator Path",
+  ai: "AI Builder Path",
+  web: "Web Developer Path",
+  little: "Little Coders Path",
+  data: "Data Scientist Path",
+  digital: "Digital Independence Path",
   "game-creator": "Game Creator Path",
   "ai-builder": "AI Builder Path",
   "web-developer": "Web Developer Path",
@@ -125,16 +154,18 @@ function PaymentContent() {
       } catch {}
     }
     setDetected(true);
-  }, []);
+  }, [regionParam]);
 
   const pack = PACK_INFO[packId] || PACK_INFO["growth"];
   const pathway = pathwayId ? PATHWAY_LABELS[pathwayId] : null;
   const pathwayCourses = pathwayId ? PATHWAY_COURSES[pathwayId] : null;
   const isBD = region === "BD";
 
+  // How many courses to show depends on pack size
+  const coursesToShow = pack.classes >= 24 ? 3 : pack.classes >= 16 ? 2 : 1;
   const displayCourses = pathwayCourses
-    ? pathwayCourses.slice(0, pack.classes >= 24 ? 5 : pack.classes >= 16 ? 2 : 1)
-    : pack.courses;
+    ? pathwayCourses.slice(0, coursesToShow)
+    : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,11 +194,11 @@ function PaymentContent() {
           <div className="text-5xl mb-4">🎉</div>
           <h2 className="text-2xl font-black text-white mb-3">Order Received!</h2>
           <p className="text-gray-400 text-sm leading-relaxed mb-2">
-            Thank you, <span className="text-white font-semibold">{form.name}</span>. We've received your{" "}
-            <span className="text-purple-400 font-semibold">{pack.name}</span> order.
+            Thank you, <span className="text-white font-semibold">{form.name}</span>. We&apos;ve
+            received your <span className="text-purple-400 font-semibold">{pack.name}</span> order.
           </p>
           <p className="text-gray-400 text-sm leading-relaxed mb-6">
-            We'll send your class access details to{" "}
+            We&apos;ll send your class access details to{" "}
             <span className="text-white font-semibold">{form.email}</span> within a few hours.
           </p>
           <div className="p-4 bg-green-900/20 border border-green-800/40 rounded-xl mb-6 text-left">
@@ -176,11 +207,14 @@ function PaymentContent() {
               <li>1. Our team confirms your payment</li>
               <li>2. We match you with the perfect teacher</li>
               <li>3. You receive class booking links via email</li>
-              <li>4. Your child's transformation begins</li>
+              <li>4. Your child&apos;s transformation begins</li>
             </ol>
           </div>
           <div className="flex flex-col gap-2">
-            <Link href="/register" className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-sm transition-all text-center">
+            <Link
+              href="/register"
+              className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-sm transition-all text-center"
+            >
               Create an Account to Track Progress
             </Link>
             <Link href="/" className="text-gray-500 hover:text-gray-300 text-sm transition-colors">
@@ -215,7 +249,9 @@ function PaymentContent() {
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         {/* Left: Order summary */}
         <div className="lg:sticky lg:top-24">
-          <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mb-4">Order Summary</p>
+          <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mb-4">
+            Order Summary
+          </p>
 
           <div className="bg-gray-900/60 border border-gray-700 rounded-2xl p-6 mb-5">
             {/* Pack */}
@@ -233,7 +269,7 @@ function PaymentContent() {
             {pack.discount && (
               <div className="mb-4 px-3 py-2 bg-green-900/30 border border-green-800/40 rounded-lg">
                 <p className="text-green-400 text-xs font-semibold">
-                  {pack.discount}% discount applied. You're saving on every class vs buying individually.
+                  {pack.discount}% discount applied. You&apos;re saving on every class vs buying individually.
                 </p>
               </div>
             )}
@@ -241,15 +277,19 @@ function PaymentContent() {
             {/* Pathway */}
             {pathway && (
               <div className="border-t border-gray-800 pt-4 mb-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-1">Learning Pathway</p>
+                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-1">
+                  Learning Pathway
+                </p>
                 <p className="text-white font-semibold text-sm">{pathway}</p>
               </div>
             )}
 
-            {/* Courses */}
+            {/* Courses — dynamic based on pathway + pack */}
             {displayCourses && displayCourses.length > 0 && (
               <div className="border-t border-gray-800 pt-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-3">Included Courses</p>
+                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-3">
+                  Included Courses
+                </p>
                 <ul className="space-y-2">
                   {displayCourses.map((c) => (
                     <li key={c.code} className="flex items-center gap-2.5 text-sm">
@@ -257,7 +297,9 @@ function PaymentContent() {
                         <span className="text-purple-400 text-[9px] font-bold">✓</span>
                       </span>
                       <div>
-                        <span className="text-gray-500 text-[10px] font-bold uppercase">{c.code} </span>
+                        <span className="text-gray-500 text-[10px] font-bold uppercase">
+                          {c.code}{" "}
+                        </span>
                         <span className="text-gray-300">{c.name}</span>
                       </div>
                     </li>
@@ -292,12 +334,15 @@ function PaymentContent() {
         {/* Right: Payment form */}
         <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
           <h2 className="text-xl font-black text-white mb-1">Complete Your Order</h2>
-          <p className="text-gray-600 text-xs mb-6">Fill in your details below to secure your child's classes</p>
+          <p className="text-gray-600 text-xs mb-6">
+            Fill in your details below to secure your child&apos;s classes
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Contact info */}
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">Full Name</label>
+              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
+                Full Name
+              </label>
               <input
                 type="text"
                 value={form.name}
@@ -309,7 +354,9 @@ function PaymentContent() {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">Email Address</label>
+              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
+                Email Address
+              </label>
               <input
                 type="email"
                 value={form.email}
@@ -321,7 +368,9 @@ function PaymentContent() {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">Phone (optional)</label>
+              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
+                Phone (optional)
+              </label>
               <input
                 type="tel"
                 value={form.phone}
@@ -333,9 +382,10 @@ function PaymentContent() {
 
             {/* Payment method */}
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-3">Payment Method</label>
+              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-3">
+                Payment Method
+              </label>
               <div className="space-y-2">
-                {/* Stripe — always shown */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("stripe")}
@@ -345,8 +395,14 @@ function PaymentContent() {
                       : "border-gray-700 bg-black/40 hover:border-gray-600"
                   }`}
                 >
-                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === "stripe" ? "border-purple-400" : "border-gray-600"}`}>
-                    {paymentMethod === "stripe" && <div className="w-2 h-2 rounded-full bg-purple-400" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      paymentMethod === "stripe" ? "border-purple-400" : "border-gray-600"
+                    }`}
+                  >
+                    {paymentMethod === "stripe" && (
+                      <div className="w-2 h-2 rounded-full bg-purple-400" />
+                    )}
                   </div>
                   <div className="text-left flex-1">
                     <p className="text-white text-sm font-semibold">Card / Apple Pay / Google Pay</p>
@@ -355,7 +411,6 @@ function PaymentContent() {
                   <span className="text-gray-500 text-xs">💳</span>
                 </button>
 
-                {/* Bank transfer — always shown */}
                 <button
                   type="button"
                   onClick={() => setPaymentMethod("bank")}
@@ -365,17 +420,24 @@ function PaymentContent() {
                       : "border-gray-700 bg-black/40 hover:border-gray-600"
                   }`}
                 >
-                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === "bank" ? "border-blue-400" : "border-gray-600"}`}>
-                    {paymentMethod === "bank" && <div className="w-2 h-2 rounded-full bg-blue-400" />}
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                      paymentMethod === "bank" ? "border-blue-400" : "border-gray-600"
+                    }`}
+                  >
+                    {paymentMethod === "bank" && (
+                      <div className="w-2 h-2 rounded-full bg-blue-400" />
+                    )}
                   </div>
                   <div className="text-left flex-1">
                     <p className="text-white text-sm font-semibold">Bank Transfer</p>
-                    <p className="text-gray-500 text-xs">We'll send account details after you submit. 1-2 business days.</p>
+                    <p className="text-gray-500 text-xs">
+                      We&apos;ll send account details after you submit. 1–2 business days.
+                    </p>
                   </div>
                   <span className="text-gray-500 text-xs">🏦</span>
                 </button>
 
-                {/* bKash — BD only */}
                 {isBD && (
                   <button
                     type="button"
@@ -386,8 +448,14 @@ function PaymentContent() {
                         : "border-gray-700 bg-black/40 hover:border-gray-600"
                     }`}
                   >
-                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === "bkash" ? "border-green-400" : "border-gray-600"}`}>
-                      {paymentMethod === "bkash" && <div className="w-2 h-2 rounded-full bg-green-400" />}
+                    <div
+                      className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                        paymentMethod === "bkash" ? "border-green-400" : "border-gray-600"
+                      }`}
+                    >
+                      {paymentMethod === "bkash" && (
+                        <div className="w-2 h-2 rounded-full bg-green-400" />
+                      )}
                     </div>
                     <div className="text-left flex-1">
                       <p className="text-white text-sm font-semibold">bKash</p>
@@ -399,25 +467,27 @@ function PaymentContent() {
               </div>
             </div>
 
-            {/* Payment method specific info */}
             {paymentMethod === "stripe" && (
               <div className="p-3 bg-purple-900/20 border border-purple-800/30 rounded-lg">
                 <p className="text-purple-300 text-xs leading-relaxed">
-                  You'll be redirected to a secure Stripe checkout page. Supports Visa, Mastercard, Amex, Apple Pay, and Google Pay.
+                  You&apos;ll be redirected to a secure Stripe checkout page. Supports Visa,
+                  Mastercard, Amex, Apple Pay, and Google Pay.
                 </p>
               </div>
             )}
             {paymentMethod === "bank" && (
               <div className="p-3 bg-blue-900/20 border border-blue-800/30 rounded-lg">
                 <p className="text-blue-300 text-xs leading-relaxed">
-                  After submitting, we'll email you our bank account details. Your classes are reserved for 48 hours while payment is confirmed.
+                  After submitting, we&apos;ll email you our bank account details. Your classes are
+                  reserved for 48 hours while payment is confirmed.
                 </p>
               </div>
             )}
             {paymentMethod === "bkash" && (
               <div className="p-3 bg-green-900/20 border border-green-800/30 rounded-lg">
                 <p className="text-green-300 text-xs leading-relaxed">
-                  After submitting, we'll send you a bKash payment number and reference. Complete the transfer and we'll activate your classes within 2 hours.
+                  After submitting, we&apos;ll send you a bKash payment number and reference.
+                  Complete the transfer and we&apos;ll activate your classes within 2 hours.
                 </p>
               </div>
             )}
@@ -440,7 +510,9 @@ function PaymentContent() {
                 </span>
               ) : (
                 <>
-                  {paymentMethod === "stripe" ? `Pay ${pack.prices[region]} with Card` : `Reserve My Classes`}
+                  {paymentMethod === "stripe"
+                    ? `Pay ${pack.prices[region]} with Card`
+                    : `Reserve My Classes`}
                   <span className="block text-[10px] font-normal opacity-70 mt-0.5">
                     {pack.classes} classes · {pack.name}
                   </span>

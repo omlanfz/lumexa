@@ -49,10 +49,11 @@ const packs = [
     gems: 8,
     subtitle: "Explorer Bundle",
     discount: null,
-    persuasion: "The perfect first step. 8 live classes are enough to build a real project and see exactly what your child is capable of. No risk, full value.",
+    persuasion:
+      "The perfect first step. 8 live classes are enough to build a real project and see exactly what your child is capable of. No risk, full value.",
     features: [
-      "8 live classes (batch, 1-on-1, or group)",
-      "Any learning pathway",
+      "8 live classes across any pathway",
+      "Choice of AI Creator Clubs, Pro Builder Pods, or Private Mentorship",
       "Progress report after each class",
       "Class recordings included",
       "7-day refund on unused classes",
@@ -60,7 +61,6 @@ const packs = [
     color: "border-blue-700/40 hover:border-blue-500/60",
     badge: "text-blue-400",
     accent: "from-blue-600 to-cyan-600",
-    ctaStyle: "border border-blue-700/50 text-blue-300 hover:bg-blue-900/20",
     buyStyle: "bg-blue-600 hover:bg-blue-500 text-white",
   },
   {
@@ -71,8 +71,8 @@ const packs = [
     subtitle: "Builder Bundle",
     discount: 5,
     features: [
-      "16 live classes (batch, 1-on-1, or group)",
-      "Any learning pathway",
+      "16 live classes across any pathway",
+      "Choice of AI Creator Clubs, Pro Builder Pods, or Private Mentorship",
       "AI-powered progress reports",
       "Priority teacher matching",
       "Class recordings included",
@@ -81,8 +81,8 @@ const packs = [
     color: "border-purple-600/60 hover:border-purple-400",
     badge: "text-purple-400",
     accent: "from-purple-600 to-blue-600",
-    ctaStyle: "bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-500 hover:to-blue-500",
-    buyStyle: "bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white",
+    buyStyle:
+      "bg-gradient-to-r from-purple-700 to-blue-700 hover:from-purple-600 hover:to-blue-600 text-white",
     featured: true,
   },
   {
@@ -93,8 +93,8 @@ const packs = [
     subtitle: "Creator Bundle",
     discount: 12,
     features: [
-      "24 live classes (batch, 1-on-1, or group)",
-      "Any learning pathway",
+      "24 live classes — complete a full pathway",
+      "Choice of AI Creator Clubs, Pro Builder Pods, or Private Mentorship",
       "AI-powered progress reports",
       "Priority teacher matching",
       "Class recordings included",
@@ -105,8 +105,33 @@ const packs = [
     color: "border-teal-700/40 hover:border-teal-500/60",
     badge: "text-teal-400",
     accent: "from-teal-600 to-green-600",
-    ctaStyle: "border border-teal-700/50 text-teal-300 hover:bg-teal-900/20",
     buyStyle: "bg-teal-600 hover:bg-teal-500 text-white",
+  },
+];
+
+// Format comparison row shown above packs
+const formats = [
+  {
+    name: "AI Creator Clubs",
+    desc: "8–15 students · 60 min",
+    label: "Entry",
+    color: "text-blue-400",
+    bg: "bg-blue-900/20 border-blue-800/30",
+  },
+  {
+    name: "Pro Builder Pods",
+    desc: "3–5 students · 60 min",
+    label: "Best Value",
+    color: "text-purple-400",
+    bg: "bg-purple-900/20 border-purple-800/30",
+    highlight: true,
+  },
+  {
+    name: "Private Mentorship",
+    desc: "1 student · 45 min",
+    label: "Premium",
+    color: "text-green-400",
+    bg: "bg-green-900/20 border-green-800/30",
   },
 ];
 
@@ -135,17 +160,39 @@ export default function PricingSection() {
             Simple Pricing · No Subscriptions
           </p>
           <h2 className="text-3xl sm:text-4xl font-black text-white mb-4">
-            Invest in Your Child's{" "}
+            Invest in Your Child&apos;s{" "}
             <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
               Future Career
             </span>
           </h2>
           <p className="text-gray-400 max-w-xl mx-auto mb-3">
-            Buy a class pack. Use them whenever your child is ready, across any pathway. No monthly fees, no lock-ins.
+            Buy a class pack. Use them across any pathway and any learning format — AI Creator Clubs,
+            Pro Builder Pods, or Private Mentorship. No monthly fees, no lock-ins.
           </p>
           <p className="text-gray-600 text-xs">
             Prices shown in your local currency based on your location.
           </p>
+        </div>
+
+        {/* Learning format chips */}
+        <div className="flex flex-wrap justify-center gap-3 mb-10">
+          {formats.map((f) => (
+            <div
+              key={f.name}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full border text-xs ${f.bg} ${
+                f.highlight ? "ring-1 ring-purple-500/30" : ""
+              }`}
+            >
+              <span className={`font-bold ${f.color}`}>{f.name}</span>
+              <span className="text-gray-600">·</span>
+              <span className="text-gray-500">{f.desc}</span>
+              {f.highlight && (
+                <span className="text-[10px] font-black text-purple-400 uppercase tracking-wider ml-1">
+                  ★ {f.label}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
 
         {/* Packs */}
@@ -163,7 +210,6 @@ export default function PricingSection() {
                 </div>
               )}
 
-              {/* Discount badge */}
               {pack.discount ? (
                 <div className="absolute top-4 right-4">
                   <span className="px-2 py-1 rounded-lg bg-green-900/60 border border-green-700/50 text-green-400 text-[10px] font-black uppercase tracking-wider">
@@ -190,10 +236,10 @@ export default function PricingSection() {
                 <span className="text-gray-500 text-xs">{cfg.perLesson[pack.key]}</span>
               </div>
 
-              {/* Discount explanation or persuasion text */}
               {pack.discount ? (
                 <p className="text-xs text-green-400 mb-4 leading-relaxed">
-                  You save {pack.discount}% vs buying individual classes. More classes, more momentum, more transformation.
+                  You save {pack.discount}% vs buying individual classes. More classes, more
+                  momentum, more transformation.
                 </p>
               ) : (
                 <p className="text-xs text-blue-400/80 mb-4 leading-relaxed">
@@ -201,7 +247,6 @@ export default function PricingSection() {
                 </p>
               )}
 
-              {/* Features */}
               <ul className="space-y-2 mb-6 flex-1">
                 {pack.features.map((f) => (
                   <li key={f} className="flex items-start gap-2 text-sm text-gray-400">
@@ -231,8 +276,11 @@ export default function PricingSection() {
         </div>
 
         <div className="text-center">
-          <Link href="/pricing" className="text-sm text-purple-400 hover:text-purple-300 transition-colors">
-            View full pricing details and FAQ →
+          <Link
+            href="/pricing"
+            className="text-sm text-purple-400 hover:text-purple-300 transition-colors"
+          >
+            View full pricing details, format comparison and FAQ →
           </Link>
         </div>
       </div>

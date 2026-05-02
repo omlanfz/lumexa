@@ -48,7 +48,7 @@ const team = [
   {
     name: "Fairooz Omlan",
     role: "Founder & CEO",
-    bio: "Built Lumexa to raise a generation of AI-native creators, equipped to build, innovate, and lead in a rapidly evolving digital world.",
+    bio: "Former software engineer turned education entrepreneur. Built Lumexa to raise a generation of AI-native creators, equipped to build, innovate, and lead in a rapidly evolving digital world.",
   },
   {
     name: "Our Teacher Network",

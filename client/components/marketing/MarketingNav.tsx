@@ -3,13 +3,22 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authed, setAuthed] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    if (pathname === "/") {
+      e.preventDefault();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setMobileOpen(false);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -42,7 +51,7 @@ export default function MarketingNav() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group">
+          <Link href="/" onClick={handleLogoClick} className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-lg shadow-purple-900/40 group-hover:shadow-purple-700/60 transition-shadow">
               <Image
                 src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"

@@ -24,6 +24,7 @@ import JourneySection from "../components/marketing/JourneySection";
 import OutcomesSection from "../components/marketing/OutcomesSection";
 import ShowcaseSection from "../components/marketing/ShowcaseSection";
 import TrustSection from "../components/marketing/TrustSection";
+import BatchSection from "../components/marketing/BatchSection";
 import PricingSection from "../components/marketing/PricingSection";
 import TestimonialsSection from "../components/marketing/TestimonialsSection";
 import FinalCTASection from "../components/marketing/FinalCTASection";
@@ -70,6 +71,7 @@ export default function RootPage() {
       <main>
         <HeroSection />
         <PathwaysSection />
+        <BatchSection />
         <JourneySection />
         <OutcomesSection />
         <ShowcaseSection />
