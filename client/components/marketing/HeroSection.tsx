@@ -21,7 +21,7 @@ export default function HeroSection() {
         {/* Badge */}
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-700/40 bg-purple-900/20 text-purple-300 text-xs font-medium mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          Live 1-on-1 classes · Expert teachers · Real AI projects
+          Live classes · Expert teachers · Real AI projects
         </div>
 
         {/* Headline — parent-focused emotional hook */}
@@ -37,7 +37,7 @@ export default function HeroSection() {
         <p className="text-lg sm:text-xl text-gray-400 max-w-2xl mx-auto mb-4 leading-relaxed">
           While other kids scroll through AI tools,{" "}
           <span className="text-white font-semibold">yours will build them.</span>
-          {" "}Live 1-on-1 coding classes from Scratch to real AI apps, designed for ages 6–18.
+          {" "}Live coding classes (batch, 1-on-1, and group) from Scratch to real AI apps, designed for ages 6 to 18.
         </p>
 
         <p className="text-sm text-gray-600 mb-10">

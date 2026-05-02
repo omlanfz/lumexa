@@ -20,63 +20,67 @@ const REGION_LABELS: Record<Region, { flag: string; name: string; currency: stri
 };
 
 const PLANS: Record<Region, { starter: string; growth: string; pro: string }> = {
-  BD: { starter: "৳2,800", growth: "৳5,200", pro: "৳7,200" },
-  IN: { starter: "₹2,200", growth: "₹4,000", pro: "₹5,500" },
-  UK: { starter: "£20", growth: "£36", pro: "£50" },
-  US: { starter: "$25", growth: "$45", pro: "$62" },
+  BD: { starter: "৳2,800", growth: "৳4,940", pro: "৳6,336" },
+  IN: { starter: "₹2,200", growth: "₹3,800", pro: "₹4,840" },
+  UK: { starter: "£20", growth: "£34", pro: "£44" },
+  US: { starter: "$25", growth: "$43", pro: "$55" },
 };
 
-const PAYMENT_METHODS: Record<Region, string[]> = {
-  BD: ["bKash", "Nagad", "Credit / Debit Card", "Bank Transfer"],
-  IN: ["UPI", "Paytm", "Credit / Debit Card", "Bank Transfer"],
-  UK: ["Credit / Debit Card", "Bank Transfer"],
-  US: ["Credit / Debit Card", "Bank Transfer"],
+const PER_LESSON: Record<Region, { starter: string; growth: string; pro: string }> = {
+  BD: { starter: "৳350/class", growth: "৳309/class", pro: "৳264/class" },
+  IN: { starter: "₹275/class", growth: "₹238/class", pro: "₹202/class" },
+  UK: { starter: "£2.50/class", growth: "£2.13/class", pro: "£1.83/class" },
+  US: { starter: "$3.13/class", growth: "$2.66/class", pro: "$2.29/class" },
 };
 
 const plans = [
   {
     id: "starter",
-    name: "Starter",
+    name: "Starter Pack",
     gems: 8,
-    label: "8 Gems",
+    label: "8 Classes",
     subtitle: "Perfect to explore one topic",
+    discount: null,
+    persuasion: "The smartest entry point into Lumexa. 8 real classes is enough for your child to build a project, gain momentum, and show you what they're capable of. Zero risk, full experience.",
     popular: false,
     features: [
-      "8 live 1-on-1 lessons",
-      "One pathway / topic",
+      "8 live classes (batch, 1-on-1, or group)",
+      "One pathway or topic",
       "Recording of each class",
       "Teacher progress notes",
       "Parent progress dashboard",
-      "7-day gem refund guarantee",
+      "7-day class refund guarantee",
     ],
   },
   {
     id: "growth",
-    name: "Growth",
+    name: "Growth Pack",
     gems: 16,
-    label: "16 Gems",
+    label: "16 Classes",
     subtitle: "Build real skills, two courses",
+    discount: 5,
     popular: true,
     features: [
-      "16 live 1-on-1 lessons",
+      "16 live classes (batch, 1-on-1, or group)",
       "Two courses across any pathway",
       "Recording of each class",
       "Teacher progress notes",
       "Parent progress dashboard",
       "Priority teacher matching",
       "Mid-point skill review session",
-      "7-day gem refund guarantee",
+      "7-day class refund guarantee",
     ],
   },
   {
     id: "pro",
-    name: "Pro",
+    name: "Pro Pack",
     gems: 24,
-    label: "24 Gems",
+    label: "24 Classes",
     subtitle: "Complete a full pathway",
+    discount: 12,
     popular: false,
     features: [
-      "24 live 1-on-1 lessons",
+      "24 live classes (batch, 1-on-1, or group)",
       "Full pathway (3 courses)",
       "Recording of each class",
       "Teacher progress notes",
@@ -85,19 +89,23 @@ const plans = [
       "Two skill review sessions",
       "Portfolio review and feedback",
       "Course completion certificate",
-      "7-day gem refund guarantee",
+      "7-day class refund guarantee",
     ],
   },
 ];
 
 const faqs = [
   {
-    q: "What is a Gem?",
-    a: "A Gem = one live 1-on-1 lesson. You buy a bundle of gems upfront, then use them to book lessons with any teacher, any pathway, any time. Unused gems refunded within 7 days if you change your mind.",
+    q: "What is a class pack?",
+    a: "You buy a bundle of live classes upfront, then use them to book sessions with any teacher, any pathway, any time. Unused classes are refunded within 7 days if you change your mind.",
+  },
+  {
+    q: "What learning formats are available?",
+    a: "Every pack gives you access to batch sessions, live 1-on-1 classes, and group learning sessions. Your teacher will recommend the best format for your child's learning style and goals.",
   },
   {
     q: "Can I switch pathways mid-way?",
-    a: "Yes. Gems work across all pathways. If your child starts Game Creator and wants to try AI Builder, just book a new teacher — no penalty, no re-purchase.",
+    a: "Yes. Classes work across all pathways. If your child starts Game Creator and wants to try AI Builder, just book a new teacher. No penalty, no re-purchase.",
   },
   {
     q: "Is the free trial actually free?",
@@ -105,19 +113,19 @@ const faqs = [
   },
   {
     q: "What payment methods do you accept?",
-    a: "We support local payment methods for each region. Bangladesh: bKash, Nagad, card. India: UPI, Paytm, card. UK and International: card and bank transfer.",
+    a: "We accept Stripe payments (including cards, Apple Pay, and Google Pay) and direct bank transfers.",
   },
   {
     q: "Can I get a refund?",
-    a: "Yes. Any unused gems can be refunded within 7 days of purchase. Used gems (completed lessons) are non-refundable, but we guarantee visible progress or we'll make it right.",
+    a: "Yes. Any unused classes can be refunded within 7 days of purchase. Used classes (completed lessons) are non-refundable, but we guarantee visible progress or we'll make it right.",
   },
   {
-    q: "Do lessons expire?",
-    a: "No expiry date. Your gems stay in your account until you use them. Book at your own pace.",
+    q: "Do classes expire?",
+    a: "No expiry date. Your classes stay in your account until you use them. Book at your own pace.",
   },
   {
     q: "What if my child doesn't like their teacher?",
-    a: "Request a teacher change anytime — free, no questions asked. We'll match your child with a new teacher immediately.",
+    a: "Request a teacher change anytime, free, no questions asked. We'll match your child with a new teacher immediately.",
   },
   {
     q: "Are classes recorded?",
@@ -128,13 +136,20 @@ const faqs = [
 export default function PricingPage() {
   const [region, setRegion] = useState<Region>("US");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [detected, setDetected] = useState(false);
 
   useEffect(() => {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    setRegion(TIMEZONE_TO_REGION[tz] ?? "US");
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      setRegion(TIMEZONE_TO_REGION[tz] ?? "US");
+    } catch {}
+    setDetected(true);
   }, []);
 
   const prices = PLANS[region];
+  const perLesson = PER_LESSON[region];
+
+  if (!detected) return null;
 
   return (
     <div className="bg-[#050D1A] text-white">
@@ -149,38 +164,26 @@ export default function PricingPage() {
             Simple, transparent pricing
           </div>
           <h1 className="text-4xl sm:text-5xl font-black text-white mb-4 leading-tight">
-            Pay for Lessons,{" "}
+            Invest in Real Skills,{" "}
             <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
-              Not Subscriptions
+              Not Just Courses
             </span>
           </h1>
-          <p className="text-lg text-gray-400 max-w-xl mx-auto mb-8">
-            Buy a bundle of gems (lessons). Use them any time, any pathway, any teacher. No monthly fees, no lock-in.
+          <p className="text-lg text-gray-400 max-w-xl mx-auto mb-4">
+            Buy a class bundle. Use them any time, any pathway, any teacher. No monthly fees, no lock-in. Your child builds real projects that last a lifetime.
           </p>
-
-          {/* Region selector */}
-          <div className="inline-flex items-center gap-3 px-4 py-2 bg-gray-900/60 border border-gray-700 rounded-full">
-            <span className="text-xs text-gray-500">Showing prices for:</span>
-            <select
-              value={region}
-              onChange={(e) => setRegion(e.target.value as Region)}
-              className="bg-transparent text-white text-sm font-semibold outline-none cursor-pointer"
-            >
-              {(Object.keys(REGION_LABELS) as Region[]).map((r) => (
-                <option key={r} value={r} className="bg-gray-900">
-                  {REGION_LABELS[r].flag} {REGION_LABELS[r].name} ({REGION_LABELS[r].currency})
-                </option>
-              ))}
-            </select>
-          </div>
+          <p className="text-gray-600 text-sm">
+            {REGION_LABELS[region].flag} Prices shown in {REGION_LABELS[region].currency} based on your location
+          </p>
         </div>
       </section>
 
       {/* Plans */}
       <section className="py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
-          {plans.map((plan, i) => {
+          {plans.map((plan) => {
             const price = prices[plan.id as keyof typeof prices];
+            const lesson = perLesson[plan.id as keyof typeof perLesson];
             return (
               <div
                 key={plan.name}
@@ -198,21 +201,39 @@ export default function PricingPage() {
                   </div>
                 )}
 
+                {/* Discount badge */}
+                {plan.discount && (
+                  <div className="absolute top-5 right-5">
+                    <span className="px-2.5 py-1 rounded-lg bg-green-900/60 border border-green-700/50 text-green-400 text-[11px] font-black uppercase tracking-wider">
+                      {plan.discount}% OFF
+                    </span>
+                  </div>
+                )}
+
                 <div className="mb-5">
                   <h3 className="text-white font-black text-xl mb-0.5">{plan.name}</h3>
                   <p className="text-gray-500 text-xs">{plan.subtitle}</p>
                 </div>
 
-                <div className="mb-6">
+                <div className="mb-2">
                   <div className="text-4xl font-black text-white mb-1">{price}</div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-gray-400">{plan.label}</span>
                     <span className="text-gray-700">·</span>
-                    <span className="text-sm text-gray-400">
-                      {price}/{plan.gems} lessons
-                    </span>
+                    <span className="text-sm text-gray-400">{lesson}</span>
                   </div>
                 </div>
+
+                {/* Discount benefit or persuasion text */}
+                {plan.discount ? (
+                  <p className="text-xs text-green-400 mb-5 leading-relaxed">
+                    Save {plan.discount}% vs individual classes. More sessions = more real skills built, faster transformation.
+                  </p>
+                ) : (
+                  <p className="text-xs text-blue-400/80 mb-5 leading-relaxed">
+                    {plan.persuasion}
+                  </p>
+                )}
 
                 <ul className="space-y-2.5 mb-8 flex-1">
                   {plan.features.map((f) => (
@@ -227,20 +248,21 @@ export default function PricingPage() {
 
                 <div className="flex flex-col gap-2">
                   <Link
-                    href="/trial"
+                    href={`/payment?pack=${plan.id}&region=${region}`}
                     className={`w-full py-3.5 text-center text-sm font-bold rounded-xl transition-all ${
                       plan.popular
                         ? "bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-lg shadow-purple-900/40"
                         : "bg-gray-800 hover:bg-gray-700 text-white"
                     }`}
                   >
-                    Start with Free Trial
+                    Buy Now
+                    <span className="block text-[10px] font-normal opacity-70 mt-0.5">Secure checkout</span>
                   </Link>
                   <Link
-                    href="/courses"
+                    href="/trial"
                     className="w-full py-2.5 text-center text-xs font-semibold text-gray-500 hover:text-gray-300 transition-colors"
                   >
-                    See what you'll build →
+                    Try one class free first →
                   </Link>
                 </div>
               </div>
@@ -248,30 +270,21 @@ export default function PricingPage() {
           })}
         </div>
 
-        {/* Payment methods */}
-        <div className="max-w-5xl mx-auto mt-8 p-5 bg-gray-900/40 border border-gray-800 rounded-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div>
-              <p className="text-xs text-gray-500 font-semibold uppercase tracking-wider mb-1">
-                {REGION_LABELS[region].flag} Payment methods for {REGION_LABELS[region].name}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {PAYMENT_METHODS[region].map((m) => (
-                  <span key={m} className={`px-2.5 py-1 rounded-lg border text-xs font-semibold ${
-                    m === "bKash" ? "border-green-700/50 bg-green-900/20 text-green-400" :
-                    m === "Nagad" ? "border-orange-700/50 bg-orange-900/20 text-orange-400" :
-                    m === "UPI" || m === "Paytm" ? "border-blue-700/50 bg-blue-900/20 text-blue-400" :
-                    "border-gray-700 bg-gray-800/50 text-gray-400"
-                  }`}>
-                    {m}
-                  </span>
-                ))}
+        {/* Value promise */}
+        <div className="max-w-5xl mx-auto mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[
+            { icon: "🔒", title: "Secure Checkout", desc: "All payments encrypted. Stripe-powered." },
+            { icon: "↩️", title: "7-Day Refund", desc: "Unused classes refunded, no questions." },
+            { icon: "🌍", title: "Local Currency", desc: "Prices auto-detected from your location." },
+          ].map((item) => (
+            <div key={item.title} className="flex items-center gap-3 p-4 bg-gray-900/40 border border-gray-800 rounded-xl">
+              <span className="text-2xl">{item.icon}</span>
+              <div>
+                <p className="text-white text-sm font-semibold">{item.title}</p>
+                <p className="text-gray-500 text-xs">{item.desc}</p>
               </div>
             </div>
-            <div className="sm:ml-auto text-xs text-gray-600 text-right">
-              All prices include applicable taxes.<br />7-day refund on unused gems.
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 

@@ -159,20 +159,20 @@ export default function TrialPage() {
             <p className="text-gray-500 text-xs mb-2 font-semibold">Prefer to reach us directly?</p>
             <div className="flex flex-col gap-2">
               <a
-                href="mailto:hello@lumexa.app"
+                href="mailto:fz.omlan@gmail.com"
                 className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
               >
                 <span>📧</span>
-                <span>hello@lumexa.app</span>
+                <span>fz.omlan@gmail.com</span>
               </a>
               <a
-                href="https://wa.me/8801700000000"
+                href="https://wa.me/8801774878252"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-xs text-green-400 hover:text-green-300 transition-colors"
               >
                 <span>💬</span>
-                <span>WhatsApp: +880 1700 000000</span>
+                <span>WhatsApp: +880 1774 878252</span>
               </a>
             </div>
           </div>
@@ -290,13 +290,13 @@ export default function TrialPage() {
                 </p>
                 <div className="flex flex-col gap-1.5">
                   <a
-                    href="mailto:hello@lumexa.app"
+                    href="mailto:fz.omlan@gmail.com"
                     className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                   >
-                    📧 hello@lumexa.app
+                    📧 fz.omlan@gmail.com
                   </a>
                   <a
-                    href="https://wa.me/8801700000000"
+                    href="https://wa.me/8801774878252"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-green-400 hover:text-green-300 transition-colors"

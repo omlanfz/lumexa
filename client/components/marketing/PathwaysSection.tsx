@@ -1,6 +1,31 @@
 import Link from "next/link";
 
-const pathways = [
+interface Course {
+  code: string;
+  name: string;
+  desc: string;
+}
+
+interface Pathway {
+  emoji: string;
+  title: string;
+  outcome: string;
+  description: string;
+  tools: string[];
+  ages: string;
+  sessions: string;
+  level: string;
+  projects: string[];
+  courses?: Course[];
+  accent: string;
+  border: string;
+  badge: string;
+  glow: string;
+  tag?: string;
+  featured?: boolean;
+}
+
+const pathways: Pathway[] = [
   {
     emoji: "🎮",
     title: "Game Creator Path",
@@ -86,12 +111,19 @@ const pathways = [
     emoji: "💼",
     title: "Digital Independence Path",
     outcome: "Start Earning Online",
-    description: "Don't just let your child learn. Help them start earning. Teens build a portfolio, set up freelance profiles, and attract their first real clients.",
-    tools: ["HTML / CSS", "Canva", "Fiverr / Upwork", "LinkedIn"],
+    description: "Don't just let your child learn. Help them start earning. Teens build a live portfolio, set up real freelancing profiles, and land their first paid clients. 5 courses. Real income potential.",
+    tools: ["Canva", "Notion", "Fiverr / Upwork", "LinkedIn", "Google Docs"],
     ages: "Ages 15–18",
-    sessions: "24 sessions",
+    sessions: "44 lessons · 5 courses",
     level: "Builder to Earner",
-    projects: ["Live portfolio website", "Fiverr gig + Upwork profile", "LinkedIn personal brand"],
+    projects: ["Live portfolio website (C1)", "Active Fiverr gig (C2)", "LinkedIn professional profile (C3)", "Client communication portfolio (C4)", "Full service launch plan (C5)"],
+    courses: [
+      { code: "C1", name: "Build Your Digital Identity", desc: "Personal brand, portfolio creation, and online presence. Students publish a live portfolio website ready for real clients." },
+      { code: "C2", name: "Freelancing Fundamentals", desc: "Platform setup, gig creation, and first order strategy. Students launch a live, conversion-optimized Fiverr gig." },
+      { code: "C3", name: "LinkedIn & Professional Presence", desc: "Profile optimization, content strategy, and networking. Students build a professional LinkedIn that attracts inbound opportunities." },
+      { code: "C4", name: "Communication & Confidence", desc: "Client management, negotiation, and professional communication. Students build a complete client-handling portfolio." },
+      { code: "C5", name: "Mini Entrepreneurship Lab", desc: "Service design, business model, and a 90-day income plan. Students package their skills into a repeatable service business." },
+    ],
     accent: "from-green-600 to-emerald-600",
     border: "border-green-700/30 hover:border-green-500/50",
     badge: "bg-green-900/30 text-green-300",
@@ -150,18 +182,35 @@ export default function PathwaysSection() {
 
               <p className="relative text-gray-400 text-sm leading-relaxed mb-4">{p.description}</p>
 
-              {/* Projects */}
-              <div className="relative mb-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">What they'll build:</p>
-                <ul className="space-y-1">
-                  {p.projects.map((proj) => (
-                    <li key={proj} className="flex items-center gap-2 text-xs text-gray-400">
-                      <span className="w-1 h-1 rounded-full bg-purple-500 flex-shrink-0" />
-                      {proj}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {/* Courses or Projects */}
+              {p.courses ? (
+                <div className="relative mb-4">
+                  <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">5 Courses Inside:</p>
+                  <ul className="space-y-2">
+                    {p.courses.map((c) => (
+                      <li key={c.code} className="flex gap-2 text-xs">
+                        <span className={`flex-shrink-0 font-bold bg-gradient-to-r ${p.accent} bg-clip-text text-transparent`}>{c.code}</span>
+                        <div>
+                          <span className="text-gray-300 font-semibold">{c.name}</span>
+                          <p className="text-gray-500 mt-0.5 leading-relaxed">{c.desc}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="relative mb-4">
+                  <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">What they'll build:</p>
+                  <ul className="space-y-1">
+                    {p.projects.map((proj) => (
+                      <li key={proj} className="flex items-center gap-2 text-xs text-gray-400">
+                        <span className="w-1 h-1 rounded-full bg-purple-500 flex-shrink-0" />
+                        {proj}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Meta */}
               <div className="relative flex flex-wrap gap-2 mb-5">
