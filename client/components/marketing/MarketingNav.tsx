@@ -44,7 +44,7 @@ export default function MarketingNav() {
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-[#050D1A]/95 backdrop-blur-md border-b border-purple-900/30 shadow-lg shadow-black/50"
+          ? "bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] shadow-sm shadow-slate-100/80"
           : "bg-transparent"
       }`}
     >
@@ -52,7 +52,7 @@ export default function MarketingNav() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" onClick={handleLogoClick} className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-lg shadow-purple-900/40 group-hover:shadow-purple-700/60 transition-shadow">
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-md shadow-purple-100 group-hover:shadow-purple-200 transition-shadow">
               <Image
                 src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
                 alt="Lumexa AI School"
@@ -61,9 +61,9 @@ export default function MarketingNav() {
                 className="object-cover w-full h-full"
               />
             </div>
-            <span className="text-white font-black text-lg tracking-tight leading-tight">
+            <span className="font-black text-lg tracking-tight leading-tight text-[#0F172A]">
               Lumexa{" "}
-              <span className="text-purple-400 font-bold">AI School</span>
+              <span className="text-purple-600 font-bold">AI School</span>
             </span>
           </Link>
 
@@ -79,7 +79,7 @@ export default function MarketingNav() {
             {authed ? (
               <button
                 onClick={handleDashboard}
-                className="px-4 py-2 text-sm text-purple-300 hover:text-white border border-purple-700/50 hover:border-purple-500 rounded-lg transition-all"
+                className="px-4 py-2 text-sm text-purple-700 hover:text-purple-900 border border-purple-200 hover:border-purple-300 rounded-lg transition-all hover:bg-purple-50"
               >
                 My Dashboard →
               </button>
@@ -87,13 +87,13 @@ export default function MarketingNav() {
               <>
                 <Link
                   href="/login"
-                  className="px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors"
+                  className="px-4 py-2 text-sm text-[#334155] hover:text-[#0F172A] transition-colors"
                 >
                   Sign In
                 </Link>
                 <Link
                   href="/trial"
-                  className="px-4 py-2 text-sm font-bold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg shadow-lg shadow-purple-900/40 hover:shadow-purple-700/50 transition-all"
+                  className="px-4 py-2 text-sm font-bold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg shadow-md shadow-purple-100 hover:shadow-purple-200 transition-all"
                 >
                   Book Free Trial
                 </Link>
@@ -104,7 +104,7 @@ export default function MarketingNav() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-gray-400 hover:text-white p-2"
+            className="md:hidden text-[#64748B] hover:text-[#0F172A] p-2 transition-colors"
             aria-label="Toggle menu"
           >
             {mobileOpen ? (
@@ -121,21 +121,21 @@ export default function MarketingNav() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden bg-[#050D1A]/98 border-t border-gray-800 py-4 space-y-1">
+          <div className="md:hidden bg-white border-t border-[#E2E8F0] py-4 space-y-1 shadow-lg">
             <MobileNavLink href="/courses" onClick={() => setMobileOpen(false)}>Pathways</MobileNavLink>
             <MobileNavLink href="/pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
             <MobileNavLink href="/about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
-            <div className="pt-3 border-t border-gray-800 mt-3 flex flex-col gap-2 px-4">
+            <div className="pt-3 border-t border-[#E2E8F0] mt-3 flex flex-col gap-2 px-4">
               {authed ? (
                 <button
                   onClick={() => { setMobileOpen(false); handleDashboard(); }}
-                  className="w-full py-2.5 text-sm text-center text-purple-300 border border-purple-700/50 rounded-lg"
+                  className="w-full py-2.5 text-sm text-center text-purple-700 border border-purple-200 rounded-lg"
                 >
                   My Dashboard →
                 </button>
               ) : (
                 <>
-                  <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-gray-300 border border-gray-700 rounded-lg">
+                  <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-[#334155] border border-[#E2E8F0] rounded-lg">
                     Sign In
                   </Link>
                   <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-bold text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg">
@@ -155,10 +155,10 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <Link
       href={href}
-      className="text-sm text-gray-300 hover:text-white transition-colors relative group"
+      className="text-sm text-[#334155] hover:text-[#0F172A] transition-colors relative group font-medium"
     >
       {children}
-      <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-purple-400 group-hover:w-full transition-all duration-200" />
+      <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-purple-600 group-hover:w-full transition-all duration-200" />
     </Link>
   );
 }
@@ -168,7 +168,7 @@ function MobileNavLink({ href, children, onClick }: { href: string; children: Re
     <Link
       href={href}
       onClick={onClick}
-      className="block px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-gray-800/50 rounded-lg mx-2"
+      className="block px-4 py-2.5 text-sm text-[#334155] hover:text-[#0F172A] hover:bg-[#F7F9FF] rounded-lg mx-2 transition-colors"
     >
       {children}
     </Link>

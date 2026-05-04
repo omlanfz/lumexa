@@ -72,3 +72,52 @@ html.light ::-webkit-scrollbar-thumb:hover { background: rgb(126 34 206 / 0.35);
 }
 .badge-glow-purple { animation: badge-glow-purple 3s ease-in-out infinite; }
 .badge-glow-blue   { animation: badge-glow-blue   3s ease-in-out infinite; }
+
+/* ── Landing page light theme animations ─────────────────────────────────── */
+@keyframes lumi-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+.lumi-float { animation: lumi-float 3s ease-in-out infinite; }
+
+@keyframes lumi-slide-up {
+  from { transform: translateY(80px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.lumi-slide-up { animation: lumi-slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+@keyframes lumi-slide-down {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(80px); opacity: 0; }
+}
+.lumi-slide-down { animation: lumi-slide-down 0.3s ease-in forwards; }
+
+@keyframes milestone-fill {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+@keyframes code-cursor {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.code-cursor { animation: code-cursor 0.8s ease-in-out infinite; }
+
+@keyframes interest-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+.interest-pop { animation: interest-pop 0.25s ease-out forwards; }
+
+@keyframes section-fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.section-fade-up { animation: section-fade-up 0.45s ease-out forwards; }
+
+@keyframes output-appear {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.output-appear { animation: output-appear 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
