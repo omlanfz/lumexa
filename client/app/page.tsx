@@ -10,6 +10,7 @@ import MarketingFooter from "../components/marketing/MarketingFooter";
 // Gamification overlays (fixed, z-indexed)
 import LumiNudge       from "../components/marketing/LumiNudge";
 import ScrollMilestones from "../components/marketing/ScrollMilestones";
+import LumiChat        from "../components/LumiChat";
 
 // Sections — in optimal conversion order
 import HeroSection          from "../components/marketing/HeroSection";
@@ -22,7 +23,6 @@ import TestimonialsSection  from "../components/marketing/TestimonialsSection";
 import OutcomesSection      from "../components/marketing/OutcomesSection";
 import PathwaysSection      from "../components/marketing/PathwaysSection";
 import BatchSection         from "../components/marketing/BatchSection";
-import JourneySection       from "../components/marketing/JourneySection";
 import PricingSection       from "../components/marketing/PricingSection";
 import FinalCTASection      from "../components/marketing/FinalCTASection";
 
@@ -60,6 +60,7 @@ export default function RootPage() {
       {/* Fixed gamification overlays */}
       <ScrollMilestones />
       <LumiNudge />
+      <LumiChat variant="parent" />
 
       <MarketingNav />
 
@@ -76,8 +77,7 @@ export default function RootPage() {
           8. Outcomes       — transformation framing (before → after)
           9. Pathways       — course discovery (comes after value is established)
          10. Batch          — format choice (batch / pod / 1-on-1)
-         11. Journey        — milestone progression (commitment escalation)
-         12. Pricing        — LAST before CTA (price shown after all value established)
+         11. Pricing        — LAST before CTA (price shown after all value established)
          13. FinalCTA       — dark high-contrast punch
         */}
         <div id="hero">
@@ -101,8 +101,6 @@ export default function RootPage() {
         <PathwaysSection />
 
         <BatchSection />
-
-        <JourneySection />
 
         <PricingSection />
 

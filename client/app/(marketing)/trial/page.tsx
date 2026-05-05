@@ -17,7 +17,7 @@ const subjects = [
   "Web Developer Path (HTML / CSS / React)",
   "Little Coders Path (Scratch, ages 6–11)",
   "Data Scientist Path (Python + data)",
-  "Not sure yet — help me choose",
+  "Not sure yet, help me choose",
 ];
 
 interface FormState {
@@ -102,7 +102,7 @@ export default function TrialPage() {
             <ol className="space-y-1.5 text-gray-400 text-xs">
               <li>1. We match {form.childName} with the perfect teacher</li>
               <li>2. You receive an email with the class link + time</li>
-              <li>3. Join the live class — it's completely free</li>
+              <li>3. Join the live class. It's completely free</li>
               <li>4. Decide if you'd like to continue (no pressure)</li>
             </ol>
           </div>
@@ -134,13 +134,13 @@ export default function TrialPage() {
           </h1>
           <p className="text-gray-400 leading-relaxed mb-8">
             Fill in the form and we'll match your child with the perfect teacher within a few hours.
-            The first class is completely free — no strings attached.
+            The first class is completely free. No strings attached.
           </p>
 
           <div className="space-y-4 mb-8">
             {[
               { icon: "👩‍🏫", title: "Verified Expert Teachers", desc: "Background-checked, degree-qualified, and trained in child-focused teaching." },
-              { icon: "📅", title: "Flexible Scheduling", desc: "Pick any time that works for your family — weekdays, evenings, or weekends." },
+              { icon: "📅", title: "Flexible Scheduling", desc: "Pick any time that works for your family: weekdays, evenings, or weekends." },
               { icon: "🎯", title: "Personalized Learning", desc: "The teacher adapts every lesson to your child's pace, goals, and learning style." },
               { icon: "🏆", title: "Real Portfolio Projects", desc: "By the end of the course, your child will have built 3+ real things to show off." },
             ].map((item) => (

@@ -43,7 +43,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build 2D games using Python and Pygame",
         description:
-          "After Roblox, your child levels up to Python — the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
+          "After Roblox, your child levels up to Python, the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
         projects: ["Space shooter with enemies", "Maze runner with timer", "Brick-breaker clone"],
         tools: ["Python 3", "Pygame", "VS Code"],
         lessonBreakdown: [
@@ -63,7 +63,7 @@ const pathways = [
         lessons: 8,
         outcome: "Design, polish, and publish a complete game with professional quality",
         description:
-          "The capstone course. Your child applies everything they know to design and ship a complete game — with proper level design, a polished UI, and real playtesters giving feedback.",
+          "The capstone course. Your child applies everything they know to design and ship a complete game: proper level design, a polished UI, and real playtesters giving feedback.",
         projects: ["RPG adventure with storyline", "Physics-based puzzle game", "Published portfolio game"],
         tools: ["Python / Pygame", "Unity Basics", "Game Design frameworks"],
         lessonBreakdown: [
@@ -98,7 +98,7 @@ const pathways = [
         lessons: 8,
         outcome: "Write Python scripts and understand how machine learning really works",
         description:
-          "The foundation of everything. Your child learns Python from scratch — variables, loops, functions, data — then builds their first machine learning model. No fluff, just real code.",
+          "The foundation of everything. Your child learns Python from scratch: variables, loops, functions, data. Then builds their first machine learning model. No fluff, just real code.",
         projects: ["Number prediction model", "Simple image classifier", "Data pattern finder"],
         tools: ["Python 3", "Jupyter Notebooks", "scikit-learn", "NumPy"],
         lessonBreakdown: [
@@ -118,7 +118,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build apps that see, detect, and recognize the real world",
         description:
-          "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions — the same technology used in self-driving cars and medical diagnostics.",
+          "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions. The same technology used in self-driving cars and medical diagnostics.",
         projects: ["Real-time emotion detector", "Object recognition app", "Motion-activated security cam"],
         tools: ["Python", "OpenCV", "TensorFlow / Keras", "Webcam API"],
         lessonBreakdown: [
@@ -138,7 +138,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build conversational AI apps using real LLM APIs",
         description:
-          "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API — complete with memory, personality, and real-world purpose.",
+          "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API: complete with memory, personality, and real-world purpose.",
         projects: ["Recipe chatbot with memory", "Study assistant bot", "Creative story generator"],
         tools: ["Python", "OpenAI API", "LangChain", "Streamlit"],
         lessonBreakdown: [
@@ -172,7 +172,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build beautiful, responsive websites that look great on any device",
         description:
-          "Your child learns the fundamentals of the web — HTML structure and CSS styling — and builds their first real, deployed website that anyone can visit.",
+          "Your child learns the fundamentals of the web (HTML structure and CSS styling) and builds their first real, deployed website that anyone can visit.",
         projects: ["Personal landing page", "Responsive portfolio layout", "Product showcase site"],
         tools: ["HTML5", "CSS3", "Flexbox", "CSS Grid", "Vercel"],
         lessonBreakdown: [
@@ -246,7 +246,7 @@ const pathways = [
         lessons: 8,
         outcome: "Create animated stories, games, and interactive projects visually",
         description:
-          "The perfect first step for young learners. Scratch uses visual blocks instead of text — so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
+          "The perfect first step for young learners. Scratch uses visual blocks instead of text, so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
         projects: ["Animated animal story", "Interactive quiz game", "Creative music maker"],
         tools: ["Scratch (MIT)", "Scratch Editor", "Scratch community"],
         lessonBreakdown: [
@@ -264,7 +264,7 @@ const pathways = [
         number: "11",
         title: "Python for Young Builders",
         lessons: 8,
-        outcome: "Write first real Python programs — the same language used by NASA and Google",
+        outcome: "Write first real Python programs (the same language used by NASA and Google)",
         description:
           "The bridge from visual to text-based coding. Your child writes their first Python programs: variables, loops, and their very own mini projects. Taught slowly, with patience, and lots of fun.",
         projects: ["Personal quiz app", "Simple calculator", "Word guessing game"],
@@ -286,7 +286,7 @@ const pathways = [
         lessons: 8,
         outcome: "Train your own AI models and build apps that see, listen, and respond",
         description:
-          "Your child discovers how AI actually works — not by reading about it, but by building with it. Using Google's Teachable Machine and ML4Kids, they train machine learning models that recognize images and sounds, then connect them to Scratch to build interactive AI-powered projects any parent will be amazed by.",
+          "Your child discovers how AI actually works, not by reading about it, but by building with it. Using Google's Teachable Machine and ML4Kids, they train machine learning models that recognize images and sounds, then connect them to Scratch to build interactive AI-powered projects any parent will be amazed by.",
         projects: ["AI rock-paper-scissors game", "Voice-activated Scratch story", "Emotion-recognition virtual pet"],
         tools: ["Scratch", "Teachable Machine", "ML4Kids", "Google AI Tools"],
         lessonBreakdown: [
@@ -320,7 +320,7 @@ const pathways = [
         lessons: 8,
         outcome: "Load, clean, and analyse real-world datasets using Python",
         description:
-          "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful — finding patterns, calculating stats, and drawing conclusions.",
+          "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful: finding patterns, calculating stats, and drawing conclusions.",
         projects: ["Sports performance analysis", "School grade analysis", "City population trends"],
         tools: ["Python 3", "Pandas", "NumPy", "Jupyter Notebooks"],
         lessonBreakdown: [
@@ -340,7 +340,7 @@ const pathways = [
         lessons: 8,
         outcome: "Turn raw data into compelling, interactive charts and dashboards",
         description:
-          "Data without visuals is just numbers. Your child learns to create charts that tell stories — the kind that make people say 'I never knew that' when they look at the data.",
+          "Data without visuals is just numbers. Your child learns to create charts that tell stories, the kind that make people say 'I never knew that' when they look at the data.",
         projects: ["Climate change dashboard", "Market trends chart", "Sports comparison visualiser"],
         tools: ["Python", "Matplotlib", "Seaborn", "Plotly", "Dash"],
         lessonBreakdown: [
@@ -360,7 +360,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build predictive models that make real decisions from real data",
         description:
-          "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models — the same technology behind Netflix recommendations and fraud detection.",
+          "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models, the same technology behind Netflix recommendations and fraud detection.",
         projects: ["House price predictor", "Customer churn predictor", "Movie recommendation engine"],
         tools: ["Python", "scikit-learn", "XGBoost", "Joblib"],
         lessonBreakdown: [

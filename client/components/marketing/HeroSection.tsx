@@ -104,7 +104,7 @@ export default function HeroSection() {
             <p className="text-lg text-[#334155] max-w-lg mb-3 leading-relaxed">
               While other kids scroll through AI tools,{" "}
               <span className="font-bold text-[#0F172A]">yours will build them.</span>{" "}
-              Live coding classes for ages 6–18 — from Scratch to real AI apps.
+              Live coding classes for ages 6–18: from Scratch to real AI apps.
             </p>
 
             <p className="text-sm text-[#94A3B8] mb-9">

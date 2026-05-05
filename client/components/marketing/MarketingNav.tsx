@@ -5,12 +5,30 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 
+function useNavTheme() {
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const stored = localStorage.getItem("lumexa-theme");
+    const dark = stored === "dark";
+    setIsDark(dark);
+    document.documentElement.classList.toggle("dark", dark);
+  }, []);
+  const toggle = () => {
+    const next = !isDark;
+    setIsDark(next);
+    localStorage.setItem("lumexa-theme", next ? "dark" : "light");
+    document.documentElement.classList.toggle("dark", next);
+  };
+  return { isDark, toggle };
+}
+
 export default function MarketingNav() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [authed, setAuthed] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const { isDark, toggle } = useNavTheme();
 
   const handleLogoClick = (e: React.MouseEvent) => {
     if (pathname === "/") {
@@ -76,6 +94,14 @@ export default function MarketingNav() {
 
           {/* Desktop CTAs */}
           <div className="hidden md:flex items-center gap-3">
+            {/* Theme toggle */}
+            <button
+              onClick={toggle}
+              className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E2E8F0] hover:border-purple-200 bg-white hover:bg-purple-50 transition-all text-sm"
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDark ? "☀️" : "🌙"}
+            </button>
             {authed ? (
               <button
                 onClick={handleDashboard}

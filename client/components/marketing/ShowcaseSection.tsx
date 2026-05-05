@@ -1,6 +1,7 @@
 import type { Interest } from "./InterestSelector";
 
 const ALL_PROJECTS = [
+  // Games (3)
   {
     emoji: "🎮",
     title: "Galactic Shooter",
@@ -15,18 +16,72 @@ const ALL_PROJECTS = [
     interest: "games" as Interest,
   },
   {
-    emoji: "🦁",
-    title: "Safari Adventure Game",
-    student: "Lucas, age 9",
-    tech: "Scratch",
-    desc: "An animated interactive story with 40+ sprites and 3 playable levels — Lucas's first ever project, built in Little Coders Path.",
-    border: "border-amber-200",
-    bg: "bg-amber-50",
-    tag: "Little Coders Path",
-    tagColor: "bg-amber-100 text-amber-700 border-amber-200",
-    dot: "bg-amber-500",
-    interest: "young" as Interest,
+    emoji: "🎮",
+    title: "Python Arcade Game",
+    student: "James, age 13",
+    tech: "Python · Pygame",
+    desc: "A fully functional side-scrolling arcade game with enemies, power-ups, and a high-score system. James made it in 12 sessions.",
+    border: "border-red-200",
+    bg: "bg-red-50",
+    tag: "Game Creator Path",
+    tagColor: "bg-red-100 text-red-700 border-red-200",
+    dot: "bg-red-500",
+    interest: "games" as Interest,
   },
+  {
+    emoji: "🗡️",
+    title: "RPG Quest World",
+    student: "Kevin, age 15",
+    tech: "Unity · C#",
+    desc: "A top-down RPG with quests, NPCs, and combat. Kevin's third project. He's now applying for a junior game dev internship.",
+    border: "border-red-200",
+    bg: "bg-red-50",
+    tag: "Game Creator Path",
+    tagColor: "bg-red-100 text-red-700 border-red-200",
+    dot: "bg-red-500",
+    interest: "games" as Interest,
+  },
+  // AI (3)
+  {
+    emoji: "🤖",
+    title: "Mood Detector AI",
+    student: "Tanvir, age 16",
+    tech: "Python · TensorFlow",
+    desc: "A computer vision model that detects emotions from webcam in real time, built in 24 sessions in the AI Builder Path.",
+    border: "border-purple-200",
+    bg: "bg-purple-50",
+    tag: "AI Builder Path",
+    tagColor: "bg-purple-100 text-purple-700 border-purple-200",
+    dot: "bg-purple-500",
+    interest: "ai" as Interest,
+  },
+  {
+    emoji: "🤖",
+    title: "Recipe Chatbot",
+    student: "Arjun, age 15",
+    tech: "Python · OpenAI API",
+    desc: "A conversational AI that suggests recipes based on what's in your fridge, using the OpenAI API and a custom Python backend.",
+    border: "border-purple-200",
+    bg: "bg-purple-50",
+    tag: "AI Builder Path",
+    tagColor: "bg-purple-100 text-purple-700 border-purple-200",
+    dot: "bg-purple-500",
+    interest: "ai" as Interest,
+  },
+  {
+    emoji: "🧠",
+    title: "Smart Study Planner",
+    student: "Sam, age 15",
+    tech: "Python · OpenAI API",
+    desc: "An AI that analyses a student's weak topics and auto-generates personalised study schedules. Won best project at Sam's school tech fair.",
+    border: "border-purple-200",
+    bg: "bg-purple-50",
+    tag: "AI Builder Path",
+    tagColor: "bg-purple-100 text-purple-700 border-purple-200",
+    dot: "bg-purple-500",
+    interest: "ai" as Interest,
+  },
+  // Web (3)
   {
     emoji: "🌐",
     title: "Photography Portfolio",
@@ -41,24 +96,38 @@ const ALL_PROJECTS = [
     interest: "web" as Interest,
   },
   {
-    emoji: "🤖",
-    title: "Mood Detector AI",
-    student: "Tanvir, age 16",
-    tech: "Python · TensorFlow",
-    desc: "A computer vision model that detects emotions from webcam in real time — built in 24 sessions in the AI Builder Path.",
-    border: "border-purple-200",
-    bg: "bg-purple-50",
-    tag: "AI Builder Path",
-    tagColor: "bg-purple-100 text-purple-700 border-purple-200",
-    dot: "bg-purple-500",
-    interest: "ai" as Interest,
+    emoji: "🛒",
+    title: "E-Commerce Store",
+    student: "Jamie, age 16",
+    tech: "React · Node.js",
+    desc: "A fully functional online store with cart, checkout, and product pages. Jamie deployed it live and shared it with local businesses.",
+    border: "border-blue-200",
+    bg: "bg-blue-50",
+    tag: "Web Developer Path",
+    tagColor: "bg-blue-100 text-blue-700 border-blue-200",
+    dot: "bg-blue-500",
+    interest: "web" as Interest,
   },
+  {
+    emoji: "📅",
+    title: "School Events App",
+    student: "Sofia, age 14",
+    tech: "React · Next.js",
+    desc: "A live web app that lets students browse, register, and get reminders for school events. Used by 300+ students at her school.",
+    border: "border-blue-200",
+    bg: "bg-blue-50",
+    tag: "Web Developer Path",
+    tagColor: "bg-blue-100 text-blue-700 border-blue-200",
+    dot: "bg-blue-500",
+    interest: "web" as Interest,
+  },
+  // Data (3)
   {
     emoji: "📊",
     title: "Climate Data Dashboard",
     student: "Emma, age 17",
     tech: "Python · Pandas · Plotly",
-    desc: "An interactive dashboard visualising 30 years of global climate data — won first place at her school science fair.",
+    desc: "An interactive dashboard visualising 30 years of global climate data. Won first place at her school science fair.",
     border: "border-teal-200",
     bg: "bg-teal-50",
     tag: "Data Scientist Path",
@@ -66,6 +135,73 @@ const ALL_PROJECTS = [
     dot: "bg-teal-500",
     interest: "data" as Interest,
   },
+  {
+    emoji: "⚽",
+    title: "Sports Stats Analyser",
+    student: "Marcus, age 15",
+    tech: "Python · Pandas",
+    desc: "Scrapes and visualises live football player stats. Marcus's coach uses it to analyse opponents before matches.",
+    border: "border-teal-200",
+    bg: "bg-teal-50",
+    tag: "Data Scientist Path",
+    tagColor: "bg-teal-100 text-teal-700 border-teal-200",
+    dot: "bg-teal-500",
+    interest: "data" as Interest,
+  },
+  {
+    emoji: "💹",
+    title: "Market Trends Predictor",
+    student: "Aisha, age 16",
+    tech: "Python · Scikit-learn",
+    desc: "A machine learning model that predicts stock price trends using historical data. Aisha used it as her university application project.",
+    border: "border-teal-200",
+    bg: "bg-teal-50",
+    tag: "Data Scientist Path",
+    tagColor: "bg-teal-100 text-teal-700 border-teal-200",
+    dot: "bg-teal-500",
+    interest: "data" as Interest,
+  },
+  // Young (3)
+  {
+    emoji: "🦁",
+    title: "Safari Adventure Game",
+    student: "Lucas, age 9",
+    tech: "Scratch",
+    desc: "An animated interactive story with 40+ sprites and 3 playable levels. Lucas's first ever project, built in Little Coders Path.",
+    border: "border-amber-200",
+    bg: "bg-amber-50",
+    tag: "Little Coders Path",
+    tagColor: "bg-amber-100 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+    interest: "young" as Interest,
+  },
+  {
+    emoji: "🌙",
+    title: "Space Maths Quiz",
+    student: "Lily, age 8",
+    tech: "Scratch",
+    desc: "A fun quiz game that shoots asteroids with correct maths answers. Lily's teacher uses it in class as a revision tool.",
+    border: "border-amber-200",
+    bg: "bg-amber-50",
+    tag: "Little Coders Path",
+    tagColor: "bg-amber-100 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+    interest: "young" as Interest,
+  },
+  {
+    emoji: "🐍",
+    title: "Python Drawing Robot",
+    student: "Noah, age 10",
+    tech: "Python · Turtle",
+    desc: "A Python program that draws geometric patterns and lets Noah control a virtual robot with keyboard commands.",
+    border: "border-amber-200",
+    bg: "bg-amber-50",
+    tag: "Little Coders Path",
+    tagColor: "bg-amber-100 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+    interest: "young" as Interest,
+  },
+  // Career (3)
   {
     emoji: "💼",
     title: "Freelance Brand Kit",
@@ -80,30 +216,30 @@ const ALL_PROJECTS = [
     interest: "career" as Interest,
   },
   {
-    emoji: "🤖",
-    title: "Recipe Chatbot",
-    student: "Arjun, age 15",
-    tech: "Python · OpenAI API",
-    desc: "A conversational AI that suggests recipes based on what's in your fridge — using the OpenAI API and a custom Python backend.",
-    border: "border-purple-200",
-    bg: "bg-purple-50",
-    tag: "AI Builder Path",
-    tagColor: "bg-purple-100 text-purple-700 border-purple-200",
-    dot: "bg-purple-500",
-    interest: "ai" as Interest,
+    emoji: "🎬",
+    title: "Content Creator Portfolio",
+    student: "Maya, age 16",
+    tech: "LinkedIn · Canva",
+    desc: "A professional content strategy and personal brand with 500+ LinkedIn followers before graduation. Maya now consults for two local businesses.",
+    border: "border-green-200",
+    bg: "bg-green-50",
+    tag: "Digital Independence Path",
+    tagColor: "bg-green-100 text-green-700 border-green-200",
+    dot: "bg-green-500",
+    interest: "career" as Interest,
   },
   {
-    emoji: "🎮",
-    title: "Python Arcade Game",
-    student: "James, age 13",
-    tech: "Python · Pygame",
-    desc: "A fully functional side-scrolling arcade game with enemies, power-ups, and a high-score system. James made it in 12 sessions.",
-    border: "border-red-200",
-    bg: "bg-red-50",
-    tag: "Game Creator Path",
-    tagColor: "bg-red-100 text-red-700 border-red-200",
-    dot: "bg-red-500",
-    interest: "games" as Interest,
+    emoji: "💡",
+    title: "Tech Tutoring Business",
+    student: "Tyler, age 17",
+    tech: "Fiverr · GitHub · Notion",
+    desc: "Tyler built a tutoring service helping classmates with coding. He's earning consistently and has a 5-star Fiverr profile.",
+    border: "border-green-200",
+    bg: "bg-green-50",
+    tag: "Digital Independence Path",
+    tagColor: "bg-green-100 text-green-700 border-green-200",
+    dot: "bg-green-500",
+    interest: "career" as Interest,
   },
 ];
 
@@ -113,7 +249,7 @@ interface Props {
 
 export default function ShowcaseSection({ interest }: Props) {
   const filtered = ALL_PROJECTS.filter((p) => p.interest === interest);
-  const display = filtered.length >= 2 ? filtered : ALL_PROJECTS.slice(0, 6);
+  const display = filtered.length >= 3 ? filtered.slice(0, 6) : ALL_PROJECTS.slice(0, 6);
 
   return (
     <section id="showcase" className="py-20 bg-[#F7F9FF]">
@@ -126,7 +262,7 @@ export default function ShowcaseSection({ interest }: Props) {
             These Kids Built This. Yours Can Too.
           </h2>
           <p className="text-[#334155] max-w-xl mx-auto">
-            Every Lumexa student graduates with a real portfolio project — not a certificate, not a quiz score.
+            Every Lumexa student graduates with a real portfolio project. Not a certificate, not a quiz score.
             Something they actually built and can show the world.
           </p>
         </div>
@@ -138,7 +274,7 @@ export default function ShowcaseSection({ interest }: Props) {
           {display.slice(0, 6).map((p) => (
             <div
               key={p.title}
-              className={`p-5 bg-white rounded-2xl border ${p.border} hover:shadow-md hover:shadow-slate-100 transition-all duration-300 group`}
+              className={`p-5 bg-white rounded-2xl border ${p.border} card-hover group`}
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="text-3xl">{p.emoji}</div>

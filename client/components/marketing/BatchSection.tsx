@@ -17,7 +17,7 @@ const batches = [
     statBg: "bg-[#F0F4FF]",
     tagline: "Discover What Your Child Loves",
     positioning:
-      "The perfect low-pressure start. Your child explores real coding in a fun, social environment with peers — building confidence and discovering their passion before committing to deeper learning.",
+      "The perfect low-pressure start. Your child explores real coding in a fun, social environment with peers, building confidence and discovering their passion before committing to deeper learning.",
     parentBenefit:
       "Low risk, maximum exposure. See if they love it before investing more. 70% of Creator Club students upgrade within 2 months.",
     priceLabel: "Most Affordable",
@@ -43,7 +43,7 @@ const batches = [
     positioning:
       "The sweet spot between personal attention and collaborative learning. Small enough that your teacher knows exactly where your child is. Large enough for pair-programming and team challenges.",
     parentBenefit:
-      "3× more teacher attention than group classes. ~40% less cost than 1-on-1. Your child learns to collaborate — the skill every employer looks for first.",
+      "3× more teacher attention than group classes. ~40% less cost than 1-on-1. Your child learns to collaborate, the skill every employer looks for first.",
     priceLabel: "Mid-Range",
     funnelStep: "STEP 2",
     funnelColor: "text-purple-500",
@@ -93,7 +93,7 @@ export default function BatchSection() {
           </h2>
           <p className="text-[#334155] max-w-2xl mx-auto text-lg">
             Choose the format that fits your child&apos;s learning style and your
-            budget. Switch formats anytime — your class credits always carry over.
+            budget. Switch formats anytime. Your class credits always carry over.
           </p>
         </div>
 
@@ -196,14 +196,56 @@ export default function BatchSection() {
           ))}
         </div>
 
-        {/* Bottom note */}
-        <div className="max-w-3xl mx-auto p-5 bg-white border border-[#E2E8F0] rounded-2xl text-center">
-          <p className="text-[#334155] text-sm leading-relaxed">
-            <span className="text-[#0F172A] font-semibold">No lock-in, ever. </span>
-            Start with Creator Clubs to explore. Graduate to Builder Pods when ready to build real skills.
-            Unlock Private Mentorship to accelerate. Your class credits work across{" "}
-            <span className="text-purple-600 font-semibold">all formats and all pathways</span>.
-          </p>
+        {/* Parent decision simplifier */}
+        <div className="max-w-3xl mx-auto mt-4">
+          <div className="p-6 bg-white border border-[#E2E8F0] rounded-2xl">
+            <h3 className="text-[#0F172A] font-black text-center text-lg mb-6">
+              Which option is right for your child?
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                {
+                  emoji: "🤫",
+                  trait: "Shy or reserved",
+                  rec: "Private AI Mentorship",
+                  why: "100% of the teacher's focus on your child. No social pressure, just pure progress.",
+                  color: "text-green-700",
+                  bg: "bg-green-50",
+                  border: "border-green-200",
+                },
+                {
+                  emoji: "🤝",
+                  trait: "Social and energetic",
+                  rec: "Pro Builder Pods",
+                  why: "Small groups of 3–5 keep it collaborative and fun without losing teacher attention.",
+                  color: "text-purple-700",
+                  bg: "bg-purple-50",
+                  border: "border-purple-200",
+                },
+                {
+                  emoji: "🔭",
+                  trait: "Just exploring",
+                  rec: "AI Creator Clubs",
+                  why: "Low stakes group setting to discover what they love before committing.",
+                  color: "text-blue-700",
+                  bg: "bg-blue-50",
+                  border: "border-blue-200",
+                },
+              ].map((item) => (
+                <div key={item.trait} className={`p-4 rounded-xl ${item.bg} border ${item.border}`}>
+                  <div className="text-2xl mb-2">{item.emoji}</div>
+                  <p className="text-[#64748B] text-xs font-semibold uppercase tracking-wider mb-1">
+                    {item.trait}
+                  </p>
+                  <p className={`font-black text-sm ${item.color} mb-2`}>{item.rec}</p>
+                  <p className="text-[#64748B] text-xs leading-relaxed">{item.why}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-xs text-[#94A3B8] mt-5">
+              Not sure? Book a free trial and your teacher will recommend the right format.
+            </p>
+          </div>
         </div>
       </div>
     </section>

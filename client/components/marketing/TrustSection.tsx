@@ -7,7 +7,7 @@ const trustItems = [
   {
     icon: "⚡",
     title: "Progress Visible After Lesson 1",
-    description: "Your child writes and runs real code in the very first session. You'll see something working — not just theory.",
+    description: "Your child writes and runs real code in the very first session. You'll see something working, not just theory.",
   },
   {
     icon: "🛡️",
@@ -76,7 +76,7 @@ export default function TrustSection() {
               child: "Son, age 10",
             },
             {
-              quote: "The teacher matched my daughter's exact pace. After 3 months she built a website that's actually live — her cousins visit it.",
+              quote: "The teacher matched my daughter's exact pace. After 3 months she built a website that's actually live. Her cousins visit it.",
               name: "Priya K.",
               location: "Mumbai, India",
               child: "Daughter, age 14",

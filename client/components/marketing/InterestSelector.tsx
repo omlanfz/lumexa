@@ -166,9 +166,9 @@ export default function InterestSelector({ selected, onSelect }: Props) {
           <p className="text-[#334155] text-sm">
             <span className="font-bold text-[#0F172A]">
               {OPTIONS.find((o) => o.id === selected)?.emoji}{" "}
-              {OPTIONS.find((o) => o.id === selected)?.label}
+              {OPTIONS.find((o) => o.id === selected)?.label}:
             </span>{" "}
-            — here are 2 real projects built by Lumexa students in this path.
+            Here are real projects built by Lumexa students in this path.
             Scroll down to explore them.
           </p>
         </div>

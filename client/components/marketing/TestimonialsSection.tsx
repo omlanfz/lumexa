@@ -16,7 +16,7 @@ const testimonials = [
     avatar: "AC",
     avatarColor: "bg-blue-600",
     quote:
-      "My 11-year-old was gaming all day. Now he's building Roblox games himself — and his friends actually play them. Lumexa completely changed his relationship with technology.",
+      "My 11-year-old was gaming all day. Now he's building Roblox games himself. His friends actually play them. Lumexa completely changed his relationship with technology.",
     rating: 5,
     subject: "Game Creator Path",
     child: "Son, age 11",

@@ -219,7 +219,7 @@ export default function InteractiveCodeDemo() {
           </h2>
           <p className="text-[#334155] max-w-xl mx-auto">
             Pick what you want to build. Watch the code write itself. Then hit{" "}
-            <span className="font-bold text-[#0F172A]">Run It</span> — and see it work.
+            <span className="font-bold text-[#0F172A]">Run It</span> and see it work.
           </p>
         </div>
 
@@ -330,7 +330,7 @@ export default function InteractiveCodeDemo() {
             href="/trial"
             className="inline-flex items-center gap-2 px-7 py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black text-sm rounded-xl shadow-lg shadow-purple-200 transition-all hover:scale-[1.02] active:scale-95"
           >
-            First class is free — no card needed →
+            First class is free. No card needed →
           </Link>
         </div>
       </div>

@@ -16,7 +16,7 @@ const values = [
   {
     icon: "🌍",
     title: "Accessible Worldwide",
-    desc: "From Dhaka to Delhi to London to Los Angeles — local currency, local payment methods, global-standard teaching quality.",
+    desc: "From Dhaka to Delhi to London to Los Angeles. Local currency, local payment methods, global-standard teaching quality.",
   },
   {
     icon: "🔒",
@@ -31,7 +31,7 @@ const values = [
   {
     icon: "📈",
     title: "Progress You Can See After Lesson 1",
-    desc: "We guarantee visible progress after the very first class. If your child doesn't build something in session 1, the class is on us — no questions.",
+    desc: "We guarantee visible progress after the very first class. If your child doesn't build something in session 1, the class is on us. No questions.",
   },
 ];
 
@@ -58,7 +58,7 @@ const team = [
   {
     name: "Our Philosophy",
     role: "Build → Publish → Improve",
-    bio: "We believe the best way to learn is by making something real. Every class is structured around a concrete deliverable — not slides, not theory, not passive watching.",
+    bio: "We believe the best way to learn is by making something real. Every class is structured around a concrete deliverable: not slides, not theory, not passive watching.",
   },
 ];
 
@@ -86,7 +86,7 @@ export default function AboutPage() {
             Lumexa AI School was built for one reason: the world is being redesigned by people who can code, and we refuse to let your child be left on the sidelines.
           </p>
           <p className="text-gray-500 max-w-xl mx-auto text-base leading-relaxed">
-            Every class is live — batch, 1-on-1, or group — taught by a verified expert who adapts to your child specifically. Not a YouTube video. Not a pre-recorded course. A real teacher who knows your child's name.
+            Every class is live (batch, 1-on-1, or group), taught by a verified expert who adapts to your child specifically. Not a YouTube video. Not a pre-recorded course. A real teacher who knows your child's name.
           </p>
         </div>
       </section>

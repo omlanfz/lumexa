@@ -83,7 +83,7 @@ const plans = [
     discount: 12,
     popular: false,
     features: [
-      "24 live classes — one complete pathway",
+      "24 live classes to complete one full pathway",
       "AI Creator Clubs, Pro Builder Pods, or Private Mentorship",
       "Three full courses end-to-end",
       "Recording of each class",
@@ -155,7 +155,7 @@ const faqs = [
   },
   {
     q: "What are AI Creator Clubs, Pro Builder Pods, and Private Mentorship?",
-    a: "These are our three learning formats. AI Creator Clubs are group classes (8–15 students, 60 min) — the most affordable entry point. Pro Builder Pods are small-group classes (3–5 students, 60 min) — the best balance of attention and price. Private AI Mentorship is 1-on-1 (45 min) — the fastest, most personalised progress. Your class pack credits work across all three formats.",
+    a: "These are our three learning formats. AI Creator Clubs are group classes (8–15 students, 60 min): the most affordable entry point. Pro Builder Pods are small-group classes (3–5 students, 60 min): the best balance of attention and price. Private AI Mentorship is 1-on-1 (45 min): the fastest, most personalised progress. Your class pack credits work across all three formats.",
   },
   {
     q: "Can I switch between formats?",
@@ -228,7 +228,7 @@ export default function PricingPage() {
             </span>
           </h1>
           <p className="text-lg text-gray-400 max-w-xl mx-auto mb-4">
-            Buy a class bundle. Use them any time, any pathway, any format — AI Creator Clubs,
+            Buy a class bundle. Use them any time, any pathway, any format: AI Creator Clubs,
             Pro Builder Pods, or Private Mentorship. No monthly fees, no lock-in.
           </p>
           <p className="text-gray-600 text-sm">
@@ -363,8 +363,8 @@ export default function PricingPage() {
               Your Class Pack Works Across All Formats
             </h2>
             <p className="text-gray-400 max-w-xl mx-auto text-sm">
-              The prices above are base rates for AI Creator Clubs. Choose your format below —
-              your teacher will recommend the best fit, or switch anytime.
+              The prices above are base rates for AI Creator Clubs. Choose your format below.
+              Your teacher will recommend the best fit, or switch anytime.
             </p>
           </div>
 

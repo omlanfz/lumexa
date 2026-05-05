@@ -17,7 +17,7 @@ const NUDGES: Nudge[] = [
   },
   {
     id: "pricing",
-    text: "Most parents start with the free class — no card needed.",
+    text: "Most parents start with the free class. No card needed.",
     cta: { label: "Book free trial", href: "/trial" },
   },
   {

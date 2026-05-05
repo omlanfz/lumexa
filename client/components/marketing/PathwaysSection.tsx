@@ -28,7 +28,7 @@ const pathways: Pathway[] = [
     title: "Game Creator Path",
     outcome: "Build 3 Real Games",
     description:
-      "From Roblox worlds to Python arcade games. Your child designs, codes, and ships games that friends can actually play — not just a certificate saying they could.",
+      "From Roblox worlds to Python arcade games. Your child designs, codes, and ships games that friends can actually play. Not just a certificate.",
     tools: ["Roblox / Lua", "Python", "Unity Basics"],
     ages: "Ages 10–18",
     sessions: "24 sessions",
@@ -48,7 +48,7 @@ const pathways: Pathway[] = [
     title: "AI Builder Path",
     outcome: "Build 3 AI Projects",
     description:
-      "Not just using AI — building it. Your child learns Python and machine learning, then creates real AI tools that detect emotions, recognise objects, and hold conversations.",
+      "Not just using AI. Building it. Your child learns Python and machine learning, then creates real AI tools that detect emotions, recognise objects, and hold conversations.",
     tools: ["Python", "TensorFlow / PyTorch", "OpenAI API"],
     ages: "Ages 12–18",
     sessions: "24 sessions",
@@ -69,7 +69,7 @@ const pathways: Pathway[] = [
     title: "Web Developer Path",
     outcome: "Build 3 Live Websites",
     description:
-      "From first HTML tag to a deployed full-stack React app. Your child will have real websites on the internet — with working code, not just screenshots.",
+      "From first HTML tag to a deployed full-stack React app. Your child will have real websites on the internet, with working code, not just screenshots.",
     tools: ["HTML / CSS", "JavaScript", "React / Next.js"],
     ages: "Ages 12–18",
     sessions: "24 sessions",
@@ -89,7 +89,7 @@ const pathways: Pathway[] = [
     title: "Little Coders Path",
     outcome: "Build 3 Real Projects",
     description:
-      "Designed for younger kids. Starts with Scratch animations, moves to Python basics, then introduces AI — all at their pace, all hands-on, all genuinely fun.",
+      "Designed for younger kids. Starts with Scratch animations, moves to Python basics, then introduces AI. All at their pace, all hands-on, all genuinely fun.",
     tools: ["Scratch", "Python Basics", "Teachable Machine"],
     ages: "Ages 6–11",
     sessions: "24 sessions",
@@ -129,7 +129,7 @@ const pathways: Pathway[] = [
     title: "Digital Independence Path",
     outcome: "Start Earning Online",
     description:
-      "The only pathway where your teen doesn't just learn a skill — they launch a real income stream. Portfolio, Fiverr profile, and LinkedIn that attracts clients.",
+      "The only pathway where your teen doesn't just learn a skill. They launch a real income stream: portfolio, Fiverr profile, and LinkedIn that attracts clients.",
     tools: ["Canva", "Fiverr / Upwork", "LinkedIn", "GitHub / Vercel"],
     ages: "Ages 15–18",
     sessions: "24 sessions",
@@ -176,7 +176,7 @@ export default function PathwaysSection() {
               {/* Featured badge */}
               {p.featured && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full text-white text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
-                  ⭐ Most Popular
+                  ⭐ Editor&apos;s Pick
                 </div>
               )}
 
