@@ -786,12 +786,11 @@ function TeacherProfileContent() {
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
     );
 
-  const card =
-    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+  const card = "t-card shadow-sm";
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
         <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -830,10 +829,10 @@ function TeacherProfileContent() {
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold dark:text-purple-100 text-purple-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
             Settings
           </h1>
-          <p className="text-sm dark:text-purple-400/60 text-purple-400">
+          <p className="text-sm text-[var(--t-text-muted)]">
             Pilot Configuration ✦
           </p>
         </div>
@@ -841,7 +840,7 @@ function TeacherProfileContent() {
         {/* ── Profile completion bar ──────────────────────────────────────── */}
         <div className={`${card} p-5 mb-6`}>
           <div className="flex items-center justify-between mb-2">
-            <p className="font-semibold dark:text-purple-100 text-purple-900">
+            <p className="font-semibold text-[var(--t-text)]">
               Profile Completeness
             </p>
             <div className="flex items-center gap-2">
@@ -850,7 +849,7 @@ function TeacherProfileContent() {
               >
                 {scoreLabel}
               </span>
-              <span className="text-lg font-bold dark:text-purple-100 text-purple-900">
+              <span className="text-lg font-bold text-[var(--t-text)]">
                 {score}%
               </span>
             </div>
@@ -888,7 +887,7 @@ function TeacherProfileContent() {
           </div>
 
           {score < 100 && (
-            <p className="text-xs dark:text-purple-400/60 text-purple-400 mt-3">
+            <p className="text-xs text-[var(--t-text-muted)] mt-3">
               💡 Complete your profile to rank higher in marketplace search
               results and attract more cadets.
             </p>
@@ -906,7 +905,7 @@ function TeacherProfileContent() {
               className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all capitalize cursor-pointer ${
                 activeTab === t
                   ? "bg-purple-600 text-white shadow-sm"
-                  : "dark:text-purple-300/70 text-purple-500 dark:hover:bg-purple-900/20 hover:bg-purple-50"
+                  : "text-[var(--t-text-muted)] dark:hover:bg-purple-900/20 hover:bg-purple-50"
               }`}
             >
               {t === "profile"
@@ -934,7 +933,7 @@ function TeacherProfileContent() {
           <div className="space-y-4">
             {/* Account info */}
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-4">
+              <h3 className="font-semibold text-[var(--t-text)] mb-4">
                 Account Information
               </h3>
               <div className="flex items-center gap-4 mb-5">
@@ -957,16 +956,16 @@ function TeacherProfileContent() {
                   )}
                 </div>
                 <div>
-                  <p className="font-bold dark:text-purple-100 text-purple-900">
+                  <p className="font-bold text-[var(--t-text)]">
                     {profile?.user?.fullName}
                   </p>
-                  <p className="text-sm dark:text-purple-400/60 text-purple-400">
+                  <p className="text-sm text-[var(--t-text-muted)]">
                     {profile?.user?.email}
                   </p>
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
-                    className="mt-2 text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors disabled:opacity-50 cursor-pointer"
+                    className="mt-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     📷 Change Photo
                   </button>
@@ -975,7 +974,7 @@ function TeacherProfileContent() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="dark:bg-gray-800/40 bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                  <p className="text-xs text-[var(--t-text-muted)]">
                     Rating
                   </p>
                   <p className="font-bold dark:text-yellow-400 text-yellow-600">
@@ -983,15 +982,15 @@ function TeacherProfileContent() {
                   </p>
                 </div>
                 <div className="dark:bg-gray-800/40 bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                  <p className="text-xs text-[var(--t-text-muted)]">
                     Reviews
                   </p>
-                  <p className="font-bold dark:text-purple-100 text-purple-900">
+                  <p className="font-bold text-[var(--t-text)]">
                     {profile?.reviewCount ?? 0}
                   </p>
                 </div>
                 <div className="dark:bg-gray-800/40 bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                  <p className="text-xs text-[var(--t-text-muted)]">
                     Strikes
                   </p>
                   <p
@@ -1001,7 +1000,7 @@ function TeacherProfileContent() {
                   </p>
                 </div>
                 <div className="dark:bg-gray-800/40 bg-gray-50 rounded-xl p-3 text-center">
-                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                  <p className="text-xs text-[var(--t-text-muted)]">
                     Status
                   </p>
                   <p
@@ -1022,7 +1021,7 @@ function TeacherProfileContent() {
 
             {/* Bio */}
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-3">
+              <h3 className="font-semibold text-[var(--t-text)] mb-3">
                 Bio{" "}
                 <span className="text-xs dark:text-purple-400/50 text-purple-400 font-normal">
                   ({bio.length}/500)
@@ -1033,17 +1032,17 @@ function TeacherProfileContent() {
                 onChange={(e) => setBio(e.target.value.slice(0, 500))}
                 rows={5}
                 placeholder="Tell cadets about your teaching experience, approach, and what makes your classes unique…"
-                className="w-full px-4 py-3 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
               />
             </div>
 
             {/* Hourly rate */}
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-3">
+              <h3 className="font-semibold text-[var(--t-text)] mb-3">
                 Hourly Rate (USD)
               </h3>
               <div className="flex items-center gap-3">
-                <span className="dark:text-purple-400/60 text-purple-400 font-bold text-xl">
+                <span className="text-[var(--t-text-muted)] font-bold text-xl">
                   $
                 </span>
                 <input
@@ -1052,10 +1051,10 @@ function TeacherProfileContent() {
                   max={500}
                   value={hourlyRate}
                   onChange={(e) => setHourlyRate(+e.target.value)}
-                  className="w-36 px-4 py-3 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-36 px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-lg font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/30"
                 />
                 <div>
-                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                  <p className="text-xs text-[var(--t-text-muted)]">
                     You earn 75% = ${(hourlyRate * 0.75).toFixed(0)}/hr
                   </p>
                   <p className="text-xs dark:text-purple-400/40 text-purple-300">
@@ -1067,7 +1066,7 @@ function TeacherProfileContent() {
 
             {/* Subjects */}
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-3">
+              <h3 className="font-semibold text-[var(--t-text)] mb-3">
                 Subjects You Teach
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -1078,7 +1077,7 @@ function TeacherProfileContent() {
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                       subjects.includes(s)
                         ? "bg-purple-600 text-white shadow-sm"
-                        : "dark:bg-gray-800/40 bg-gray-100 dark:text-purple-300/70 text-purple-500 dark:hover:bg-purple-900/30 hover:bg-purple-100"
+                        : "dark:bg-gray-800/40 bg-gray-100 text-[var(--t-text-muted)] dark:hover:bg-purple-900/30 hover:bg-purple-100"
                     }`}
                   >
                     {s}
@@ -1089,7 +1088,7 @@ function TeacherProfileContent() {
 
             {/* Grades */}
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-3">
+              <h3 className="font-semibold text-[var(--t-text)] mb-3">
                 Grade Levels
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -1100,7 +1099,7 @@ function TeacherProfileContent() {
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
                       grades.includes(g)
                         ? "bg-purple-600 text-white shadow-sm"
-                        : "dark:bg-gray-800/40 bg-gray-100 dark:text-purple-300/70 text-purple-500 dark:hover:bg-purple-900/30 hover:bg-purple-100"
+                        : "dark:bg-gray-800/40 bg-gray-100 text-[var(--t-text-muted)] dark:hover:bg-purple-900/30 hover:bg-purple-100"
                     }`}
                   >
                     {g}
@@ -1111,13 +1110,13 @@ function TeacherProfileContent() {
 
             {/* Timezone */}
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-3">
+              <h3 className="font-semibold text-[var(--t-text)] mb-3">
                 Timezone
               </h3>
               <select
                 value={timezone}
                 onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
               >
                 <option value="">Select timezone…</option>
                 {TIMEZONES.map((tz) => (
@@ -1143,10 +1142,10 @@ function TeacherProfileContent() {
         {activeTab === "documents" && (
           <div className="space-y-4">
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-1">
+              <h3 className="font-semibold text-[var(--t-text)] mb-1">
                 Verification Documents
               </h3>
-              <p className="text-sm dark:text-purple-400/60 text-purple-400 mb-5">
+              <p className="text-sm text-[var(--t-text-muted)] mb-5">
                 Upload your documents to build trust with parents and increase
                 your search ranking. All documents are reviewed by Lumexa and
                 kept confidential.
@@ -1176,7 +1175,7 @@ function TeacherProfileContent() {
                         </span>
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-semibold dark:text-purple-100 text-purple-900">
+                            <p className="text-sm font-semibold text-[var(--t-text)]">
                               {doc.label}
                             </p>
                             {doc.required ? (
@@ -1189,7 +1188,7 @@ function TeacherProfileContent() {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs dark:text-purple-400/60 text-purple-400 mt-0.5">
+                          <p className="text-xs text-[var(--t-text-muted)] mt-0.5">
                             {doc.desc}
                           </p>
                           {uploaded && (
@@ -1258,10 +1257,10 @@ function TeacherProfileContent() {
         {activeTab === "payout" && (
           <div className="space-y-4">
             <div className={`${card} p-5`}>
-              <h3 className="font-semibold dark:text-purple-100 text-purple-900 mb-1">
+              <h3 className="font-semibold text-[var(--t-text)] mb-1">
                 Payout Setup
               </h3>
-              <p className="text-sm dark:text-purple-400/60 text-purple-400 mb-5">
+              <p className="text-sm text-[var(--t-text-muted)] mb-5">
                 Reward Ledger Configuration
               </p>
 
@@ -1333,7 +1332,7 @@ export default function TeacherProfilePage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

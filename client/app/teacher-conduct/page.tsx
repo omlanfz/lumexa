@@ -81,7 +81,7 @@ const RULES = [
 const COLOR_MAP: Record<string, string> = {
   blue: "dark:bg-blue-900/20 dark:border-blue-800/30 bg-blue-50 border-blue-200 dark:text-blue-300 text-blue-700",
   purple:
-    "dark:bg-purple-900/20 dark:border-purple-800/30 bg-purple-50 border-purple-200 dark:text-purple-300 text-purple-700",
+    "dark:bg-purple-900/20 dark:border-purple-800/30 bg-purple-50 border-purple-200 text-[var(--t-nav-active-text)]",
   amber:
     "dark:bg-amber-900/20 dark:border-amber-800/30 bg-amber-50 border-amber-200 dark:text-amber-300 text-amber-700",
   green:
@@ -110,12 +110,11 @@ function TeacherConductContent() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  const card =
-    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+  const card = "t-card shadow-sm";
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
         <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -140,10 +139,10 @@ function TeacherConductContent() {
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold dark:text-purple-100 text-purple-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
             Pilot Guidelines
           </h1>
-          <p className="text-sm dark:text-purple-400/60 text-purple-400">
+          <p className="text-sm text-[var(--t-text-muted)]">
             Pilot Code · Know the Rules, Fly with Integrity
           </p>
         </div>
@@ -169,10 +168,10 @@ function TeacherConductContent() {
         <div className={`${card} p-5 mb-6`}>
           <div className="flex items-start justify-between flex-wrap gap-3">
             <div>
-              <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">
                 Your Strike Status
               </p>
-              <p className="text-2xl font-bold mt-1 dark:text-purple-100 text-purple-900">
+              <p className="text-2xl font-bold mt-1 text-[var(--t-text)]">
                 {strikes} / 3 strikes
               </p>
               <p
@@ -194,10 +193,10 @@ function TeacherConductContent() {
               </p>
             </div>
             <div className="text-right">
-              <p className="text-4xl font-black dark:text-purple-100 text-purple-900">
+              <p className="text-4xl font-black text-[var(--t-text)]">
                 {3 - strikes}
               </p>
-              <p className="text-xs dark:text-purple-400/60 text-purple-400">
+              <p className="text-xs text-[var(--t-text-muted)]">
                 strikes remaining
               </p>
             </div>
@@ -210,7 +209,7 @@ function TeacherConductContent() {
               />
             </div>
             <div className="flex justify-between mt-1">
-              <span className="text-xs dark:text-purple-400/50 text-purple-400">
+              <span className="text-xs text-[var(--t-text-muted)]">
                 Clean
               </span>
               <span className="text-xs text-red-400">Suspended</span>
@@ -242,7 +241,7 @@ function TeacherConductContent() {
           ].map((item) => (
             <div key={item.label} className={`${card} p-4 text-center`}>
               <p className="text-2xl mb-2">{item.icon}</p>
-              <p className="text-sm font-semibold dark:text-purple-100 text-purple-900">
+              <p className="text-sm font-semibold text-[var(--t-text)]">
                 {item.label}
               </p>
               <p
@@ -282,25 +281,25 @@ function TeacherConductContent() {
 
         {/* Earnings impact table */}
         <div className={`${card} mt-6 overflow-hidden`}>
-          <div className="px-5 py-4 border-b dark:border-purple-900/20 border-purple-100">
-            <p className="font-semibold dark:text-purple-100 text-purple-900">
+          <div className="px-5 py-4 border-b border-[var(--t-nav-border)]">
+            <p className="font-semibold text-[var(--t-text)]">
               Earnings Impact Summary
             </p>
-            <p className="text-xs dark:text-purple-400/60 text-purple-400">
+            <p className="text-xs text-[var(--t-text-muted)]">
               How rule violations affect your payout
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b dark:border-purple-900/20 border-purple-100">
-                  <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
+                <tr className="border-b border-[var(--t-nav-border)]">
+                  <th className="text-left px-5 py-3 text-xs uppercase font-medium text-[var(--t-text-muted)]">
                     Violation
                   </th>
-                  <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
+                  <th className="text-left px-5 py-3 text-xs uppercase font-medium text-[var(--t-text-muted)]">
                     Strike
                   </th>
-                  <th className="text-left px-5 py-3 text-xs uppercase font-medium dark:text-purple-300/60 text-purple-400">
+                  <th className="text-left px-5 py-3 text-xs uppercase font-medium text-[var(--t-text-muted)]">
                     Earnings Impact
                   </th>
                 </tr>
@@ -337,7 +336,7 @@ function TeacherConductContent() {
                     key={row.violation}
                     className="dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
                   >
-                    <td className="px-5 py-3 dark:text-purple-100 text-purple-900">
+                    <td className="px-5 py-3 text-[var(--t-text)]">
                       {row.violation}
                     </td>
                     <td
@@ -358,10 +357,10 @@ function TeacherConductContent() {
         {/* Support */}
         <div className={`${card} mt-6 p-5 text-center`}>
           <p className="text-lg mb-2">❓</p>
-          <p className="font-semibold dark:text-purple-100 text-purple-900 text-sm">
+          <p className="font-semibold text-[var(--t-text)] text-sm">
             Have a question about these guidelines?
           </p>
-          <p className="text-xs dark:text-purple-400/60 text-purple-400 mt-1 mb-3">
+          <p className="text-xs text-[var(--t-text-muted)] mt-1 mb-3">
             Contact Lumexa Mission Support. We're here to help all pilots
             succeed.
           </p>
@@ -393,7 +392,7 @@ export default function TeacherConductPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

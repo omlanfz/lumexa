@@ -115,18 +115,18 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-sm rounded-2xl border shadow-2xl z-10 dark:bg-[#160C24] dark:border-purple-900/40 bg-white border-purple-100">
+      <div className="relative w-full max-w-sm rounded-2xl border shadow-2xl z-10 bg-[var(--t-surface)] border-[var(--t-border)]">
         <div className="p-6">
-          <h2 className="text-lg font-bold dark:text-purple-100 text-purple-900 mb-0.5">
+          <h2 className="text-lg font-bold text-[var(--t-text)] mb-0.5">
             Add Availability
           </h2>
-          <p className="text-sm dark:text-purple-400/60 text-purple-400 mb-5">
+          <p className="text-sm text-[var(--t-text-muted)] mb-5">
             Log Flight Slot
           </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+              <label className="block text-xs font-medium text-[var(--t-text-muted)] mb-1.5">
                 Date
               </label>
               <input
@@ -134,30 +134,30 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 min={new Date().toISOString().split("T")[0]}
-                className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--t-text-muted)] mb-1.5">
                   Start Time
                 </label>
                 <input
                   type="time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+                <label className="block text-xs font-medium text-[var(--t-text-muted)] mb-1.5">
                   End Time
                 </label>
                 <input
                   type="time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
                 />
               </div>
             </div>
@@ -169,7 +169,7 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
                   <p className="text-sm font-medium dark:text-purple-200 text-purple-800">
                     🔁 Repeat weekly
                   </p>
-                  <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                  <p className="text-xs text-[var(--t-text-muted)]">
                     Auto-create this slot every week
                   </p>
                 </div>
@@ -189,7 +189,7 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
 
               {recurring && (
                 <div>
-                  <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+                  <label className="block text-xs font-medium text-[var(--t-text-muted)] mb-1.5">
                     Repeat for how many weeks?
                   </label>
                   <div className="flex gap-2 flex-wrap">
@@ -348,12 +348,12 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10 dark:bg-[#160C24] dark:border-purple-900/40 bg-white border-purple-100 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10 bg-[var(--t-surface)] border-[var(--t-border)] max-h-[90vh] overflow-y-auto">
         <div className="p-6">
-          <h2 className="text-lg font-bold dark:text-purple-100 text-purple-900 mb-1">
+          <h2 className="text-lg font-bold text-[var(--t-text)] mb-1">
             {shift.isBooked ? "Modify Booking" : "Remove Slot"}
           </h2>
-          <p className="text-sm dark:text-purple-400/60 text-purple-400 mb-4">
+          <p className="text-sm text-[var(--t-text-muted)] mb-4">
             {new Date(shift.start).toLocaleDateString("en-US", {
               weekday: "long",
               month: "long",
@@ -388,7 +388,7 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
           {/* Who is initiating? */}
           {shift.isBooked && (
             <div className="mb-4">
-              <p className="text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-2">
+              <p className="text-xs font-medium text-[var(--t-text-muted)] mb-2">
                 Who is requesting this?
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -460,14 +460,14 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
           {/* Student code verification */}
           {initiator === "student" && (
             <div className="mb-4">
-              <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+              <label className="block text-xs font-medium text-[var(--t-text-muted)] mb-1.5">
                 Student Cancellation Code
               </label>
               <input
                 value={studentCode}
                 onChange={(e) => setStudentCode(e.target.value)}
                 placeholder="Enter code provided by student"
-                className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
               />
               <p className="text-xs dark:text-purple-400/50 text-purple-400 mt-1">
                 The student will receive a code in their dashboard to share with
@@ -479,7 +479,7 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
           {/* New time for reschedule */}
           {action === "reschedule" && (
             <div className="mb-4 space-y-3">
-              <p className="text-xs font-medium dark:text-purple-300/70 text-purple-600">
+              <p className="text-xs font-medium text-[var(--t-text-muted)]">
                 New Time
               </p>
               <input
@@ -487,20 +487,20 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
                 value={newDate}
                 onChange={(e) => setNewDate(e.target.value)}
                 min={new Date().toISOString().split("T")[0]}
-                className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
               />
               <div className="grid grid-cols-2 gap-3">
                 <input
                   type="time"
                   value={newStart}
                   onChange={(e) => setNewStart(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
                 />
                 <input
                   type="time"
                   value={newEnd}
                   onChange={(e) => setNewEnd(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                  className="w-full px-3 py-2.5 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
                 />
               </div>
             </div>
@@ -508,7 +508,7 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
 
           {/* Reason */}
           <div className="mb-4">
-            <label className="block text-xs font-medium dark:text-purple-300/70 text-purple-600 mb-1.5">
+            <label className="block text-xs font-medium text-[var(--t-text-muted)] mb-1.5">
               Reason {isTeacherInitiated ? "(required)" : "(optional)"}
             </label>
             <textarea
@@ -516,7 +516,7 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
               onChange={(e) => setReason(e.target.value)}
               placeholder="Brief explanation…"
               rows={2}
-              className="w-full px-3 py-2 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+              className="w-full px-3 py-2 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
             />
           </div>
 
@@ -633,12 +633,11 @@ function CalendarContent() {
     return { top, height: Math.max(height, 24) };
   };
 
-  const card =
-    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+  const card = "t-card shadow-sm";
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
         <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -653,10 +652,10 @@ function CalendarContent() {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4 sm:mb-6">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold dark:text-purple-100 text-purple-900">
+            <h1 className="text-xl sm:text-2xl font-bold text-[var(--t-text)]">
               Schedule
             </h1>
-            <p className="text-sm dark:text-purple-400/60 text-purple-400">
+            <p className="text-sm text-[var(--t-text-muted)]">
               Flight Log ✦
             </p>
           </div>
@@ -702,7 +701,7 @@ function CalendarContent() {
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => setWeekOffset((o) => o - 1)}
-            className="p-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
+            className="p-2 rounded-xl bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
           >
             ←
           </button>
@@ -720,7 +719,7 @@ function CalendarContent() {
           </p>
           <button
             onClick={() => setWeekOffset((o) => o + 1)}
-            className="p-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
+            className="p-2 rounded-xl bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
           >
             →
           </button>
@@ -740,10 +739,10 @@ function CalendarContent() {
             {shifts.length === 0 ? (
               <div className="p-10 text-center">
                 <p className="text-3xl mb-3">📅</p>
-                <p className="font-semibold dark:text-purple-100 text-purple-900">
+                <p className="font-semibold text-[var(--t-text)]">
                   No availability slots yet
                 </p>
-                <p className="text-sm dark:text-purple-400/60 text-purple-400 mt-1 mb-4">
+                <p className="text-sm text-[var(--t-text-muted)] mt-1 mb-4">
                   Add time slots so cadets can book your classes
                 </p>
                 <button
@@ -773,14 +772,14 @@ function CalendarContent() {
                           className={`w-2 h-10 rounded-full flex-shrink-0 ${isPast ? "dark:bg-gray-700 bg-gray-300" : shift.isBooked ? "bg-green-500" : "bg-purple-500"}`}
                         />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
+                          <p className="text-sm font-medium text-[var(--t-text)]">
                             {start.toLocaleDateString("en-US", {
                               weekday: "short",
                               month: "short",
                               day: "numeric",
                             })}
                           </p>
-                          <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                          <p className="text-xs text-[var(--t-text-muted)]">
                             {start.toLocaleTimeString("en-US", {
                               hour: "numeric",
                               minute: "2-digit",
@@ -815,7 +814,7 @@ function CalendarContent() {
           /* ── Week Calendar View ───────────────────────────────────────────── */
           <div className={`${card} overflow-hidden`}>
             {/* Day headers */}
-            <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b dark:border-purple-900/20 border-purple-100">
+            <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-[var(--t-nav-border)]">
               <div />
               {weekDays.map((day) => {
                 const isToday =
@@ -823,13 +822,13 @@ function CalendarContent() {
                 return (
                   <div
                     key={day.toISOString()}
-                    className="py-3 text-center border-l dark:border-purple-900/20 border-purple-100"
+                    className="py-3 text-center border-l border-[var(--t-nav-border)]"
                   >
-                    <p className="text-xs dark:text-purple-400/60 text-purple-400 uppercase">
+                    <p className="text-xs text-[var(--t-text-muted)] uppercase">
                       {day.toLocaleDateString("en-US", { weekday: "short" })}
                     </p>
                     <p
-                      className={`text-sm font-bold mt-0.5 ${isToday ? "w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center mx-auto" : "dark:text-purple-100 text-purple-900"}`}
+                      className={`text-sm font-bold mt-0.5 ${isToday ? "w-7 h-7 rounded-full bg-purple-600 text-white flex items-center justify-center mx-auto" : "text-[var(--t-text)]"}`}
                     >
                       {day.getDate()}
                     </p>
@@ -872,7 +871,7 @@ function CalendarContent() {
                   return (
                     <div
                       key={day.toISOString()}
-                      className="relative border-l dark:border-purple-900/20 border-purple-100 cursor-pointer"
+                      className="relative border-l border-[var(--t-nav-border)] cursor-pointer"
                       style={{ height: 24 * HOUR_PX }}
                       onClick={() => {
                         setAddDefaultDate(day);
@@ -995,7 +994,7 @@ export default function CalendarPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

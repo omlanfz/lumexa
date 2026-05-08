@@ -159,18 +159,18 @@ function StudentSidebar({
 
       <aside
         className={`fixed top-0 left-0 h-full w-64 z-30 flex flex-col
-          bg-[#060E1F] border-r border-blue-900/30
+          bg-[var(--s-nav-bg)] border-r border-[var(--s-nav-border)]
           transition-transform duration-300 lg:translate-x-0
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         {/* Logo */}
-        <div className="p-4 border-b border-blue-900/20 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-sm select-none">
+        <div className="p-4 border-b border-[var(--s-nav-border)] flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center font-bold text-white text-sm select-none">
             L
           </div>
           <div>
-            <p className="font-bold text-white text-sm">Lumexa</p>
-            <p className="text-xs text-blue-400">
+            <p className="font-bold text-[var(--s-text)] text-sm">Lumexa</p>
+            <p className="text-xs text-[var(--s-text-muted)]">
               {isTeacherView ? "Teacher View" : "Mission Control"}
             </p>
           </div>
@@ -183,14 +183,14 @@ function StudentSidebar({
           That entire block has been removed. Students only show a gradient
           circle with their initial — no upload UI, no file input.
         */}
-        <div className="px-4 py-4 border-b border-blue-900/20">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-600 to-cyan-700 flex items-center justify-center font-bold text-white text-xl select-none">
+        <div className="px-4 py-4 border-b border-[var(--s-nav-border)]">
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#4F7CFF] to-[#27D6C5] flex items-center justify-center font-bold text-white text-xl select-none">
             {student?.name ? student.name.charAt(0).toUpperCase() : "…"}
           </div>
-          <p className="font-semibold text-white mt-2 text-sm">
+          <p className="font-semibold text-[var(--s-text)] mt-2 text-sm">
             {student?.name ?? "Loading…"}
           </p>
-          <p className="text-xs text-blue-400">
+          <p className="text-xs text-[var(--s-text-muted)]">
             {student?.grade ? `${student.grade} · ` : ""}Age{" "}
             {student?.age ?? "…"} · Cadet
           </p>
@@ -208,8 +208,8 @@ function StudentSidebar({
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                 activeTab === item.id && !item.href
-                  ? "bg-blue-600 text-white"
-                  : "text-blue-300/60 hover:bg-blue-900/30 hover:text-blue-200"
+                  ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)]"
+                  : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
               }`}
             >
               <span className="text-lg">{item.icon}</span>
@@ -222,12 +222,12 @@ function StudentSidebar({
         </nav>
 
         {/* Back link */}
-        <div className="p-4 border-t border-blue-900/20">
+        <div className="p-4 border-t border-[var(--s-nav-border)]">
           <button
             onClick={() =>
               router.push(isTeacherView ? "/teacher-students" : "/dashboard")
             }
-            className="w-full text-xs text-blue-400 hover:text-blue-300 text-left transition-colors"
+            className="w-full text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] text-left transition-colors"
           >
             ←{" "}
             {isTeacherView ? "Back to My Students" : "Back to Parent Dashboard"}
@@ -388,7 +388,7 @@ function StudentDashboardContent() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#050D1A]">
+      <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
         <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -396,7 +396,7 @@ function StudentDashboardContent() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-[#050D1A] gap-4 px-4">
+      <div className="flex flex-col items-center justify-center h-screen bg-[var(--s-bg)] gap-4 px-4">
         <p className="text-4xl">🚫</p>
         <p className="text-red-400 text-sm max-w-sm text-center">{error}</p>
         <button
@@ -427,12 +427,12 @@ function StudentDashboardContent() {
     )
     .slice(0, 5);
 
-  const card = "rounded-2xl border bg-[#0D1B2E]/60 border-blue-900/30";
-  const txtp = "text-blue-100";
-  const txtm = "text-blue-300/60";
+  const card = "s-card";
+  const txtp = "text-[var(--s-text)]";
+  const txtm = "text-[var(--s-text-muted)]";
 
   return (
-    <div className="min-h-screen bg-[#050D1A] text-white flex">
+    <div className="min-h-screen bg-[var(--s-bg)] text-[var(--s-text)] flex">
       <StudentSidebar
         student={student}
         activeTab={activeTab}
@@ -446,9 +446,9 @@ function StudentDashboardContent() {
       <button
         onClick={toggleSidebar}
         className={`fixed top-4 z-40 w-8 h-8 rounded-full
-          bg-[#0D1B2E] border border-blue-900/40
+          bg-[var(--s-surface)] border border-[var(--s-border)]
           flex items-center justify-center
-          text-blue-400 hover:text-blue-200
+          text-[var(--s-text-muted)] hover:text-[var(--s-text)]
           transition-all duration-300 shadow-lg
           ${sidebarOpen ? "left-[268px]" : "left-4"}`}
         aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
@@ -536,7 +536,7 @@ function StudentDashboardContent() {
 
             {/* Find a Teacher CTA — hidden for teacher view */}
             {!isTeacherView && (
-              <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-900/40 to-cyan-900/20 border border-blue-800/30">
+              <div className="p-6 rounded-2xl bg-gradient-to-r from-[var(--s-accent)]/10 to-[var(--s-accent-2)]/10 border border-[var(--s-border-strong)]">
                 <h3 className={`font-semibold text-lg mb-1 ${txtp}`}>
                   Ready to learn? 🚀
                 </h3>
@@ -566,9 +566,9 @@ function StudentDashboardContent() {
                   {upcomingBookings.slice(0, 3).map((b) => (
                     <div
                       key={b.id}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-blue-900/10 border border-blue-900/20"
+                      className="flex items-center gap-3 p-3 rounded-xl bg-[var(--s-nav-active)]/40 border border-[var(--s-border)]"
                     >
-                      <div className="w-10 h-10 rounded-lg bg-blue-700 flex items-center justify-center flex-shrink-0">
+                      <div className="w-10 h-10 rounded-lg bg-[var(--s-accent)] flex items-center justify-center flex-shrink-0">
                         <span className="text-white text-sm font-bold">
                           {new Date(b.shift.start).getDate()}
                         </span>
@@ -587,7 +587,7 @@ function StudentDashboardContent() {
                           })}
                         </p>
                       </div>
-                      <span className="text-xs px-2 py-1 bg-blue-600/20 text-blue-300 rounded-full border border-blue-600/30 flex-shrink-0">
+                      <span className="text-xs px-2 py-1 bg-[var(--s-accent)]/15 text-[var(--s-accent)] rounded-full border border-[var(--s-accent)]/30 flex-shrink-0">
                         Upcoming
                       </span>
                     </div>
@@ -606,9 +606,9 @@ function StudentDashboardContent() {
                   {recentCompleted.map((b) => (
                     <div
                       key={b.id}
-                      className="flex items-center gap-3 p-3 rounded-xl bg-green-900/10 border border-green-900/20"
+                      className="flex items-center gap-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20"
                     >
-                      <div className="w-10 h-10 rounded-lg bg-green-900/40 border border-green-800/30 flex items-center justify-center flex-shrink-0">
+                      <div className="w-10 h-10 rounded-lg bg-green-500/20 border border-green-500/30 flex items-center justify-center flex-shrink-0">
                         <span className="text-green-400 text-lg">✅</span>
                       </div>
                       <div className="flex-1 min-w-0">
@@ -630,8 +630,8 @@ function StudentDashboardContent() {
                               key={s}
                               className={`text-xs ${
                                 s <= (b.review?.rating ?? 0)
-                                  ? "text-yellow-400"
-                                  : "text-gray-600"
+                                  ? "text-yellow-500"
+                                  : "text-[var(--s-text-faint)]"
                               }`}
                             >
                               ★
@@ -700,7 +700,7 @@ function StudentDashboardContent() {
                     key={b.id}
                     className={`${card} p-4 flex items-center gap-4`}
                   >
-                    <div className="w-12 h-12 rounded-xl bg-blue-700 flex flex-col items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-[var(--s-accent)] flex flex-col items-center justify-center flex-shrink-0">
                       <span className="text-white text-xs font-medium">
                         {new Date(b.shift.start).toLocaleDateString("en-US", {
                           month: "short",
@@ -726,7 +726,7 @@ function StudentDashboardContent() {
                         })}
                       </p>
                     </div>
-                    <span className="text-xs px-2 py-1 bg-blue-600/20 text-blue-300 rounded-full border border-blue-600/30">
+                    <span className="text-xs px-2 py-1 bg-[var(--s-accent)]/15 text-[var(--s-accent)] rounded-full border border-[var(--s-accent)]/30">
                       Upcoming
                     </span>
                   </div>
@@ -744,8 +744,8 @@ export default function StudentDashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen bg-[#050D1A]">
-          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
+          <div className="w-10 h-10 border-2 border-[var(--s-accent)] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

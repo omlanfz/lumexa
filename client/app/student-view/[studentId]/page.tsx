@@ -70,21 +70,20 @@ function StudentViewContent() {
       .finally(() => setLoading(false));
   }, [studentId, router]);
 
-  const card =
-    "rounded-2xl border dark:bg-[#0D1B2E]/60 bg-white dark:border-blue-900/30 border-blue-100";
-  const txtp = "dark:text-blue-100 text-blue-900";
-  const txtm = "dark:text-blue-300/60 text-blue-400";
+  const card = "s-card";
+  const txtp = "text-[var(--s-text)]";
+  const txtm = "text-[var(--s-text-muted)]";
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
         <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
 
   if (error || !snap)
     return (
-      <div className="flex flex-col items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF] gap-4 text-center px-4">
+      <div className="flex flex-col items-center justify-center h-screen bg-[var(--s-bg)] gap-4 text-center px-4">
         <p className="text-5xl">🚫</p>
         <p className="text-red-400 font-semibold">
           {error ?? "Student not found"}
@@ -103,7 +102,7 @@ function StudentViewContent() {
     );
 
   return (
-    <div className="min-h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+    <div className="min-h-screen bg-[var(--s-bg)]">
       <StudentNav
         studentId={studentId}
         studentName={snap.student.name}
@@ -286,7 +285,7 @@ export default function StudentViewPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
           <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

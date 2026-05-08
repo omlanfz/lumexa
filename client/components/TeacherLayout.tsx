@@ -23,7 +23,7 @@ export default function TeacherLayout({
 }: TeacherLayoutProps) {
   return (
     // CHANGE: flex row, overflow-x-hidden prevents horizontal scroll
-    <div className="flex h-screen overflow-hidden dark:bg-[#0A0714] bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-[var(--t-bg)]">
       <TeacherNav
         teacherName={teacherName}
         avatarUrl={avatarUrl}

@@ -114,28 +114,28 @@ function ProgressNav({
 }) {
   const router = useRouter();
   return (
-    <div className="fixed top-0 left-0 h-full w-64 bg-[#060E1F] border-r border-blue-900/30 flex flex-col z-30 overflow-hidden">
+    <div className="fixed top-0 left-0 h-full w-64 bg-[var(--s-nav-bg)] border-r border-[var(--s-nav-border)] flex flex-col z-30 overflow-hidden">
       {/* Logo */}
-      <div className="p-4 border-b border-blue-900/20 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white text-sm">
+      <div className="p-4 border-b border-[var(--s-nav-border)] flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center font-bold text-white text-sm">
           L
         </div>
         <div>
-          <p className="font-bold text-white text-sm">Lumexa</p>
-          <p className="text-xs text-blue-400">Mission Control</p>
+          <p className="font-bold text-[var(--s-text)] text-sm">Lumexa</p>
+          <p className="text-xs text-[var(--s-text-muted)]">Mission Control</p>
         </div>
       </div>
 
       {/* Student identity */}
-      <div className="px-4 py-3 border-b border-blue-900/20">
-        <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center font-bold text-white mb-2">
+      <div className="px-4 py-3 border-b border-[var(--s-nav-border)]">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F7CFF] to-[#27D6C5] flex items-center justify-center font-bold text-white mb-2">
           {/* SAFE: studentName may be undefined while loading */}
           {studentName ? studentName.charAt(0).toUpperCase() : "…"}
         </div>
-        <p className="font-semibold text-white text-sm">
+        <p className="font-semibold text-[var(--s-text)] text-sm">
           {studentName ?? "Loading…"}
         </p>
-        <p className="text-xs text-blue-400">Cadet</p>
+        <p className="text-xs text-[var(--s-text-muted)]">Cadet</p>
       </div>
 
       {/* Nav links */}
@@ -173,8 +173,8 @@ function ProgressNav({
             onClick={() => router.push(item.href)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition-all ${
               item.active
-                ? "bg-blue-600 text-white"
-                : "text-blue-300/60 hover:bg-blue-900/30 hover:text-blue-200"
+                ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)]"
+                : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
             }`}
           >
             <span>{item.icon}</span>
@@ -183,10 +183,10 @@ function ProgressNav({
         ))}
       </nav>
 
-      <div className="p-4 border-t border-blue-900/20">
+      <div className="p-4 border-t border-[var(--s-nav-border)]">
         <button
           onClick={() => router.push("/dashboard")}
-          className="w-full text-xs text-blue-400 hover:text-blue-300 text-left"
+          className="w-full text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] text-left"
         >
           ← Back to Parent Dashboard
         </button>
@@ -249,7 +249,7 @@ function ProgressContent() {
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
         <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -297,12 +297,12 @@ function ProgressContent() {
   const maxMonth = Math.max(...months.map(([, v]) => v), 1);
 
   const card =
-    "rounded-2xl border dark:bg-[#0D1B2E]/60 bg-white dark:border-blue-900/30 border-blue-100";
-  const txtp = "dark:text-blue-100 text-blue-900";
-  const txtm = "dark:text-blue-300/60 text-blue-400";
+    "s-card";
+  const txtp = "text-[var(--s-text)]";
+  const txtm = "text-[var(--s-text-muted)]";
 
   return (
-    <div className="min-h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+    <div className="min-h-screen bg-[var(--s-bg)]">
       {/* CHANGE: ProgressNav instead of StudentNav — no parent.fullName access */}
       <ProgressNav studentName={student?.name} studentId={studentId} />
 
@@ -539,7 +539,7 @@ export default function StudentProgressPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
           <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

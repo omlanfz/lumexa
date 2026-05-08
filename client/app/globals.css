@@ -233,3 +233,301 @@ html.dark .card-hover:hover {
   outline-offset: 3px;
   border-radius: 6px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LUMEXA DASHBOARD DESIGN SYSTEM
+   One ecosystem · Two role environments · Light + Dark themes
+   Teacher: Violet/Indigo palette  ·  Student: Electric Blue / Teal palette
+   Light mode is the default. Dark mode applied via html.dark class.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Shared Dashboard Tokens ─────────────────────────────────────────────── */
+:root {
+  --dash-radius-sm:   0.5rem;
+  --dash-radius:      0.75rem;
+  --dash-radius-lg:   1rem;
+  --dash-radius-xl:   1.25rem;
+  --dash-radius-2xl:  1.5rem;
+  --dash-transition:  200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --dash-shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --dash-shadow:      0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --dash-shadow-lg:   0 10px 30px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.06);
+}
+
+/* ── Teacher Dashboard Tokens — Light (default) ──────────────────────────── */
+:root {
+  /* Backgrounds */
+  --t-bg:              #F7F5FF;   /* page canvas — violet-tinted off-white */
+  --t-bg-2:            #EDE9FF;   /* secondary background */
+  /* Surfaces */
+  --t-surface:         #FFFFFF;   /* card / panel */
+  --t-surface-2:       #F3F0FF;   /* nested surface */
+  --t-surface-3:       #EDE9FF;   /* deep nested / hover */
+  /* Borders */
+  --t-border:          #DDD6FE;   /* default border */
+  --t-border-strong:   #C4B5FD;   /* emphasis border */
+  /* Typography */
+  --t-text:            #1E1B4B;   /* primary text */
+  --t-text-muted:      #5B5E84;   /* secondary / muted text */
+  --t-text-faint:      #8B8DB8;   /* placeholder / very muted */
+  /* Navigation */
+  --t-nav-bg:          #FFFFFF;
+  --t-nav-border:      #EDE9FF;
+  --t-nav-active:      rgba(123, 97, 255, 0.09);
+  --t-nav-hover:       rgba(123, 97, 255, 0.05);
+  --t-nav-active-text: #4C1D95;
+  /* Accent palette */
+  --t-accent:          #7B61FF;   /* deep violet — CTAs, active states */
+  --t-accent-hover:    #6A4FF0;
+  --t-accent-light:    rgba(123, 97, 255, 0.10);
+  --t-accent-2:        #5B8CFF;   /* indigo — secondary accent */
+  /* Semantic */
+  --t-success:         #16A34A;   /* earnings / completed */
+  --t-success-bg:      #DCFCE7;
+  --t-success-text:    #14532D;
+  --t-warning:         #D97706;
+  --t-warning-bg:      #FEF3C7;
+  --t-danger:          #DC2626;
+  --t-danger-bg:       #FEE2E2;
+  --t-reward:          #D97706;
+  --t-reward-bg:       #FEF3C7;
+  /* Emerald green for payout/earnings highlights */
+  --t-earn:            #24C78B;
+  --t-earn-bg:         rgba(36, 199, 139, 0.08);
+}
+
+/* ── Student Dashboard Tokens — Light (default) ──────────────────────────── */
+:root {
+  /* Backgrounds */
+  --s-bg:              #F0F6FF;   /* page canvas — electric-blue tint */
+  --s-bg-2:            #E8F2FF;   /* secondary background */
+  /* Surfaces */
+  --s-surface:         #FFFFFF;   /* card / panel */
+  --s-surface-2:       #EFF5FF;   /* nested surface */
+  --s-surface-3:       #E8F0FF;   /* deep nested / hover */
+  /* Borders */
+  --s-border:          #BFDBFE;   /* default border */
+  --s-border-strong:   #93C5FD;   /* emphasis border */
+  /* Typography */
+  --s-text:            #0F2244;   /* primary text */
+  --s-text-muted:      #4A6480;   /* secondary / muted text */
+  --s-text-faint:      #7A94B4;   /* placeholder / very muted */
+  /* Navigation */
+  --s-nav-bg:          #FFFFFF;
+  --s-nav-border:      #DBEAFE;
+  --s-nav-active:      rgba(79, 124, 255, 0.09);
+  --s-nav-hover:       rgba(79, 124, 255, 0.05);
+  --s-nav-active-text: #1D4ED8;
+  /* Accent palette */
+  --s-accent:          #4F7CFF;   /* electric blue — CTAs, active states */
+  --s-accent-hover:    #3D68E8;
+  --s-accent-light:    rgba(79, 124, 255, 0.10);
+  --s-accent-2:        #27D6C5;   /* teal — secondary accent */
+  --s-accent-2-light:  rgba(39, 214, 197, 0.10);
+  /* Reward system — used for XP, achievements, streaks */
+  --s-reward:          #D97706;
+  --s-reward-bg:       #FEF3C7;
+  --s-reward-text:     #92400E;
+  --s-reward-gold:     #FFC857;   /* bright gold for badges */
+  /* Semantic */
+  --s-success:         #16A34A;
+  --s-success-bg:      #DCFCE7;
+  --s-danger:          #DC2626;
+  --s-danger-bg:       #FEE2E2;
+}
+
+/* ── Dark Mode Overrides ─────────────────────────────────────────────────── */
+html.dark {
+
+  /* Teacher — dark */
+  --t-bg:              #0F172A;
+  --t-bg-2:            #111827;
+  --t-surface:         #161F35;
+  --t-surface-2:       #1D2847;
+  --t-surface-3:       #243054;
+  --t-border:          rgba(123, 97, 255, 0.13);
+  --t-border-strong:   rgba(123, 97, 255, 0.26);
+  --t-text:            #E2E8FF;
+  --t-text-muted:      #9CA8D4;
+  --t-text-faint:      #6B7BA4;
+  --t-nav-bg:          #0A0714;
+  --t-nav-border:      rgba(123, 97, 255, 0.11);
+  --t-nav-active:      rgba(123, 97, 255, 0.14);
+  --t-nav-hover:       rgba(123, 97, 255, 0.07);
+  --t-nav-active-text: #C4B5FD;
+  --t-accent:          #9B85FF;
+  --t-accent-hover:    #AC98FF;
+  --t-accent-light:    rgba(155, 133, 255, 0.12);
+  --t-accent-2:        #7AA8FF;
+  --t-success:         #22C55E;
+  --t-success-bg:      rgba(34, 197, 94, 0.10);
+  --t-success-text:    #86EFAC;
+  --t-warning:         #F59E0B;
+  --t-warning-bg:      rgba(245, 158, 11, 0.10);
+  --t-danger:          #F87171;
+  --t-danger-bg:       rgba(248, 113, 113, 0.10);
+  --t-reward:          #FFC857;
+  --t-reward-bg:       rgba(255, 200, 87, 0.10);
+  --t-earn:            #2EE5A1;
+  --t-earn-bg:         rgba(46, 229, 161, 0.08);
+
+  /* Student — dark */
+  --s-bg:              #0B1020;
+  --s-bg-2:            #0D1426;
+  --s-surface:         #131A2E;
+  --s-surface-2:       #1B2440;
+  --s-surface-3:       #233059;
+  --s-border:          rgba(79, 124, 255, 0.13);
+  --s-border-strong:   rgba(79, 124, 255, 0.26);
+  --s-text:            #E8EEFF;
+  --s-text-muted:      #8BA0C8;
+  --s-text-faint:      #5A6E94;
+  --s-nav-bg:          #060E1F;
+  --s-nav-border:      rgba(79, 124, 255, 0.11);
+  --s-nav-active:      rgba(79, 124, 255, 0.14);
+  --s-nav-hover:       rgba(79, 124, 255, 0.07);
+  --s-nav-active-text: #93C5FD;
+  --s-accent:          #6B92FF;
+  --s-accent-hover:    #7DA1FF;
+  --s-accent-light:    rgba(107, 146, 255, 0.12);
+  --s-accent-2:        #32E8D6;
+  --s-accent-2-light:  rgba(50, 232, 214, 0.10);
+  --s-reward:          #FFC857;
+  --s-reward-bg:       rgba(255, 200, 87, 0.10);
+  --s-reward-text:     #FDE68A;
+  --s-reward-gold:     #FFD37A;
+  --s-success:         #22C55E;
+  --s-success-bg:      rgba(34, 197, 94, 0.10);
+  --s-danger:          #F87171;
+  --s-danger-bg:       rgba(248, 113, 113, 0.10);
+}
+
+/* ── Semantic Component Classes ─────────────────────────────────────────── */
+
+/* Teacher card (replaces per-page card constant) */
+.t-card {
+  background-color: var(--t-surface);
+  border: 1px solid var(--t-border);
+  border-radius: var(--dash-radius-2xl);
+  transition: border-color var(--dash-transition),
+              box-shadow var(--dash-transition);
+}
+.t-card-hover:hover {
+  border-color: var(--t-border-strong);
+  box-shadow: 0 8px 28px rgba(123, 97, 255, 0.09),
+              0 2px 6px rgba(0, 0, 0, 0.05);
+}
+html.dark .t-card-hover:hover {
+  box-shadow: 0 8px 28px rgba(123, 97, 255, 0.18),
+              0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* Student card */
+.s-card {
+  background-color: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: var(--dash-radius-2xl);
+  transition: border-color var(--dash-transition),
+              box-shadow var(--dash-transition);
+}
+.s-card-hover:hover {
+  border-color: var(--s-border-strong);
+  box-shadow: 0 8px 28px rgba(79, 124, 255, 0.09),
+              0 2px 6px rgba(0, 0, 0, 0.05);
+}
+html.dark .s-card-hover:hover {
+  box-shadow: 0 8px 28px rgba(79, 124, 255, 0.18),
+              0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* Loading shimmer — teacher */
+.t-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--t-surface) 25%,
+    var(--t-surface-2) 50%,
+    var(--t-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Loading shimmer — student */
+.s-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--s-surface) 25%,
+    var(--s-surface-2) 50%,
+    var(--s-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Reward badge glow */
+@keyframes reward-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 200, 87, 0); }
+  50%       { box-shadow: 0 0 12px 3px rgba(255, 200, 87, 0.35); }
+}
+.reward-glow { animation: reward-glow 2.5s ease-in-out infinite; }
+
+/* Accent focus ring — teacher */
+.t-focus:focus-visible {
+  outline: 2px solid var(--t-accent);
+  outline-offset: 3px;
+  border-radius: var(--dash-radius);
+}
+
+/* Accent focus ring — student */
+.s-focus:focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 3px;
+  border-radius: var(--dash-radius);
+}
+
+/* Dashboard page loading spinner wrapper */
+.dash-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+.dash-loading-teacher { background-color: var(--t-bg); }
+.dash-loading-student { background-color: var(--s-bg); }
+
+/* Stat value highlight colors (role-specific) */
+.t-stat-value { color: var(--t-accent); }
+.s-stat-value { color: var(--s-accent); }
+
+/* Earn/success color — teacher */
+.t-earn-text { color: var(--t-earn); }
+.t-earn-badge {
+  background-color: var(--t-earn-bg);
+  color: var(--t-earn);
+}
+
+/* Reward color — student */
+.s-reward-text  { color: var(--s-reward-gold); }
+.s-reward-badge {
+  background-color: var(--s-reward-bg);
+  color: var(--s-reward-text);
+}
+
+/* ── Teacher scrollbar (override .dark purple with violet) ─────────────── */
+html.dark .teacher-scroll::-webkit-scrollbar-thumb {
+  background: rgba(123, 97, 255, 0.30);
+}
+html.dark .teacher-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(123, 97, 255, 0.50);
+}
+html.light .teacher-scroll::-webkit-scrollbar-thumb {
+  background: rgba(123, 97, 255, 0.18);
+}
+
+/* ── Student scrollbar ─────────────────────────────────────────────────── */
+html.dark .student-scroll-dark::-webkit-scrollbar-thumb {
+  background: rgba(79, 124, 255, 0.28);
+}
+html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 124, 255, 0.48);
+}

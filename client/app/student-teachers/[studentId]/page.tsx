@@ -105,19 +105,19 @@ function MyTeachersContent() {
   }, [studentId, router]);
 
   return (
-    <div className="min-h-screen bg-[#050D1A]">
+    <div className="min-h-screen bg-[var(--s-bg)]">
       {/* Header */}
-      <div className="border-b border-blue-900/20 px-4 sm:px-6 py-4 flex items-center gap-4 bg-[#060E1F]">
+      <div className="border-b border-[var(--s-nav-border)] px-4 sm:px-6 py-4 flex items-center gap-4 bg-[var(--s-nav-bg)]">
         <button
           onClick={() => router.push(`/student-dashboard/${studentId}`)}
-          className="text-blue-400 hover:text-blue-300 transition-colors text-xl leading-none"
+          className="text-[var(--s-text-muted)] hover:text-[var(--s-text)] transition-colors text-xl leading-none"
           aria-label="Go back"
         >
           ←
         </button>
         <div>
-          <h1 className="font-bold text-white">My Teachers</h1>
-          <p className="text-xs text-blue-400">{studentName}'s Crew</p>
+          <h1 className="font-bold text-[var(--s-text)]">My Teachers</h1>
+          <p className="text-xs text-[var(--s-text-muted)]">{studentName}'s Crew</p>
         </div>
       </div>
 
@@ -137,10 +137,10 @@ function MyTeachersContent() {
         ) : teachers.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-5xl mb-4">👩‍🚀</p>
-            <p className="text-blue-100 font-semibold text-lg mb-2">
+            <p className="text-[var(--s-text)] font-semibold text-lg mb-2">
               No teachers yet
             </p>
-            <p className="text-blue-400 text-sm mb-6">
+            <p className="text-[var(--s-text-muted)] text-sm mb-6">
               Book a class to meet your first teacher!
             </p>
             <button
@@ -155,7 +155,7 @@ function MyTeachersContent() {
             {teachers.map((t) => (
               <div
                 key={t.id}
-                className="bg-[#0D1B2E]/80 rounded-2xl border border-blue-900/30 p-5"
+                className="s-card p-5"
               >
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0 select-none">
@@ -163,10 +163,10 @@ function MyTeachersContent() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white truncate">
+                    <p className="font-semibold text-[var(--s-text)] truncate">
                       {t.name}
                     </p>
-                    <p className="text-xs text-blue-400">
+                    <p className="text-xs text-[var(--s-text-muted)]">
                       ⭐ {t.ratingAvg.toFixed(1)} rating
                     </p>
 
@@ -175,7 +175,7 @@ function MyTeachersContent() {
                         {t.subjects.slice(0, 3).map((s) => (
                           <span
                             key={s}
-                            className="text-xs px-2 py-0.5 rounded-full bg-blue-900/40 text-blue-300 border border-blue-800/30"
+                            className="text-xs px-2 py-0.5 rounded-full bg-[var(--s-accent)]/15 text-[var(--s-accent)] border border-[var(--s-accent)]/30"
                           >
                             {s}
                           </span>
@@ -184,14 +184,14 @@ function MyTeachersContent() {
                     )}
 
                     {t.bio && (
-                      <p className="text-xs text-blue-400/60 mt-2 line-clamp-2">
+                      <p className="text-xs text-[var(--s-text-muted)] mt-2 line-clamp-2">
                         {t.bio}
                       </p>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between text-xs text-blue-400/70">
+                <div className="mt-4 flex items-center justify-between text-xs text-[var(--s-text-muted)]">
                   <span>
                     📚 {t.classCount} class{t.classCount !== 1 ? "es" : ""}{" "}
                     together
@@ -231,7 +231,7 @@ export default function MyTeachersPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#050D1A] flex items-center justify-center">
+        <div className="min-h-screen bg-[var(--s-bg)] flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

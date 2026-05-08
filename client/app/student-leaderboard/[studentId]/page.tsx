@@ -133,18 +133,18 @@ function LeaderboardContent() {
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
         <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
 
   const card =
-    "rounded-2xl border dark:bg-[#0D1B2E]/60 bg-white dark:border-blue-900/30 border-blue-100";
-  const txtp = "dark:text-blue-100 text-blue-900";
-  const txtm = "dark:text-blue-300/60 text-blue-400";
+    "s-card";
+  const txtp = "text-[var(--s-text)]";
+  const txtm = "text-[var(--s-text-muted)]";
 
   return (
-    <div className="min-h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+    <div className="min-h-screen bg-[var(--s-bg)]">
       <StudentNav
         studentId={studentId || "none"}
         studentName={studentName}
@@ -308,7 +308,7 @@ export default function StudentLeaderboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
           <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

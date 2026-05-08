@@ -121,7 +121,7 @@ function LessonsContent() {
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
         <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -155,12 +155,12 @@ function LessonsContent() {
           );
 
   const card =
-    "rounded-2xl border dark:bg-[#0D1B2E]/60 bg-white dark:border-blue-900/30 border-blue-100";
-  const txtp = "dark:text-blue-100 text-blue-900";
-  const txtm = "dark:text-blue-300/60 text-blue-400";
+    "s-card";
+  const txtp = "text-[var(--s-text)]";
+  const txtm = "text-[var(--s-text-muted)]";
 
   return (
-    <div className="min-h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+    <div className="min-h-screen bg-[var(--s-bg)]">
       <StudentNav
         studentId={studentId}
         studentName={student?.name ?? null}
@@ -180,7 +180,7 @@ function LessonsContent() {
 
           {/* Filter tabs */}
           <div
-            className={`flex gap-1 p-1 rounded-xl mb-6 inline-flex dark:bg-[#0D1B2E] bg-blue-50 border dark:border-blue-900/30 border-blue-100`}
+            className={`flex gap-1 p-1 rounded-xl mb-6 inline-flex bg-[var(--s-surface)] border border-[var(--s-border)]`}
           >
             {(["all", "upcoming", "completed"] as const).map((f) => (
               <button
@@ -304,7 +304,7 @@ function LessonsContent() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setReviewModal(null)}
           />
-          <div className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10 dark:bg-[#0D1B2E] bg-white dark:border-blue-800/40 border-blue-200">
+          <div className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10 bg-[var(--s-surface)] border-[var(--s-border)]">
             <div className="p-6">
               <h2 className={`text-lg font-bold mb-4 ${txtp}`}>
                 Rate this lesson
@@ -325,7 +325,7 @@ function LessonsContent() {
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Optional comment..."
                 rows={3}
-                className="w-full px-3 py-2 rounded-xl border dark:border-blue-800/40 border-blue-200 dark:bg-[#1A2B40] bg-blue-50 dark:text-blue-100 text-blue-900 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 rounded-xl border bg-[var(--s-surface)] border-[var(--s-border)] text-[var(--s-text)] text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               {reviewError && (
                 <p className="text-red-400 text-sm mt-2">{reviewError}</p>
@@ -369,7 +369,7 @@ export default function StudentLessonsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#050D1A] bg-[#F0F5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--s-bg)]">
           <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

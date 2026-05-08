@@ -95,8 +95,8 @@ export default function StudentNav({
   const sidebarWMobile = mobileOpen ? "translate-x-0" : "-translate-x-full";
   const sidebarBase = `
     h-screen flex flex-col overflow-hidden transition-all duration-300 z-40
-    dark:bg-[#050D1A] bg-white
-    dark:border-blue-900/30 border-blue-100 border-r
+    bg-[var(--s-nav-bg)]
+    border-[var(--s-nav-border)] border-r
   `;
 
   const NavContent = () => (
@@ -110,11 +110,11 @@ export default function StudentNav({
 
       {/* Header */}
       <div
-        className={`flex items-center justify-between px-4 py-5 border-b dark:border-blue-900/20 border-blue-100 flex-shrink-0 ${collapsed ? "justify-center px-2" : ""}`}
+        className={`flex items-center justify-between px-4 py-5 border-b border-[var(--s-nav-border)] flex-shrink-0 ${collapsed ? "justify-center px-2" : ""}`}
       >
         {!collapsed && (
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden shadow-sm">
               <Image
                 src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
                 width={32}
@@ -123,23 +123,23 @@ export default function StudentNav({
               />
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-blue-500 text-sm leading-none">
+              <p className="font-bold text-[var(--s-accent)] text-sm leading-none">
                 Lumexa
               </p>
-              <p className="text-xs dark:text-blue-400/50 text-blue-400 leading-none">
+              <p className="text-xs text-[var(--s-text-muted)] leading-none opacity-70">
                 Mission Control
               </p>
             </div>
           </div>
         )}
         {collapsed && (
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center text-white text-sm font-bold">
             L
           </div>
         )}
         <button
           onClick={() => setCollapsed((c) => !c)}
-          className="hidden lg:flex ml-auto w-7 h-7 rounded-lg dark:bg-blue-900/30 bg-blue-100 dark:text-blue-400 text-blue-600 items-center justify-center transition-colors flex-shrink-0"
+          className="hidden lg:flex ml-auto w-7 h-7 rounded-lg bg-[var(--s-nav-active)] text-[var(--s-text-muted)] items-center justify-center transition-colors flex-shrink-0 hover:text-[var(--s-text)]"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? "→" : "←"}
@@ -148,7 +148,7 @@ export default function StudentNav({
 
       {/* Student profile */}
       <div
-        className={`flex-shrink-0 px-3 py-4 border-b dark:border-blue-900/20 border-blue-100 ${collapsed ? "flex justify-center" : ""}`}
+        className={`flex-shrink-0 px-3 py-4 border-b border-[var(--s-nav-border)] ${collapsed ? "flex justify-center" : ""}`}
       >
         <div
           className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
@@ -157,19 +157,19 @@ export default function StudentNav({
             <img
               src={avatarUrl}
               alt="avatar"
-              className="w-10 h-10 rounded-full object-cover border-2 dark:border-blue-700/40 border-blue-200 flex-shrink-0"
+              className="w-10 h-10 rounded-full object-cover border-2 border-[var(--s-border-strong)] flex-shrink-0"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-cyan-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F7CFF] to-[#27D6C5] flex items-center justify-center text-white font-bold flex-shrink-0 shadow-sm">
               {studentName ? studentName.charAt(0).toUpperCase() : "…"}
             </div>
           )}
           {!collapsed && (
             <div className="min-w-0">
-              <p className="text-sm font-semibold dark:text-blue-100 text-blue-900 truncate">
+              <p className="text-sm font-semibold text-[var(--s-text)] truncate">
                 {studentName}
               </p>
-              <p className="text-xs dark:text-blue-400/60 text-blue-400">
+              <p className="text-xs text-[var(--s-text-muted)]">
                 {level.icon} {level.name}
               </p>
             </div>
@@ -190,8 +190,8 @@ export default function StudentNav({
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                 isActive
-                  ? "dark:bg-blue-600/20 bg-blue-100 dark:text-blue-200 text-blue-700 dark:border dark:border-blue-600/30"
-                  : "dark:text-blue-300/70 text-blue-500 dark:hover:bg-blue-900/20 hover:bg-blue-50"
+                  ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)] border border-[var(--s-border-strong)]"
+                  : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
               } ${collapsed ? "justify-center px-2" : ""}`}
               title={collapsed ? `${item.label} · ${item.sub}` : undefined}
             >
@@ -201,7 +201,7 @@ export default function StudentNav({
                   <p className="text-sm font-medium leading-tight truncate">
                     {item.label}
                   </p>
-                  <p className="text-xs dark:text-blue-400/50 text-blue-400 leading-none truncate">
+                  <p className="text-xs text-[var(--s-text-faint)] leading-none truncate">
                     {item.sub}
                   </p>
                 </div>
@@ -213,7 +213,7 @@ export default function StudentNav({
 
       {/* Footer */}
       <div
-        className={`flex-shrink-0 px-3 py-4 border-t dark:border-blue-900/20 border-blue-100 ${collapsed ? "flex justify-center" : "flex items-center justify-between"}`}
+        className={`flex-shrink-0 px-3 py-4 border-t border-[var(--s-nav-border)] ${collapsed ? "flex justify-center" : "flex items-center justify-between"}`}
       >
         {!collapsed && isTeacherView && (
           <button
@@ -230,7 +230,7 @@ export default function StudentNav({
         {!collapsed && !isTeacherView && (
           <button
             onClick={() => router.push("/dashboard")}
-            className="text-xs dark:text-blue-400/60 text-blue-400 dark:hover:text-blue-300 hover:text-blue-600 transition-colors"
+            className="text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] transition-colors"
           >
             ← Parent Dashboard
           </button>
@@ -245,7 +245,7 @@ export default function StudentNav({
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen((o) => !o)}
-        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-xl dark:bg-blue-900/60 bg-blue-100 dark:text-blue-300 text-blue-700 flex items-center justify-center shadow-lg"
+        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-xl bg-[var(--s-nav-active)] text-[var(--s-text-muted)] flex items-center justify-center shadow-lg border border-[var(--s-nav-border)]"
       >
         {mobileOpen ? "✕" : "☰"}
       </button>

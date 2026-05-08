@@ -84,12 +84,11 @@ function TeacherStudentsContent() {
     );
   }, [search, students]);
 
-  const card =
-    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+  const card = "t-card shadow-sm";
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
         <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -106,16 +105,16 @@ function TeacherStudentsContent() {
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold dark:text-purple-100 text-purple-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
               Students
             </h1>
-            <p className="text-sm dark:text-purple-400/60 text-purple-400">
+            <p className="text-sm text-[var(--t-text-muted)]">
               Cadet Roster ✦
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <div className={`${card} px-3 py-2 flex items-center gap-2`}>
-              <span className="text-sm dark:text-purple-400/60 text-purple-400">
+              <span className="text-sm text-[var(--t-text-muted)]">
                 {students.length} total
               </span>
             </div>
@@ -133,7 +132,7 @@ function TeacherStudentsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, grade, or subject…"
-            className="w-full sm:w-80 px-4 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 dark:text-purple-100 text-purple-900 text-sm placeholder-purple-400/50 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            className="w-full sm:w-80 px-4 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 text-[var(--t-text)] text-sm placeholder-purple-400/50 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
           />
         </div>
 
@@ -146,12 +145,12 @@ function TeacherStudentsContent() {
         {filtered.length === 0 ? (
           <div className={`${card} p-10 sm:p-16 text-center`}>
             <p className="text-4xl mb-3">🛸</p>
-            <p className="font-semibold dark:text-purple-100 text-purple-900">
+            <p className="font-semibold text-[var(--t-text)]">
               {search
                 ? "No cadets match your search"
                 : "No cadets enrolled yet"}
             </p>
-            <p className="text-sm dark:text-purple-400/60 text-purple-400 mt-1">
+            <p className="text-sm text-[var(--t-text-muted)] mt-1">
               {search
                 ? "Try a different search term"
                 : "Students will appear here once they book your classes"}
@@ -169,7 +168,7 @@ function TeacherStudentsContent() {
           <>
             {/* ── Desktop table ── */}
             <div className={`${card} overflow-hidden hidden sm:block`}>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b dark:border-purple-900/20 border-purple-100">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
                 {[
                   "Student",
                   "Details",
@@ -181,7 +180,7 @@ function TeacherStudentsContent() {
                 ].map((h, i) => (
                   <p
                     key={i}
-                    className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400"
+                    className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]"
                   >
                     {h}
                   </p>
@@ -200,10 +199,10 @@ function TeacherStudentsContent() {
                         {s.studentName?.charAt(0)?.toUpperCase() ?? "?"}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium dark:text-purple-100 text-purple-900 truncate">
+                        <p className="text-sm font-medium text-[var(--t-text)] truncate">
                           {s.studentName}
                         </p>
-                        <p className="text-xs dark:text-purple-400/50 text-purple-400 truncate">
+                        <p className="text-xs text-[var(--t-text-muted)] truncate">
                           {s.parentEmail ?? "N/A"}
                         </p>
                       </div>
@@ -211,17 +210,17 @@ function TeacherStudentsContent() {
 
                     {/* Details */}
                     <div>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         {s.grade ?? "No grade"}
                       </p>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         {s.age ? `Age ${s.age}` : "Age N/A"}
                       </p>
                     </div>
 
                     {/* Classes */}
                     <div>
-                      <p className="text-sm font-semibold dark:text-purple-100 text-purple-900">
+                      <p className="text-sm font-semibold text-[var(--t-text)]">
                         {s.totalClasses}
                       </p>
                       <span
@@ -236,7 +235,7 @@ function TeacherStudentsContent() {
                     </div>
 
                     {/* Last class */}
-                    <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                    <p className="text-xs text-[var(--t-text-muted)]">
                       {s.lastClassDate
                         ? new Date(s.lastClassDate).toLocaleDateString(
                             "en-US",
@@ -249,7 +248,7 @@ function TeacherStudentsContent() {
                     </p>
 
                     {/* Next class */}
-                    <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                    <p className="text-xs text-[var(--t-text-muted)]">
                       {s.nextClassDate
                         ? new Date(s.nextClassDate).toLocaleDateString(
                             "en-US",
@@ -275,7 +274,7 @@ function TeacherStudentsContent() {
                       }
                       className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium
                         dark:bg-purple-900/30 bg-purple-100
-                        dark:text-purple-300 text-purple-700
+                        text-[var(--t-nav-active-text)]
                         dark:hover:bg-purple-800/50 hover:bg-purple-200
                         dark:border dark:border-purple-700/30 border border-purple-200
                         transition-colors whitespace-nowrap"
@@ -296,10 +295,10 @@ function TeacherStudentsContent() {
                       {s.studentName?.charAt(0)?.toUpperCase() ?? "?"}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold dark:text-purple-100 text-purple-900">
+                      <p className="font-semibold text-[var(--t-text)]">
                         {s.studentName}
                       </p>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         {s.parentEmail ?? ""}
                         {s.age ? ` · Age ${s.age}` : ""}
                       </p>
@@ -308,26 +307,26 @@ function TeacherStudentsContent() {
 
                   <div className="grid grid-cols-3 gap-2 text-center mb-3">
                     <div className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
-                      <p className="font-bold dark:text-purple-100 text-purple-900">
+                      <p className="font-bold text-[var(--t-text)]">
                         {s.totalClasses}
                       </p>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         Total
                       </p>
                     </div>
                     <div className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
-                      <p className="font-bold dark:text-purple-100 text-purple-900">
+                      <p className="font-bold text-[var(--t-text)]">
                         {s.completedClasses}
                       </p>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         Done
                       </p>
                     </div>
                     <div className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
-                      <p className="font-bold dark:text-purple-100 text-purple-900">
+                      <p className="font-bold text-[var(--t-text)]">
                         {s.pendingClasses}
                       </p>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         Upcoming
                       </p>
                     </div>
@@ -339,7 +338,7 @@ function TeacherStudentsContent() {
                     }
                     className="w-full py-2 rounded-xl text-sm font-medium
                       dark:bg-purple-900/30 bg-purple-100
-                      dark:text-purple-300 text-purple-700
+                      text-[var(--t-nav-active-text)]
                       dark:hover:bg-purple-800/50 hover:bg-purple-200
                       transition-colors"
                   >
@@ -370,7 +369,7 @@ export default function TeacherStudentsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }
