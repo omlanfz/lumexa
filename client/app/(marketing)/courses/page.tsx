@@ -13,9 +13,9 @@ const pathways = [
     ages: "Ages 10–18",
     color: "from-red-600 to-orange-600",
     border: "border-red-700/40",
-    badge: "bg-red-900/30 text-red-300",
-    accent: "text-red-400",
-    dot: "bg-red-400",
+    badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
+    accent: "text-red-600 dark:text-red-400",
+    dot: "bg-red-500",
     courses: [
       {
         number: "01",
@@ -87,9 +87,9 @@ const pathways = [
     ages: "Ages 12–18",
     color: "from-purple-600 to-blue-600",
     border: "border-purple-700/40",
-    badge: "bg-purple-900/30 text-purple-300",
-    accent: "text-purple-400",
-    dot: "bg-purple-400",
+    badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
+    accent: "text-purple-600 dark:text-purple-400",
+    dot: "bg-purple-500",
     featured: true,
     courses: [
       {
@@ -162,9 +162,9 @@ const pathways = [
     ages: "Ages 12–18",
     color: "from-blue-600 to-cyan-600",
     border: "border-blue-700/40",
-    badge: "bg-blue-900/30 text-blue-300",
-    accent: "text-blue-400",
-    dot: "bg-blue-400",
+    badge: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
+    accent: "text-blue-600 dark:text-blue-400",
+    dot: "bg-blue-500",
     courses: [
       {
         number: "07",
@@ -236,9 +236,9 @@ const pathways = [
     ages: "Ages 6–11",
     color: "from-yellow-500 to-orange-500",
     border: "border-yellow-700/40",
-    badge: "bg-yellow-900/30 text-yellow-300",
-    accent: "text-yellow-400",
-    dot: "bg-yellow-400",
+    badge: "bg-amber-100 dark:bg-yellow-900/30 text-amber-700 dark:text-yellow-300",
+    accent: "text-amber-600 dark:text-yellow-400",
+    dot: "bg-amber-500",
     courses: [
       {
         number: "10",
@@ -310,9 +310,9 @@ const pathways = [
     ages: "Ages 13–18",
     color: "from-teal-600 to-green-600",
     border: "border-teal-700/40",
-    badge: "bg-teal-900/30 text-teal-300",
-    accent: "text-teal-400",
-    dot: "bg-teal-400",
+    badge: "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300",
+    accent: "text-teal-600 dark:text-teal-400",
+    dot: "bg-teal-500",
     courses: [
       {
         number: "13",
@@ -490,14 +490,14 @@ function CoursesContent() {
           <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-blue-700/6 rounded-full blur-3xl" />
         </div>
         <div className="relative max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-700/40 bg-purple-900/20 text-purple-300 text-xs font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             {pathways.length} Pathways · {totalCourses} Courses · {totalLessons} Lessons
           </div>
-          <h1 className="text-4xl sm:text-5xl font-black text-white leading-tight mb-4">
+          <h1 className="text-4xl sm:text-5xl font-black text-[#0F172A] dark:text-white leading-tight mb-4">
             Full Curriculum Catalog
           </h1>
-          <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-6">
+          <p className="text-lg text-[#334155] dark:text-gray-400 max-w-2xl mx-auto mb-6">
             Every course is taught live by a verified expert teacher across all learning formats.
             Every lesson ends with something your child built. Every course ends with a real portfolio project.
           </p>
@@ -511,7 +511,7 @@ function CoursesContent() {
             </Link>
             <Link
               href="/pricing"
-              className="px-8 py-4 text-sm font-semibold text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-xl transition-all"
+              className="px-8 py-4 text-sm font-semibold text-[#334155] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#CBD5E1] dark:border-gray-700 hover:border-[#94A3B8] dark:hover:border-gray-500 rounded-xl transition-all"
             >
               View Pricing →
             </Link>
@@ -686,7 +686,7 @@ function CoursesContent() {
                           </Link>
                           <Link
                             href="/pricing"
-                            className="px-5 py-2.5 text-sm font-semibold text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-xl transition-all"
+                            className="px-5 py-2.5 text-sm font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-[#CBD5E1] dark:hover:border-gray-500 rounded-xl transition-all"
                           >
                             Buy Now
                           </Link>
@@ -728,7 +728,7 @@ export default function CoursesPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#050D1A] flex items-center justify-center">
+        <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400" />
         </div>
       }

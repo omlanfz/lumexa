@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ScrollReveal from "../ScrollReveal";
 
 const outcomes = [
   {
@@ -67,7 +68,7 @@ export default function OutcomesSection() {
   return (
     <section className="py-20 bg-white dark:bg-[#07101F] transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-14">
+        <ScrollReveal className="text-center mb-14">
           <p className="text-orange-600 dark:text-orange-400 text-sm font-bold uppercase tracking-widest mb-3">
             What Your Child Will Become
           </p>
@@ -80,14 +81,14 @@ export default function OutcomesSection() {
           <p className="text-[#334155] dark:text-gray-400 max-w-2xl mx-auto text-lg">
             Every child who finishes a Lumexa AI School course doesn&apos;t just know more. They become someone different.
           </p>
-        </div>
+        </ScrollReveal>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {outcomes.map((o) => (
             <div
               key={o.after}
-              className={`relative p-6 rounded-2xl border ${o.border} ${o.bg} transition-all duration-300 hover:shadow-sm hover:-translate-y-0.5 group ${
-                o.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50" : ""
+              className={`relative p-6 rounded-2xl border ${o.border} ${o.bg} card-hover group ${
+                o.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 card-glow-purple" : ""
               }`}
             >
               <div className="text-3xl mb-4 group-hover:scale-110 transition-transform duration-200">{o.emoji}</div>

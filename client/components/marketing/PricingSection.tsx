@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 type Region = "BD" | "IN" | "PH" | "NG" | "EU" | "UK" | "AU" | "CA" | "US";
@@ -69,19 +69,19 @@ const FORMATS: { id: Format; label: string; short: string; desc: string; emoji: 
     id:       "clubs",
     label:    "AI Creator Clubs",
     short:    "Clubs",
-    desc:     "8–15 students · 60 min",
+    desc:     "8-15 students · 60 min",
     emoji:    "🏫",
     tag:      "Entry",
-    tagColor: "text-blue-600 border-blue-200 bg-blue-50",
+    tagColor: "text-blue-600 border-blue-200 bg-blue-50 dark:text-blue-400 dark:border-blue-800/40 dark:bg-blue-900/20",
   },
   {
     id:       "pods",
     label:    "Pro Builder Pods",
     short:    "Pods",
-    desc:     "3–5 students · 60 min",
+    desc:     "3-5 students · 60 min",
     emoji:    "👥",
     tag:      "Best Value",
-    tagColor: "text-purple-600 border-purple-200 bg-purple-50",
+    tagColor: "text-purple-600 border-purple-200 bg-purple-50 dark:text-purple-400 dark:border-purple-800/40 dark:bg-purple-900/20",
   },
   {
     id:       "private",
@@ -90,7 +90,7 @@ const FORMATS: { id: Format; label: string; short: string; desc: string; emoji: 
     desc:     "1-on-1 · 45 min",
     emoji:    "🎯",
     tag:      "Premium",
-    tagColor: "text-green-600 border-green-200 bg-green-50",
+    tagColor: "text-green-600 border-green-200 bg-green-50 dark:text-green-400 dark:border-green-800/40 dark:bg-green-900/20",
   },
 ];
 
@@ -183,6 +183,8 @@ export default function PricingSection() {
   const [region, setRegion] = useState<Region>("US");
   const [format, setFormat] = useState<Format>("clubs");
   const [detected, setDetected] = useState(false);
+  const [regionOpen, setRegionOpen] = useState(false);
+  const regionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -192,6 +194,17 @@ export default function PricingSection() {
     } catch {}
     setDetected(true);
   }, []);
+
+  useEffect(() => {
+    if (!regionOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (regionRef.current && !regionRef.current.contains(e.target as Node)) {
+        setRegionOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [regionOpen]);
 
   if (!detected) return null;
 
@@ -271,7 +284,7 @@ export default function PricingSection() {
             return (
               <div
                 key={pack.id}
-                className={`relative flex flex-col p-6 rounded-2xl bg-white dark:bg-gray-900/50 border-2 ${pack.cardBorder} dark:border-gray-700/60 transition-all duration-300 hover:shadow-lg hover:shadow-slate-100 dark:hover:shadow-none hover:-translate-y-0.5 ${
+                className={`relative flex flex-col p-6 rounded-2xl bg-white dark:bg-gray-900/50 border-2 ${pack.cardBorder} dark:border-gray-700/60 card-hover card-glow-purple ${
                   pack.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-none" : ""
                 }`}
               >
@@ -317,9 +330,9 @@ export default function PricingSection() {
                     </li>
                   ))}
                   {format !== "clubs" && (
-                    <li className="flex items-start gap-2 text-sm text-[#334155]">
+                    <li className="flex items-start gap-2 text-sm text-[#334155] dark:text-gray-400">
                       <span className={`text-xs mt-0.5 flex-shrink-0 ${pack.checkColor}`}>✓</span>
-                      {format === "pods" ? "Small group (3–5 students)" : "Fully 1-on-1 with dedicated teacher"}
+                      {format === "pods" ? "Small group (3-5 students)" : "Fully 1-on-1 with dedicated teacher"}
                     </li>
                   )}
                 </ul>
@@ -344,22 +357,37 @@ export default function PricingSection() {
           })}
         </div>
 
-        {/* Region selector */}
-        <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
-          <span className="text-xs text-[#94A3B8] dark:text-gray-500 font-medium mr-1">Showing prices in:</span>
-          {(Object.keys(REGIONS) as Region[]).map((r) => (
-            <button
-              key={r}
-              onClick={() => setRegion(r)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                region === r
-                  ? "bg-purple-600 text-white border-purple-600"
-                  : "bg-white dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 border-[#E2E8F0] dark:border-gray-700/60 hover:border-purple-200 dark:hover:border-purple-700/50 hover:text-purple-600 dark:hover:text-purple-400"
-              }`}
-            >
-              {REGIONS[r].flag} {REGIONS[r].label}
-            </button>
-          ))}
+        {/* Region selector — collapsed by default, shows detected currency */}
+        <div className="flex flex-col items-center mb-8" ref={regionRef}>
+          <button
+            onClick={() => setRegionOpen((v) => !v)}
+            className="flex items-center gap-2 text-xs text-[#64748B] dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors group"
+          >
+            <span className="text-base">{REGIONS[region].flag}</span>
+            <span>
+              Prices in <strong className="text-[#0F172A] dark:text-white">{REGIONS[region].label}</strong>
+            </span>
+            <span className={`text-[10px] transition-transform duration-200 ${regionOpen ? "rotate-180" : ""}`}>▾</span>
+            <span className="text-purple-600 dark:text-purple-400 underline underline-offset-2 decoration-dotted ml-0.5">Change</span>
+          </button>
+
+          {regionOpen && (
+            <div className="mt-3 flex flex-wrap justify-center gap-2 max-w-lg fade-in">
+              {(Object.keys(REGIONS) as Region[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => { setRegion(r); setRegionOpen(false); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    region === r
+                      ? "bg-purple-600 text-white border-purple-600"
+                      : "bg-white dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 border-[#E2E8F0] dark:border-gray-700/60 hover:border-purple-200 dark:hover:border-purple-700/50 hover:text-purple-600 dark:hover:text-purple-400"
+                  }`}
+                >
+                  {REGIONS[r].flag} {REGIONS[r].label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="text-center">

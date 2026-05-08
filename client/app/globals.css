@@ -172,6 +172,21 @@ html.dark .card-hover:hover {
   box-shadow: 0 8px 30px rgba(13, 148, 136, 0.15), 0 0 0 1px rgba(13, 148, 136, 0.1);
 }
 
+/* Red glow card */
+.card-glow-red:hover {
+  box-shadow: 0 8px 30px rgba(220, 38, 38, 0.12), 0 0 0 1px rgba(220, 38, 38, 0.08);
+}
+
+/* Amber glow card */
+.card-glow-amber:hover {
+  box-shadow: 0 8px 30px rgba(217, 119, 6, 0.12), 0 0 0 1px rgba(217, 119, 6, 0.08);
+}
+
+/* Green glow card */
+.card-glow-green:hover {
+  box-shadow: 0 8px 30px rgba(22, 163, 74, 0.12), 0 0 0 1px rgba(22, 163, 74, 0.08);
+}
+
 /* Smooth button press */
 .btn-press {
   transition: transform 0.1s ease, box-shadow 0.1s ease;

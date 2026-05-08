@@ -208,7 +208,7 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
                     ))}
                   </div>
                   <p className="text-xs dark:text-purple-400/50 text-purple-400 mt-2">
-                    Will create {recurWeeks} slots — one per week starting{" "}
+                    Will create {recurWeeks} slots, one per week starting{" "}
                     {date}.
                   </p>
                 </div>

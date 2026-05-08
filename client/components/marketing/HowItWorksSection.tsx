@@ -6,30 +6,30 @@ const steps = [
     icon: "🎯",
     title: "Book a Free Trial",
     desc: "Pick a subject and a time. We match your child with the perfect teacher. Zero commitment, no card required.",
-    accentBg: "bg-purple-50",
-    accentBorder: "border-purple-200",
-    accentText: "text-purple-600",
-    numColor: "text-purple-200",
+    accentBg: "bg-purple-50 dark:bg-purple-900/20",
+    accentBorder: "border-purple-200 dark:border-purple-700/40",
+    accentText: "text-purple-600 dark:text-purple-400",
+    numColor: "text-purple-200 dark:text-purple-700",
   },
   {
     step: "02",
     icon: "📚",
     title: "Learn Live with Expert Teachers",
     desc: "Real-time classes in your preferred format: group, small-group, or 1-on-1. Your teacher adapts to your child's exact pace and goals.",
-    accentBg: "bg-blue-50",
-    accentBorder: "border-blue-200",
-    accentText: "text-blue-600",
-    numColor: "text-blue-200",
+    accentBg: "bg-blue-50 dark:bg-blue-900/20",
+    accentBorder: "border-blue-200 dark:border-blue-700/40",
+    accentText: "text-blue-600 dark:text-blue-400",
+    numColor: "text-blue-200 dark:text-blue-700",
   },
   {
     step: "03",
     icon: "🏆",
     title: "Build Real Projects",
     desc: "Students finish each course with a portfolio-ready project: a game, website, or AI model they can show anyone.",
-    accentBg: "bg-teal-50",
-    accentBorder: "border-teal-200",
-    accentText: "text-teal-600",
-    numColor: "text-teal-200",
+    accentBg: "bg-teal-50 dark:bg-teal-900/20",
+    accentBorder: "border-teal-200 dark:border-teal-700/40",
+    accentText: "text-teal-600 dark:text-teal-400",
+    numColor: "text-teal-200 dark:text-teal-700",
   },
 ];
 
@@ -120,8 +120,8 @@ export default function HowItWorksSection() {
                 <div className={`text-4xl font-black ${s.numColor} select-none`}>{s.step}</div>
                 <div className="text-3xl group-hover:scale-110 transition-transform duration-200">{s.icon}</div>
               </div>
-              <h3 className="text-[#0F172A] font-bold text-lg mb-2">{s.title}</h3>
-              <p className="text-[#334155] text-sm leading-relaxed">{s.desc}</p>
+              <h3 className="text-[#0F172A] dark:text-white font-bold text-lg mb-2">{s.title}</h3>
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed">{s.desc}</p>
             </div>
           ))}
         </div>

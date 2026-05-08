@@ -25,7 +25,7 @@ const RULES = [
     items: [
       "You must set availability at least 24 hours in advance.",
       "Minimum session length: 30 minutes. Maximum: 4 hours.",
-      "No overlapping time slots — the system will reject them.",
+      "No overlapping time slots. The system will reject them.",
       "You cannot create slots in the past.",
     ],
   },
@@ -45,7 +45,7 @@ const RULES = [
     icon: "🔄",
     color: "amber",
     items: [
-      "Student-requested: Cancel/reschedule anytime — no penalty. Verification required.",
+      "Student-requested: Cancel/reschedule anytime. No penalty. Verification required.",
       "Teacher-initiated: Maximum 2 free cancellations per calendar month.",
       "3rd cancellation and beyond: 1 automatic strike per cancellation.",
       "You must give 24 hours notice for teacher-initiated cancellations.",
@@ -73,7 +73,7 @@ const RULES = [
       "Strike 3: Account suspended. Cannot accept new bookings.",
       "Admin review required to reinstate after Strike 3.",
       "Strikes reset to 0 after 90 days of clean conduct (admin discretion).",
-      "False misconduct reports against teachers are investigated — protect yourself by documenting.",
+      "False misconduct reports against teachers are investigated. Protect yourself by documenting.",
     ],
   },
 ];
@@ -185,7 +185,7 @@ function TeacherConductContent() {
                 }`}
               >
                 {strikes === 0
-                  ? "✅ Clean record — keep it up!"
+                  ? "✅ Clean record. Keep it up!"
                   : strikes === 1
                     ? "⚡ First warning"
                     : strikes === 2

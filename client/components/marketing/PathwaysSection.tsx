@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ScrollReveal from "../ScrollReveal";
 
 interface Pathway {
   id: string;
@@ -17,6 +18,7 @@ interface Pathway {
   tagBg: string;
   tagText: string;
   dotColor: string;
+  glowClass: string;
   tag?: string;
   featured?: boolean;
 }
@@ -37,9 +39,10 @@ const pathways: Pathway[] = [
     accent: "from-red-600 to-orange-600",
     cardBg: "bg-white",
     cardBorder: "border-red-200 hover:border-red-300",
-    tagBg: "bg-red-50",
-    tagText: "text-red-700",
+    tagBg: "bg-red-50 dark:bg-red-900/20",
+    tagText: "text-red-700 dark:text-red-400",
     dotColor: "bg-red-500",
+    glowClass: "card-glow-red",
     tag: "Most Popular",
   },
   {
@@ -57,9 +60,10 @@ const pathways: Pathway[] = [
     accent: "from-purple-600 to-blue-600",
     cardBg: "bg-white",
     cardBorder: "border-purple-200 hover:border-purple-300",
-    tagBg: "bg-purple-50",
-    tagText: "text-purple-700",
+    tagBg: "bg-purple-50 dark:bg-purple-900/20",
+    tagText: "text-purple-700 dark:text-purple-400",
     dotColor: "bg-purple-500",
+    glowClass: "card-glow-purple",
     tag: "Future-Proof",
     featured: true,
   },
@@ -78,9 +82,10 @@ const pathways: Pathway[] = [
     accent: "from-blue-600 to-cyan-600",
     cardBg: "bg-white",
     cardBorder: "border-blue-200 hover:border-blue-300",
-    tagBg: "bg-blue-50",
-    tagText: "text-blue-700",
+    tagBg: "bg-blue-50 dark:bg-blue-900/20",
+    tagText: "text-blue-700 dark:text-blue-400",
     dotColor: "bg-blue-500",
+    glowClass: "card-glow-blue",
     tag: "High Demand",
   },
   {
@@ -98,9 +103,10 @@ const pathways: Pathway[] = [
     accent: "from-amber-500 to-orange-500",
     cardBg: "bg-white",
     cardBorder: "border-amber-200 hover:border-amber-300",
-    tagBg: "bg-amber-50",
-    tagText: "text-amber-700",
+    tagBg: "bg-amber-50 dark:bg-amber-900/20",
+    tagText: "text-amber-700 dark:text-amber-400",
     dotColor: "bg-amber-500",
+    glowClass: "card-glow-amber",
     tag: "Best for Beginners",
   },
   {
@@ -118,9 +124,10 @@ const pathways: Pathway[] = [
     accent: "from-teal-600 to-green-600",
     cardBg: "bg-white",
     cardBorder: "border-teal-200 hover:border-teal-300",
-    tagBg: "bg-teal-50",
-    tagText: "text-teal-700",
+    tagBg: "bg-teal-50 dark:bg-teal-900/20",
+    tagText: "text-teal-700 dark:text-teal-400",
     dotColor: "bg-teal-500",
+    glowClass: "card-glow-teal",
     tag: "Career Ready",
   },
   {
@@ -138,9 +145,10 @@ const pathways: Pathway[] = [
     accent: "from-green-600 to-emerald-600",
     cardBg: "bg-white",
     cardBorder: "border-green-200 hover:border-green-300",
-    tagBg: "bg-green-50",
-    tagText: "text-green-700",
+    tagBg: "bg-green-50 dark:bg-green-900/20",
+    tagText: "text-green-700 dark:text-green-400",
     dotColor: "bg-green-500",
+    glowClass: "card-glow-green",
     tag: "Earn Online",
   },
 ];
@@ -149,7 +157,7 @@ export default function PathwaysSection() {
   return (
     <section className="py-20 bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200" id="pathways">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-14">
+        <ScrollReveal className="text-center mb-14">
           <p className="text-purple-600 dark:text-purple-400 text-sm font-bold uppercase tracking-widest mb-3">
             6 Flagship Learning Pathways
           </p>
@@ -163,14 +171,14 @@ export default function PathwaysSection() {
             Every pathway ends with 3+ real projects in your child&apos;s portfolio.
             Not certificates, not badges. Actual things they built.
           </p>
-        </div>
+        </ScrollReveal>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pathways.map((p) => (
             <div
               key={p.title}
-              className={`relative flex flex-col p-6 rounded-2xl ${p.cardBg} dark:bg-gray-900/50 border ${p.cardBorder} dark:border-gray-700/60 transition-all duration-300 hover:shadow-md hover:shadow-slate-100 dark:hover:shadow-none dark:hover:-translate-y-0.5 group ${
-                p.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-purple-900/20" : ""
+              className={`relative flex flex-col p-6 rounded-2xl ${p.cardBg} dark:bg-gray-900/50 border ${p.cardBorder} dark:border-gray-700/60 card-hover ${p.glowClass} group ${
+                p.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-purple-900/20 glow-pulse" : ""
               }`}
             >
               {/* Featured badge */}
@@ -202,7 +210,7 @@ export default function PathwaysSection() {
 
               {/* What they'll build */}
               <div className="mb-4">
-                <p className="text-xs text-[#94A3B8] font-semibold uppercase tracking-wider mb-2">
+                <p className="text-xs text-[#94A3B8] dark:text-gray-500 font-semibold uppercase tracking-wider mb-2">
                   What they&apos;ll build:
                 </p>
                 <ul className="space-y-1">

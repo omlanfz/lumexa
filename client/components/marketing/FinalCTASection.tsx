@@ -48,7 +48,7 @@ export default function FinalCTASection() {
           </Link>
           <Link
             href="/courses"
-            className="px-6 py-4 text-sm font-semibold text-purple-200 hover:text-white border border-purple-500/40 hover:border-purple-400 rounded-xl transition-all"
+            className="px-6 py-4 text-sm font-semibold text-purple-200 hover:text-white border border-purple-500/40 hover:border-purple-400 rounded-xl transition-all btn-press"
           >
             Explore learning paths first →
           </Link>

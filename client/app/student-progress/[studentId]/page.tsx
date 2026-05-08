@@ -331,7 +331,7 @@ function ProgressContent() {
               {
                 icon: "⭐",
                 label: "Avg Rating",
-                value: avgRating ? avgRating.toFixed(1) : "—",
+                value: avgRating ? avgRating.toFixed(1) : "N/A",
               },
               { icon: "✏️", label: "Teachers", value: uniqueTeachers },
             ].map((s) => (
@@ -521,7 +521,7 @@ function ProgressContent() {
                       )}
                       {/* CHANGE: safe optional chain on teacher.fullName */}
                       <p className={`text-xs ${txtm} mt-0.5`}>
-                        Teacher: {b.teacher?.fullName ?? "—"}
+                        Teacher: {b.teacher?.fullName ?? "N/A"}
                       </p>
                     </div>
                   </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { ThemeToggle } from "../../components/ThemeProvider";
 
 type Region = "BD" | "IN" | "PH" | "NG" | "EU" | "UK" | "AU" | "CA" | "US";
 type Format = "clubs" | "pods" | "private";
@@ -62,8 +63,8 @@ const TZ_TO_REGION: Record<string, Region> = {
 const FORMAT_MULTIPLIERS: Record<Format, number> = { clubs: 1.0, pods: 1.5, private: 1.8 };
 
 const FORMAT_LABELS: Record<Format, { label: string; emoji: string; desc: string }> = {
-  clubs:   { label: "AI Creator Clubs",   emoji: "🏫", desc: "8–15 students · 60 min" },
-  pods:    { label: "Pro Builder Pods",   emoji: "👥", desc: "3–5 students · 60 min" },
+  clubs:   { label: "AI Creator Clubs",   emoji: "🏫", desc: "8-15 students · 60 min" },
+  pods:    { label: "Pro Builder Pods",   emoji: "👥", desc: "3-5 students · 60 min" },
   private: { label: "Private Mentorship", emoji: "🎯", desc: "1-on-1 · 45 min" },
 };
 
@@ -135,19 +136,19 @@ function computePerClass(base: number, multiplier: number, classes: number, symb
 
 function PaymentContent() {
   const searchParams = useSearchParams();
-  const packId   = searchParams.get("pack")    || "growth";
-  const pathwayId = searchParams.get("pathway") || "";
+  const packId      = searchParams.get("pack")    || "growth";
+  const pathwayId   = searchParams.get("pathway") || "";
   const formatParam = (searchParams.get("format") || "clubs") as Format;
   const regionParam = searchParams.get("region") as Region | null;
 
-  const [region, setRegion]         = useState<Region>(regionParam && REGIONS[regionParam] ? regionParam : "US");
-  const [format, setFormat]         = useState<Format>(FORMAT_MULTIPLIERS[formatParam] !== undefined ? formatParam : "clubs");
-  const [detected, setDetected]     = useState(false);
+  const [region, setRegion]               = useState<Region>(regionParam && REGIONS[regionParam] ? regionParam : "US");
+  const [format, setFormat]               = useState<Format>(FORMAT_MULTIPLIERS[formatParam] !== undefined ? formatParam : "clubs");
+  const [detected, setDetected]           = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"stripe" | "bank" | "bkash">("stripe");
-  const [form, setForm]             = useState({ name: "", email: "", phone: "" });
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState("");
-  const [submitted, setSubmitted]   = useState(false);
+  const [form, setForm]                   = useState({ name: "", email: "", phone: "" });
+  const [loading, setLoading]             = useState(false);
+  const [error, setError]                 = useState("");
+  const [submitted, setSubmitted]         = useState(false);
 
   useEffect(() => {
     if (!regionParam) {
@@ -160,18 +161,18 @@ function PaymentContent() {
     setDetected(true);
   }, [regionParam]);
 
-  const pack = PACKS[packId] || PACKS["growth"];
-  const cfg = REGIONS[region];
-  const multiplier = FORMAT_MULTIPLIERS[format];
-  const fmtInfo = FORMAT_LABELS[format];
-  const pathway = pathwayId ? PATHWAY_LABELS[pathwayId] : null;
+  const pack         = PACKS[packId] || PACKS["growth"];
+  const cfg          = REGIONS[region];
+  const multiplier   = FORMAT_MULTIPLIERS[format];
+  const fmtInfo      = FORMAT_LABELS[format];
+  const pathway      = pathwayId ? PATHWAY_LABELS[pathwayId] : null;
   const pathwayCourses = pathwayId ? PATHWAY_COURSES[pathwayId] : null;
-  const isBD = region === "BD";
+  const isBD         = region === "BD";
 
-  const priceStr   = computePrice(cfg[pack.key] as number, multiplier, cfg.symbol);
+  const priceStr    = computePrice(cfg[pack.key] as number, multiplier, cfg.symbol);
   const perClassStr = computePerClass(cfg[pack.key] as number, multiplier, pack.classes, cfg.symbol);
-  const coursesToShow = pack.classes >= 24 ? 3 : pack.classes >= 16 ? 2 : 1;
-  const displayCourses = pathwayCourses ? pathwayCourses.slice(0, coursesToShow) : null;
+  const coursesToShow   = pack.classes >= 24 ? 3 : pack.classes >= 16 ? 2 : 1;
+  const displayCourses  = pathwayCourses ? pathwayCourses.slice(0, coursesToShow) : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,24 +196,24 @@ function PaymentContent() {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-[#050D1A] flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center p-10 bg-gray-900/60 border border-green-800/50 rounded-2xl shadow-2xl">
+      <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A] flex items-center justify-center px-4 transition-colors duration-200">
+        <div className="max-w-md w-full text-center p-10 bg-white dark:bg-gray-900/60 border border-green-200 dark:border-green-800/50 rounded-2xl shadow-xl shadow-slate-100/80 dark:shadow-black/40">
           <div className="text-5xl mb-4">🎉</div>
-          <h2 className="text-2xl font-black text-white mb-3">Order Received!</h2>
-          <p className="text-gray-400 text-sm leading-relaxed mb-2">
-            Thank you, <span className="text-white font-semibold">{form.name}</span>. We&apos;ve
-            received your <span className="text-purple-400 font-semibold">{pack.name}</span> order
+          <h2 className="text-2xl font-black text-[#0F172A] dark:text-white mb-3">Order Received!</h2>
+          <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mb-2">
+            Thank you, <span className="text-[#0F172A] dark:text-white font-semibold">{form.name}</span>. We&apos;ve
+            received your <span className="text-purple-600 dark:text-purple-400 font-semibold">{pack.name}</span> order
             {pathway && (
-              <> for the <span className="text-purple-400 font-semibold">{pathway}</span></>
+              <> for the <span className="text-purple-600 dark:text-purple-400 font-semibold">{pathway}</span></>
             )}.
           </p>
-          <p className="text-gray-400 text-sm leading-relaxed mb-6">
+          <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mb-6">
             We&apos;ll send your class access details to{" "}
-            <span className="text-white font-semibold">{form.email}</span> within a few hours.
+            <span className="text-[#0F172A] dark:text-white font-semibold">{form.email}</span> within a few hours.
           </p>
-          <div className="p-4 bg-green-900/20 border border-green-800/40 rounded-xl mb-6 text-left">
-            <p className="text-green-400 text-xs font-semibold mb-2">What happens next:</p>
-            <ol className="space-y-1.5 text-gray-400 text-xs">
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 rounded-xl mb-6 text-left">
+            <p className="text-green-700 dark:text-green-400 text-xs font-semibold mb-2">What happens next:</p>
+            <ol className="space-y-1.5 text-[#64748B] dark:text-gray-400 text-xs">
               <li>1. Our team confirms your payment</li>
               <li>2. We match you with the perfect teacher</li>
               <li>3. You receive class booking links via email</li>
@@ -223,7 +224,7 @@ function PaymentContent() {
             <Link href="/register" className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-sm transition-all text-center">
               Create an Account to Track Progress
             </Link>
-            <Link href="/" className="text-gray-500 hover:text-gray-300 text-sm transition-colors">
+            <Link href="/" className="text-[#94A3B8] dark:text-gray-500 hover:text-[#64748B] dark:hover:text-gray-300 text-sm transition-colors">
               Back to Home →
             </Link>
           </div>
@@ -233,63 +234,66 @@ function PaymentContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050D1A] text-white py-16 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A] text-[#0F172A] dark:text-white py-16 px-4 sm:px-6 lg:px-8 transition-colors duration-200">
       {/* Logo nav */}
       <div className="max-w-5xl mx-auto mb-10">
-        <Link href="/" className="flex items-center gap-2.5 group w-fit">
-          <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0">
-            <Image
-              src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
-              alt="Lumexa AI School"
-              width={36}
-              height={36}
-              className="object-cover w-full h-full"
-            />
-          </div>
-          <span className="text-white font-black text-lg tracking-tight">
-            Lumexa <span className="text-purple-400 font-bold">AI School</span>
-          </span>
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2.5 group w-fit">
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-sm shadow-purple-100 dark:shadow-none">
+              <Image
+                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                alt="Lumexa AI School"
+                width={36}
+                height={36}
+                className="object-cover w-full h-full"
+              />
+            </div>
+            <span className="text-[#0F172A] dark:text-white font-black text-lg tracking-tight">
+              Lumexa <span className="text-purple-600 dark:text-purple-400 font-bold">AI School</span>
+            </span>
+          </Link>
+          <ThemeToggle variant="teacher" />
+        </div>
       </div>
 
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
         {/* Left: Order summary */}
         <div className="lg:sticky lg:top-24">
-          <p className="text-purple-400 text-xs font-bold uppercase tracking-widest mb-4">
+          <p className="text-purple-600 dark:text-purple-400 text-xs font-bold uppercase tracking-widest mb-4">
             Order Summary
           </p>
 
-          <div className="bg-gray-900/60 border border-gray-700 rounded-2xl p-6 mb-5">
+          <div className="bg-white dark:bg-gray-900/60 border border-[#E2E8F0] dark:border-gray-700 rounded-2xl p-6 mb-5 shadow-sm shadow-slate-100/60 dark:shadow-none">
             {/* Pack + price */}
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-white font-black text-2xl">{pack.name}</h2>
-                <p className="text-gray-500 text-xs">{pack.subtitle}</p>
+                <h2 className="text-[#0F172A] dark:text-white font-black text-2xl">{pack.name}</h2>
+                <p className="text-[#94A3B8] dark:text-gray-500 text-xs">{pack.subtitle}</p>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-black text-purple-400">{priceStr}</div>
-                <div className="text-gray-600 text-xs">{perClassStr}</div>
+                <div className="text-2xl font-black text-purple-600 dark:text-purple-400">{priceStr}</div>
+                <div className="text-[#94A3B8] dark:text-gray-600 text-xs">{perClassStr}</div>
               </div>
             </div>
 
             {pack.discount > 0 && (
-              <div className="mb-4 px-3 py-2 bg-green-900/30 border border-green-800/40 rounded-lg">
-                <p className="text-green-400 text-xs font-semibold">
+              <div className="mb-4 px-3 py-2 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800/40 rounded-lg">
+                <p className="text-green-700 dark:text-green-400 text-xs font-semibold">
                   {pack.discount}% discount applied vs buying individually.
                 </p>
               </div>
             )}
 
             {/* Format */}
-            <div className="border-t border-gray-800 pt-4 mb-4">
-              <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">
+            <div className="border-t border-[#E2E8F0] dark:border-gray-800 pt-4 mb-4">
+              <p className="text-xs text-[#94A3B8] dark:text-gray-600 font-semibold uppercase tracking-wider mb-2">
                 Learning Format
               </p>
               <div className="flex items-center gap-2">
                 <span className="text-lg">{fmtInfo.emoji}</span>
                 <div>
-                  <p className="text-white text-sm font-semibold">{fmtInfo.label}</p>
-                  <p className="text-gray-500 text-xs">{fmtInfo.desc}</p>
+                  <p className="text-[#0F172A] dark:text-white text-sm font-semibold">{fmtInfo.label}</p>
+                  <p className="text-[#64748B] dark:text-gray-500 text-xs">{fmtInfo.desc}</p>
                 </div>
               </div>
               {/* Format switcher */}
@@ -301,7 +305,7 @@ function PaymentContent() {
                     className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
                       format === f
                         ? "bg-purple-600 border-purple-600 text-white"
-                        : "border-gray-700 text-gray-500 hover:border-gray-500"
+                        : "border-[#E2E8F0] dark:border-gray-700 text-[#94A3B8] dark:text-gray-500 hover:border-purple-300 dark:hover:border-gray-500 bg-white dark:bg-transparent"
                     }`}
                   >
                     {f === "clubs" ? "Clubs" : f === "pods" ? "Pods" : "Private"}
@@ -312,29 +316,29 @@ function PaymentContent() {
 
             {/* Pathway */}
             {pathway && (
-              <div className="border-t border-gray-800 pt-4 mb-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-1">
+              <div className="border-t border-[#E2E8F0] dark:border-gray-800 pt-4 mb-4">
+                <p className="text-xs text-[#94A3B8] dark:text-gray-600 font-semibold uppercase tracking-wider mb-1">
                   Learning Pathway
                 </p>
-                <p className="text-white font-semibold text-sm">{pathway}</p>
+                <p className="text-[#0F172A] dark:text-white font-semibold text-sm">{pathway}</p>
               </div>
             )}
 
             {/* Courses */}
             {displayCourses && displayCourses.length > 0 && (
-              <div className="border-t border-gray-800 pt-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-3">
+              <div className="border-t border-[#E2E8F0] dark:border-gray-800 pt-4">
+                <p className="text-xs text-[#94A3B8] dark:text-gray-600 font-semibold uppercase tracking-wider mb-3">
                   Included Courses
                 </p>
                 <ul className="space-y-2">
                   {displayCourses.map((c) => (
                     <li key={c.code} className="flex items-center gap-2.5 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-purple-900/60 border border-purple-700/50 flex items-center justify-center flex-shrink-0">
-                        <span className="text-purple-400 text-[9px] font-bold">✓</span>
+                      <span className="w-5 h-5 rounded-full bg-purple-50 dark:bg-purple-900/60 border border-purple-300 dark:border-purple-700/50 flex items-center justify-center flex-shrink-0">
+                        <span className="text-purple-600 dark:text-purple-400 text-[9px] font-bold">✓</span>
                       </span>
                       <div>
-                        <span className="text-gray-500 text-[10px] font-bold uppercase">{c.code} </span>
-                        <span className="text-gray-300">{c.name}</span>
+                        <span className="text-[#94A3B8] dark:text-gray-500 text-[10px] font-bold uppercase">{c.code} </span>
+                        <span className="text-[#475569] dark:text-gray-300">{c.name}</span>
                       </div>
                     </li>
                   ))}
@@ -343,9 +347,9 @@ function PaymentContent() {
             )}
 
             {/* Total */}
-            <div className="border-t border-gray-800 mt-4 pt-4 flex items-center justify-between">
-              <span className="text-gray-500 text-sm">Total live classes</span>
-              <span className="text-white font-black text-lg">{pack.classes} classes</span>
+            <div className="border-t border-[#E2E8F0] dark:border-gray-800 mt-4 pt-4 flex items-center justify-between">
+              <span className="text-[#64748B] dark:text-gray-500 text-sm">Total live classes</span>
+              <span className="text-[#0F172A] dark:text-white font-black text-lg">{pack.classes} classes</span>
             </div>
           </div>
 
@@ -357,7 +361,7 @@ function PaymentContent() {
               { icon: "🎓", text: "Verified expert teachers" },
               { icon: "🏆", text: "Real projects in every session" },
             ].map((t) => (
-              <div key={t.text} className="flex items-center gap-2 text-gray-500 text-xs">
+              <div key={t.text} className="flex items-center gap-2 text-[#94A3B8] dark:text-gray-500 text-xs">
                 <span>{t.icon}</span>
                 <span>{t.text}</span>
               </div>
@@ -366,15 +370,15 @@ function PaymentContent() {
         </div>
 
         {/* Right: Payment form */}
-        <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
-          <h2 className="text-xl font-black text-white mb-1">Complete Your Order</h2>
-          <p className="text-gray-600 text-xs mb-6">
+        <div className="bg-white dark:bg-gray-900/70 border border-[#E2E8F0] dark:border-gray-700 rounded-2xl p-6 sm:p-8 shadow-sm shadow-slate-100/60 dark:shadow-none">
+          <h2 className="text-xl font-black text-[#0F172A] dark:text-white mb-1">Complete Your Order</h2>
+          <p className="text-[#94A3B8] dark:text-gray-600 text-xs mb-6">
             Fill in your details below to secure your child&apos;s classes
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1.5">
                 Full Name
               </label>
               <input
@@ -383,12 +387,12 @@ function PaymentContent() {
                 onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 required
                 placeholder="e.g. Sarah Johnson"
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                className="w-full bg-white dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 dark:focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#CBD5E1] dark:placeholder-gray-600 transition-colors shadow-sm shadow-slate-50 dark:shadow-none"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1.5">
                 Email Address
               </label>
               <input
@@ -397,12 +401,12 @@ function PaymentContent() {
                 onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                 required
                 placeholder="e.g. sarah@email.com"
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                className="w-full bg-white dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 dark:focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#CBD5E1] dark:placeholder-gray-600 transition-colors shadow-sm shadow-slate-50 dark:shadow-none"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1.5">
                 Phone (optional)
               </label>
               <input
@@ -410,19 +414,19 @@ function PaymentContent() {
                 value={form.phone}
                 onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
                 placeholder="e.g. +1 555 123 4567"
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                className="w-full bg-white dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 dark:focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#CBD5E1] dark:placeholder-gray-600 transition-colors shadow-sm shadow-slate-50 dark:shadow-none"
               />
             </div>
 
             {/* Payment method */}
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-3">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-3">
                 Payment Method
               </label>
               <div className="space-y-2">
                 {[
-                  { id: "stripe", label: "Card / Apple Pay / Google Pay", sub: "Powered by Stripe. Instant.", icon: "💳", color: "purple" },
-                  { id: "bank",   label: "Bank Transfer",                  sub: "We'll send account details. 1–2 business days.", icon: "🏦", color: "blue" },
+                  { id: "stripe", label: "Card / Apple Pay / Google Pay", sub: "Powered by Stripe. Instant.", icon: "💳", activeBorder: "border-purple-500", activeBg: "bg-purple-50 dark:bg-purple-900/20", radioActive: "border-purple-500", radioDot: "bg-purple-600 dark:bg-purple-400" },
+                  { id: "bank",   label: "Bank Transfer",                  sub: "We'll send account details. 1-2 business days.", icon: "🏦", activeBorder: "border-blue-500", activeBg: "bg-blue-50 dark:bg-blue-900/20", radioActive: "border-blue-500", radioDot: "bg-blue-600 dark:bg-blue-400" },
                 ].map((m) => (
                   <button
                     key={m.id}
@@ -430,18 +434,18 @@ function PaymentContent() {
                     onClick={() => setPaymentMethod(m.id as "stripe" | "bank")}
                     className={`w-full flex items-center gap-3 p-4 rounded-xl border transition-all ${
                       paymentMethod === m.id
-                        ? `border-${m.color}-500 bg-${m.color}-900/20`
-                        : "border-gray-700 bg-black/40 hover:border-gray-600"
+                        ? `${m.activeBorder} ${m.activeBg}`
+                        : "border-[#E2E8F0] dark:border-gray-700 bg-[#F7F9FF] dark:bg-black/40 hover:border-[#CBD5E1] dark:hover:border-gray-600"
                     }`}
                   >
-                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === m.id ? `border-${m.color}-400` : "border-gray-600"}`}>
-                      {paymentMethod === m.id && <div className={`w-2 h-2 rounded-full bg-${m.color}-400`} />}
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === m.id ? m.radioActive : "border-[#CBD5E1] dark:border-gray-600"}`}>
+                      {paymentMethod === m.id && <div className={`w-2 h-2 rounded-full ${m.radioDot}`} />}
                     </div>
                     <div className="text-left flex-1">
-                      <p className="text-white text-sm font-semibold">{m.label}</p>
-                      <p className="text-gray-500 text-xs">{m.sub}</p>
+                      <p className="text-[#0F172A] dark:text-white text-sm font-semibold">{m.label}</p>
+                      <p className="text-[#64748B] dark:text-gray-500 text-xs">{m.sub}</p>
                     </div>
-                    <span className="text-gray-500 text-xs">{m.icon}</span>
+                    <span className="text-[#94A3B8] dark:text-gray-500 text-xs">{m.icon}</span>
                   </button>
                 ))}
 
@@ -451,55 +455,55 @@ function PaymentContent() {
                     onClick={() => setPaymentMethod("bkash")}
                     className={`w-full flex items-center gap-3 p-4 rounded-xl border transition-all ${
                       paymentMethod === "bkash"
-                        ? "border-green-500 bg-green-900/20"
-                        : "border-gray-700 bg-black/40 hover:border-gray-600"
+                        ? "border-green-500 bg-green-50 dark:bg-green-900/20"
+                        : "border-[#E2E8F0] dark:border-gray-700 bg-[#F7F9FF] dark:bg-black/40 hover:border-[#CBD5E1] dark:hover:border-gray-600"
                     }`}
                   >
-                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === "bkash" ? "border-green-400" : "border-gray-600"}`}>
-                      {paymentMethod === "bkash" && <div className="w-2 h-2 rounded-full bg-green-400" />}
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${paymentMethod === "bkash" ? "border-green-500" : "border-[#CBD5E1] dark:border-gray-600"}`}>
+                      {paymentMethod === "bkash" && <div className="w-2 h-2 rounded-full bg-green-600 dark:bg-green-400" />}
                     </div>
                     <div className="text-left flex-1">
-                      <p className="text-white text-sm font-semibold">bKash</p>
-                      <p className="text-gray-500 text-xs">Instant mobile payment. Bangladesh only.</p>
+                      <p className="text-[#0F172A] dark:text-white text-sm font-semibold">bKash</p>
+                      <p className="text-[#64748B] dark:text-gray-500 text-xs">Instant mobile payment. Bangladesh only.</p>
                     </div>
-                    <span className="text-gray-500 text-xs">📱</span>
+                    <span className="text-[#94A3B8] dark:text-gray-500 text-xs">📱</span>
                   </button>
                 )}
               </div>
             </div>
 
             {paymentMethod === "stripe" && (
-              <div className="p-3 bg-purple-900/20 border border-purple-800/30 rounded-lg">
-                <p className="text-purple-300 text-xs leading-relaxed">
+              <div className="p-3 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800/30 rounded-lg">
+                <p className="text-purple-700 dark:text-purple-300 text-xs leading-relaxed">
                   You&apos;ll be redirected to a secure Stripe checkout page. Supports Visa, Mastercard, Amex, Apple Pay, and Google Pay.
                 </p>
               </div>
             )}
             {paymentMethod === "bank" && (
-              <div className="p-3 bg-blue-900/20 border border-blue-800/30 rounded-lg">
-                <p className="text-blue-300 text-xs leading-relaxed">
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/30 rounded-lg">
+                <p className="text-blue-700 dark:text-blue-300 text-xs leading-relaxed">
                   After submitting, we&apos;ll email you our bank account details. Classes reserved for 48 hours.
                 </p>
               </div>
             )}
             {paymentMethod === "bkash" && (
-              <div className="p-3 bg-green-900/20 border border-green-800/30 rounded-lg">
-                <p className="text-green-300 text-xs leading-relaxed">
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/30 rounded-lg">
+                <p className="text-green-700 dark:text-green-300 text-xs leading-relaxed">
                   After submitting, we&apos;ll send you a bKash number and reference. Classes activated within 2 hours of payment.
                 </p>
               </div>
             )}
 
             {error && (
-              <div className="p-3 bg-red-900/20 border border-red-900/40 rounded-lg">
-                <p className="text-red-400 text-xs">{error}</p>
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-lg">
+                <p className="text-red-600 dark:text-red-400 text-xs">{error}</p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 text-white font-black rounded-xl shadow-lg shadow-purple-900/40 transition-all text-sm"
+              className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 text-white font-black rounded-xl shadow-lg shadow-purple-200/60 dark:shadow-purple-900/40 transition-all hover:shadow-xl hover:shadow-purple-200/80 dark:hover:shadow-purple-900/50 hover:-translate-y-0.5 active:translate-y-0 text-sm"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -516,7 +520,7 @@ function PaymentContent() {
               )}
             </button>
 
-            <p className="text-gray-700 text-[10px] text-center leading-relaxed">
+            <p className="text-[#CBD5E1] dark:text-gray-700 text-[10px] text-center leading-relaxed">
               By completing your order you agree to our Terms of Service and Privacy Policy.
               7-day refund guarantee on unused classes.
             </p>
@@ -531,7 +535,7 @@ export default function PaymentPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#050D1A] flex items-center justify-center">
+        <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A] flex items-center justify-center transition-colors">
           <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

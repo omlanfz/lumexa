@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ScrollReveal from "../ScrollReveal";
 
 const batches = [
   {
@@ -9,7 +10,7 @@ const batches = [
     groupSize: "8–15 students",
     duration: "60 min / class",
     tag: "Best Entry Point",
-    tagBg: "bg-blue-50 text-blue-700 border border-blue-200",
+    tagBg: "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/40",
     cardBg: "bg-white",
     cardBorder: "border-blue-200 hover:border-blue-300",
     accent: "from-blue-600 to-cyan-600",
@@ -33,7 +34,7 @@ const batches = [
     groupSize: "3–5 students",
     duration: "60 min / class",
     tag: "Best Value",
-    tagBg: "bg-purple-50 text-purple-700 border border-purple-200",
+    tagBg: "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/40",
     cardBg: "bg-white",
     cardBorder: "border-purple-300 hover:border-purple-400",
     accent: "from-purple-600 to-blue-600",
@@ -58,7 +59,7 @@ const batches = [
     groupSize: "1 student",
     duration: "45 min / class",
     tag: "Fastest Progress",
-    tagBg: "bg-green-50 text-green-700 border border-green-200",
+    tagBg: "bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/40",
     cardBg: "bg-white",
     cardBorder: "border-green-200 hover:border-green-300",
     accent: "from-green-600 to-emerald-600",
@@ -81,7 +82,7 @@ export default function BatchSection() {
     <section className="py-20 bg-[#EEF3FF] dark:bg-[#07101F] transition-colors duration-200" id="formats">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-14">
+        <ScrollReveal className="text-center mb-14">
           <p className="text-purple-600 text-sm font-bold uppercase tracking-widest mb-3">
             3 Learning Formats
           </p>
@@ -95,7 +96,7 @@ export default function BatchSection() {
             Choose the format that fits your child&apos;s learning style and your
             budget. Switch formats anytime. Your class credits always carry over.
           </p>
-        </div>
+        </ScrollReveal>
 
         {/* Funnel path indicator */}
         <div className="hidden lg:flex items-center justify-center gap-3 mb-10">
@@ -120,7 +121,7 @@ export default function BatchSection() {
           {batches.map((b) => (
             <div
               key={b.id}
-              className={`relative flex flex-col p-6 rounded-2xl ${b.cardBg} dark:bg-gray-900/50 border ${b.cardBorder} dark:border-gray-700/60 transition-all duration-300 hover:shadow-md hover:shadow-slate-100 dark:hover:shadow-none dark:hover:-translate-y-0.5 group ${
+              className={`relative flex flex-col p-6 rounded-2xl ${b.cardBg} dark:bg-gray-900/50 border ${b.cardBorder} dark:border-gray-700/60 card-hover group ${
                 b.featured
                   ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-none md:scale-[1.03]"
                   : ""
