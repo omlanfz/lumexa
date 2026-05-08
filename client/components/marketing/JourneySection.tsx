@@ -47,7 +47,7 @@ const milestones = [
     emoji: "🚀",
     weeks: "Week 21+",
     tagline: "Use AI to solve real problems",
-    description: "The top tier. Your child integrates AI into their own projects — building tools that would impress most adults.",
+    description: "The top tier. Your child integrates AI into their own projects, building tools that would impress most adults.",
     skills: ["Machine learning models", "AI API integration", "Real-world impact projects"],
     textColor: "text-teal-600",
     border: "border-teal-200",

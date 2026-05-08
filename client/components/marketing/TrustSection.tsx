@@ -33,17 +33,17 @@ const trustItems = [
 
 export default function TrustSection() {
   return (
-    <section className="py-20 bg-[#EEF3FF]">
+    <section className="py-20 bg-[#EEF3FF] dark:bg-[#07101F] transition-colors duration-200">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <p className="text-green-600 text-sm font-bold uppercase tracking-widest mb-3">
+          <p className="text-green-600 dark:text-green-400 text-sm font-bold uppercase tracking-widest mb-3">
             Built for Parents
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] mb-4">
+          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] dark:text-white mb-4">
             Everything You Need to{" "}
-            <span className="text-green-600">Feel Confident</span>
+            <span className="text-green-600 dark:text-green-400">Feel Confident</span>
           </h2>
-          <p className="text-[#334155] max-w-xl mx-auto">
+          <p className="text-[#334155] dark:text-gray-400 max-w-xl mx-auto">
             We know you&apos;re trusting us with your child&apos;s time and your family&apos;s money.
             Here&apos;s how we protect both.
           </p>
@@ -53,20 +53,20 @@ export default function TrustSection() {
           {trustItems.map((item) => (
             <div
               key={item.title}
-              className="flex gap-4 p-5 bg-white border border-[#E2E8F0] rounded-2xl hover:border-green-200 hover:shadow-sm transition-all"
+              className="flex gap-4 p-5 bg-white dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-700/60 rounded-2xl hover:border-green-200 dark:hover:border-green-700/50 hover:shadow-sm transition-all group"
             >
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-green-50 border border-green-200 flex items-center justify-center text-lg">
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700/40 flex items-center justify-center text-lg group-hover:scale-110 transition-transform duration-200">
                 {item.icon}
               </div>
               <div>
-                <h3 className="text-[#0F172A] font-bold text-sm mb-1">{item.title}</h3>
-                <p className="text-[#64748B] text-xs leading-relaxed">{item.description}</p>
+                <h3 className="text-[#0F172A] dark:text-white font-bold text-sm mb-1">{item.title}</h3>
+                <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{item.description}</p>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Parent testimonials strip — specific, real, with child age */}
+        {/* Parent testimonials strip */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             {
@@ -88,18 +88,18 @@ export default function TrustSection() {
               child: "Son, age 13",
             },
           ].map((t) => (
-            <div key={t.name} className="p-5 bg-white border border-[#E2E8F0] rounded-2xl">
+            <div key={t.name} className="p-5 bg-white dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-700/60 rounded-2xl hover:shadow-sm transition-all">
               <div className="flex gap-0.5 mb-3">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span key={i} className="text-amber-500 text-sm">★</span>
                 ))}
               </div>
-              <p className="text-[#334155] text-sm leading-relaxed mb-4 italic">
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed mb-4 italic">
                 &ldquo;{t.quote}&rdquo;
               </p>
               <div>
-                <p className="text-[#0F172A] text-xs font-semibold">{t.name}</p>
-                <p className="text-[#94A3B8] text-[10px]">{t.child} · {t.location}</p>
+                <p className="text-[#0F172A] dark:text-white text-xs font-semibold">{t.name}</p>
+                <p className="text-[#94A3B8] dark:text-gray-500 text-[10px]">{t.child} · {t.location}</p>
               </div>
             </div>
           ))}

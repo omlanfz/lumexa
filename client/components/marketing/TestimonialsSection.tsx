@@ -81,16 +81,16 @@ function Stars({ count }: { count: number }) {
 
 export default function TestimonialsSection() {
   return (
-    <section className="py-20 bg-white">
+    <section className="py-20 bg-white dark:bg-[#07101F] transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <p className="text-amber-600 text-sm font-semibold uppercase tracking-widest mb-2">
+          <p className="text-amber-600 dark:text-amber-400 text-sm font-semibold uppercase tracking-widest mb-2">
             Testimonials
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] mb-4">
+          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] dark:text-white mb-4">
             Loved by Families Worldwide
           </h2>
-          <p className="text-[#334155] max-w-lg mx-auto">
+          <p className="text-[#334155] dark:text-gray-400 max-w-lg mx-auto">
             Over 1,200 students have built real projects, grown in confidence,
             and discovered a passion for technology.
           </p>
@@ -100,32 +100,32 @@ export default function TestimonialsSection() {
           {testimonials.map((t) => (
             <div
               key={t.name}
-              className="p-5 bg-[#F7F9FF] border border-[#E2E8F0] rounded-2xl hover:border-purple-200 hover:shadow-sm transition-all"
+              className="p-5 bg-[#F7F9FF] dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-700/60 rounded-2xl hover:border-purple-200 dark:hover:border-purple-700/50 hover:shadow-sm transition-all group"
             >
               <div className="flex items-start gap-3 mb-4">
                 <div
-                  className={`w-10 h-10 rounded-full ${t.avatarColor} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}
+                  className={`w-10 h-10 rounded-full ${t.avatarColor} flex items-center justify-center text-white text-xs font-bold flex-shrink-0 group-hover:scale-105 transition-transform duration-200`}
                 >
                   {t.avatar}
                 </div>
                 <div>
-                  <div className="text-[#0F172A] font-semibold text-sm">{t.name}</div>
-                  <div className="text-[#64748B] text-xs">{t.role}</div>
+                  <div className="text-[#0F172A] dark:text-white font-semibold text-sm">{t.name}</div>
+                  <div className="text-[#64748B] dark:text-gray-500 text-xs">{t.role}</div>
                 </div>
                 <div className="ml-auto flex-shrink-0">
                   <Stars count={t.rating} />
                 </div>
               </div>
 
-              <p className="text-[#334155] text-sm leading-relaxed mb-3">
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed mb-3">
                 &ldquo;{t.quote}&rdquo;
               </p>
 
               <div className="flex items-center justify-between">
-                <span className="inline-block text-[10px] px-2.5 py-0.5 bg-white border border-[#E2E8F0] rounded-full text-[#64748B] font-medium">
+                <span className="inline-block text-[10px] px-2.5 py-0.5 bg-white dark:bg-gray-800 border border-[#E2E8F0] dark:border-gray-700 rounded-full text-[#64748B] dark:text-gray-400 font-medium">
                   {t.subject}
                 </span>
-                <span className="text-[10px] text-[#94A3B8]">{t.child}</span>
+                <span className="text-[10px] text-[#94A3B8] dark:text-gray-500">{t.child}</span>
               </div>
             </div>
           ))}

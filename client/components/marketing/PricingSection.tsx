@@ -200,28 +200,28 @@ export default function PricingSection() {
   const activeFormat = FORMATS.find((f) => f.id === format)!;
 
   return (
-    <section className="py-20 bg-[#F7F9FF]" id="pricing">
+    <section className="py-20 bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200" id="pricing">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* Header */}
         <div className="text-center mb-10">
-          <p className="text-purple-600 text-sm font-bold uppercase tracking-widest mb-2">
+          <p className="text-purple-600 dark:text-purple-400 text-sm font-bold uppercase tracking-widest mb-2">
             Simple Pricing · No Subscriptions
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] mb-4">
+          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] dark:text-white mb-4">
             Invest in Your Child&apos;s{" "}
-            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
               Future Career
             </span>
           </h2>
-          <p className="text-[#334155] max-w-xl mx-auto">
+          <p className="text-[#334155] dark:text-gray-400 max-w-xl mx-auto">
             Buy a class pack. Use them across any pathway. No monthly fees, no lock-ins.
           </p>
         </div>
 
         {/* Format selector */}
         <div className="mb-10">
-          <p className="text-center text-xs font-bold uppercase tracking-widest text-[#94A3B8] mb-4">
+          <p className="text-center text-xs font-bold uppercase tracking-widest text-[#94A3B8] dark:text-gray-500 mb-4">
             Choose your learning format
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
@@ -231,8 +231,8 @@ export default function PricingSection() {
                 onClick={() => setFormat(f.id)}
                 className={`relative flex flex-col items-center gap-1 px-4 py-4 rounded-2xl border-2 text-center transition-all duration-200 ${
                   format === f.id
-                    ? "border-purple-400 bg-white shadow-md shadow-purple-50 scale-[1.02]"
-                    : "border-[#E2E8F0] bg-white hover:border-purple-200 hover:shadow-sm"
+                    ? "border-purple-400 bg-white dark:bg-gray-900/80 shadow-md shadow-purple-50 dark:shadow-none scale-[1.02]"
+                    : "border-[#E2E8F0] dark:border-gray-700/60 bg-white dark:bg-gray-900/40 hover:border-purple-200 dark:hover:border-purple-700/50 hover:shadow-sm"
                 }`}
               >
                 {format === f.id && (
@@ -241,8 +241,8 @@ export default function PricingSection() {
                   </div>
                 )}
                 <span className="text-2xl">{f.emoji}</span>
-                <span className="text-[#0F172A] font-black text-sm leading-tight">{f.label}</span>
-                <span className="text-[#94A3B8] text-[10px]">{f.desc}</span>
+                <span className="text-[#0F172A] dark:text-white font-black text-sm leading-tight">{f.label}</span>
+                <span className="text-[#94A3B8] dark:text-gray-500 text-[10px]">{f.desc}</span>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${f.tagColor}`}>
                   {f.tag}
                 </span>
@@ -271,8 +271,8 @@ export default function PricingSection() {
             return (
               <div
                 key={pack.id}
-                className={`relative flex flex-col p-6 rounded-2xl bg-white border-2 ${pack.cardBorder} transition-all duration-300 hover:shadow-lg hover:shadow-slate-100 hover:-translate-y-0.5 ${
-                  pack.featured ? "ring-2 ring-purple-200 shadow-md shadow-purple-50" : ""
+                className={`relative flex flex-col p-6 rounded-2xl bg-white dark:bg-gray-900/50 border-2 ${pack.cardBorder} dark:border-gray-700/60 transition-all duration-300 hover:shadow-lg hover:shadow-slate-100 dark:hover:shadow-none hover:-translate-y-0.5 ${
+                  pack.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-none" : ""
                 }`}
               >
                 {pack.featured && (
@@ -290,8 +290,8 @@ export default function PricingSection() {
                 )}
 
                 <div className="mb-3">
-                  <h3 className="text-[#0F172A] font-black text-xl">{pack.name}</h3>
-                  <p className="text-[#94A3B8] text-xs">{pack.subtitle}</p>
+                  <h3 className="text-[#0F172A] dark:text-white font-black text-xl">{pack.name}</h3>
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-xs">{pack.subtitle}</p>
                 </div>
 
                 {/* Price */}
@@ -301,17 +301,17 @@ export default function PricingSection() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[#0F172A] font-bold">{pack.classes}</span>
-                  <span className="text-[#334155] text-sm">classes</span>
-                  <span className="text-[#CBD5E1] text-xs">·</span>
-                  <span className="text-[#64748B] text-xs">{perClass}</span>
+                  <span className="text-[#0F172A] dark:text-white font-bold">{pack.classes}</span>
+                  <span className="text-[#334155] dark:text-gray-400 text-sm">classes</span>
+                  <span className="text-[#CBD5E1] dark:text-gray-600 text-xs">·</span>
+                  <span className="text-[#64748B] dark:text-gray-500 text-xs">{perClass}</span>
                 </div>
 
                 <p className="text-xs text-[#64748B] mb-4 leading-relaxed">{pack.persuasion}</p>
 
                 <ul className="space-y-2 mb-6 flex-1">
                   {pack.features.map((feat) => (
-                    <li key={feat} className="flex items-start gap-2 text-sm text-[#334155]">
+                    <li key={feat} className="flex items-start gap-2 text-sm text-[#334155] dark:text-gray-400">
                       <span className={`text-xs mt-0.5 flex-shrink-0 ${pack.checkColor}`}>✓</span>
                       {feat}
                     </li>
@@ -346,7 +346,7 @@ export default function PricingSection() {
 
         {/* Region selector */}
         <div className="flex flex-wrap items-center justify-center gap-2 mb-8">
-          <span className="text-xs text-[#94A3B8] font-medium mr-1">Showing prices in:</span>
+          <span className="text-xs text-[#94A3B8] dark:text-gray-500 font-medium mr-1">Showing prices in:</span>
           {(Object.keys(REGIONS) as Region[]).map((r) => (
             <button
               key={r}
@@ -354,7 +354,7 @@ export default function PricingSection() {
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
                 region === r
                   ? "bg-purple-600 text-white border-purple-600"
-                  : "bg-white text-[#64748B] border-[#E2E8F0] hover:border-purple-200 hover:text-purple-600"
+                  : "bg-white dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 border-[#E2E8F0] dark:border-gray-700/60 hover:border-purple-200 dark:hover:border-purple-700/50 hover:text-purple-600 dark:hover:text-purple-400"
               }`}
             >
               {REGIONS[r].flag} {REGIONS[r].label}
@@ -365,7 +365,7 @@ export default function PricingSection() {
         <div className="text-center">
           <Link
             href="/pricing"
-            className="text-sm text-purple-600 hover:text-purple-700 transition-colors"
+            className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
           >
             View full pricing details, format comparison and FAQ →
           </Link>

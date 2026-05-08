@@ -252,16 +252,16 @@ export default function ShowcaseSection({ interest }: Props) {
   const display = filtered.length >= 3 ? filtered.slice(0, 6) : ALL_PROJECTS.slice(0, 6);
 
   return (
-    <section id="showcase" className="py-20 bg-[#F7F9FF]">
+    <section id="showcase" className="py-20 bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-12">
-          <p className="text-orange-600 text-sm font-bold uppercase tracking-widest mb-2">
+          <p className="text-orange-600 dark:text-orange-400 text-sm font-bold uppercase tracking-widest mb-2">
             Real Student Projects
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] mb-4">
+          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] dark:text-white mb-4">
             These Kids Built This. Yours Can Too.
           </h2>
-          <p className="text-[#334155] max-w-xl mx-auto">
+          <p className="text-[#334155] dark:text-gray-400 max-w-xl mx-auto">
             Every Lumexa student graduates with a real portfolio project. Not a certificate, not a quiz score.
             Something they actually built and can show the world.
           </p>
@@ -274,30 +274,30 @@ export default function ShowcaseSection({ interest }: Props) {
           {display.slice(0, 6).map((p) => (
             <div
               key={p.title}
-              className={`p-5 bg-white rounded-2xl border ${p.border} card-hover group`}
+              className={`p-5 bg-white dark:bg-gray-900/50 rounded-2xl border ${p.border} dark:border-gray-700/60 card-hover group`}
             >
               <div className="flex items-start justify-between mb-3">
-                <div className="text-3xl">{p.emoji}</div>
+                <div className="text-3xl group-hover:scale-110 transition-transform duration-200">{p.emoji}</div>
                 <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${p.tagColor}`}>
                   {p.tag}
                 </span>
               </div>
-              <h3 className="text-[#0F172A] font-bold mb-1">{p.title}</h3>
-              <p className="text-[#94A3B8] text-xs mb-2">
+              <h3 className="text-[#0F172A] dark:text-white font-bold mb-1">{p.title}</h3>
+              <p className="text-[#94A3B8] dark:text-gray-500 text-xs mb-2">
                 by {p.student} · {p.tech}
               </p>
-              <p className="text-[#334155] text-sm leading-relaxed">{p.desc}</p>
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed">{p.desc}</p>
             </div>
           ))}
         </div>
 
         <div className="mt-10 text-center">
-          <p className="text-[#64748B] text-sm mb-4">
+          <p className="text-[#64748B] dark:text-gray-500 text-sm mb-4">
             Every Lumexa student graduates with at least 3 portfolio projects.
           </p>
           <a
             href="/trial"
-            className="inline-flex items-center gap-2 text-sm text-purple-600 hover:text-purple-700 font-semibold transition-colors"
+            className="inline-flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-semibold transition-colors"
           >
             Start building with a free class →
           </a>

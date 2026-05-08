@@ -62,7 +62,7 @@ export default function MarketingNav() {
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
-          ? "bg-white/95 backdrop-blur-md border-b border-[#E2E8F0] shadow-sm shadow-slate-100/80"
+          ? "bg-white/95 dark:bg-[#050D1A]/95 backdrop-blur-md border-b border-[#E2E8F0] dark:border-gray-800/60 shadow-sm shadow-slate-100/80 dark:shadow-black/20"
           : "bg-transparent"
       }`}
     >
@@ -79,9 +79,9 @@ export default function MarketingNav() {
                 className="object-cover w-full h-full"
               />
             </div>
-            <span className="font-black text-lg tracking-tight leading-tight text-[#0F172A]">
+            <span className="font-black text-lg tracking-tight leading-tight text-[#0F172A] dark:text-white">
               Lumexa{" "}
-              <span className="text-purple-600 font-bold">AI School</span>
+              <span className="text-purple-600 dark:text-purple-400 font-bold">AI School</span>
             </span>
           </Link>
 
@@ -97,7 +97,7 @@ export default function MarketingNav() {
             {/* Theme toggle */}
             <button
               onClick={toggle}
-              className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E2E8F0] hover:border-purple-200 bg-white hover:bg-purple-50 transition-all text-sm"
+              className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 bg-white dark:bg-gray-800/60 hover:bg-purple-50 dark:hover:bg-gray-700/60 transition-all text-sm"
               title={isDark ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDark ? "☀️" : "🌙"}
@@ -130,7 +130,7 @@ export default function MarketingNav() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-[#64748B] hover:text-[#0F172A] p-2 transition-colors"
+            className="md:hidden text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white p-2 transition-colors"
             aria-label="Toggle menu"
           >
             {mobileOpen ? (
@@ -147,11 +147,11 @@ export default function MarketingNav() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden bg-white border-t border-[#E2E8F0] py-4 space-y-1 shadow-lg">
+          <div className="md:hidden bg-white dark:bg-[#050D1A] border-t border-[#E2E8F0] dark:border-gray-800 py-4 space-y-1 shadow-lg dark:shadow-black/30">
             <MobileNavLink href="/courses" onClick={() => setMobileOpen(false)}>Pathways</MobileNavLink>
             <MobileNavLink href="/pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
             <MobileNavLink href="/about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
-            <div className="pt-3 border-t border-[#E2E8F0] mt-3 flex flex-col gap-2 px-4">
+            <div className="pt-3 border-t border-[#E2E8F0] dark:border-gray-800 mt-3 flex flex-col gap-2 px-4">
               {authed ? (
                 <button
                   onClick={() => { setMobileOpen(false); handleDashboard(); }}
@@ -161,7 +161,7 @@ export default function MarketingNav() {
                 </button>
               ) : (
                 <>
-                  <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-[#334155] border border-[#E2E8F0] rounded-lg">
+                  <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700 rounded-lg dark:hover:border-gray-600 transition-colors">
                     Sign In
                   </Link>
                   <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-bold text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg">
@@ -181,7 +181,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <Link
       href={href}
-      className="text-sm text-[#334155] hover:text-[#0F172A] transition-colors relative group font-medium"
+      className="text-sm text-[#334155] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white transition-colors relative group font-medium"
     >
       {children}
       <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-purple-600 group-hover:w-full transition-all duration-200" />
@@ -194,7 +194,7 @@ function MobileNavLink({ href, children, onClick }: { href: string; children: Re
     <Link
       href={href}
       onClick={onClick}
-      className="block px-4 py-2.5 text-sm text-[#334155] hover:text-[#0F172A] hover:bg-[#F7F9FF] rounded-lg mx-2 transition-colors"
+      className="block px-4 py-2.5 text-sm text-[#334155] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#F7F9FF] dark:hover:bg-gray-800/60 rounded-lg mx-2 transition-colors"
     >
       {children}
     </Link>

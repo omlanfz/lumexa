@@ -147,19 +147,19 @@ const pathways: Pathway[] = [
 
 export default function PathwaysSection() {
   return (
-    <section className="py-20 bg-[#F7F9FF]" id="pathways">
+    <section className="py-20 bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200" id="pathways">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-14">
-          <p className="text-purple-600 text-sm font-bold uppercase tracking-widest mb-3">
+          <p className="text-purple-600 dark:text-purple-400 text-sm font-bold uppercase tracking-widest mb-3">
             6 Flagship Learning Pathways
           </p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0F172A] mb-4 leading-tight">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0F172A] dark:text-white mb-4 leading-tight">
             Your Child Doesn&apos;t Just Learn.{" "}
-            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
               They Build.
             </span>
           </h2>
-          <p className="text-[#334155] max-w-2xl mx-auto text-lg">
+          <p className="text-[#334155] dark:text-gray-400 max-w-2xl mx-auto text-lg">
             Every pathway ends with 3+ real projects in your child&apos;s portfolio.
             Not certificates, not badges. Actual things they built.
           </p>
@@ -169,8 +169,8 @@ export default function PathwaysSection() {
           {pathways.map((p) => (
             <div
               key={p.title}
-              className={`relative flex flex-col p-6 rounded-2xl ${p.cardBg} border ${p.cardBorder} transition-all duration-300 hover:shadow-md hover:shadow-slate-100 ${
-                p.featured ? "ring-2 ring-purple-200 shadow-md shadow-purple-50" : ""
+              className={`relative flex flex-col p-6 rounded-2xl ${p.cardBg} dark:bg-gray-900/50 border ${p.cardBorder} dark:border-gray-700/60 transition-all duration-300 hover:shadow-md hover:shadow-slate-100 dark:hover:shadow-none dark:hover:-translate-y-0.5 group ${
+                p.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-purple-900/20" : ""
               }`}
             >
               {/* Featured badge */}
@@ -191,14 +191,14 @@ export default function PathwaysSection() {
 
               {/* Header */}
               <div className="mb-4">
-                <div className="text-4xl mb-3">{p.emoji}</div>
-                <h3 className="text-[#0F172A] font-black text-xl mb-1">{p.title}</h3>
+                <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-200">{p.emoji}</div>
+                <h3 className="text-[#0F172A] dark:text-white font-black text-xl mb-1">{p.title}</h3>
                 <div className={`inline-block text-sm font-bold bg-gradient-to-r ${p.accent} bg-clip-text text-transparent`}>
                   {p.outcome}
                 </div>
               </div>
 
-              <p className="text-[#334155] text-sm leading-relaxed mb-4">{p.description}</p>
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed mb-4">{p.description}</p>
 
               {/* What they'll build */}
               <div className="mb-4">
@@ -207,7 +207,7 @@ export default function PathwaysSection() {
                 </p>
                 <ul className="space-y-1">
                   {p.projects.map((proj) => (
-                    <li key={proj} className="flex items-center gap-2 text-xs text-[#334155]">
+                    <li key={proj} className="flex items-center gap-2 text-xs text-[#334155] dark:text-gray-400">
                       <span className={`w-1.5 h-1.5 rounded-full ${p.dotColor} flex-shrink-0`} />
                       {proj}
                     </li>
@@ -217,15 +217,15 @@ export default function PathwaysSection() {
 
               {/* Meta */}
               <div className="flex flex-wrap gap-2 mb-5">
-                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] text-[#334155] border border-[#E2E8F0]">{p.ages}</span>
-                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] text-[#334155] border border-[#E2E8F0]">{p.sessions}</span>
-                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] text-[#334155] border border-[#E2E8F0]">{p.level}</span>
+                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700/60">{p.ages}</span>
+                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700/60">{p.sessions}</span>
+                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700/60">{p.level}</span>
               </div>
 
               {/* Tools */}
               <div className="flex flex-wrap gap-1.5 mb-5">
                 {p.tools.map((t) => (
-                  <span key={t} className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#E2E8F0] text-[#64748B] bg-white">
+                  <span key={t} className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#E2E8F0] dark:border-gray-700/60 text-[#64748B] dark:text-gray-400 bg-white dark:bg-gray-800/40">
                     {t}
                   </span>
                 ))}
@@ -241,7 +241,7 @@ export default function PathwaysSection() {
                 </Link>
                 <Link
                   href={`/courses?pathway=${p.id}`}
-                  className="w-full py-2.5 text-center text-xs font-semibold text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0] hover:border-[#CBD5E1] bg-white rounded-xl transition-all"
+                  className="w-full py-2.5 text-center text-xs font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700/60 hover:border-[#CBD5E1] dark:hover:border-gray-600 bg-white dark:bg-gray-800/40 rounded-xl transition-all"
                 >
                   View Full Curriculum →
                 </Link>
@@ -252,12 +252,12 @@ export default function PathwaysSection() {
 
         {/* Browse All */}
         <div className="mt-10 text-center">
-          <p className="text-[#64748B] text-sm mb-4">
+          <p className="text-[#64748B] dark:text-gray-500 text-sm mb-4">
             Not sure which path is right? Start with a free trial and we&apos;ll recommend the perfect one.
           </p>
           <Link
             href="/courses"
-            className="inline-flex items-center gap-2 px-6 py-3 border border-[#E2E8F0] hover:border-purple-200 text-[#334155] hover:text-purple-700 rounded-xl text-sm font-semibold transition-all hover:bg-purple-50"
+            className="inline-flex items-center gap-2 px-6 py-3 border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 text-[#334155] dark:text-gray-400 hover:text-purple-700 dark:hover:text-purple-300 rounded-xl text-sm font-semibold transition-all hover:bg-purple-50 dark:hover:bg-purple-900/10"
           >
             Browse All Courses and Lesson Breakdowns →
           </Link>

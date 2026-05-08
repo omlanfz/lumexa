@@ -482,7 +482,7 @@ function CoursesContent() {
   );
 
   return (
-    <div className="bg-[#050D1A] text-white">
+    <div className="bg-[#F7F9FF] dark:bg-[#050D1A] text-[#0F172A] dark:text-white transition-colors duration-200">
       {/* Hero */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
@@ -520,14 +520,14 @@ function CoursesContent() {
       </section>
 
       {/* Filter tabs */}
-      <div className="sticky top-16 z-20 bg-[#050D1A]/95 backdrop-blur border-b border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
+      <div className="sticky top-16 z-20 bg-[#F7F9FF]/95 dark:bg-[#050D1A]/95 backdrop-blur border-b border-[#E2E8F0] dark:border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           <button
             onClick={() => setActivePathway("all")}
             className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activePathway === "all"
                 ? "bg-purple-600 text-white"
-                : "bg-gray-800/60 text-gray-400 hover:text-white hover:bg-gray-800"
+                : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
             }`}
           >
             All Pathways
@@ -539,7 +539,7 @@ function CoursesContent() {
               className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 activePathway === p.id
                   ? `bg-gradient-to-r ${p.color} text-white`
-                  : "bg-gray-800/60 text-gray-400 hover:text-white hover:bg-gray-800"
+                  : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
               }`}
             >
               {p.emoji} {p.title.replace(" Path", "")}
@@ -558,7 +558,7 @@ function CoursesContent() {
                 <div className="text-5xl">{pathway.emoji}</div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h2 className="text-2xl font-black text-white">{pathway.title}</h2>
+                    <h2 className="text-2xl font-black text-[#0F172A] dark:text-white">{pathway.title}</h2>
                     <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${pathway.badge}`}>
                       {pathway.ages}
                     </span>
@@ -569,7 +569,7 @@ function CoursesContent() {
                     )}
                   </div>
                   <p className={`font-bold text-sm ${pathway.accent}`}>{pathway.tagline}</p>
-                  <p className="text-gray-500 text-xs mt-0.5">
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-xs mt-0.5">
                     {pathway.courses.length} courses ·{" "}
                     {pathway.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
                   </p>
@@ -584,7 +584,7 @@ function CoursesContent() {
                 </Link>
                 <Link
                   href="/pricing"
-                  className="px-4 py-2 text-sm font-semibold text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-xl transition-all"
+                  className="px-4 py-2 text-sm font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-gray-500 rounded-xl transition-all"
                 >
                   Buy Now
                 </Link>
@@ -599,10 +599,10 @@ function CoursesContent() {
                 return (
                   <div
                     key={course.number}
-                    className={`border rounded-2xl overflow-hidden transition-all ${pathway.border} bg-gray-900/40`}
+                    className={`border rounded-2xl overflow-hidden transition-all ${pathway.border} bg-white dark:bg-gray-900/40 card-hover`}
                   >
                     <button
-                      className="w-full flex items-start gap-4 p-5 sm:p-6 text-left hover:bg-gray-900/60 transition-colors"
+                      className="w-full flex items-start gap-4 p-5 sm:p-6 text-left hover:bg-[#F7F9FF] dark:hover:bg-gray-900/60 transition-colors"
                       onClick={() => setExpandedCourse(isOpen ? null : courseKey)}
                     >
                       <div className={`text-2xl font-black ${pathway.accent} flex-shrink-0 w-10 text-center`}>
@@ -611,14 +611,14 @@ function CoursesContent() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <h3 className="text-white font-bold text-base mb-1">{course.title}</h3>
-                            <p className="text-gray-400 text-sm leading-relaxed">{course.outcome}</p>
+                            <h3 className="text-[#0F172A] dark:text-white font-bold text-base mb-1">{course.title}</h3>
+                            <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed">{course.outcome}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                            <span className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 whitespace-nowrap">
+                            <span className="text-xs px-2.5 py-1 rounded-lg bg-[#F1F5F9] dark:bg-gray-800 text-[#64748B] dark:text-gray-400 whitespace-nowrap">
                               {course.lessons} lessons
                             </span>
-                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-gray-500`}>
+                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-[#94A3B8] dark:text-gray-500`}>
                               ▾
                             </span>
                           </div>
@@ -629,7 +629,7 @@ function CoursesContent() {
                           {course.tools.map((t) => (
                             <span
                               key={t}
-                              className="text-[10px] font-mono px-2 py-0.5 rounded border border-gray-700 text-gray-500"
+                              className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#D1D5DB] dark:border-gray-700 text-[#94A3B8] dark:text-gray-500"
                             >
                               {t}
                             </span>
@@ -639,11 +639,11 @@ function CoursesContent() {
                     </button>
 
                     {isOpen && (
-                      <div className="px-5 sm:px-6 pb-6 border-t border-gray-800/60">
+                      <div className="px-5 sm:px-6 pb-6 border-t border-[#E2E8F0] dark:border-gray-800/60">
                         <div className="pt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
                           {/* Description + Projects */}
                           <div className="lg:col-span-2 space-y-5">
-                            <p className="text-sm text-gray-400 leading-relaxed">{course.description}</p>
+                            <p className="text-sm text-[#64748B] dark:text-gray-400 leading-relaxed">{course.description}</p>
 
                             <div>
                               <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
@@ -651,7 +651,7 @@ function CoursesContent() {
                               </p>
                               <ul className="space-y-1.5">
                                 {course.projects.map((proj) => (
-                                  <li key={proj} className="flex items-center gap-2 text-sm text-gray-300">
+                                  <li key={proj} className="flex items-center gap-2 text-sm text-[#334155] dark:text-gray-300">
                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathway.dot}`} />
                                     {proj}
                                   </li>
@@ -667,7 +667,7 @@ function CoursesContent() {
                             </p>
                             <ol className="space-y-1.5">
                               {course.lessonBreakdown.map((lesson, i) => (
-                                <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
+                                <li key={i} className="flex items-start gap-2 text-xs text-[#64748B] dark:text-gray-400">
                                   <span className={`font-bold flex-shrink-0 ${pathway.accent}`}>{i + 1}.</span>
                                   <span>{lesson}</span>
                                 </li>
@@ -677,7 +677,7 @@ function CoursesContent() {
                         </div>
 
                         {/* CTA */}
-                        <div className="flex gap-3 mt-6 pt-4 border-t border-gray-800/60">
+                        <div className="flex gap-3 mt-6 pt-4 border-t border-[#E2E8F0] dark:border-gray-800/60">
                           <Link
                             href="/trial"
                             className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${pathway.color} hover:opacity-90 transition-all`}
@@ -702,10 +702,10 @@ function CoursesContent() {
       </div>
 
       {/* Bottom CTA */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[#07101F] to-[#050D1A]">
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gradient-to-b dark:from-[#07101F] dark:to-[#050D1A] transition-colors duration-200">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-black text-white mb-4">Not Sure Where to Start?</h2>
-          <p className="text-gray-400 mb-8">
+          <h2 className="text-3xl font-black mb-4">Not Sure Where to Start?</h2>
+          <p className="text-[#64748B] dark:text-gray-400 mb-8">
             Book a free trial and we&apos;ll recommend the perfect pathway for your child&apos;s age,
             interests, and goals.
           </p>

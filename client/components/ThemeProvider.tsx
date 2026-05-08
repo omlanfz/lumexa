@@ -52,16 +52,13 @@ function applyTheme(t: Theme) {
 // ── Provider ───────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Issue 14 fix: read saved theme AND apply it to <html> on first mount.
-    // Previously only setTheme() was called here, which updates React state
-    // but does not touch the DOM — so dark: classes never activated.
-    const saved = (localStorage.getItem("lumexa-theme") as Theme) ?? "dark";
+    const saved = (localStorage.getItem("lumexa-theme") as Theme) ?? "light";
     setTheme(saved);
-    applyTheme(saved); // ← THE FIX: mutate <html> immediately on mount
+    applyTheme(saved);
     setMounted(true);
   }, []);
 
@@ -78,7 +75,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   return (
     <ThemeContext.Provider
-      value={{ theme, toggleTheme, isDark: mounted ? theme === "dark" : true }}
+      value={{ theme, toggleTheme, isDark: mounted ? theme === "dark" : false }}
     >
       {children}
     </ThemeContext.Provider>

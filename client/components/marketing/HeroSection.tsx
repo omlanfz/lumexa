@@ -3,25 +3,25 @@ import Link from "next/link";
 /* Glassmorphism code preview — the ONE allowed glass element per spec */
 function GlassCodePreview() {
   const codeLines = [
-    { color: "text-slate-500", text: "# Build a mood detector AI" },
-    { color: "text-blue-600",  text: "import cv2, tensorflow as tf" },
-    { color: "text-slate-700", text: "" },
-    { color: "text-purple-600", text: "model = load_model(" },
-    { color: "text-green-600",  text: '  "emotion_detector.h5"' },
-    { color: "text-purple-600", text: ")" },
-    { color: "text-slate-700", text: "" },
-    { color: "text-blue-600",  text: "cap = cv2.VideoCapture(0)" },
-    { color: "text-slate-500", text: "# Real-time face detection" },
+    { color: "text-slate-500 dark:text-slate-400", text: "# Build a mood detector AI" },
+    { color: "text-blue-600 dark:text-blue-400",   text: "import cv2, tensorflow as tf" },
+    { color: "text-slate-700 dark:text-slate-500", text: "" },
+    { color: "text-purple-600 dark:text-purple-400", text: "model = load_model(" },
+    { color: "text-green-600 dark:text-green-400",   text: '  "emotion_detector.h5"' },
+    { color: "text-purple-600 dark:text-purple-400", text: ")" },
+    { color: "text-slate-700 dark:text-slate-500", text: "" },
+    { color: "text-blue-600 dark:text-blue-400",   text: "cap = cv2.VideoCapture(0)" },
+    { color: "text-slate-500 dark:text-slate-400", text: "# Real-time face detection" },
   ];
 
   return (
     <div className="relative">
-      {/* Colourful gradient blob behind the glass card */}
-      <div className="absolute -inset-6 bg-gradient-to-br from-purple-300/60 via-blue-300/40 to-cyan-300/50 rounded-3xl blur-2xl" />
+      {/* Gradient blob behind the glass card */}
+      <div className="absolute -inset-6 bg-gradient-to-br from-purple-300/60 via-blue-300/40 to-cyan-300/50 dark:from-purple-700/30 dark:via-blue-700/20 dark:to-cyan-700/20 rounded-3xl blur-2xl" />
 
       {/* Glass card */}
       <div
-        className="relative rounded-2xl p-5 border border-white/70 shadow-2xl shadow-purple-200/60"
+        className="relative rounded-2xl p-5 border border-white/70 dark:border-white/10 shadow-2xl shadow-purple-200/60 dark:shadow-purple-900/40 transition-transform duration-300 hover:-translate-y-1"
         style={{
           backdropFilter: "blur(14px)",
           background: "rgba(255,255,255,0.62)",
@@ -39,7 +39,7 @@ function GlassCodePreview() {
         <div className="font-mono text-[12px] space-y-0.5">
           {codeLines.map((l, i) => (
             <div key={i} className={`${l.color} leading-5`}>
-              {l.text || " "}
+              {l.text || " "}
             </div>
           ))}
         </div>
@@ -68,18 +68,18 @@ export default function HeroSection() {
   return (
     <section
       id="hero"
-      className="relative min-h-screen flex items-center overflow-hidden bg-[#F7F9FF]"
+      className="relative min-h-screen flex items-center overflow-hidden bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200"
     >
       {/* Subtle dot grid */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.04]"
+      <div className="absolute inset-0 pointer-events-none opacity-[0.04] dark:opacity-[0.06]"
         style={{
           backgroundImage: "radial-gradient(circle, #2563EB 1px, transparent 1px)",
           backgroundSize: "40px 40px",
         }}
       />
-      {/* Light gradient blobs */}
-      <div className="absolute top-1/4 left-0 w-[500px] h-[500px] bg-purple-200/40 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-blue-200/30 rounded-full blur-3xl pointer-events-none" />
+      {/* Gradient blobs */}
+      <div className="absolute top-1/4 left-0 w-[500px] h-[500px] bg-purple-200/40 dark:bg-purple-700/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-blue-200/30 dark:bg-blue-700/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
@@ -87,27 +87,27 @@ export default function HeroSection() {
           {/* Left: copy */}
           <div>
             {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold mb-7">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-semibold mb-7">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               Live classes · Expert teachers · Real AI projects
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-[58px] font-black text-[#0F172A] leading-[1.06] tracking-tight mb-5">
+            <h1 className="text-4xl sm:text-5xl lg:text-[58px] font-black text-[#0F172A] dark:text-white leading-[1.06] tracking-tight mb-5">
               Turn Your Child Into an{" "}
-              <span className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 dark:from-purple-400 dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
                 AI Builder
               </span>
             </h1>
 
-            {/* Sub-headline — outcome specific */}
-            <p className="text-lg text-[#334155] max-w-lg mb-3 leading-relaxed">
+            {/* Sub-headline */}
+            <p className="text-lg text-[#334155] dark:text-gray-400 max-w-lg mb-3 leading-relaxed">
               While other kids scroll through AI tools,{" "}
-              <span className="font-bold text-[#0F172A]">yours will build them.</span>{" "}
-              Live coding classes for ages 6–18: from Scratch to real AI apps.
+              <span className="font-bold text-[#0F172A] dark:text-white">yours will build them.</span>{" "}
+              Live coding classes for ages 6-18: from Scratch to real AI apps.
             </p>
 
-            <p className="text-sm text-[#94A3B8] mb-9">
+            <p className="text-sm text-[#94A3B8] dark:text-gray-500 mb-9">
               No prior experience needed · Progress visible after lesson 1 · Cancel anytime
             </p>
 
@@ -115,7 +115,7 @@ export default function HeroSection() {
             <div className="flex flex-col sm:flex-row gap-3 mb-12">
               <Link
                 href="/trial"
-                className="px-8 py-4 text-base font-black bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-xl shadow-lg shadow-purple-200 hover:shadow-purple-300 transition-all hover:scale-[1.02] active:scale-95"
+                className="px-8 py-4 text-base font-black bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-xl shadow-lg shadow-purple-200 dark:shadow-purple-900/40 hover:shadow-purple-300 dark:hover:shadow-purple-800/50 transition-all hover:scale-[1.02] active:scale-95 glow-pulse"
               >
                 Book Free Trial Class
                 <span className="block text-xs font-normal opacity-75 mt-0.5">
@@ -124,7 +124,7 @@ export default function HeroSection() {
               </Link>
               <Link
                 href="/courses"
-                className="px-8 py-4 text-base font-semibold border-2 border-[#E2E8F0] hover:border-purple-200 text-[#334155] hover:text-purple-700 rounded-xl transition-all hover:bg-purple-50"
+                className="px-8 py-4 text-base font-semibold border-2 border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 text-[#334155] dark:text-gray-400 hover:text-purple-700 dark:hover:text-purple-300 rounded-xl transition-all hover:bg-purple-50 dark:hover:bg-purple-900/10"
               >
                 Explore Learning Paths →
               </Link>
@@ -138,9 +138,9 @@ export default function HeroSection() {
                 { value: "50+",    label: "Expert Teachers" },
                 { value: "3+",     label: "Projects Per Course" },
               ].map((s) => (
-                <div key={s.label}>
-                  <div className="text-2xl font-black text-[#0F172A]">{s.value}</div>
-                  <div className="text-xs text-[#64748B] mt-0.5">{s.label}</div>
+                <div key={s.label} className="group cursor-default">
+                  <div className="text-2xl font-black text-[#0F172A] dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors duration-200">{s.value}</div>
+                  <div className="text-xs text-[#64748B] dark:text-gray-500 mt-0.5">{s.label}</div>
                 </div>
               ))}
             </div>
@@ -155,16 +155,16 @@ export default function HeroSection() {
         {/* Pathway tags strip */}
         <div className="mt-14 flex flex-wrap gap-2 justify-center lg:justify-start">
           {[
-            { label: "🎮 Game Creator",       color: "bg-red-50   border-red-200   text-red-700"    },
-            { label: "🤖 AI Builder",          color: "bg-purple-50 border-purple-200 text-purple-700" },
-            { label: "🌐 Web Developer",       color: "bg-blue-50  border-blue-200  text-blue-700"   },
-            { label: "🌟 Little Coders",       color: "bg-amber-50  border-amber-200  text-amber-700"  },
-            { label: "📊 Data Scientist",      color: "bg-teal-50  border-teal-200  text-teal-700"   },
-            { label: "💼 Digital Independence",color: "bg-green-50 border-green-200 text-green-700"  },
+            { label: "🎮 Game Creator",        color: "bg-red-50 dark:bg-red-900/20   border-red-200 dark:border-red-700/40   text-red-700 dark:text-red-300"    },
+            { label: "🤖 AI Builder",           color: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700/40 text-purple-700 dark:text-purple-300" },
+            { label: "🌐 Web Developer",        color: "bg-blue-50 dark:bg-blue-900/20  border-blue-200 dark:border-blue-700/40  text-blue-700 dark:text-blue-300"   },
+            { label: "🌟 Little Coders",        color: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-300"  },
+            { label: "📊 Data Scientist",       color: "bg-teal-50 dark:bg-teal-900/20  border-teal-200 dark:border-teal-700/40  text-teal-700 dark:text-teal-300"   },
+            { label: "💼 Digital Independence", color: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/40 text-green-700 dark:text-green-300"  },
           ].map((tag) => (
             <span
               key={tag.label}
-              className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold ${tag.color}`}
+              className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold transition-all duration-200 hover:scale-105 hover:shadow-sm cursor-default ${tag.color}`}
             >
               {tag.label}
             </span>
@@ -173,7 +173,7 @@ export default function HeroSection() {
       </div>
 
       {/* Bottom soft fade to next section */}
-      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white dark:from-[#07101F] to-transparent pointer-events-none" />
     </section>
   );
 }

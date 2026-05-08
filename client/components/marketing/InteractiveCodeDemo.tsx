@@ -22,7 +22,7 @@ function StarOutput() {
           ))}
         </div>
       ))}
-      <p className="text-[#64748B] text-xs mt-3">Your star pattern! 🎉</p>
+      <p className="text-[#64748B] dark:text-gray-400 text-xs mt-3">Your star pattern! 🎉</p>
     </div>
   );
 }
@@ -32,7 +32,7 @@ function QuizOutput() {
   const correct = "Paris";
   return (
     <div className="flex flex-col gap-3 py-4 px-2">
-      <p className="text-[#0F172A] font-semibold text-sm text-center">
+      <p className="text-[#0F172A] dark:text-white font-semibold text-sm text-center">
         What is the capital of France?
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -42,12 +42,12 @@ function QuizOutput() {
             onClick={() => setAnswer(opt)}
             className={`py-2 px-3 rounded-xl text-sm font-bold border-2 transition-all ${
               answer === null
-                ? "bg-white border-[#E2E8F0] text-[#334155] hover:border-blue-300 hover:bg-blue-50"
+                ? "bg-white dark:bg-gray-800/60 border-[#E2E8F0] dark:border-gray-700 text-[#334155] dark:text-gray-300 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 : opt === correct
-                ? "bg-green-50 border-green-400 text-green-700"
+                ? "bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600 text-green-700 dark:text-green-400"
                 : opt === answer
-                ? "bg-red-50 border-red-300 text-red-600"
-                : "bg-white border-[#E2E8F0] text-[#94A3B8]"
+                ? "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-600 text-red-600 dark:text-red-400"
+                : "bg-white dark:bg-gray-800/40 border-[#E2E8F0] dark:border-gray-700 text-[#94A3B8] dark:text-gray-600"
             }`}
           >
             {opt}
@@ -207,19 +207,19 @@ export default function InteractiveCodeDemo() {
   const Output = chosen?.OutputComponent;
 
   return (
-    <section className="py-20 bg-[#EEF3FF]">
+    <section className="py-20 bg-[#EEF3FF] dark:bg-[#07101F] transition-colors duration-200">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-12">
-          <p className="text-blue-600 text-sm font-bold uppercase tracking-widest mb-2">
+          <p className="text-blue-600 dark:text-blue-400 text-sm font-bold uppercase tracking-widest mb-2">
             Try It Right Now
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] mb-3">
+          <h2 className="text-3xl sm:text-4xl font-black text-[#0F172A] dark:text-white mb-3">
             Build Something Real in 30 Seconds
           </h2>
-          <p className="text-[#334155] max-w-xl mx-auto">
+          <p className="text-[#334155] dark:text-gray-400 max-w-xl mx-auto">
             Pick what you want to build. Watch the code write itself. Then hit{" "}
-            <span className="font-bold text-[#0F172A]">Run It</span> and see it work.
+            <span className="font-bold text-[#0F172A] dark:text-white">Run It</span> and see it work.
           </p>
         </div>
 
@@ -232,7 +232,7 @@ export default function InteractiveCodeDemo() {
               className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl border-2 font-semibold text-sm transition-all duration-200 ${
                 chosen?.id === demo.id
                   ? "bg-[#2563EB] border-[#2563EB] text-white shadow-lg shadow-blue-200"
-                  : "bg-white border-[#E2E8F0] text-[#334155] hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                  : "bg-white dark:bg-gray-900/50 border-[#E2E8F0] dark:border-gray-700/60 text-[#334155] dark:text-gray-400 hover:border-blue-200 dark:hover:border-blue-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-700 dark:hover:text-blue-300"
               }`}
             >
               <span className="text-xl">{demo.emoji}</span>
@@ -298,8 +298,8 @@ export default function InteractiveCodeDemo() {
             </div>
 
             {/* Output panel */}
-            <div className="bg-white border-l border-[#E2E8F0] p-5 min-h-[220px] flex flex-col">
-              <p className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wider mb-3">
+            <div className="bg-white dark:bg-gray-900/70 border-l border-[#E2E8F0] dark:border-gray-800 p-5 min-h-[220px] flex flex-col">
+              <p className="text-xs font-semibold text-[#94A3B8] dark:text-gray-500 uppercase tracking-wider mb-3">
                 Output
               </p>
               {showOutput && Output ? (
@@ -307,7 +307,7 @@ export default function InteractiveCodeDemo() {
                   <Output />
                 </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center text-[#CBD5E1] text-sm">
+                <div className="flex-1 flex items-center justify-center text-[#CBD5E1] dark:text-gray-600 text-sm">
                   {typing ? "Writing code…" : "Hit ▶ Run It to see the magic"}
                 </div>
               )}
@@ -316,14 +316,14 @@ export default function InteractiveCodeDemo() {
         )}
 
         {!chosen && (
-          <div className="text-center text-[#94A3B8] text-sm py-8">
+          <div className="text-center text-[#94A3B8] dark:text-gray-500 text-sm py-8">
             ↑ Pick something to build above
           </div>
         )}
 
         {/* CTA */}
         <div className="mt-12 text-center">
-          <p className="text-[#64748B] text-sm mb-4">
+          <p className="text-[#64748B] dark:text-gray-500 text-sm mb-4">
             Want to learn how you just did that?
           </p>
           <Link

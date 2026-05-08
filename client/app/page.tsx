@@ -8,7 +8,6 @@ import MarketingNav    from "../components/marketing/MarketingNav";
 import MarketingFooter from "../components/marketing/MarketingFooter";
 
 // Gamification overlays (fixed, z-indexed)
-import LumiNudge       from "../components/marketing/LumiNudge";
 import ScrollMilestones from "../components/marketing/ScrollMilestones";
 import LumiChat        from "../components/LumiChat";
 
@@ -52,14 +51,13 @@ export default function RootPage() {
 
   if (!ready) {
     // Blank splash while checking auth — matches landing bg so there's no flash
-    return <div className="min-h-screen bg-[#F7F9FF]" />;
+    return <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A]" />;
   }
 
   return (
-    <div className="bg-[#F7F9FF] min-h-screen">
+    <div className="bg-[#F7F9FF] dark:bg-[#050D1A] min-h-screen transition-colors duration-200">
       {/* Fixed gamification overlays */}
       <ScrollMilestones />
-      <LumiNudge />
       <LumiChat variant="parent" />
 
       <MarketingNav />

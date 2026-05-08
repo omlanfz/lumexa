@@ -15,7 +15,7 @@ const subjects = [
   "Game Creator Path (Roblox / Python games)",
   "AI Builder Path (Python + machine learning)",
   "Web Developer Path (HTML / CSS / React)",
-  "Little Coders Path (Scratch, ages 6–11)",
+  "Little Coders Path (Scratch, ages 6-11)",
   "Data Scientist Path (Python + data)",
   "Not sure yet, help me choose",
 ];
@@ -86,22 +86,22 @@ export default function TrialPage() {
   if (submitted) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center p-8 bg-gray-900/60 border border-green-800/50 rounded-2xl shadow-xl">
+        <div className="max-w-md w-full text-center p-8 bg-white dark:bg-gray-900/60 border border-green-200 dark:border-green-800/50 rounded-2xl shadow-xl">
           <div className="text-5xl mb-4">🎉</div>
-          <h2 className="text-2xl font-black text-white mb-3">You're Booked!</h2>
-          <p className="text-gray-400 text-sm leading-relaxed mb-2">
+          <h2 className="text-2xl font-black text-[#0F172A] dark:text-white mb-3">You're Booked!</h2>
+          <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mb-2">
             We've received your free trial request for{" "}
-            <span className="text-white font-semibold">{form.childName}</span>.
+            <span className="text-[#0F172A] dark:text-white font-semibold">{form.childName}</span>.
           </p>
-          <p className="text-gray-400 text-sm leading-relaxed mb-6">
-            We'll email <span className="text-white font-semibold">{form.parentEmail}</span> within
+          <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mb-6">
+            We'll email <span className="text-[#0F172A] dark:text-white font-semibold">{form.parentEmail}</span> within
             a few hours to confirm your teacher match and class time.
           </p>
-          <div className="p-4 bg-green-900/20 border border-green-800/40 rounded-xl mb-6 text-left">
-            <p className="text-green-400 text-xs font-semibold mb-2">What happens next:</p>
-            <ol className="space-y-1.5 text-gray-400 text-xs">
+          <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 rounded-xl mb-6 text-left">
+            <p className="text-green-600 dark:text-green-400 text-xs font-semibold mb-2">What happens next:</p>
+            <ol className="space-y-1.5 text-[#64748B] dark:text-gray-400 text-xs">
               <li>1. We match {form.childName} with the perfect teacher</li>
-              <li>2. You receive an email with the class link + time</li>
+              <li>2. You receive an email with the class link and time</li>
               <li>3. Join the live class. It's completely free</li>
               <li>4. Decide if you'd like to continue (no pressure)</li>
             </ol>
@@ -110,7 +110,7 @@ export default function TrialPage() {
             <Link href="/register" className="w-full py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-sm transition-all text-center">
               Create an Account
             </Link>
-            <Link href="/" className="text-gray-500 hover:text-gray-300 text-sm transition-colors">
+            <Link href="/" className="text-[#94A3B8] hover:text-[#64748B] dark:hover:text-gray-300 text-sm transition-colors">
               Back to Home →
             </Link>
           </div>
@@ -124,15 +124,15 @@ export default function TrialPage() {
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
         {/* Left: Info */}
         <div className="lg:sticky lg:top-24">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-700/40 bg-purple-900/20 text-purple-300 text-xs font-medium mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-300 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             100% Free · No credit card needed
           </div>
 
-          <h1 className="text-3xl sm:text-4xl font-black text-white mb-4 leading-tight">
+          <h1 className="text-3xl sm:text-4xl font-black text-[#0F172A] dark:text-white mb-4 leading-tight">
             Book Your Child's Free Trial Class
           </h1>
-          <p className="text-gray-400 leading-relaxed mb-8">
+          <p className="text-[#64748B] dark:text-gray-400 leading-relaxed mb-8">
             Fill in the form and we'll match your child with the perfect teacher within a few hours.
             The first class is completely free. No strings attached.
           </p>
@@ -144,23 +144,23 @@ export default function TrialPage() {
               { icon: "🎯", title: "Personalized Learning", desc: "The teacher adapts every lesson to your child's pace, goals, and learning style." },
               { icon: "🏆", title: "Real Portfolio Projects", desc: "By the end of the course, your child will have built 3+ real things to show off." },
             ].map((item) => (
-              <div key={item.title} className="flex gap-3">
-                <span className="text-xl flex-shrink-0 mt-0.5">{item.icon}</span>
+              <div key={item.title} className="flex gap-3 group">
+                <span className="text-xl flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform duration-200">{item.icon}</span>
                 <div>
-                  <div className="text-white font-semibold text-sm">{item.title}</div>
-                  <div className="text-gray-500 text-xs mt-0.5">{item.desc}</div>
+                  <div className="text-[#0F172A] dark:text-white font-semibold text-sm">{item.title}</div>
+                  <div className="text-[#94A3B8] dark:text-gray-500 text-xs mt-0.5">{item.desc}</div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Fallback contact — always visible */}
-          <div className="p-4 bg-gray-900/40 border border-gray-800 rounded-xl">
-            <p className="text-gray-500 text-xs mb-2 font-semibold">Prefer to reach us directly?</p>
+          {/* Fallback contact */}
+          <div className="p-4 bg-white dark:bg-gray-900/40 border border-[#E2E8F0] dark:border-gray-800 rounded-xl">
+            <p className="text-[#94A3B8] dark:text-gray-500 text-xs mb-2 font-semibold">Prefer to reach us directly?</p>
             <div className="flex flex-col gap-2">
               <a
                 href="mailto:fz.omlan@gmail.com"
-                className="flex items-center gap-2 text-xs text-gray-400 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-xs text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white transition-colors"
               >
                 <span>📧</span>
                 <span>fz.omlan@gmail.com</span>
@@ -169,7 +169,7 @@ export default function TrialPage() {
                 href="https://wa.me/8801774878252"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-xs text-green-400 hover:text-green-300 transition-colors"
+                className="flex items-center gap-2 text-xs text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors"
               >
                 <span>💬</span>
                 <span>WhatsApp: +880 1774 878252</span>
@@ -179,14 +179,14 @@ export default function TrialPage() {
         </div>
 
         {/* Right: Form */}
-        <div className="bg-gray-900/70 border border-gray-700 rounded-2xl p-6 sm:p-8">
-          <h2 className="text-xl font-bold text-white mb-1">Trial Request Form</h2>
-          <p className="text-gray-600 text-xs mb-6">First class 100% free · No card required</p>
+        <div className="bg-white dark:bg-gray-900/70 border border-[#E2E8F0] dark:border-gray-700 rounded-2xl p-6 sm:p-8 shadow-sm dark:shadow-none">
+          <h2 className="text-xl font-bold text-[#0F172A] dark:text-white mb-1">Trial Request Form</h2>
+          <p className="text-[#94A3B8] dark:text-gray-600 text-xs mb-6">First class 100% free · No card required</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Parent */}
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                 Your Name (Parent / Guardian)
               </label>
               <input
@@ -197,12 +197,12 @@ export default function TrialPage() {
                 minLength={2}
                 maxLength={80}
                 placeholder="e.g. Sarah Johnson"
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#94A3B8] dark:placeholder-gray-600 transition-colors"
               />
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                 Your Email
               </label>
               <input
@@ -211,13 +211,13 @@ export default function TrialPage() {
                 onChange={set("parentEmail")}
                 required
                 placeholder="e.g. sarah@email.com"
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#94A3B8] dark:placeholder-gray-600 transition-colors"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                   Child's Name
                 </label>
                 <input
@@ -228,11 +228,11 @@ export default function TrialPage() {
                   minLength={2}
                   maxLength={50}
                   placeholder="e.g. Alex"
-                  className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                  className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#94A3B8] dark:placeholder-gray-600 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
+                <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                   Child's Age
                 </label>
                 <input
@@ -243,20 +243,20 @@ export default function TrialPage() {
                   min={5}
                   max={19}
                   placeholder="e.g. 12"
-                  className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors"
+                  className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#94A3B8] dark:placeholder-gray-600 transition-colors"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                 Learning Path of Interest
               </label>
               <select
                 value={form.subject}
                 onChange={set("subject")}
                 required
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm transition-colors"
+                className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm transition-colors"
               >
                 <option value="">Select a path…</option>
                 {subjects.map((s) => (
@@ -266,7 +266,7 @@ export default function TrialPage() {
             </div>
 
             <div>
-              <label className="block text-xs text-gray-400 uppercase tracking-wider mb-1">
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                 Anything else? (optional)
               </label>
               <textarea
@@ -275,23 +275,23 @@ export default function TrialPage() {
                 rows={3}
                 maxLength={500}
                 placeholder="e.g. My child has no experience but loves Minecraft…"
-                className="w-full bg-black/60 border border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-white text-sm placeholder-gray-600 transition-colors resize-none"
+                className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm placeholder-[#94A3B8] dark:placeholder-gray-600 transition-colors resize-none"
               />
             </div>
 
             {/* Error with fallback */}
             {error && (
-              <div className="bg-red-900/20 border border-red-900/40 rounded-xl p-4">
-                <p className="text-red-400 text-xs font-semibold mb-2">
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-xl p-4">
+                <p className="text-red-600 dark:text-red-400 text-xs font-semibold mb-2">
                   ⚠️ {error}
                 </p>
-                <p className="text-gray-500 text-xs mb-2">
+                <p className="text-[#94A3B8] dark:text-gray-500 text-xs mb-2">
                   You can also reach us directly:
                 </p>
                 <div className="flex flex-col gap-1.5">
                   <a
                     href="mailto:fz.omlan@gmail.com"
-                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
                   >
                     📧 fz.omlan@gmail.com
                   </a>
@@ -299,7 +299,7 @@ export default function TrialPage() {
                     href="https://wa.me/8801774878252"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-green-400 hover:text-green-300 transition-colors"
+                    className="text-xs text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 transition-colors"
                   >
                     💬 WhatsApp us directly
                   </a>
@@ -310,7 +310,7 @@ export default function TrialPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-purple-900/40 transition-all active:scale-95 mt-2"
+              className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 text-white font-bold rounded-xl shadow-lg shadow-purple-200 dark:shadow-purple-900/40 transition-all active:scale-95 mt-2"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -327,7 +327,7 @@ export default function TrialPage() {
               )}
             </button>
 
-            <p className="text-gray-700 text-[10px] text-center">
+            <p className="text-[#CBD5E1] dark:text-gray-700 text-[10px] text-center">
               By submitting, you agree to our privacy policy. We never share your data.
             </p>
           </form>

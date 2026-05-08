@@ -78,20 +78,20 @@ const batches = [
 
 export default function BatchSection() {
   return (
-    <section className="py-20 bg-[#EEF3FF]" id="formats">
+    <section className="py-20 bg-[#EEF3FF] dark:bg-[#07101F] transition-colors duration-200" id="formats">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="text-center mb-14">
           <p className="text-purple-600 text-sm font-bold uppercase tracking-widest mb-3">
             3 Learning Formats
           </p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0F172A] mb-4 leading-tight">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0F172A] dark:text-white mb-4 leading-tight">
             Every Child Learns Differently.{" "}
-            <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
               We Meet Them Where They Are.
             </span>
           </h2>
-          <p className="text-[#334155] max-w-2xl mx-auto text-lg">
+          <p className="text-[#334155] dark:text-gray-400 max-w-2xl mx-auto text-lg">
             Choose the format that fits your child&apos;s learning style and your
             budget. Switch formats anytime. Your class credits always carry over.
           </p>
@@ -120,9 +120,9 @@ export default function BatchSection() {
           {batches.map((b) => (
             <div
               key={b.id}
-              className={`relative flex flex-col p-6 rounded-2xl ${b.cardBg} border ${b.cardBorder} transition-all duration-300 hover:shadow-md hover:shadow-slate-100 ${
+              className={`relative flex flex-col p-6 rounded-2xl ${b.cardBg} dark:bg-gray-900/50 border ${b.cardBorder} dark:border-gray-700/60 transition-all duration-300 hover:shadow-md hover:shadow-slate-100 dark:hover:shadow-none dark:hover:-translate-y-0.5 group ${
                 b.featured
-                  ? "ring-2 ring-purple-200 shadow-md shadow-purple-50 md:scale-[1.03]"
+                  ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-none md:scale-[1.03]"
                   : ""
               }`}
             >
@@ -144,20 +144,20 @@ export default function BatchSection() {
 
               {/* Header */}
               <div className="mb-4">
-                <div className="text-4xl mb-2">{b.emoji}</div>
-                <h3 className="text-[#0F172A] font-black text-xl mb-0.5">{b.name}</h3>
-                <p className="text-[#64748B] text-xs">{b.subtitle}</p>
+                <div className="text-4xl mb-2 group-hover:scale-110 transition-transform duration-200">{b.emoji}</div>
+                <h3 className="text-[#0F172A] dark:text-white font-black text-xl mb-0.5">{b.name}</h3>
+                <p className="text-[#64748B] dark:text-gray-500 text-xs">{b.subtitle}</p>
               </div>
 
               {/* Stats */}
               <div className="flex gap-3 mb-4">
-                <div className={`flex-1 px-3 py-2.5 ${b.statBg} rounded-xl text-center border border-[#E2E8F0]`}>
+                <div className={`flex-1 px-3 py-2.5 ${b.statBg} dark:bg-gray-800/60 rounded-xl text-center border border-[#E2E8F0] dark:border-gray-700/50`}>
                   <p className={`text-xs font-black ${b.accentText}`}>{b.groupSize}</p>
-                  <p className="text-[#94A3B8] text-[10px] mt-0.5">group size</p>
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-[10px] mt-0.5">group size</p>
                 </div>
-                <div className={`flex-1 px-3 py-2.5 ${b.statBg} rounded-xl text-center border border-[#E2E8F0]`}>
+                <div className={`flex-1 px-3 py-2.5 ${b.statBg} dark:bg-gray-800/60 rounded-xl text-center border border-[#E2E8F0] dark:border-gray-700/50`}>
                   <p className={`text-xs font-black ${b.accentText}`}>{b.duration}</p>
-                  <p className="text-[#94A3B8] text-[10px] mt-0.5">per session</p>
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-[10px] mt-0.5">per session</p>
                 </div>
               </div>
 
@@ -167,21 +167,21 @@ export default function BatchSection() {
               </div>
 
               {/* Description */}
-              <p className="text-[#334155] text-sm leading-relaxed mb-4 flex-1">
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed mb-4 flex-1">
                 {b.positioning}
               </p>
 
               {/* Parent insight */}
-              <div className="p-3 rounded-xl bg-[#F7F9FF] border border-[#E2E8F0] mb-5">
-                <p className="text-[#334155] text-xs leading-relaxed">
-                  <span className="font-bold text-[#0F172A]">For parents: </span>
+              <div className="p-3 rounded-xl bg-[#F7F9FF] dark:bg-gray-800/50 border border-[#E2E8F0] dark:border-gray-700/50 mb-5">
+                <p className="text-[#334155] dark:text-gray-400 text-xs leading-relaxed">
+                  <span className="font-bold text-[#0F172A] dark:text-white">For parents: </span>
                   {b.parentBenefit}
                 </p>
               </div>
 
               {/* Price tier */}
               <div className="flex items-center justify-between mb-5">
-                <span className="text-[#94A3B8] text-xs">Price tier</span>
+                <span className="text-[#94A3B8] dark:text-gray-500 text-xs">Price tier</span>
                 <span className={`text-xs font-bold ${b.accentText}`}>{b.priceLabel}</span>
               </div>
 
@@ -198,8 +198,8 @@ export default function BatchSection() {
 
         {/* Parent decision simplifier */}
         <div className="max-w-3xl mx-auto mt-4">
-          <div className="p-6 bg-white border border-[#E2E8F0] rounded-2xl">
-            <h3 className="text-[#0F172A] font-black text-center text-lg mb-6">
+          <div className="p-6 bg-white dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-700/60 rounded-2xl">
+            <h3 className="text-[#0F172A] dark:text-white font-black text-center text-lg mb-6">
               Which option is right for your child?
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -234,15 +234,15 @@ export default function BatchSection() {
               ].map((item) => (
                 <div key={item.trait} className={`p-4 rounded-xl ${item.bg} border ${item.border}`}>
                   <div className="text-2xl mb-2">{item.emoji}</div>
-                  <p className="text-[#64748B] text-xs font-semibold uppercase tracking-wider mb-1">
+                  <p className="text-[#64748B] dark:text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">
                     {item.trait}
                   </p>
                   <p className={`font-black text-sm ${item.color} mb-2`}>{item.rec}</p>
-                  <p className="text-[#64748B] text-xs leading-relaxed">{item.why}</p>
+                  <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{item.why}</p>
                 </div>
               ))}
             </div>
-            <p className="text-center text-xs text-[#94A3B8] mt-5">
+            <p className="text-center text-xs text-[#94A3B8] dark:text-gray-500 mt-5">
               Not sure? Book a free trial and your teacher will recommend the right format.
             </p>
           </div>
