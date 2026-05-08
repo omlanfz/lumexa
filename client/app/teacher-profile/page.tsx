@@ -979,7 +979,7 @@ function TeacherProfileContent() {
                     Rating
                   </p>
                   <p className="font-bold dark:text-yellow-400 text-yellow-600">
-                    ⭐ {profile?.ratingAvg?.toFixed(1) ?? "—"}
+                    ⭐ {profile?.ratingAvg?.toFixed(1) ?? "N/A"}
                   </p>
                 </div>
                 <div className="dark:bg-gray-800/40 bg-gray-50 rounded-xl p-3 text-center">

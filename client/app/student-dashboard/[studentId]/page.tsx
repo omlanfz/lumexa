@@ -467,7 +467,7 @@ function StudentDashboardContent() {
             <span className="text-lg">👁️</span>
             <div>
               <p className="text-sm font-medium text-purple-200">
-                Teacher View — Read Only
+                Teacher View: Read Only
               </p>
               <p className="text-xs text-purple-400/70">
                 Viewing{" "}

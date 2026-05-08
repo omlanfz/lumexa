@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ScrollReveal from "../ScrollReveal";
 
 interface Pathway {
   id: string;
@@ -12,9 +13,12 @@ interface Pathway {
   level: string;
   projects: string[];
   accent: string;
-  border: string;
-  badge: string;
-  glow: string;
+  cardBg: string;
+  cardBorder: string;
+  tagBg: string;
+  tagText: string;
+  dotColor: string;
+  glowClass: string;
   tag?: string;
   featured?: boolean;
 }
@@ -26,16 +30,19 @@ const pathways: Pathway[] = [
     title: "Game Creator Path",
     outcome: "Build 3 Real Games",
     description:
-      "From Roblox worlds to Python arcade games. Your child designs, codes, and ships games that friends can actually play — not just a certificate saying they could.",
+      "From Roblox worlds to Python arcade games. Your child designs, codes, and ships games that friends can actually play. Not just a certificate.",
     tools: ["Roblox / Lua", "Python", "Unity Basics"],
     ages: "Ages 10–18",
     sessions: "24 sessions",
     level: "Beginner to Creator",
     projects: ["Multiplayer Roblox shooter", "Python arcade game", "Custom RPG world"],
     accent: "from-red-600 to-orange-600",
-    border: "border-red-700/30 hover:border-red-500/50",
-    badge: "bg-red-900/30 text-red-300",
-    glow: "bg-red-700/5",
+    cardBg: "bg-white",
+    cardBorder: "border-red-200 hover:border-red-300",
+    tagBg: "bg-red-50 dark:bg-red-900/20",
+    tagText: "text-red-700 dark:text-red-400",
+    dotColor: "bg-red-500",
+    glowClass: "card-glow-red",
     tag: "Most Popular",
   },
   {
@@ -44,16 +51,19 @@ const pathways: Pathway[] = [
     title: "AI Builder Path",
     outcome: "Build 3 AI Projects",
     description:
-      "Not just using AI — building it. Your child learns Python and machine learning, then creates real AI tools that detect emotions, recognize objects, and hold conversations.",
+      "Not just using AI. Building it. Your child learns Python and machine learning, then creates real AI tools that detect emotions, recognise objects, and hold conversations.",
     tools: ["Python", "TensorFlow / PyTorch", "OpenAI API"],
     ages: "Ages 12–18",
     sessions: "24 sessions",
     level: "Builder to Innovator",
     projects: ["Real-time emotion detector", "Chatbot with GPT API", "Computer vision classifier"],
     accent: "from-purple-600 to-blue-600",
-    border: "border-purple-600/40 hover:border-purple-400/60",
-    badge: "bg-purple-900/40 text-purple-300",
-    glow: "bg-purple-700/8",
+    cardBg: "bg-white",
+    cardBorder: "border-purple-200 hover:border-purple-300",
+    tagBg: "bg-purple-50 dark:bg-purple-900/20",
+    tagText: "text-purple-700 dark:text-purple-400",
+    dotColor: "bg-purple-500",
+    glowClass: "card-glow-purple",
     tag: "Future-Proof",
     featured: true,
   },
@@ -63,16 +73,19 @@ const pathways: Pathway[] = [
     title: "Web Developer Path",
     outcome: "Build 3 Live Websites",
     description:
-      "From first HTML tag to a deployed full-stack React app. Your child will have real websites on the internet — with working code, not just screenshots.",
+      "From first HTML tag to a deployed full-stack React app. Your child will have real websites on the internet, with working code, not just screenshots.",
     tools: ["HTML / CSS", "JavaScript", "React / Next.js"],
     ages: "Ages 12–18",
     sessions: "24 sessions",
     level: "Beginner to Creator",
     projects: ["Live portfolio site", "Interactive web app", "Full-stack React project"],
     accent: "from-blue-600 to-cyan-600",
-    border: "border-blue-700/30 hover:border-blue-500/50",
-    badge: "bg-blue-900/30 text-blue-300",
-    glow: "bg-blue-700/5",
+    cardBg: "bg-white",
+    cardBorder: "border-blue-200 hover:border-blue-300",
+    tagBg: "bg-blue-50 dark:bg-blue-900/20",
+    tagText: "text-blue-700 dark:text-blue-400",
+    dotColor: "bg-blue-500",
+    glowClass: "card-glow-blue",
     tag: "High Demand",
   },
   {
@@ -81,16 +94,19 @@ const pathways: Pathway[] = [
     title: "Little Coders Path",
     outcome: "Build 3 Real Projects",
     description:
-      "Designed for younger kids. Starts with Scratch animations, moves to Python basics, then introduces AI — all at their pace, all hands-on, all genuinely fun.",
+      "Designed for younger kids. Starts with Scratch animations, moves to Python basics, then introduces AI. All at their pace, all hands-on, all genuinely fun.",
     tools: ["Scratch", "Python Basics", "Teachable Machine"],
     ages: "Ages 6–11",
     sessions: "24 sessions",
     level: "Explorer to Builder",
     projects: ["Animated Scratch story", "Python mini-game", "AI-powered project"],
-    accent: "from-yellow-500 to-orange-500",
-    border: "border-yellow-700/30 hover:border-yellow-500/50",
-    badge: "bg-yellow-900/30 text-yellow-300",
-    glow: "bg-yellow-700/5",
+    accent: "from-amber-500 to-orange-500",
+    cardBg: "bg-white",
+    cardBorder: "border-amber-200 hover:border-amber-300",
+    tagBg: "bg-amber-50 dark:bg-amber-900/20",
+    tagText: "text-amber-700 dark:text-amber-400",
+    dotColor: "bg-amber-500",
+    glowClass: "card-glow-amber",
     tag: "Best for Beginners",
   },
   {
@@ -106,9 +122,12 @@ const pathways: Pathway[] = [
     level: "Builder to Innovator",
     projects: ["Sports stats analyser", "Climate data dashboard", "Market trends predictor"],
     accent: "from-teal-600 to-green-600",
-    border: "border-teal-700/30 hover:border-teal-500/50",
-    badge: "bg-teal-900/30 text-teal-300",
-    glow: "bg-teal-700/5",
+    cardBg: "bg-white",
+    cardBorder: "border-teal-200 hover:border-teal-300",
+    tagBg: "bg-teal-50 dark:bg-teal-900/20",
+    tagText: "text-teal-700 dark:text-teal-400",
+    dotColor: "bg-teal-500",
+    glowClass: "card-glow-teal",
     tag: "Career Ready",
   },
   {
@@ -117,80 +136,87 @@ const pathways: Pathway[] = [
     title: "Digital Independence Path",
     outcome: "Start Earning Online",
     description:
-      "The only pathway where your teen doesn't just learn a skill — they launch a real income stream. By the end they have a live portfolio, active freelancing profiles, and a professional LinkedIn that attracts clients.",
+      "The only pathway where your teen doesn't just learn a skill. They launch a real income stream: portfolio, Fiverr profile, and LinkedIn that attracts clients.",
     tools: ["Canva", "Fiverr / Upwork", "LinkedIn", "GitHub / Vercel"],
     ages: "Ages 15–18",
     sessions: "24 sessions",
     level: "Builder to Earner",
     projects: ["Live portfolio + personal brand", "Active Fiverr gig + proposal kit", "Professional LinkedIn + content strategy"],
     accent: "from-green-600 to-emerald-600",
-    border: "border-green-700/30 hover:border-green-500/50",
-    badge: "bg-green-900/30 text-green-300",
-    glow: "bg-green-700/5",
+    cardBg: "bg-white",
+    cardBorder: "border-green-200 hover:border-green-300",
+    tagBg: "bg-green-50 dark:bg-green-900/20",
+    tagText: "text-green-700 dark:text-green-400",
+    dotColor: "bg-green-500",
+    glowClass: "card-glow-green",
     tag: "Earn Online",
   },
 ];
 
 export default function PathwaysSection() {
   return (
-    <section className="py-20 bg-[#050D1A]" id="pathways">
+    <section className="py-20 bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200" id="pathways">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-14">
-          <p className="text-purple-400 text-sm font-bold uppercase tracking-widest mb-3">
+        <ScrollReveal className="text-center mb-14">
+          <p className="text-purple-600 dark:text-purple-400 text-sm font-bold uppercase tracking-widest mb-3">
             6 Flagship Learning Pathways
           </p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-4 leading-tight">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0F172A] dark:text-white mb-4 leading-tight">
             Your Child Doesn&apos;t Just Learn.{" "}
-            <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
               They Build.
             </span>
           </h2>
-          <p className="text-gray-400 max-w-2xl mx-auto text-lg">
+          <p className="text-[#334155] dark:text-gray-400 max-w-2xl mx-auto text-lg">
             Every pathway ends with 3+ real projects in your child&apos;s portfolio.
             Not certificates, not badges. Actual things they built.
           </p>
-        </div>
+        </ScrollReveal>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {pathways.map((p) => (
             <div
               key={p.title}
-              className={`relative flex flex-col p-6 rounded-2xl bg-gray-900/60 border ${p.border} transition-all duration-300 group ${
-                p.featured ? "ring-1 ring-purple-500/30 shadow-2xl shadow-purple-900/20" : ""
+              className={`relative flex flex-col p-6 rounded-2xl ${p.cardBg} dark:bg-gray-900/50 border ${p.cardBorder} dark:border-gray-700/60 card-hover ${p.glowClass} group ${
+                p.featured ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-purple-900/20 glow-pulse" : ""
               }`}
             >
-              {/* Glow background */}
-              <div className={`absolute inset-0 rounded-2xl ${p.glow} opacity-0 group-hover:opacity-100 transition-opacity`} />
+              {/* Featured badge */}
+              {p.featured && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full text-white text-[10px] font-black uppercase tracking-wider whitespace-nowrap">
+                  ⭐ Editor&apos;s Pick
+                </div>
+              )}
 
               {/* Tag */}
               {p.tag && (
-                <div className="relative flex items-center justify-between mb-4">
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${p.badge}`}>
+                <div className="flex items-center justify-between mb-4">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${p.tagBg} ${p.tagText}`}>
                     {p.tag}
                   </span>
                 </div>
               )}
 
               {/* Header */}
-              <div className="relative mb-4">
-                <div className="text-4xl mb-3">{p.emoji}</div>
-                <h3 className="text-white font-black text-xl mb-1">{p.title}</h3>
+              <div className="mb-4">
+                <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-200">{p.emoji}</div>
+                <h3 className="text-[#0F172A] dark:text-white font-black text-xl mb-1">{p.title}</h3>
                 <div className={`inline-block text-sm font-bold bg-gradient-to-r ${p.accent} bg-clip-text text-transparent`}>
                   {p.outcome}
                 </div>
               </div>
 
-              <p className="relative text-gray-400 text-sm leading-relaxed mb-4">{p.description}</p>
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed mb-4">{p.description}</p>
 
               {/* What they'll build */}
-              <div className="relative mb-4">
-                <p className="text-xs text-gray-600 font-semibold uppercase tracking-wider mb-2">
+              <div className="mb-4">
+                <p className="text-xs text-[#94A3B8] dark:text-gray-500 font-semibold uppercase tracking-wider mb-2">
                   What they&apos;ll build:
                 </p>
                 <ul className="space-y-1">
                   {p.projects.map((proj) => (
-                    <li key={proj} className="flex items-center gap-2 text-xs text-gray-400">
-                      <span className="w-1 h-1 rounded-full bg-purple-500 flex-shrink-0" />
+                    <li key={proj} className="flex items-center gap-2 text-xs text-[#334155] dark:text-gray-400">
+                      <span className={`w-1.5 h-1.5 rounded-full ${p.dotColor} flex-shrink-0`} />
                       {proj}
                     </li>
                   ))}
@@ -198,40 +224,34 @@ export default function PathwaysSection() {
               </div>
 
               {/* Meta */}
-              <div className="relative flex flex-wrap gap-2 mb-5">
-                <span className="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400">{p.ages}</span>
-                <span className="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400">{p.sessions}</span>
-                <span className="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400">{p.level}</span>
+              <div className="flex flex-wrap gap-2 mb-5">
+                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700/60">{p.ages}</span>
+                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700/60">{p.sessions}</span>
+                <span className="text-xs px-2 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700/60">{p.level}</span>
               </div>
 
               {/* Tools */}
-              <div className="relative flex flex-wrap gap-1.5 mb-5">
+              <div className="flex flex-wrap gap-1.5 mb-5">
                 {p.tools.map((t) => (
-                  <span key={t} className="text-[10px] font-mono px-2 py-0.5 rounded border border-gray-700 text-gray-500">
+                  <span key={t} className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#E2E8F0] dark:border-gray-700/60 text-[#64748B] dark:text-gray-400 bg-white dark:bg-gray-800/40">
                     {t}
                   </span>
                 ))}
               </div>
 
               {/* CTAs */}
-              <div className="relative mt-auto flex flex-col gap-2">
+              <div className="mt-auto flex flex-col gap-2">
                 <Link
                   href="/trial"
-                  className={`w-full py-3 text-center text-sm font-bold text-white rounded-xl bg-gradient-to-r ${p.accent} hover:opacity-90 transition-all shadow-lg`}
+                  className={`w-full py-3 text-center text-sm font-bold text-white rounded-xl bg-gradient-to-r ${p.accent} hover:opacity-90 transition-all shadow-sm`}
                 >
                   Book Free Trial
                 </Link>
                 <Link
                   href={`/courses?pathway=${p.id}`}
-                  className="w-full py-2.5 text-center text-xs font-semibold text-gray-300 hover:text-white border border-gray-700 hover:border-gray-500 bg-gray-800/40 hover:bg-gray-800 rounded-xl transition-all"
+                  className="w-full py-2.5 text-center text-xs font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700/60 hover:border-[#CBD5E1] dark:hover:border-gray-600 bg-white dark:bg-gray-800/40 rounded-xl transition-all"
                 >
                   View Full Curriculum →
-                </Link>
-                <Link
-                  href="/pricing"
-                  className="w-full py-2 text-center text-xs font-semibold text-gray-600 hover:text-gray-400 transition-colors"
-                >
-                  Buy Now
                 </Link>
               </div>
             </div>
@@ -240,12 +260,12 @@ export default function PathwaysSection() {
 
         {/* Browse All */}
         <div className="mt-10 text-center">
-          <p className="text-gray-500 text-sm mb-4">
+          <p className="text-[#64748B] dark:text-gray-500 text-sm mb-4">
             Not sure which path is right? Start with a free trial and we&apos;ll recommend the perfect one.
           </p>
           <Link
             href="/courses"
-            className="inline-flex items-center gap-2 px-6 py-3 border border-gray-700 hover:border-purple-600/60 text-gray-300 hover:text-white rounded-xl text-sm font-semibold transition-all hover:bg-purple-900/10"
+            className="inline-flex items-center gap-2 px-6 py-3 border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 text-[#334155] dark:text-gray-400 hover:text-purple-700 dark:hover:text-purple-300 rounded-xl text-sm font-semibold transition-all hover:bg-purple-50 dark:hover:bg-purple-900/10"
           >
             Browse All Courses and Lesson Breakdowns →
           </Link>

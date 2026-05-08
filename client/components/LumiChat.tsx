@@ -41,11 +41,11 @@ export interface LumiChatProps {
 
 const GREETINGS: Record<string, string> = {
   teacher:
-    "Mrrrow, Pilot! 🐱✨\nI'm Lumi — your Lumexa space guide!\nNeed help with scheduling, earnings, students, or platform setup? I'm your cat.",
+    "Mrrrow, Pilot! 🐱✨\nI'm Lumi, your Lumexa space guide!\nNeed help with scheduling, earnings, students, or platform setup? I'm your cat.",
   student:
-    "Hi there, Cadet! 🐱✨\nI'm Lumi — your guide through the Lumexa galaxy!\nAsk me how to book a class, find your lessons, or anything about the platform 🚀",
+    "Hi there, Cadet! 🐱✨\nI'm Lumi, your guide through the Lumexa galaxy!\nAsk me how to book a class, find your lessons, or anything about the platform 🚀",
   parent:
-    "Hello, Commander! 🐱✨\nI'm Lumi — here to help you navigate Lumexa!\nBooking lessons, managing students, tracking progress — just ask!",
+    "Hello, Commander! 🐱✨\nI'm Lumi, here to help you navigate Lumexa!\nBooking lessons, managing students, tracking progress: just ask!",
 };
 
 // ── Markdown-lite renderer ─────────────────────────────────────────────────────
@@ -442,8 +442,8 @@ export default function LumiChat({
 
       const errorContent =
         status === 401
-          ? "🔐 Authentication error — please log out and log back in, then try again!\nIf this keeps happening, contact **support@lumexa.app**."
-          : "Oops! My signal got lost in space 🛸\nPlease try again — or email **support@lumexa.app** if this keeps happening!";
+          ? "🔐 Authentication error. Please log out and log back in, then try again!\nIf this keeps happening, contact **support@lumexa.app**."
+          : "Oops! My signal got lost in space 🛸\nPlease try again, or email **support@lumexa.app** if this keeps happening!";
 
       setMessages((prev) => [
         ...prev,

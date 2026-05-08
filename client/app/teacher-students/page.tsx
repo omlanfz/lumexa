@@ -204,7 +204,7 @@ function TeacherStudentsContent() {
                           {s.studentName}
                         </p>
                         <p className="text-xs dark:text-purple-400/50 text-purple-400 truncate">
-                          {s.parentEmail ?? "—"}
+                          {s.parentEmail ?? "N/A"}
                         </p>
                       </div>
                     </div>
@@ -212,10 +212,10 @@ function TeacherStudentsContent() {
                     {/* Details */}
                     <div>
                       <p className="text-xs dark:text-purple-400/60 text-purple-400">
-                        {s.grade ?? "—"}
+                        {s.grade ?? "No grade"}
                       </p>
                       <p className="text-xs dark:text-purple-400/60 text-purple-400">
-                        {s.age ? `Age ${s.age}` : "—"}
+                        {s.age ? `Age ${s.age}` : "Age N/A"}
                       </p>
                     </div>
 
@@ -245,7 +245,7 @@ function TeacherStudentsContent() {
                               day: "numeric",
                             },
                           )
-                        : "—"}
+                        : "None yet"}
                     </p>
 
                     {/* Next class */}
@@ -258,14 +258,14 @@ function TeacherStudentsContent() {
                               day: "numeric",
                             },
                           )
-                        : "—"}
+                        : "None"}
                     </p>
 
                     {/* Rating */}
                     <p className="text-xs dark:text-yellow-400 text-yellow-600">
                       {s.latestReview
                         ? `⭐ ${s.latestReview.rating.toFixed(1)}`
-                        : "—"}
+                        : "No rating"}
                     </p>
 
                     {/* View Dashboard */}

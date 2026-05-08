@@ -23,7 +23,7 @@ import { ThemeProvider } from "../components/ThemeProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Lumexa — Live Tutoring",
+  title: "Lumexa · Live AI Tutoring",
   description:
     "Connect with expert teachers for live one-on-one tutoring sessions.",
   icons: { icon: "/favicon.ico" },

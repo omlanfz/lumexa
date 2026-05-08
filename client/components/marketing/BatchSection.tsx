@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ScrollReveal from "../ScrollReveal";
 
 const batches = [
   {
@@ -9,14 +10,15 @@ const batches = [
     groupSize: "8–15 students",
     duration: "60 min / class",
     tag: "Best Entry Point",
-    tagColor: "bg-blue-900/40 text-blue-300 border border-blue-800/40",
-    cardBorder: "border-blue-700/30 hover:border-blue-500/40",
+    tagBg: "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800/40",
+    cardBg: "bg-white",
+    cardBorder: "border-blue-200 hover:border-blue-300",
     accent: "from-blue-600 to-cyan-600",
-    accentText: "text-blue-400",
-    glow: "bg-blue-700/5",
+    accentText: "text-blue-600",
+    statBg: "bg-[#F0F4FF]",
     tagline: "Discover What Your Child Loves",
     positioning:
-      "The perfect low-pressure start. Your child explores real coding in a fun, social environment with peers — building confidence and discovering their passion before committing to deeper learning.",
+      "The perfect low-pressure start. Your child explores real coding in a fun, social environment with peers, building confidence and discovering their passion before committing to deeper learning.",
     parentBenefit:
       "Low risk, maximum exposure. See if they love it before investing more. 70% of Creator Club students upgrade within 2 months.",
     priceLabel: "Most Affordable",
@@ -32,16 +34,17 @@ const batches = [
     groupSize: "3–5 students",
     duration: "60 min / class",
     tag: "Best Value",
-    tagColor: "bg-purple-900/40 text-purple-300 border border-purple-700/40",
-    cardBorder: "border-purple-600/50 hover:border-purple-400/60",
+    tagBg: "bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800/40",
+    cardBg: "bg-white",
+    cardBorder: "border-purple-300 hover:border-purple-400",
     accent: "from-purple-600 to-blue-600",
-    accentText: "text-purple-400",
-    glow: "bg-purple-700/8",
+    accentText: "text-purple-600",
+    statBg: "bg-purple-50",
     tagline: "Build Real Skills With Peer Energy",
     positioning:
-      "The sweet spot between personal attention and collaborative learning. Small enough that your teacher knows exactly where your child is. Large enough for pair-programming, peer review, and team challenges.",
+      "The sweet spot between personal attention and collaborative learning. Small enough that your teacher knows exactly where your child is. Large enough for pair-programming and team challenges.",
     parentBenefit:
-      "3× more teacher attention than group classes. ~40% less cost than 1-on-1. Your child learns to collaborate — the skill every employer looks for first.",
+      "3× more teacher attention than group classes. ~40% less cost than 1-on-1. Your child learns to collaborate, the skill every employer looks for first.",
     priceLabel: "Mid-Range",
     funnelStep: "STEP 2",
     funnelColor: "text-purple-500",
@@ -56,11 +59,12 @@ const batches = [
     groupSize: "1 student",
     duration: "45 min / class",
     tag: "Fastest Progress",
-    tagColor: "bg-green-900/40 text-green-300 border border-green-800/40",
-    cardBorder: "border-green-700/30 hover:border-green-500/40",
+    tagBg: "bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800/40",
+    cardBg: "bg-white",
+    cardBorder: "border-green-200 hover:border-green-300",
     accent: "from-green-600 to-emerald-600",
-    accentText: "text-green-400",
-    glow: "bg-green-700/5",
+    accentText: "text-green-600",
+    statBg: "bg-green-50",
     tagline: "Maximum Depth, Maximum Speed",
     positioning:
       "100% of the teacher's focus is on your child. Every session is customised to their exact pace, learning style, and goals. No adapting to others. No waiting. Just focused, measurable progress.",
@@ -75,40 +79,40 @@ const batches = [
 
 export default function BatchSection() {
   return (
-    <section className="py-20 bg-[#07101F]" id="formats">
+    <section className="py-20 bg-[#EEF3FF] dark:bg-[#07101F] transition-colors duration-200" id="formats">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center mb-14">
-          <p className="text-purple-400 text-sm font-bold uppercase tracking-widest mb-3">
+        <ScrollReveal className="text-center mb-14">
+          <p className="text-purple-600 text-sm font-bold uppercase tracking-widest mb-3">
             3 Learning Formats
           </p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-4 leading-tight">
+          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-[#0F172A] dark:text-white mb-4 leading-tight">
             Every Child Learns Differently.{" "}
-            <span className="bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
               We Meet Them Where They Are.
             </span>
           </h2>
-          <p className="text-gray-400 max-w-2xl mx-auto text-lg">
+          <p className="text-[#334155] dark:text-gray-400 max-w-2xl mx-auto text-lg">
             Choose the format that fits your child&apos;s learning style and your
-            budget. Switch formats anytime — your class credits always carry over.
+            budget. Switch formats anytime. Your class credits always carry over.
           </p>
-        </div>
+        </ScrollReveal>
 
         {/* Funnel path indicator */}
         <div className="hidden lg:flex items-center justify-center gap-3 mb-10">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-            <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">Explore</span>
+            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Explore</span>
           </div>
-          <div className="flex-1 max-w-16 h-px bg-gradient-to-r from-blue-600 to-purple-600 opacity-40" />
+          <div className="flex-1 max-w-16 h-px bg-gradient-to-r from-blue-300 to-purple-300" />
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-            <span className="text-xs font-bold text-purple-400 uppercase tracking-wider">Build Skills</span>
+            <span className="text-xs font-bold text-purple-600 uppercase tracking-wider">Build Skills</span>
           </div>
-          <div className="flex-1 max-w-16 h-px bg-gradient-to-r from-purple-600 to-green-600 opacity-40" />
+          <div className="flex-1 max-w-16 h-px bg-gradient-to-r from-purple-300 to-green-300" />
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-            <span className="text-xs font-bold text-green-400 uppercase tracking-wider">Accelerate</span>
+            <span className="text-xs font-bold text-green-600 uppercase tracking-wider">Accelerate</span>
           </div>
         </div>
 
@@ -117,24 +121,21 @@ export default function BatchSection() {
           {batches.map((b) => (
             <div
               key={b.id}
-              className={`relative flex flex-col p-6 rounded-2xl bg-gray-900/60 border ${b.cardBorder} transition-all duration-300 group ${
+              className={`relative flex flex-col p-6 rounded-2xl ${b.cardBg} dark:bg-gray-900/50 border ${b.cardBorder} dark:border-gray-700/60 card-hover group ${
                 b.featured
-                  ? "ring-1 ring-purple-500/30 shadow-2xl shadow-purple-900/20 md:scale-[1.03]"
+                  ? "ring-2 ring-purple-200 dark:ring-purple-700/50 shadow-md shadow-purple-50 dark:shadow-none md:scale-[1.03]"
                   : ""
               }`}
             >
-              {/* Glow */}
-              <div className={`absolute inset-0 rounded-2xl ${b.glow} opacity-0 group-hover:opacity-100 transition-opacity`} />
-
               {b.featured && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full text-white text-[10px] font-black uppercase tracking-wider whitespace-nowrap shadow-lg">
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 px-4 py-1 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full text-white text-[10px] font-black uppercase tracking-wider whitespace-nowrap shadow-md">
                   ⭐ Most Recommended
                 </div>
               )}
 
               {/* Tag + funnel step */}
-              <div className="relative flex items-center justify-between mb-5">
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${b.tagColor}`}>
+              <div className="flex items-center justify-between mb-5">
+                <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${b.tagBg}`}>
                   {b.tag}
                 </span>
                 <span className={`text-[10px] font-black uppercase tracking-widest ${b.funnelColor}`}>
@@ -143,54 +144,52 @@ export default function BatchSection() {
               </div>
 
               {/* Header */}
-              <div className="relative mb-4">
-                <div className="text-4xl mb-2">{b.emoji}</div>
-                <h3 className="text-white font-black text-xl mb-0.5">{b.name}</h3>
-                <p className="text-gray-500 text-xs">{b.subtitle}</p>
+              <div className="mb-4">
+                <div className="text-4xl mb-2 group-hover:scale-110 transition-transform duration-200">{b.emoji}</div>
+                <h3 className="text-[#0F172A] dark:text-white font-black text-xl mb-0.5">{b.name}</h3>
+                <p className="text-[#64748B] dark:text-gray-500 text-xs">{b.subtitle}</p>
               </div>
 
               {/* Stats */}
-              <div className="relative flex gap-3 mb-4">
-                <div className="flex-1 px-3 py-2.5 bg-gray-800/70 rounded-xl text-center">
+              <div className="flex gap-3 mb-4">
+                <div className={`flex-1 px-3 py-2.5 ${b.statBg} dark:bg-gray-800/60 rounded-xl text-center border border-[#E2E8F0] dark:border-gray-700/50`}>
                   <p className={`text-xs font-black ${b.accentText}`}>{b.groupSize}</p>
-                  <p className="text-gray-600 text-[10px] mt-0.5">group size</p>
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-[10px] mt-0.5">group size</p>
                 </div>
-                <div className="flex-1 px-3 py-2.5 bg-gray-800/70 rounded-xl text-center">
+                <div className={`flex-1 px-3 py-2.5 ${b.statBg} dark:bg-gray-800/60 rounded-xl text-center border border-[#E2E8F0] dark:border-gray-700/50`}>
                   <p className={`text-xs font-black ${b.accentText}`}>{b.duration}</p>
-                  <p className="text-gray-600 text-[10px] mt-0.5">per session</p>
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-[10px] mt-0.5">per session</p>
                 </div>
               </div>
 
               {/* Tagline */}
-              <div
-                className={`relative text-sm font-bold bg-gradient-to-r ${b.accent} bg-clip-text text-transparent mb-3`}
-              >
+              <div className={`text-sm font-bold bg-gradient-to-r ${b.accent} bg-clip-text text-transparent mb-3`}>
                 {b.tagline}
               </div>
 
               {/* Description */}
-              <p className="relative text-gray-400 text-sm leading-relaxed mb-4 flex-1">
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed mb-4 flex-1">
                 {b.positioning}
               </p>
 
               {/* Parent insight */}
-              <div className="relative p-3 rounded-xl bg-gray-800/50 border border-gray-700/50 mb-5">
-                <p className="text-gray-300 text-xs leading-relaxed">
-                  <span className="font-bold text-white">For parents: </span>
+              <div className="p-3 rounded-xl bg-[#F7F9FF] dark:bg-gray-800/50 border border-[#E2E8F0] dark:border-gray-700/50 mb-5">
+                <p className="text-[#334155] dark:text-gray-400 text-xs leading-relaxed">
+                  <span className="font-bold text-[#0F172A] dark:text-white">For parents: </span>
                   {b.parentBenefit}
                 </p>
               </div>
 
               {/* Price tier */}
-              <div className="relative flex items-center justify-between mb-5">
-                <span className="text-gray-600 text-xs">Price tier</span>
+              <div className="flex items-center justify-between mb-5">
+                <span className="text-[#94A3B8] dark:text-gray-500 text-xs">Price tier</span>
                 <span className={`text-xs font-bold ${b.accentText}`}>{b.priceLabel}</span>
               </div>
 
               {/* CTA */}
               <Link
                 href="/trial"
-                className={`relative w-full py-3 text-center text-sm font-bold text-white rounded-xl bg-gradient-to-r ${b.accent} hover:opacity-90 transition-all shadow-lg`}
+                className={`w-full py-3 text-center text-sm font-bold text-white rounded-xl bg-gradient-to-r ${b.accent} hover:opacity-90 transition-all shadow-sm`}
               >
                 {b.cta}
               </Link>
@@ -198,14 +197,56 @@ export default function BatchSection() {
           ))}
         </div>
 
-        {/* Bottom note */}
-        <div className="max-w-3xl mx-auto p-5 bg-gray-900/40 border border-gray-800 rounded-2xl text-center">
-          <p className="text-gray-400 text-sm leading-relaxed">
-            <span className="text-white font-semibold">No lock-in, ever. </span>
-            Start with Creator Clubs to explore. Graduate to Builder Pods when ready to build real skills.
-            Unlock Private Mentorship to accelerate. Your class credits work across{" "}
-            <span className="text-purple-400 font-semibold">all formats and all pathways</span>.
-          </p>
+        {/* Parent decision simplifier */}
+        <div className="max-w-3xl mx-auto mt-4">
+          <div className="p-6 bg-white dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-700/60 rounded-2xl">
+            <h3 className="text-[#0F172A] dark:text-white font-black text-center text-lg mb-6">
+              Which option is right for your child?
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                {
+                  emoji: "🤫",
+                  trait: "Shy or reserved",
+                  rec: "Private AI Mentorship",
+                  why: "100% of the teacher's focus on your child. No social pressure, just pure progress.",
+                  color: "text-green-700",
+                  bg: "bg-green-50",
+                  border: "border-green-200",
+                },
+                {
+                  emoji: "🤝",
+                  trait: "Social and energetic",
+                  rec: "Pro Builder Pods",
+                  why: "Small groups of 3–5 keep it collaborative and fun without losing teacher attention.",
+                  color: "text-purple-700",
+                  bg: "bg-purple-50",
+                  border: "border-purple-200",
+                },
+                {
+                  emoji: "🔭",
+                  trait: "Just exploring",
+                  rec: "AI Creator Clubs",
+                  why: "Low stakes group setting to discover what they love before committing.",
+                  color: "text-blue-700",
+                  bg: "bg-blue-50",
+                  border: "border-blue-200",
+                },
+              ].map((item) => (
+                <div key={item.trait} className={`p-4 rounded-xl ${item.bg} border ${item.border}`}>
+                  <div className="text-2xl mb-2">{item.emoji}</div>
+                  <p className="text-[#64748B] dark:text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">
+                    {item.trait}
+                  </p>
+                  <p className={`font-black text-sm ${item.color} mb-2`}>{item.rec}</p>
+                  <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{item.why}</p>
+                </div>
+              ))}
+            </div>
+            <p className="text-center text-xs text-[#94A3B8] dark:text-gray-500 mt-5">
+              Not sure? Book a free trial and your teacher will recommend the right format.
+            </p>
+          </div>
         </div>
       </div>
     </section>

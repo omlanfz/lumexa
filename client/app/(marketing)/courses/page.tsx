@@ -13,9 +13,9 @@ const pathways = [
     ages: "Ages 10–18",
     color: "from-red-600 to-orange-600",
     border: "border-red-700/40",
-    badge: "bg-red-900/30 text-red-300",
-    accent: "text-red-400",
-    dot: "bg-red-400",
+    badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
+    accent: "text-red-600 dark:text-red-400",
+    dot: "bg-red-500",
     courses: [
       {
         number: "01",
@@ -43,7 +43,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build 2D games using Python and Pygame",
         description:
-          "After Roblox, your child levels up to Python — the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
+          "After Roblox, your child levels up to Python, the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
         projects: ["Space shooter with enemies", "Maze runner with timer", "Brick-breaker clone"],
         tools: ["Python 3", "Pygame", "VS Code"],
         lessonBreakdown: [
@@ -63,7 +63,7 @@ const pathways = [
         lessons: 8,
         outcome: "Design, polish, and publish a complete game with professional quality",
         description:
-          "The capstone course. Your child applies everything they know to design and ship a complete game — with proper level design, a polished UI, and real playtesters giving feedback.",
+          "The capstone course. Your child applies everything they know to design and ship a complete game: proper level design, a polished UI, and real playtesters giving feedback.",
         projects: ["RPG adventure with storyline", "Physics-based puzzle game", "Published portfolio game"],
         tools: ["Python / Pygame", "Unity Basics", "Game Design frameworks"],
         lessonBreakdown: [
@@ -87,9 +87,9 @@ const pathways = [
     ages: "Ages 12–18",
     color: "from-purple-600 to-blue-600",
     border: "border-purple-700/40",
-    badge: "bg-purple-900/30 text-purple-300",
-    accent: "text-purple-400",
-    dot: "bg-purple-400",
+    badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
+    accent: "text-purple-600 dark:text-purple-400",
+    dot: "bg-purple-500",
     featured: true,
     courses: [
       {
@@ -98,7 +98,7 @@ const pathways = [
         lessons: 8,
         outcome: "Write Python scripts and understand how machine learning really works",
         description:
-          "The foundation of everything. Your child learns Python from scratch — variables, loops, functions, data — then builds their first machine learning model. No fluff, just real code.",
+          "The foundation of everything. Your child learns Python from scratch: variables, loops, functions, data. Then builds their first machine learning model. No fluff, just real code.",
         projects: ["Number prediction model", "Simple image classifier", "Data pattern finder"],
         tools: ["Python 3", "Jupyter Notebooks", "scikit-learn", "NumPy"],
         lessonBreakdown: [
@@ -118,7 +118,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build apps that see, detect, and recognize the real world",
         description:
-          "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions — the same technology used in self-driving cars and medical diagnostics.",
+          "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions. The same technology used in self-driving cars and medical diagnostics.",
         projects: ["Real-time emotion detector", "Object recognition app", "Motion-activated security cam"],
         tools: ["Python", "OpenCV", "TensorFlow / Keras", "Webcam API"],
         lessonBreakdown: [
@@ -138,7 +138,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build conversational AI apps using real LLM APIs",
         description:
-          "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API — complete with memory, personality, and real-world purpose.",
+          "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API: complete with memory, personality, and real-world purpose.",
         projects: ["Recipe chatbot with memory", "Study assistant bot", "Creative story generator"],
         tools: ["Python", "OpenAI API", "LangChain", "Streamlit"],
         lessonBreakdown: [
@@ -162,9 +162,9 @@ const pathways = [
     ages: "Ages 12–18",
     color: "from-blue-600 to-cyan-600",
     border: "border-blue-700/40",
-    badge: "bg-blue-900/30 text-blue-300",
-    accent: "text-blue-400",
-    dot: "bg-blue-400",
+    badge: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
+    accent: "text-blue-600 dark:text-blue-400",
+    dot: "bg-blue-500",
     courses: [
       {
         number: "07",
@@ -172,7 +172,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build beautiful, responsive websites that look great on any device",
         description:
-          "Your child learns the fundamentals of the web — HTML structure and CSS styling — and builds their first real, deployed website that anyone can visit.",
+          "Your child learns the fundamentals of the web (HTML structure and CSS styling) and builds their first real, deployed website that anyone can visit.",
         projects: ["Personal landing page", "Responsive portfolio layout", "Product showcase site"],
         tools: ["HTML5", "CSS3", "Flexbox", "CSS Grid", "Vercel"],
         lessonBreakdown: [
@@ -236,9 +236,9 @@ const pathways = [
     ages: "Ages 6–11",
     color: "from-yellow-500 to-orange-500",
     border: "border-yellow-700/40",
-    badge: "bg-yellow-900/30 text-yellow-300",
-    accent: "text-yellow-400",
-    dot: "bg-yellow-400",
+    badge: "bg-amber-100 dark:bg-yellow-900/30 text-amber-700 dark:text-yellow-300",
+    accent: "text-amber-600 dark:text-yellow-400",
+    dot: "bg-amber-500",
     courses: [
       {
         number: "10",
@@ -246,7 +246,7 @@ const pathways = [
         lessons: 8,
         outcome: "Create animated stories, games, and interactive projects visually",
         description:
-          "The perfect first step for young learners. Scratch uses visual blocks instead of text — so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
+          "The perfect first step for young learners. Scratch uses visual blocks instead of text, so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
         projects: ["Animated animal story", "Interactive quiz game", "Creative music maker"],
         tools: ["Scratch (MIT)", "Scratch Editor", "Scratch community"],
         lessonBreakdown: [
@@ -264,7 +264,7 @@ const pathways = [
         number: "11",
         title: "Python for Young Builders",
         lessons: 8,
-        outcome: "Write first real Python programs — the same language used by NASA and Google",
+        outcome: "Write first real Python programs (the same language used by NASA and Google)",
         description:
           "The bridge from visual to text-based coding. Your child writes their first Python programs: variables, loops, and their very own mini projects. Taught slowly, with patience, and lots of fun.",
         projects: ["Personal quiz app", "Simple calculator", "Word guessing game"],
@@ -286,7 +286,7 @@ const pathways = [
         lessons: 8,
         outcome: "Train your own AI models and build apps that see, listen, and respond",
         description:
-          "Your child discovers how AI actually works — not by reading about it, but by building with it. Using Google's Teachable Machine and ML4Kids, they train machine learning models that recognize images and sounds, then connect them to Scratch to build interactive AI-powered projects any parent will be amazed by.",
+          "Your child discovers how AI actually works, not by reading about it, but by building with it. Using Google's Teachable Machine and ML4Kids, they train machine learning models that recognize images and sounds, then connect them to Scratch to build interactive AI-powered projects any parent will be amazed by.",
         projects: ["AI rock-paper-scissors game", "Voice-activated Scratch story", "Emotion-recognition virtual pet"],
         tools: ["Scratch", "Teachable Machine", "ML4Kids", "Google AI Tools"],
         lessonBreakdown: [
@@ -310,9 +310,9 @@ const pathways = [
     ages: "Ages 13–18",
     color: "from-teal-600 to-green-600",
     border: "border-teal-700/40",
-    badge: "bg-teal-900/30 text-teal-300",
-    accent: "text-teal-400",
-    dot: "bg-teal-400",
+    badge: "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300",
+    accent: "text-teal-600 dark:text-teal-400",
+    dot: "bg-teal-500",
     courses: [
       {
         number: "13",
@@ -320,7 +320,7 @@ const pathways = [
         lessons: 8,
         outcome: "Load, clean, and analyse real-world datasets using Python",
         description:
-          "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful — finding patterns, calculating stats, and drawing conclusions.",
+          "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful: finding patterns, calculating stats, and drawing conclusions.",
         projects: ["Sports performance analysis", "School grade analysis", "City population trends"],
         tools: ["Python 3", "Pandas", "NumPy", "Jupyter Notebooks"],
         lessonBreakdown: [
@@ -340,7 +340,7 @@ const pathways = [
         lessons: 8,
         outcome: "Turn raw data into compelling, interactive charts and dashboards",
         description:
-          "Data without visuals is just numbers. Your child learns to create charts that tell stories — the kind that make people say 'I never knew that' when they look at the data.",
+          "Data without visuals is just numbers. Your child learns to create charts that tell stories, the kind that make people say 'I never knew that' when they look at the data.",
         projects: ["Climate change dashboard", "Market trends chart", "Sports comparison visualiser"],
         tools: ["Python", "Matplotlib", "Seaborn", "Plotly", "Dash"],
         lessonBreakdown: [
@@ -360,7 +360,7 @@ const pathways = [
         lessons: 8,
         outcome: "Build predictive models that make real decisions from real data",
         description:
-          "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models — the same technology behind Netflix recommendations and fraud detection.",
+          "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models, the same technology behind Netflix recommendations and fraud detection.",
         projects: ["House price predictor", "Customer churn predictor", "Movie recommendation engine"],
         tools: ["Python", "scikit-learn", "XGBoost", "Joblib"],
         lessonBreakdown: [
@@ -482,7 +482,7 @@ function CoursesContent() {
   );
 
   return (
-    <div className="bg-[#050D1A] text-white">
+    <div className="bg-[#F7F9FF] dark:bg-[#050D1A] text-[#0F172A] dark:text-white transition-colors duration-200">
       {/* Hero */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
@@ -490,14 +490,14 @@ function CoursesContent() {
           <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-blue-700/6 rounded-full blur-3xl" />
         </div>
         <div className="relative max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-700/40 bg-purple-900/20 text-purple-300 text-xs font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
             {pathways.length} Pathways · {totalCourses} Courses · {totalLessons} Lessons
           </div>
-          <h1 className="text-4xl sm:text-5xl font-black text-white leading-tight mb-4">
+          <h1 className="text-4xl sm:text-5xl font-black text-[#0F172A] dark:text-white leading-tight mb-4">
             Full Curriculum Catalog
           </h1>
-          <p className="text-lg text-gray-400 max-w-2xl mx-auto mb-6">
+          <p className="text-lg text-[#334155] dark:text-gray-400 max-w-2xl mx-auto mb-6">
             Every course is taught live by a verified expert teacher across all learning formats.
             Every lesson ends with something your child built. Every course ends with a real portfolio project.
           </p>
@@ -511,7 +511,7 @@ function CoursesContent() {
             </Link>
             <Link
               href="/pricing"
-              className="px-8 py-4 text-sm font-semibold text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-xl transition-all"
+              className="px-8 py-4 text-sm font-semibold text-[#334155] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#CBD5E1] dark:border-gray-700 hover:border-[#94A3B8] dark:hover:border-gray-500 rounded-xl transition-all"
             >
               View Pricing →
             </Link>
@@ -520,14 +520,14 @@ function CoursesContent() {
       </section>
 
       {/* Filter tabs */}
-      <div className="sticky top-16 z-20 bg-[#050D1A]/95 backdrop-blur border-b border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
+      <div className="sticky top-16 z-20 bg-[#F7F9FF]/95 dark:bg-[#050D1A]/95 backdrop-blur border-b border-[#E2E8F0] dark:border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           <button
             onClick={() => setActivePathway("all")}
             className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
               activePathway === "all"
                 ? "bg-purple-600 text-white"
-                : "bg-gray-800/60 text-gray-400 hover:text-white hover:bg-gray-800"
+                : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
             }`}
           >
             All Pathways
@@ -539,7 +539,7 @@ function CoursesContent() {
               className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 activePathway === p.id
                   ? `bg-gradient-to-r ${p.color} text-white`
-                  : "bg-gray-800/60 text-gray-400 hover:text-white hover:bg-gray-800"
+                  : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
               }`}
             >
               {p.emoji} {p.title.replace(" Path", "")}
@@ -558,7 +558,7 @@ function CoursesContent() {
                 <div className="text-5xl">{pathway.emoji}</div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h2 className="text-2xl font-black text-white">{pathway.title}</h2>
+                    <h2 className="text-2xl font-black text-[#0F172A] dark:text-white">{pathway.title}</h2>
                     <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${pathway.badge}`}>
                       {pathway.ages}
                     </span>
@@ -569,7 +569,7 @@ function CoursesContent() {
                     )}
                   </div>
                   <p className={`font-bold text-sm ${pathway.accent}`}>{pathway.tagline}</p>
-                  <p className="text-gray-500 text-xs mt-0.5">
+                  <p className="text-[#94A3B8] dark:text-gray-500 text-xs mt-0.5">
                     {pathway.courses.length} courses ·{" "}
                     {pathway.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
                   </p>
@@ -584,7 +584,7 @@ function CoursesContent() {
                 </Link>
                 <Link
                   href="/pricing"
-                  className="px-4 py-2 text-sm font-semibold text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-xl transition-all"
+                  className="px-4 py-2 text-sm font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-gray-500 rounded-xl transition-all"
                 >
                   Buy Now
                 </Link>
@@ -599,10 +599,10 @@ function CoursesContent() {
                 return (
                   <div
                     key={course.number}
-                    className={`border rounded-2xl overflow-hidden transition-all ${pathway.border} bg-gray-900/40`}
+                    className={`border rounded-2xl overflow-hidden transition-all ${pathway.border} bg-white dark:bg-gray-900/40 card-hover`}
                   >
                     <button
-                      className="w-full flex items-start gap-4 p-5 sm:p-6 text-left hover:bg-gray-900/60 transition-colors"
+                      className="w-full flex items-start gap-4 p-5 sm:p-6 text-left hover:bg-[#F7F9FF] dark:hover:bg-gray-900/60 transition-colors"
                       onClick={() => setExpandedCourse(isOpen ? null : courseKey)}
                     >
                       <div className={`text-2xl font-black ${pathway.accent} flex-shrink-0 w-10 text-center`}>
@@ -611,14 +611,14 @@ function CoursesContent() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <h3 className="text-white font-bold text-base mb-1">{course.title}</h3>
-                            <p className="text-gray-400 text-sm leading-relaxed">{course.outcome}</p>
+                            <h3 className="text-[#0F172A] dark:text-white font-bold text-base mb-1">{course.title}</h3>
+                            <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed">{course.outcome}</p>
                           </div>
                           <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                            <span className="text-xs px-2.5 py-1 rounded-lg bg-gray-800 text-gray-400 whitespace-nowrap">
+                            <span className="text-xs px-2.5 py-1 rounded-lg bg-[#F1F5F9] dark:bg-gray-800 text-[#64748B] dark:text-gray-400 whitespace-nowrap">
                               {course.lessons} lessons
                             </span>
-                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-gray-500`}>
+                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-[#94A3B8] dark:text-gray-500`}>
                               ▾
                             </span>
                           </div>
@@ -629,7 +629,7 @@ function CoursesContent() {
                           {course.tools.map((t) => (
                             <span
                               key={t}
-                              className="text-[10px] font-mono px-2 py-0.5 rounded border border-gray-700 text-gray-500"
+                              className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#D1D5DB] dark:border-gray-700 text-[#94A3B8] dark:text-gray-500"
                             >
                               {t}
                             </span>
@@ -639,11 +639,11 @@ function CoursesContent() {
                     </button>
 
                     {isOpen && (
-                      <div className="px-5 sm:px-6 pb-6 border-t border-gray-800/60">
+                      <div className="px-5 sm:px-6 pb-6 border-t border-[#E2E8F0] dark:border-gray-800/60">
                         <div className="pt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
                           {/* Description + Projects */}
                           <div className="lg:col-span-2 space-y-5">
-                            <p className="text-sm text-gray-400 leading-relaxed">{course.description}</p>
+                            <p className="text-sm text-[#64748B] dark:text-gray-400 leading-relaxed">{course.description}</p>
 
                             <div>
                               <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
@@ -651,7 +651,7 @@ function CoursesContent() {
                               </p>
                               <ul className="space-y-1.5">
                                 {course.projects.map((proj) => (
-                                  <li key={proj} className="flex items-center gap-2 text-sm text-gray-300">
+                                  <li key={proj} className="flex items-center gap-2 text-sm text-[#334155] dark:text-gray-300">
                                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathway.dot}`} />
                                     {proj}
                                   </li>
@@ -667,7 +667,7 @@ function CoursesContent() {
                             </p>
                             <ol className="space-y-1.5">
                               {course.lessonBreakdown.map((lesson, i) => (
-                                <li key={i} className="flex items-start gap-2 text-xs text-gray-400">
+                                <li key={i} className="flex items-start gap-2 text-xs text-[#64748B] dark:text-gray-400">
                                   <span className={`font-bold flex-shrink-0 ${pathway.accent}`}>{i + 1}.</span>
                                   <span>{lesson}</span>
                                 </li>
@@ -677,7 +677,7 @@ function CoursesContent() {
                         </div>
 
                         {/* CTA */}
-                        <div className="flex gap-3 mt-6 pt-4 border-t border-gray-800/60">
+                        <div className="flex gap-3 mt-6 pt-4 border-t border-[#E2E8F0] dark:border-gray-800/60">
                           <Link
                             href="/trial"
                             className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${pathway.color} hover:opacity-90 transition-all`}
@@ -686,7 +686,7 @@ function CoursesContent() {
                           </Link>
                           <Link
                             href="/pricing"
-                            className="px-5 py-2.5 text-sm font-semibold text-gray-400 hover:text-white border border-gray-700 hover:border-gray-500 rounded-xl transition-all"
+                            className="px-5 py-2.5 text-sm font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-[#CBD5E1] dark:hover:border-gray-500 rounded-xl transition-all"
                           >
                             Buy Now
                           </Link>
@@ -702,10 +702,10 @@ function CoursesContent() {
       </div>
 
       {/* Bottom CTA */}
-      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-[#07101F] to-[#050D1A]">
+      <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gradient-to-b dark:from-[#07101F] dark:to-[#050D1A] transition-colors duration-200">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-black text-white mb-4">Not Sure Where to Start?</h2>
-          <p className="text-gray-400 mb-8">
+          <h2 className="text-3xl font-black mb-4">Not Sure Where to Start?</h2>
+          <p className="text-[#64748B] dark:text-gray-400 mb-8">
             Book a free trial and we&apos;ll recommend the perfect pathway for your child&apos;s age,
             interests, and goals.
           </p>
@@ -728,7 +728,7 @@ export default function CoursesPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#050D1A] flex items-center justify-center">
+        <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400" />
         </div>
       }

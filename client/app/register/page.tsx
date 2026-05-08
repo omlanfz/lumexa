@@ -132,6 +132,21 @@ function RegisterContent() {
         </div>
       )}
 
+      {/* Back to Home */}
+      <Link
+        href="/"
+        className={`fixed top-4 left-4 z-50 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+          isDark
+            ? "bg-blue-900/40 hover:bg-blue-900/60 text-blue-300 border border-blue-800/40"
+            : "bg-white hover:bg-blue-50 text-blue-600 border border-blue-200 shadow-sm"
+        }`}
+      >
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to Home
+      </Link>
+
       {/* Theme toggle */}
       <button
         onClick={toggle}
