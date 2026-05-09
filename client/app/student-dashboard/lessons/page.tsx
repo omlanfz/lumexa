@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 
 type TabStatus = 'upcoming' | 'completed';
 
@@ -42,10 +43,9 @@ export default function StudentLessonsPage() {
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (!token) { router.push('/student/login'); return; }
-    const rawUser = localStorage.getItem('user');
-    const role = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : null;
+    const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
   }, [router]);
 

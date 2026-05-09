@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import StudentNav from '@/components/StudentNav';
 import LumiChat from '@/components/LumiChat';
 import api from '@/lib/axios';
+import { parseStoredUser, getStoredToken } from '@/lib/storage';
 
 interface StudentProfile {
   id: string;
@@ -34,15 +35,14 @@ export default function StudentDashboardLayout({
   });
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const rawUser = localStorage.getItem('user');
+    const token = getStoredToken();
+    const user = parseStoredUser();
 
-    if (!token || !rawUser) {
+    if (!token || !user) {
       router.push('/student/login');
       return;
     }
 
-    const user = JSON.parse(rawUser) as { role?: string };
     const r = user.role ?? null;
     setRole(r);
 

@@ -25,6 +25,7 @@
 // login/logout state changes are picked up immediately.
 
 import axios from "axios";
+import { getStoredRole, clearAuth } from "@/lib/storage";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -59,11 +60,8 @@ api.interceptors.response.use(
         path === "/student/register";
 
       if (!isAuthPage) {
-        // Route to student login if the stored user was a student
-        const rawUser = localStorage.getItem("user");
-        const role = rawUser ? (JSON.parse(rawUser) as { role?: string })?.role : null;
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        const role = getStoredRole();
+        clearAuth();
         window.location.href = role === "STUDENT" ? "/student/login" : "/login";
       }
     }

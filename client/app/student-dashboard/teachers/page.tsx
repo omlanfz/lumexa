@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 
 interface TeacherEntry {
   teacherProfileId: string;
@@ -27,10 +28,9 @@ export default function StudentTeachersPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (!token) { router.push('/student/login'); return; }
-    const rawUser = localStorage.getItem('user');
-    const role = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : null;
+    const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
 
     fetchTeachers();

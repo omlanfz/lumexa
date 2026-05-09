@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parseStoredUser, getStoredToken } from "@/lib/storage";
 
 // Layout
 import MarketingNav    from "../components/marketing/MarketingNav";
@@ -31,8 +32,8 @@ export default function RootPage() {
   const [interest, setInterest] = useState<Interest>("ai");
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const user = JSON.parse(localStorage.getItem("user") ?? "null");
+    const token = getStoredToken();
+    const user = parseStoredUser();
 
     if (!token || !user) {
       setReady(true);
@@ -41,6 +42,7 @@ export default function RootPage() {
 
     if (user.role === "TEACHER") { router.replace("/teacher-dashboard"); return; }
     if (user.role === "ADMIN")   { router.replace("/admin"); return; }
+    if (user.role === "STUDENT") { router.replace("/student-dashboard"); return; }
     if (user.role === "PARENT") {
       const lastStudentId = localStorage.getItem("last_student_id");
       router.replace(lastStudentId ? `/student-dashboard/${lastStudentId}` : "/dashboard");

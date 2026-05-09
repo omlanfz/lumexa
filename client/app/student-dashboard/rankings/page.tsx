@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 
 interface RankEntry {
   position: number;
@@ -133,10 +134,9 @@ export default function StudentRankingsPage() {
   const [tab, setTab] = useState<Tab>('cohort');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (!token) { router.push('/student/login'); return; }
-    const rawUser = localStorage.getItem('user');
-    const role = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : null;
+    const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
     fetchRankings();
   }, [router]);

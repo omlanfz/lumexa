@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
 import LumiChat from '@/components/LumiChat';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 
 interface Student {
   id: string;
@@ -30,11 +31,10 @@ function DashboardContent() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (!token) { router.push('/login'); return; }
 
-    const rawUser = localStorage.getItem('user');
-    const role = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : null;
+    const role = getStoredRole();
     if (role === 'STUDENT') { router.push('/student-dashboard'); return; }
     if (role === 'TEACHER') { router.push('/teacher-dashboard'); return; }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 import RankProgressBar from '@/components/student/RankProgressBar';
 import StreakCounter from '@/components/student/StreakCounter';
 import BadgeGrid from '@/components/student/BadgeGrid';
@@ -89,10 +90,9 @@ export default function StudentProgressPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (!token) { router.push('/student/login'); return; }
-    const rawUser = localStorage.getItem('user');
-    const role = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : null;
+    const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
 
     fetchAll();

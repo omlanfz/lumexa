@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -80,16 +81,12 @@ function MarketplaceContent() {
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState('');
 
-  const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('token');
+  const hasToken = typeof window !== 'undefined' && !!getStoredToken();
 
   // ── Detect role on mount ───────────────────────────────────────────────
 
   useEffect(() => {
-    const rawUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
-    if (rawUser) {
-      const u = JSON.parse(rawUser) as { role?: string };
-      setIsStudent(u.role === 'STUDENT');
-    }
+    setIsStudent(getStoredRole() === 'STUDENT');
   }, []);
 
   // ── Fetch teachers ─────────────────────────────────────────────────────

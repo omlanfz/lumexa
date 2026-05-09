@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import { LABELS } from '@/lib/labels';
+import { getStoredRole, getStoredToken } from '@/lib/storage';
 import NextClassCard from '@/components/student/NextClassCard';
 import GemWalletWidget from '@/components/student/GemWalletWidget';
 import RankProgressBar from '@/components/student/RankProgressBar';
@@ -179,11 +180,10 @@ export default function StudentDashboardPage() {
   const [ceremonyIcon, setCeremonyIcon] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getStoredToken();
     if (!token) { router.push('/student/login'); return; }
 
-    const rawUser = localStorage.getItem('user');
-    const role = rawUser ? (JSON.parse(rawUser) as { role?: string }).role : null;
+    const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
 
     fetchDashboard();

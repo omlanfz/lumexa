@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/axios';
+import { parseStoredUser, getStoredToken } from '@/lib/storage';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,10 +175,11 @@ function ProxyDashboardContent() {
   };
 
   useEffect(() => {
-    const rawUser = localStorage.getItem('user');
-    if (!rawUser) { router.push('/login'); return; }
+    const token = getStoredToken();
+    if (!token) { router.push('/login'); return; }
 
-    const user = JSON.parse(rawUser) as { role?: string };
+    const user = parseStoredUser();
+    if (!user) { router.push('/login'); return; }
     const role = user.role ?? 'PARENT';
 
     // STUDENT role must never land here — redirect to their own dashboard
