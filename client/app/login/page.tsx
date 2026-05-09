@@ -53,6 +53,7 @@ function LoginContent() {
       localStorage.setItem("user", JSON.stringify(user));
       if (user.role === "TEACHER") router.push("/teacher-dashboard");
       else if (user.role === "ADMIN") router.push("/admin");
+      else if (user.role === "STUDENT") router.push("/student-dashboard");
       else router.push("/dashboard");
     } catch (err: any) {
       const m = err.response?.data?.message;
@@ -236,6 +237,26 @@ function LoginContent() {
             Create Account
           </button>
         </p>
+
+        {/* Student portal entry */}
+        <div className={`mt-4 p-3 rounded-xl border ${isDark ? "border-teal-800/40 bg-teal-900/10" : "border-teal-200 bg-teal-50"} text-center`}>
+          <p className={`text-xs ${isDark ? "text-teal-400/70" : "text-teal-600"}`}>
+            Are you a student?{" "}
+            <button
+              onClick={() => router.push("/student/login")}
+              className={`font-semibold ${isDark ? "text-teal-400 hover:text-teal-300" : "text-teal-600 hover:text-teal-700"} transition-colors`}
+            >
+              Student Login →
+            </button>
+            {" · "}
+            <button
+              onClick={() => router.push("/student/register")}
+              className={`font-semibold ${isDark ? "text-teal-400 hover:text-teal-300" : "text-teal-600 hover:text-teal-700"} transition-colors`}
+            >
+              Sign Up
+            </button>
+          </p>
+        </div>
 
         {/* Space decoration */}
         <p
