@@ -13,6 +13,8 @@ interface StudentNavProps {
   gemBalance?: number;
   totalSessions?: number;
   avatarUrl?: string | null;
+  // Collapse sync: layout can pass this to stay in sync with content margin
+  onCollapseChange?: (collapsed: boolean) => void;
   // Legacy props (parent-proxy pages) — accepted for backward compat
   studentId?: string;
   studentName?: string | null;
@@ -56,6 +58,7 @@ export default function StudentNav({
   gemBalance: gemBalanceProp,
   avatarUrl,
   totalSessions: totalSessionsProp,
+  onCollapseChange,
   // legacy
   studentName,
   completedClasses,
@@ -80,6 +83,7 @@ export default function StudentNav({
     const next = !collapsed;
     setCollapsed(next);
     localStorage.setItem('lumexa_student_nav_collapsed', String(next));
+    onCollapseChange?.(next);
   };
 
   const handleLogout = () => {

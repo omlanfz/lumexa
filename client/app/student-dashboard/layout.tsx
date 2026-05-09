@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import StudentNav from '@/components/StudentNav';
+import LumiChat from '@/components/LumiChat';
 import api from '@/lib/axios';
 
 interface StudentProfile {
@@ -21,11 +22,16 @@ export default function StudentDashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  // Read initial collapse state from localStorage so margin is correct on first render
+  const [navCollapsed, setNavCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('lumexa_student_nav_collapsed') === 'true';
+    }
+    return false;
+  });
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -41,14 +47,10 @@ export default function StudentDashboardLayout({
     setRole(r);
 
     if (r !== 'STUDENT') {
-      // Non-student accessing student-dashboard routes (e.g. parent proxy [studentId])
-      // Just render children — those pages handle their own auth + sidebar
+      // Non-student (teacher/parent proxy [studentId] pages) — render children as-is
       setChecked(true);
       return;
     }
-
-    const saved = localStorage.getItem('lumexa_student_nav_collapsed');
-    if (saved === 'true') setNavCollapsed(true);
 
     api
       .get<StudentProfile>('/students/me')
@@ -69,12 +71,12 @@ export default function StudentDashboardLayout({
     );
   }
 
-  // Non-student role (parent proxy pages) — render children without student chrome
+  // Non-student role (parent/teacher proxy pages) — no student chrome
   if (role !== 'STUDENT') {
     return <>{children}</>;
   }
 
-  // Student-auth layout — StudentNav + content
+  // Student-auth layout: StudentNav sidebar + main content + LumiChat
   return (
     <div className="min-h-screen bg-black">
       <StudentNav
@@ -84,14 +86,19 @@ export default function StudentDashboardLayout({
         gemBalance={profile!.gemBalance}
         avatarUrl={profile!.avatarUrl}
         totalSessions={profile!.totalSessions}
+        onCollapseChange={setNavCollapsed}
       />
       <main
         className={`min-h-screen transition-all duration-300 ${
           navCollapsed ? 'lg:ml-16' : 'lg:ml-64'
-        } px-4 sm:px-6 pt-16 lg:pt-0 pb-12`}
+        } px-4 sm:px-6 pt-16 lg:pt-6 pb-12`}
       >
         {children}
       </main>
+      <LumiChat
+        variant="student"
+        context="Student dashboard — personal learning hub, rank progress, sessions, and achievements"
+      />
     </div>
   );
 }

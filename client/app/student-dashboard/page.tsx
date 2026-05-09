@@ -67,6 +67,15 @@ interface DashboardData {
   stats: Stats;
 }
 
+const RANK_ORDER = [
+  'STARCHILD',
+  'EXPLORER',
+  'COSMONAUT',
+  'NAVIGATOR',
+  'CAPTAIN',
+  'GALAXY_COMMANDER',
+];
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 
 function Skeleton({ className }: { className: string }) {
@@ -79,10 +88,80 @@ function DashboardSkeleton() {
       <Skeleton className="h-8 w-64" />
       <Skeleton className="h-32 w-full rounded-xl" />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        {[1, 2, 3, 4].map((i) => (
+          <Skeleton key={i} className="h-24 rounded-xl" />
+        ))}
       </div>
       <Skeleton className="h-24 w-full rounded-xl" />
       <Skeleton className="h-48 w-full rounded-xl" />
+    </div>
+  );
+}
+
+// ─── Onboarding checklist for new students (0 sessions) ──────────────────────
+
+function OnboardingChecklist({ studentName, router }: { studentName: string; router: ReturnType<typeof useRouter> }) {
+  const steps = [
+    { icon: '✅', label: 'Account created', done: true },
+    { icon: '🔭', label: 'Browse teachers in the marketplace', done: false, action: () => router.push('/marketplace') },
+    { icon: '📅', label: 'Book your first session', done: false, action: () => router.push('/marketplace') },
+    { icon: '🚀', label: 'Enter Star Lab and launch your mission', done: false },
+  ];
+
+  return (
+    <div className="bg-gradient-to-br from-teal-900/30 to-cyan-900/20 border border-teal-700/40 rounded-xl p-6">
+      <div className="flex items-start justify-between flex-wrap gap-3 mb-5">
+        <div>
+          <p className="text-xs text-teal-400 font-medium uppercase tracking-wide mb-1">
+            Launch Sequence
+          </p>
+          <h3 className="text-white font-semibold text-lg">
+            Welcome aboard, {studentName}! 🌌
+          </h3>
+          <p className="text-gray-400 text-sm mt-1">
+            Complete these steps to launch your first mission.
+          </p>
+        </div>
+        <span className="text-4xl select-none">🛸</span>
+      </div>
+
+      <div className="space-y-3">
+        {steps.map((step, i) => (
+          <div
+            key={i}
+            className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${
+              step.done
+                ? 'bg-teal-800/30 border border-teal-700/30'
+                : 'bg-gray-800/50 border border-gray-700/30'
+            } ${step.action ? 'cursor-pointer hover:border-teal-600/50' : ''}`}
+            onClick={step.action}
+            role={step.action ? 'button' : undefined}
+            tabIndex={step.action ? 0 : undefined}
+            onKeyDown={step.action ? (e) => e.key === 'Enter' && step.action?.() : undefined}
+          >
+            <span className={`text-xl flex-shrink-0 ${step.done ? '' : 'grayscale opacity-40'}`}>
+              {step.icon}
+            </span>
+            <p
+              className={`text-sm font-medium flex-1 ${
+                step.done ? 'text-teal-300 line-through opacity-70' : 'text-white'
+              }`}
+            >
+              {step.label}
+            </p>
+            {!step.done && step.action && (
+              <span className="text-teal-400 text-xs font-semibold flex-shrink-0">Start →</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={() => router.push('/marketplace')}
+        className="w-full mt-5 py-3 bg-teal-500 hover:bg-teal-400 text-black font-semibold rounded-xl text-sm transition-colors"
+      >
+        {LABELS.STUDENT_BOOK_CLASS.primary}
+      </button>
     </div>
   );
 }
@@ -117,8 +196,8 @@ export default function StudentDashboardPage() {
       const res = await api.get<DashboardData>('/students/me/dashboard');
       setData(res.data);
       setPendingReview(res.data.pendingReview);
-      // Rank-up ceremony: compare stored rank to API rank
-      const RANK_ORDER = ['STARCHILD', 'EXPLORER', 'COSMONAUT', 'NAVIGATOR', 'CAPTAIN', 'GALAXY_COMMANDER'];
+
+      // Rank-up ceremony: compare stored rank to current rank
       const lastRank = localStorage.getItem('lumexa_last_rank') ?? '';
       const currentRank = res.data.student.spaceRank;
       if (lastRank && RANK_ORDER.indexOf(currentRank) > RANK_ORDER.indexOf(lastRank)) {
@@ -159,6 +238,13 @@ export default function StudentDashboardPage() {
   if (!data) return null;
 
   const { student, upcomingBooking, recentSessions, stats } = data;
+  const isNewStudent = stats.totalSessions === 0;
+  const firstName = student.fullName.split(' ')[0];
+
+  // Greeting varies by time of day
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   const statCards = [
     {
@@ -166,24 +252,31 @@ export default function StudentDashboardPage() {
       label: 'Total Sessions',
       value: stats.totalSessions,
       color: 'text-teal-400',
+      bg: 'bg-teal-900/20 border-teal-800/30',
     },
     {
       icon: student.rankIcon,
       label: 'Space Rank',
       value: stats.spaceRank.replace(/_/g, ' '),
       color: 'text-violet-400',
+      bg: 'bg-violet-900/20 border-violet-800/30',
     },
     {
       icon: stats.streakWeeks > 0 ? '🔥' : '❄️',
       label: LABELS.STUDENT_STREAK.primary,
       value: `${stats.streakWeeks}w`,
       color: stats.streakWeeks > 0 ? 'text-orange-400' : 'text-gray-400',
+      bg:
+        stats.streakWeeks > 0
+          ? 'bg-orange-900/20 border-orange-800/30'
+          : 'bg-gray-800/50 border-gray-700/30',
     },
     {
       icon: '✦',
       label: LABELS.STUDENT_GEMS.primary,
       value: stats.gemBalance,
       color: 'text-amber-400',
+      bg: 'bg-amber-900/20 border-amber-800/30',
     },
   ];
 
@@ -198,22 +291,41 @@ export default function StudentDashboardPage() {
       )}
 
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">
-          Welcome back, {student.fullName.split(' ')[0]} 👋
-        </h1>
-        <p className="text-gray-400 text-sm mt-1">{LABELS.STUDENT_DASHBOARD.theme}</p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">
+            {greeting}, {firstName}! 👋
+          </h1>
+          <p className="text-gray-400 text-sm mt-1">{LABELS.STUDENT_DASHBOARD.theme}</p>
+        </div>
+        {/* Streak badge — always visible in header if active */}
+        {stats.streakWeeks > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+            <span className="text-lg">🔥</span>
+            <div>
+              <p className="text-orange-400 text-sm font-bold leading-none">{stats.streakWeeks}w streak</p>
+              {student.streakFreezes > 0 && (
+                <p className="text-gray-500 text-xs">❄️ {student.streakFreezes} freeze{student.streakFreezes !== 1 ? 's' : ''} left</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Hero: Next class */}
-      <NextClassCard booking={upcomingBooking} />
+      {/* Onboarding checklist — only for brand new students */}
+      {isNewStudent ? (
+        <OnboardingChecklist studentName={firstName} router={router} />
+      ) : (
+        /* Hero: Next class card */
+        <NextClassCard booking={upcomingBooking} />
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {statCards.map((s) => (
           <div
             key={s.label}
-            className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 text-center"
+            className={`border rounded-xl p-4 text-center ${s.bg}`}
           >
             <span className="text-2xl">{s.icon}</span>
             <p className={`text-xl font-bold mt-2 ${s.color}`}>{s.value}</p>
@@ -222,7 +334,7 @@ export default function StudentDashboardPage() {
         ))}
       </div>
 
-      {/* Pending review — prominent, shown before recent sessions */}
+      {/* Pending review — shown prominently before sessions list */}
       {pendingReview && (
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-3">
@@ -313,15 +425,22 @@ export default function StudentDashboardPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-white text-sm font-medium truncate">{session.teacherName}</p>
                     <p className="text-gray-400 text-xs">
-                      {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      {' · '}{session.durationMinutes} min
+                      {date.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                      {' · '}
+                      {session.durationMinutes} min
                     </p>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
-                    session.hasReview
-                      ? 'bg-green-500/20 text-green-400 border border-green-500/20'
-                      : 'bg-gray-600/20 text-gray-400 border border-gray-600/20'
-                  }`}>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
+                      session.hasReview
+                        ? 'bg-green-500/20 text-green-400 border border-green-500/20'
+                        : 'bg-gray-600/20 text-gray-400 border border-gray-600/20'
+                    }`}
+                  >
                     {session.hasReview ? '★ Reviewed' : 'No review'}
                   </span>
                 </div>
@@ -330,6 +449,36 @@ export default function StudentDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Quick actions row — shown for returning students */}
+      {!isNewStudent && (
+        <div className="grid grid-cols-2 gap-3 pb-4">
+          <button
+            onClick={() => router.push('/marketplace')}
+            className="flex items-center gap-3 p-4 bg-gray-800/50 border border-gray-700/50 rounded-xl hover:border-teal-700/50 hover:bg-teal-900/10 transition-colors text-left group"
+          >
+            <span className="text-2xl flex-shrink-0">🔭</span>
+            <div>
+              <p className="text-white font-medium text-sm group-hover:text-teal-300 transition-colors">
+                Find a Teacher
+              </p>
+              <p className="text-gray-500 text-xs">Mission Selection</p>
+            </div>
+          </button>
+          <button
+            onClick={() => router.push('/student-dashboard/progress')}
+            className="flex items-center gap-3 p-4 bg-gray-800/50 border border-gray-700/50 rounded-xl hover:border-violet-700/50 hover:bg-violet-900/10 transition-colors text-left group"
+          >
+            <span className="text-2xl flex-shrink-0">📊</span>
+            <div>
+              <p className="text-white font-medium text-sm group-hover:text-violet-300 transition-colors">
+                View Progress
+              </p>
+              <p className="text-gray-500 text-xs">Flight Stats</p>
+            </div>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
