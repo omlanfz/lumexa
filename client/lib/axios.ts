@@ -46,20 +46,25 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// ── Response interceptor: redirect to /login on 401 ───────────────────────────
+// ── Response interceptor: redirect to correct login on 401 ───────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (typeof window !== "undefined" && error?.response?.status === 401) {
-      // Only redirect if not already on an auth page
+      const path = window.location.pathname;
       const isAuthPage =
-        window.location.pathname === "/login" ||
-        window.location.pathname === "/register";
+        path === "/login" ||
+        path === "/register" ||
+        path === "/student/login" ||
+        path === "/student/register";
+
       if (!isAuthPage) {
-        // Clear stale tokens and send to login
+        // Route to student login if the stored user was a student
+        const rawUser = localStorage.getItem("user");
+        const role = rawUser ? (JSON.parse(rawUser) as { role?: string })?.role : null;
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-        window.location.href = "/login";
+        window.location.href = role === "STUDENT" ? "/student/login" : "/login";
       }
     }
     return Promise.reject(error);

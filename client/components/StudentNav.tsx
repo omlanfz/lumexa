@@ -1,120 +1,103 @@
-// FILE PATH: client/components/StudentNav.tsx
-// Features:
-// 1. Sidebar collapse toggle
-// 2. Responsive (mobile hamburger + overlay)
-// 3. Blue/cyan color theme (distinct from teacher purple)
-// 4. Optional "Teacher View" mode amber banner
+'use client';
 
-"use client";
-
-import { useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { useTheme, ThemeToggle } from "./ThemeProvider";
-import Image from "next/image";
+import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import Image from 'next/image';
+import { LABELS } from '@/lib/labels';
 
 interface StudentNavProps {
-  studentId: string;
-  studentName: string | null;
+  // New student-auth props
+  fullName?: string;
+  spaceRank?: string;
+  rankIcon?: string;
+  gemBalance?: number;
+  totalSessions?: number;
+  avatarUrl?: string | null;
+  // Legacy props (parent-proxy pages) — accepted for backward compat
+  studentId?: string;
+  studentName?: string | null;
   grade?: string | null;
   parentName?: string | null;
-  avatarUrl?: string | null;
+  parentId?: string;
   isTeacherView?: boolean;
   onExitTeacherView?: () => void;
-  parentId?: string;
   completedClasses?: number;
 }
 
-const LEVEL_TIERS = [
-  { name: "Starchild", icon: "🌟", min: 0 },
-  { name: "Explorer", icon: "🔭", min: 5 },
-  { name: "Cosmonaut", icon: "🛸", min: 15 },
-  { name: "Navigator", icon: "🧭", min: 30 },
-  { name: "Captain", icon: "🎖️", min: 60 },
-  { name: "Galaxy Commander", icon: "🌌", min: 100 },
+const NAV_ITEMS = [
+  { href: '/student-dashboard', icon: '🌌', label: LABELS.STUDENT_DASHBOARD.primary, sub: LABELS.STUDENT_DASHBOARD.theme, exact: true },
+  { href: '/student-dashboard/lessons', icon: '📚', label: LABELS.STUDENT_LESSONS.primary, sub: LABELS.STUDENT_LESSONS.theme, exact: false },
+  { href: '/student-dashboard/progress', icon: '📊', label: LABELS.STUDENT_PROGRESS.primary, sub: LABELS.STUDENT_PROGRESS.theme, exact: false },
+  { href: '/student-dashboard/teachers', icon: '👨‍🚀', label: LABELS.STUDENT_TEACHERS.primary, sub: LABELS.STUDENT_TEACHERS.theme, exact: false },
+  { href: '/student-dashboard/recordings', icon: '🎬', label: LABELS.STUDENT_RECORDINGS.primary, sub: LABELS.STUDENT_RECORDINGS.theme, exact: false },
+  { href: '/student-dashboard/rankings', icon: '🏆', label: LABELS.STUDENT_RANKINGS.primary, sub: LABELS.STUDENT_RANKINGS.theme, exact: false },
 ];
 
-function getLevelTier(classes: number) {
-  let tier = 0;
-  for (let i = 0; i < LEVEL_TIERS.length; i++) {
-    if (classes >= LEVEL_TIERS[i].min) tier = i;
-  }
-  return LEVEL_TIERS[tier];
+const RANK_THRESHOLDS = [
+  { rank: 'STARCHILD', min: 0, next: 5 },
+  { rank: 'EXPLORER', min: 5, next: 15 },
+  { rank: 'COSMONAUT', min: 15, next: 30 },
+  { rank: 'NAVIGATOR', min: 30, next: 60 },
+  { rank: 'CAPTAIN', min: 60, next: 100 },
+  { rank: 'GALAXY_COMMANDER', min: 100, next: null },
+];
+
+function rankProgress(sessions: number, rank: string): number {
+  const tier = RANK_THRESHOLDS.find((t) => t.rank === rank);
+  if (!tier || tier.next === null) return 100;
+  const range = tier.next - tier.min;
+  return Math.min(100, Math.round(((sessions - tier.min) / range) * 100));
 }
 
 export default function StudentNav({
-  studentName,
-  studentId,
+  fullName: fullNameProp,
+  spaceRank: spaceRankProp,
+  rankIcon: rankIconProp,
+  gemBalance: gemBalanceProp,
   avatarUrl,
-  isTeacherView = false,
-  onExitTeacherView,
-  parentId,
-  completedClasses = 0,
+  totalSessions: totalSessionsProp,
+  // legacy
+  studentName,
+  completedClasses,
 }: StudentNavProps) {
+  // Resolve new vs legacy props
+  const fullName = fullNameProp ?? studentName ?? '';
+  const spaceRank = spaceRankProp ?? 'STARCHILD';
+  const rankIcon = rankIconProp ?? '🌟';
+  const gemBalance = gemBalanceProp ?? 0;
+  const totalSessions = totalSessionsProp ?? completedClasses ?? 0;
   const router = useRouter();
   const pathname = usePathname();
-  const { isDark } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const level = getLevelTier(completedClasses);
+  useEffect(() => {
+    const saved = localStorage.getItem('lumexa_student_nav_collapsed');
+    if (saved === 'true') setCollapsed(true);
+  }, []);
 
-  const NAV_ITEMS = [
-    {
-      href: `/student-dashboard/${studentId}`,
-      icon: "🌌",
-      label: "Dashboard",
-      sub: "Mission Hub",
-    },
-    {
-      href: `/student-lessons/${studentId}`,
-      icon: "📚",
-      label: "My Lessons",
-      sub: "Mission Log",
-    },
-    {
-      href: `/student-progress/${studentId}`,
-      icon: "📊",
-      label: "Progress",
-      sub: "Flight Stats",
-    },
-    {
-      href: `/student-leaderboard`,
-      icon: "🏆",
-      label: "Rankings",
-      sub: "Star Chart",
-    },
-    {
-      href: `/marketplace`,
-      icon: "🔭",
-      label: "Find a Teacher",
-      sub: "Mission Select",
-    },
-  ];
+  const toggleCollapse = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem('lumexa_student_nav_collapsed', String(next));
+  };
 
-  const sidebarW = collapsed ? "w-16" : "w-64";
-  const sidebarWMobile = mobileOpen ? "translate-x-0" : "-translate-x-full";
-  const sidebarBase = `
-    h-screen flex flex-col overflow-hidden transition-all duration-300 z-40
-    bg-[var(--s-nav-bg)]
-    border-[var(--s-nav-border)] border-r
-  `;
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    router.push('/student/login');
+  };
+
+  const progress = rankProgress(totalSessions, spaceRank);
+  const initial = fullName ? fullName.charAt(0).toUpperCase() : '?';
 
   const NavContent = () => (
     <>
-      {/* Teacher view amber banner */}
-      {isTeacherView && (
-        <div className="bg-amber-500 text-amber-900 text-xs font-bold text-center py-2 px-3 flex-shrink-0">
-          👁️ TEACHER VIEW — Read Only
-        </div>
-      )}
-
       {/* Header */}
-      <div
-        className={`flex items-center justify-between px-4 py-5 border-b border-[var(--s-nav-border)] flex-shrink-0 ${collapsed ? "justify-center px-2" : ""}`}
-      >
+      <div className={`flex items-center justify-between px-4 py-5 border-b border-teal-800/30 flex-shrink-0 ${collapsed ? 'justify-center px-2' : ''}`}>
         {!collapsed && (
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden shadow-sm">
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
               <Image
                 src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
                 width={32}
@@ -123,64 +106,69 @@ export default function StudentNav({
               />
             </div>
             <div className="min-w-0">
-              <p className="font-bold text-[var(--s-accent)] text-sm leading-none">
-                Lumexa
-              </p>
-              <p className="text-xs text-[var(--s-text-muted)] leading-none opacity-70">
-                Mission Control
-              </p>
+              <p className="font-bold text-teal-400 text-sm leading-none">Lumexa</p>
+              <p className="text-xs text-gray-500 leading-none">{LABELS.STUDENT_DASHBOARD.theme}</p>
             </div>
           </div>
         )}
         {collapsed && (
-          <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center text-white text-sm font-bold">
+          <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-black text-sm font-bold">
             L
           </div>
         )}
         <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="hidden lg:flex ml-auto w-7 h-7 rounded-lg bg-[var(--s-nav-active)] text-[var(--s-text-muted)] items-center justify-center transition-colors flex-shrink-0 hover:text-[var(--s-text)]"
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          onClick={toggleCollapse}
+          className="hidden lg:flex ml-auto w-7 h-7 rounded-lg bg-gray-800 text-gray-400 items-center justify-center hover:text-teal-400 transition-colors flex-shrink-0"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? "→" : "←"}
+          {collapsed ? '→' : '←'}
         </button>
       </div>
 
       {/* Student profile */}
-      <div
-        className={`flex-shrink-0 px-3 py-4 border-b border-[var(--s-nav-border)] ${collapsed ? "flex justify-center" : ""}`}
-      >
-        <div
-          className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
-        >
+      <div className={`flex-shrink-0 px-3 py-4 border-b border-teal-800/30 ${collapsed ? 'flex flex-col items-center gap-2' : ''}`}>
+        <div className={`flex items-center gap-3 ${collapsed ? 'justify-center' : ''}`}>
           {avatarUrl ? (
             <img
               src={avatarUrl}
               alt="avatar"
-              className="w-10 h-10 rounded-full object-cover border-2 border-[var(--s-border-strong)] flex-shrink-0"
+              className="w-10 h-10 rounded-full object-cover border-2 border-teal-800/40 flex-shrink-0"
             />
           ) : (
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F7CFF] to-[#27D6C5] flex items-center justify-center text-white font-bold flex-shrink-0 shadow-sm">
-              {studentName ? studentName.charAt(0).toUpperCase() : "…"}
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-cyan-400 flex items-center justify-center text-black font-bold flex-shrink-0">
+              {initial}
             </div>
           )}
           {!collapsed && (
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-[var(--s-text)] truncate">
-                {studentName}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-white truncate">{fullName}</p>
+              <p className="text-xs text-gray-400">
+                {rankIcon} {spaceRank.replace(/_/g, ' ')}
               </p>
-              <p className="text-xs text-[var(--s-text-muted)]">
-                {level.icon} {level.name}
-              </p>
+              <div className="mt-1.5 w-full bg-gray-700 rounded-full h-1">
+                <div
+                  className="bg-teal-400 h-1 rounded-full transition-all duration-500"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
             </div>
           )}
         </div>
+
+        {!collapsed && (
+          <div className="mt-3 flex items-center gap-1.5 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <span className="text-amber-400 text-sm">✦</span>
+            <span className="text-amber-400 text-xs font-semibold">{gemBalance} {LABELS.STUDENT_GEMS.primary}</span>
+          </div>
+        )}
       </div>
 
       {/* Nav items */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {NAV_ITEMS.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = item.exact
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(item.href + '/');
           return (
             <button
               key={item.href}
@@ -190,20 +178,16 @@ export default function StudentNav({
               }}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all ${
                 isActive
-                  ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)] border border-[var(--s-border-strong)]"
-                  : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
-              } ${collapsed ? "justify-center px-2" : ""}`}
+                  ? 'bg-teal-900/30 text-teal-400 border-l-2 border-teal-400'
+                  : 'text-gray-400 hover:text-teal-300 hover:bg-gray-800/30'
+              } ${collapsed ? 'justify-center px-2' : ''}`}
               title={collapsed ? `${item.label} · ${item.sub}` : undefined}
             >
               <span className="text-lg flex-shrink-0">{item.icon}</span>
               {!collapsed && (
                 <div className="min-w-0">
-                  <p className="text-sm font-medium leading-tight truncate">
-                    {item.label}
-                  </p>
-                  <p className="text-xs text-[var(--s-text-faint)] leading-none truncate">
-                    {item.sub}
-                  </p>
+                  <p className="text-sm font-medium leading-tight truncate">{item.label}</p>
+                  <p className="text-xs text-gray-500 leading-none truncate">{item.sub}</p>
                 </div>
               )}
             </button>
@@ -212,30 +196,23 @@ export default function StudentNav({
       </nav>
 
       {/* Footer */}
-      <div
-        className={`flex-shrink-0 px-3 py-4 border-t border-[var(--s-nav-border)] ${collapsed ? "flex justify-center" : "flex items-center justify-between"}`}
-      >
-        {!collapsed && isTeacherView && (
-          <button
-            onClick={() =>
-              onExitTeacherView
-                ? onExitTeacherView()
-                : router.push("/teacher-dashboard")
-            }
-            className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-amber-900 font-bold hover:bg-amber-400 transition-colors"
-          >
-            ← Back to Flight Deck
-          </button>
-        )}
-        {!collapsed && !isTeacherView && (
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] transition-colors"
-          >
-            ← Parent Dashboard
-          </button>
-        )}
-        <ThemeToggle variant="student" />
+      <div className={`flex-shrink-0 px-3 py-4 border-t border-teal-800/30 space-y-1 ${collapsed ? 'flex flex-col items-center' : ''}`}>
+        <button
+          onClick={() => router.push('/marketplace')}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-gray-400 hover:text-teal-300 hover:bg-gray-800/30 transition-all ${collapsed ? 'justify-center px-2' : ''}`}
+          title={collapsed ? 'Find a Teacher' : undefined}
+        >
+          <span className="text-lg">🔭</span>
+          {!collapsed && <span className="text-sm">Find a Teacher</span>}
+        </button>
+        <button
+          onClick={handleLogout}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-gray-500 hover:text-red-400 hover:bg-gray-800/30 transition-all ${collapsed ? 'justify-center px-2' : ''}`}
+          title={collapsed ? 'Log Out' : undefined}
+        >
+          <span className="text-lg">🚪</span>
+          {!collapsed && <span className="text-sm">{LABELS.LOGOUT.primary}</span>}
+        </button>
       </div>
     </>
   );
@@ -245,29 +222,35 @@ export default function StudentNav({
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen((o) => !o)}
-        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-xl bg-[var(--s-nav-active)] text-[var(--s-text-muted)] flex items-center justify-center shadow-lg border border-[var(--s-nav-border)]"
+        className="lg:hidden fixed top-4 left-4 z-50 w-10 h-10 rounded-xl bg-gray-800 text-gray-400 flex items-center justify-center shadow-lg border border-teal-800/30"
+        aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
       >
-        {mobileOpen ? "✕" : "☰"}
+        {mobileOpen ? '✕' : '☰'}
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-30 backdrop-blur-sm"
+          className="lg:hidden fixed inset-0 bg-black/50 z-30"
           onClick={() => setMobileOpen(false)}
         />
       )}
 
       {/* Mobile sidebar */}
       <aside
-        className={`lg:hidden fixed left-0 top-0 h-full w-64 ${sidebarWMobile} ${sidebarBase} shadow-2xl transition-transform duration-300`}
+        className={`lg:hidden fixed left-0 top-0 h-full w-64 z-40 flex flex-col
+          bg-gray-900 border-r border-teal-800/30 shadow-2xl
+          transition-transform duration-300
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <NavContent />
       </aside>
 
       {/* Desktop sidebar */}
       <aside
-        className={`hidden lg:flex fixed left-0 top-0 ${sidebarW} ${sidebarBase} flex-col shadow-xl`}
+        className={`hidden lg:flex fixed left-0 top-0 h-full flex-col
+          bg-gray-900 border-r border-teal-800/30 shadow-xl z-40
+          transition-all duration-300
+          ${collapsed ? 'w-16' : 'w-64'}`}
       >
         <NavContent />
       </aside>

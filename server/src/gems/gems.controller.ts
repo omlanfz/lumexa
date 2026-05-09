@@ -13,30 +13,43 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Role } from '@prisma/client';
 import { GemsService } from './gems.service';
 import { PurchaseGemsDto } from './dto/purchase-gems.dto';
+import { IsInt, Min, Max } from 'class-validator';
+import { Type } from 'class-transformer';
+
+class RequestTopupDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10000)
+  amount: number;
+}
 
 @Controller('gems')
 @UseGuards(AuthGuard('jwt'))
 export class GemsController {
   constructor(private readonly gemsService: GemsService) {}
 
-  /** Get current user's gem wallet + recent purchases */
+  // ─── Named routes before parameterised ──────────────────────────────────
+
   @Get('wallet')
   getWallet(@Req() req: any) {
     return this.gemsService.getWallet(req.user.userId);
   }
 
-  /**
-   * Initiate a gem purchase.
-   * - STRIPE: frontend then creates a Stripe PaymentIntent separately
-   * - BKASH: frontend redirects to bKash, comes back with trxID
-   * - BANK_TRANSFER: frontend uploads proof, submits proofUrl
-   */
   @Post('purchase')
   initiate(@Req() req: any, @Body() dto: PurchaseGemsDto) {
     return this.gemsService.initiatePurchase(req.user.userId, dto);
   }
 
-  /** Admin: approve a pending BKASH or BANK_TRANSFER purchase */
+  // STUDENT: request a gem top-up from billing contact
+  @Post('request-topup')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  requestTopup(@Req() req: any, @Body() dto: RequestTopupDto) {
+    return this.gemsService.requestTopup(req.user.userId, dto.amount);
+  }
+
+  // Admin: approve a pending BKASH or BANK_TRANSFER purchase
   @Post('purchases/:id/approve')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)

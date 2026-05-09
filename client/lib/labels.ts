@@ -77,6 +77,23 @@ export const LABELS = {
     theme: "Reward Ledger",
   },
 
+  // ── Student dashboard ────────────────────────────────────────────────────────
+  STUDENT_DASHBOARD: { primary: "Dashboard", theme: "Mission Hub" },
+  STUDENT_LESSONS: { primary: "My Lessons", theme: "Mission Log" },
+  STUDENT_PROGRESS: { primary: "Progress", theme: "Flight Stats" },
+  STUDENT_TEACHERS: { primary: "My Teachers", theme: "Crew" },
+  STUDENT_RECORDINGS: { primary: "Recordings", theme: "Mission Footage" },
+  STUDENT_RANKINGS: { primary: "Rankings", theme: "Star Chart" },
+  STUDENT_GEMS: { primary: "Gems", theme: "Stellar Credits" },
+  STUDENT_STREAK: { primary: "Streak", theme: "Mission Chain" },
+  STUDENT_NEXT_CLASS: { primary: "Next Class", theme: "Next Mission" },
+  STUDENT_ENTER_CLASS: { primary: "Enter Star Lab", theme: "Launch Mission" },
+  STUDENT_BOOK_CLASS: { primary: "Book Your Next Mission", theme: "Select Mission" },
+  STUDENT_RANK_UP: { primary: "Mission Accomplished!", theme: "Rank Achieved" },
+  STUDENT_REQUEST_TOPUP: { primary: "Request Top-Up", theme: "Request Credits" },
+  STUDENT_REGISTER: { primary: "Create Student Account", theme: "Initiate Launch" },
+  STUDENT_LOGIN: { primary: "Student Log In", theme: "Access Mission Portal" },
+
   // ── Actions ─────────────────────────────────────────────────────────────────
   CREATE_ACCOUNT: {
     primary: "Create Account",

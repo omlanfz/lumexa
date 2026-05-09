@@ -19,7 +19,6 @@ export class NotificationsService {
       );
       return;
     }
-    // Lazy import to avoid hard crash if package not installed yet
     try {
       const { Resend } = require('resend');
       this.resend = new Resend(process.env.RESEND_API_KEY);
@@ -43,13 +42,12 @@ export class NotificationsService {
         html,
       });
     } catch (err) {
-      // Never let email failures crash the main flow
       this.logger.error(`Failed to send email to ${to}: ${err}`);
     }
   }
 
   async sendBookingConfirmation(
-    parentEmail: string,
+    recipientEmail: string,
     data: BookingEmailData,
   ): Promise<void> {
     const classUrl = `${process.env.FRONTEND_URL}/classroom/${data.bookingId}`;
@@ -59,21 +57,84 @@ export class NotificationsService {
     }).format(data.classStart);
 
     await this.send(
-      parentEmail,
+      recipientEmail,
       `✅ Class Confirmed with ${data.teacherName}`,
       `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #6d28d9;">Class Booking Confirmed</h2>
+        <h2 style="color: #0d9488;">Class Booking Confirmed</h2>
         <p>Great news! Your class with <strong>${data.teacherName}</strong> is confirmed.</p>
-        <div style="background: #1e1b4b; color: #c4b5fd; padding: 16px; border-radius: 8px; margin: 24px 0;">
+        <div style="background: #0f2027; color: #5eead4; padding: 16px; border-radius: 8px; margin: 24px 0;">
           <p style="margin: 0;"><strong>📅 When:</strong> ${formattedDate}</p>
         </div>
-        <p>You and your student can join the classroom using the link below 10 minutes before the class starts:</p>
-        <a href="${classUrl}" style="display: inline-block; background: #6d28d9; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+        <p>Join the classroom using the link below 10 minutes before the class starts:</p>
+        <a href="${classUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
           Join Classroom →
         </a>
         <p style="color: #6b7280; font-size: 14px; margin-top: 32px;">
           If you need to cancel, please do so at least 24 hours in advance for a full refund.
+        </p>
+      </div>
+      `,
+    );
+  }
+
+  async sendConsentRequest(
+    billingContactEmail: string,
+    data: {
+      studentName: string;
+      consentUrl: string;
+      expiresHours: number;
+    },
+  ): Promise<void> {
+    await this.send(
+      billingContactEmail,
+      `Action Required: Activate ${data.studentName}'s Lumexa Account`,
+      `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d9488;">Parental Consent Required</h2>
+        <p><strong>${data.studentName}</strong> has registered on Lumexa and needs your approval to activate their account.</p>
+        <p>Lumexa is an online tutoring platform for K-12 students. By clicking the button below, you confirm that you are the parent or guardian of ${data.studentName} and consent to their use of the platform.</p>
+        <p>This link expires in <strong>${data.expiresHours} hours</strong>.</p>
+        <a href="${data.consentUrl}"
+          style="display: inline-block; background: #0d9488; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 16px 0;">
+          Activate ${data.studentName}'s Account →
+        </a>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+          If you did not expect this email, please ignore it. The account will not be activated without your action.
+        </p>
+      </div>
+      `,
+    );
+  }
+
+  async sendGemTopupRequest(
+    billingContactEmail: string,
+    data: {
+      studentName: string;
+      gems: number;
+      studentEmail: string;
+    },
+  ): Promise<void> {
+    const dashboardUrl = `${process.env.FRONTEND_URL}/dashboard`;
+
+    await this.send(
+      billingContactEmail,
+      `${data.studentName} is requesting ${data.gems} Lumexa Gems`,
+      `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #f59e0b;">✦ Gem Top-Up Request</h2>
+        <p><strong>${data.studentName}</strong> (${data.studentEmail}) has requested <strong>${data.gems} Gems</strong> on Lumexa.</p>
+        <p>Gems are used to book tutoring sessions and access course content on the platform.</p>
+        <div style="background: #1c1917; color: #fbbf24; padding: 16px; border-radius: 8px; margin: 24px 0;">
+          <p style="margin: 0; font-size: 18px;"><strong>✦ ${data.gems} Gems</strong> requested</p>
+        </div>
+        <p>Log in to your parent dashboard to purchase gems for ${data.studentName}:</p>
+        <a href="${dashboardUrl}"
+          style="display: inline-block; background: #f59e0b; color: black; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+          Go to Dashboard →
+        </a>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+          If you have questions, contact support at support@lumexa.app
         </p>
       </div>
       `,
@@ -89,9 +150,9 @@ export class NotificationsService {
 
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #6d28d9;">⏰ Your class starts in 30 minutes</h2>
+        <h2 style="color: #0d9488;">⏰ Your class starts in 30 minutes</h2>
         <p>This is your reminder that a class with <strong>${data.teacherName}</strong> is starting soon.</p>
-        <a href="${classUrl}" style="display: inline-block; background: #6d28d9; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
+        <a href="${classUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
           Join Classroom →
         </a>
       </div>

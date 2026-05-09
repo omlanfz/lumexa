@@ -17,9 +17,29 @@ model User {
   role           Role            @default(PARENT)
   coppaConsentAt DateTime?
   avatarUrl      String?
-  students       Student[]
-  teacherProfile TeacherProfile?
-  gemWallet      GemWallet?
+
+  // STUDENT identity fields (null on TEACHER/ADMIN/PARENT rows)
+  age                     Int?
+  grade                   String?
+  subjects                String[]      @default([])
+  spaceRank               SpaceRank     @default(STARCHILD)
+  totalSessions           Int           @default(0)
+  streakWeeks             Int           @default(0)
+  streakFreezes           Int           @default(1)
+  gemBalance              Int           @default(0)
+  accountStatus           AccountStatus @default(ACTIVE)
+
+  // Billing contact — server-side only, never returned in student API responses
+  billingContactEmail     String?
+  billingContactStripeId  String?
+  billingContactConsented Boolean       @default(false)
+  billingContactConsentAt DateTime?
+
+  students        Student[]
+  teacherProfile  TeacherProfile?
+  gemWallet       GemWallet?
+  consentTokens   ConsentToken[]
+  studentBookings Booking[]      @relation("StudentBookings")
 }
 
 model Student {
@@ -86,7 +106,8 @@ model Shift {
 model Booking {
   id                String             @id @default(uuid())
   shiftId           String             @unique
-  studentId         String
+  studentId         String?            // legacy: references Student sub-entity (nullable for student self-auth bookings)
+  studentUserId     String?            // new: references User with STUDENT role (self-auth)
   createdAt         DateTime           @default(now())
   amountCents       Int?
   egressId          String?
@@ -94,11 +115,13 @@ model Booking {
   paymentStatus     PaymentStatus      @default(PENDING)
   recordingUrl      String?
   shift             Shift              @relation(fields: [shiftId], references: [id])
-  student           Student            @relation(fields: [studentId], references: [id])
+  student           Student?           @relation(fields: [studentId], references: [id])
+  studentUser       User?              @relation("StudentBookings", fields: [studentUserId], references: [id])
   rescheduleRequest RescheduleRequest?
   review            Review?
 
   @@index([studentId])
+  @@index([studentUserId])
   @@index([paymentStatus])
 }
 
@@ -131,10 +154,11 @@ model Review {
   teacherId           String
   rating              Int
   comment             String?
-  submittedByParentId String
-  createdAt           DateTime       @default(now())
-  booking             Booking        @relation(fields: [bookingId], references: [id])
-  teacher             TeacherProfile @relation(fields: [teacherId], references: [id])
+  submittedByParentId  String?
+  submittedByStudentId String?
+  createdAt            DateTime       @default(now())
+  booking              Booking        @relation(fields: [bookingId], references: [id])
+  teacher              TeacherProfile @relation(fields: [teacherId], references: [id])
 
   @@index([teacherId])
 }
@@ -201,6 +225,18 @@ model GemPurchase {
   @@index([status])
 }
 
+model ConsentToken {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique @default(uuid())
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([token])
+}
+
 model TrialLead {
   id          String   @id @default(uuid())
   parentName  String
@@ -218,8 +254,25 @@ model TrialLead {
 
 enum Role {
   PARENT
+  STUDENT
   TEACHER
   ADMIN
+}
+
+enum AccountStatus {
+  PENDING_CONSENT
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum SpaceRank {
+  STARCHILD        // 0–4 sessions
+  EXPLORER         // 5–14 sessions
+  COSMONAUT        // 15–29 sessions
+  NAVIGATOR        // 30–59 sessions
+  CAPTAIN          // 60–99 sessions
+  GALAXY_COMMANDER // 100+ sessions
 }
 
 enum PaymentStatus {
