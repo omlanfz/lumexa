@@ -8,6 +8,7 @@ import NextClassCard from '@/components/student/NextClassCard';
 import GemWalletWidget from '@/components/student/GemWalletWidget';
 import RankProgressBar from '@/components/student/RankProgressBar';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
+import RankUpCeremony from '@/components/student/RankUpCeremony';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,9 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null);
+  const [showCeremony, setShowCeremony] = useState(false);
+  const [ceremonyRank, setCeremonyRank] = useState('');
+  const [ceremonyIcon, setCeremonyIcon] = useState('');
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -113,6 +117,17 @@ export default function StudentDashboardPage() {
       const res = await api.get<DashboardData>('/students/me/dashboard');
       setData(res.data);
       setPendingReview(res.data.pendingReview);
+      // Rank-up ceremony: compare stored rank to API rank
+      const RANK_ORDER = ['STARCHILD', 'EXPLORER', 'COSMONAUT', 'NAVIGATOR', 'CAPTAIN', 'GALAXY_COMMANDER'];
+      const lastRank = localStorage.getItem('lumexa_last_rank') ?? '';
+      const currentRank = res.data.student.spaceRank;
+      if (lastRank && RANK_ORDER.indexOf(currentRank) > RANK_ORDER.indexOf(lastRank)) {
+        setCeremonyRank(currentRank);
+        setCeremonyIcon(res.data.student.rankIcon);
+        setShowCeremony(true);
+      } else if (!lastRank) {
+        localStorage.setItem('lumexa_last_rank', currentRank);
+      }
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string | string[] } } };
       const msg = e.response?.data?.message;
@@ -120,6 +135,11 @@ export default function StudentDashboardPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCeremonyDismiss = () => {
+    setShowCeremony(false);
+    if (data) localStorage.setItem('lumexa_last_rank', data.student.spaceRank);
   };
 
   if (loading) return <DashboardSkeleton />;
@@ -169,6 +189,14 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pt-6">
+      {showCeremony && (
+        <RankUpCeremony
+          newRank={ceremonyRank}
+          rankIcon={ceremonyIcon}
+          onDismiss={handleCeremonyDismiss}
+        />
+      )}
+
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-white">

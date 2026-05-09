@@ -8,6 +8,7 @@ import {
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StudentsService } from '../students/students.service';
 import { calculateRefundAmount } from './cancellation.policy';
 import { Role } from '@prisma/client';
 
@@ -17,6 +18,7 @@ export class BookingsService {
     private prisma: PrismaService,
     private stripe: StripeService,
     private notifications: NotificationsService,
+    private studentsService: StudentsService,
   ) {}
 
   // ─── Marketplace ────────────────────────────────────────────────────────────
@@ -608,12 +610,39 @@ export class BookingsService {
         },
       });
 
-      return {
+      const result = {
         message: 'Review submitted. Thank you for your feedback!',
         reviewId: review.id,
         rating: review.rating,
       };
+
+      // Award bonus gems for 5-star review (fire-and-forget)
+      if (rating === 5) {
+        this.studentsService
+          .awardGems(studentUserId, 3, 'FIVE_STAR_REVIEW', '5-star review bonus')
+          .catch(() => {});
+      }
+
+      return result;
     });
+  }
+
+  // ─── Post-capture gamification trigger ────────────────────────────────────────
+
+  async triggerSessionCompletedRewards(studentUserId: string, isFirstSession: boolean) {
+    const gems = isFirstSession ? 15 : 5; // 10 first-session + 5 session = 15 first time
+    const type = isFirstSession ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
+    const desc = isFirstSession ? 'First session completion bonus' : 'Session completion reward';
+
+    await Promise.all([
+      this.studentsService.awardGems(studentUserId, gems, type, desc),
+      this.studentsService.checkAndAwardBadges(studentUserId),
+    ]);
+
+    if (isFirstSession) {
+      // Award rank-up gems (FIRST_MISSION badge)
+      await this.studentsService.awardGems(studentUserId, 10, 'FIRST_SESSION_BONUS', 'First mission bonus');
+    }
   }
 
   // ─── Stripe Connect ──────────────────────────────────────────────────────────

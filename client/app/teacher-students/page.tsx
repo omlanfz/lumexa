@@ -1,33 +1,107 @@
-// FILE PATH: client/app/teacher-students/page.tsx
-"use client";
+'use client';
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import axios from "axios";
-import TeacherLayout from "../../components/TeacherLayout";
-// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
-import LumiChat from "../../components/LumiChat";
-// ──────────────────────────────────────────────────────────────────────────────
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import api from '@/lib/axios';
+import TeacherLayout from '../../components/TeacherLayout';
+import LumiChat from '../../components/LumiChat';
 
 interface StudentEntry {
   studentId: string;
+  isUserRef: boolean;
   studentName: string;
-  parentName?: string;
-  parentEmail?: string;
-  age?: number;
-  grade?: string | null;
-  subject?: string | null;
+  studentAge: number | null;
+  studentGrade: string | null;
+  avatarUrl: string | null;
+  spaceRank: string | null;
+  totalSessions: number;
   totalClasses: number;
   completedClasses: number;
   pendingClasses: number;
-  lastClassDate?: string | null;
-  nextClassDate?: string | null;
-  latestReview?: { rating: number; comment: string | null } | null;
+  lastClassDate: string | null;
+  nextClassDate: string | null;
+  latestReview: { rating: number; comment: string | null } | null;
 }
 
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
   rankTier: number;
+}
+
+const RANK_ICONS: Record<string, string> = {
+  STARCHILD: '🌟', EXPLORER: '🔭', COSMONAUT: '🛸',
+  NAVIGATOR: '🧭', CAPTAIN: '🎖️', GALAXY_COMMANDER: '🌌',
+};
+
+function AddNoteModal({
+  student,
+  onClose,
+  onSaved,
+}: {
+  student: StudentEntry;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const save = async () => {
+    if (!note.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await api.post(`/teachers/me/students/${student.studentId}/notes`, {
+        note: note.trim(),
+        isUserRef: student.isUserRef,
+      });
+      onSaved();
+      onClose();
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string | string[] } } };
+      const msg = e.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save note.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-gray-800 border border-purple-700/30 rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-white">Add Note — {student.studentName}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Private note about this student…"
+          rows={4}
+          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none"
+        />
+        {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
+        <div className="flex gap-3 mt-4">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-400 text-sm hover:border-gray-500 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={!note.trim() || saving}
+            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save Note'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TeacherStudentsContent() {
@@ -36,35 +110,27 @@ function TeacherStudentsContent() {
   const [students, setStudents] = useState<StudentEntry[]>([]);
   const [filtered, setFiltered] = useState<StudentEntry[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [noteTarget, setNoteTarget] = useState<StudentEntry | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const token = localStorage.getItem('token');
+    if (!token) { router.push('/login'); return; }
 
     (async () => {
       try {
         const [studRes, profileRes] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/students`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          api.get<StudentEntry[]>('/teachers/me/students'),
+          api.get<Profile>('/teachers/me/profile'),
         ]);
         setStudents(studRes.data ?? []);
         setFiltered(studRes.data ?? []);
         setProfile(profileRes.data);
-      } catch (e: any) {
-        const m = e.response?.data?.message;
-        setError(
-          Array.isArray(m) ? m.join(", ") : (m ?? "Failed to load students"),
-        );
+      } catch (e: unknown) {
+        const m = (e as any).response?.data?.message;
+        setError(Array.isArray(m) ? m.join(', ') : (m ?? 'Failed to load students'));
       } finally {
         setLoading(false);
       }
@@ -77,14 +143,13 @@ function TeacherStudentsContent() {
       students.filter(
         (s) =>
           s.studentName?.toLowerCase().includes(q) ||
-          s.grade?.toLowerCase().includes(q) ||
-          s.subject?.toLowerCase().includes(q) ||
-          s.parentEmail?.toLowerCase().includes(q),
+          s.studentGrade?.toLowerCase().includes(q) ||
+          s.spaceRank?.toLowerCase().includes(q),
       ),
     );
   }, [search, students]);
 
-  const card = "t-card shadow-sm";
+  const card = 't-card shadow-sm';
 
   if (loading)
     return (
@@ -97,26 +162,19 @@ function TeacherStudentsContent() {
 
   return (
     <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Pilot"}
+      teacherName={profile?.user?.fullName ?? 'Pilot'}
       avatarUrl={profile?.user?.avatarUrl ?? null}
       rankTier={profile?.rankTier ?? 0}
     >
-      <div className="p-6 lg:p-8">
-        {/* Header */}
-        <div className="flex items-start justify-between flex-wrap gap-3 mb-6 sm:mb-8">
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
-              Students
-            </h1>
-            <p className="text-sm text-[var(--t-text-muted)]">
-              Cadet Roster ✦
-            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">My Students</h1>
+            <p className="text-sm text-[var(--t-text-muted)]">Cadet Roster ✦</p>
           </div>
           <div className="flex gap-2 flex-wrap">
             <div className={`${card} px-3 py-2 flex items-center gap-2`}>
-              <span className="text-sm text-[var(--t-text-muted)]">
-                {students.length} total
-              </span>
+              <span className="text-sm text-[var(--t-text-muted)]">{students.length} total</span>
             </div>
             {upcoming > 0 && (
               <div className="px-3 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium">
@@ -126,12 +184,11 @@ function TeacherStudentsContent() {
           </div>
         </div>
 
-        {/* Search */}
         <div className="mb-5">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, grade, or subject…"
+            placeholder="Search by name, grade, or rank…"
             className="w-full sm:w-80 px-4 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 text-[var(--t-text)] text-sm placeholder-purple-400/50 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
           />
         </div>
@@ -146,18 +203,14 @@ function TeacherStudentsContent() {
           <div className={`${card} p-10 sm:p-16 text-center`}>
             <p className="text-4xl mb-3">🛸</p>
             <p className="font-semibold text-[var(--t-text)]">
-              {search
-                ? "No cadets match your search"
-                : "No cadets enrolled yet"}
+              {search ? 'No cadets match your search' : 'No cadets enrolled yet'}
             </p>
             <p className="text-sm text-[var(--t-text-muted)] mt-1">
-              {search
-                ? "Try a different search term"
-                : "Students will appear here once they book your classes"}
+              {search ? 'Try a different search term' : 'Students will appear here once they book your classes'}
             </p>
             {!search && (
               <button
-                onClick={() => router.push("/calendar")}
+                onClick={() => router.push('/calendar')}
                 className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
               >
                 Add Availability →
@@ -166,184 +219,142 @@ function TeacherStudentsContent() {
           </div>
         ) : (
           <>
-            {/* ── Desktop table ── */}
+            {/* Desktop table */}
             <div className={`${card} overflow-hidden hidden sm:block`}>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
-                {[
-                  "Student",
-                  "Details",
-                  "Classes",
-                  "Last Class",
-                  "Next Class",
-                  "Rating",
-                  "",
-                ].map((h, i) => (
-                  <p
-                    key={i}
-                    className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]"
-                  >
-                    {h}
-                  </p>
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
+                {['Student', 'Rank & Grade', 'Sessions', 'Last Class', 'Rating', ''].map((h, i) => (
+                  <p key={i} className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">{h}</p>
                 ))}
               </div>
 
               <div className="divide-y dark:divide-purple-900/20 divide-purple-100">
                 {filtered.map((s) => (
                   <div
-                    key={s.studentId}
-                    className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-4 items-center dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
+                    key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`}
+                    className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-4 items-center dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
                   >
-                    {/* Student name + email */}
+                    {/* Name */}
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                        {s.studentName?.charAt(0)?.toUpperCase() ?? "?"}
-                      </div>
+                      {s.avatarUrl ? (
+                        <img src={s.avatarUrl} alt={s.studentName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                          {s.studentName?.charAt(0)?.toUpperCase() ?? '?'}
+                        </div>
+                      )}
                       <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--t-text)] truncate">
-                          {s.studentName}
-                        </p>
-                        <p className="text-xs text-[var(--t-text-muted)] truncate">
-                          {s.parentEmail ?? "N/A"}
-                        </p>
+                        <p className="text-sm font-medium text-[var(--t-text)] truncate">{s.studentName}</p>
+                        {s.isUserRef && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-900/30 text-teal-400">Self-auth</span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Details */}
+                    {/* Rank + grade */}
                     <div>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        {s.grade ?? "No grade"}
-                      </p>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        {s.age ? `Age ${s.age}` : "Age N/A"}
-                      </p>
+                      {s.spaceRank && (
+                        <p className="text-xs font-medium text-[var(--t-text)]">
+                          {RANK_ICONS[s.spaceRank] ?? '🌟'} {s.spaceRank.replace(/_/g, ' ')}
+                        </p>
+                      )}
+                      <p className="text-xs text-[var(--t-text-muted)]">{s.studentGrade ?? 'No grade'}</p>
                     </div>
 
-                    {/* Classes */}
+                    {/* Sessions */}
                     <div>
-                      <p className="text-sm font-semibold text-[var(--t-text)]">
-                        {s.totalClasses}
-                      </p>
-                      <span
-                        className={`text-xs px-1.5 py-0.5 rounded-full ${
-                          s.completedClasses > 0
-                            ? "dark:bg-green-900/30 bg-green-100 dark:text-green-400 text-green-700"
-                            : "dark:bg-gray-800/40 bg-gray-100 dark:text-gray-500 text-gray-500"
-                        }`}
-                      >
+                      <p className="text-sm font-semibold text-[var(--t-text)]">{s.totalClasses}</p>
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${s.completedClasses > 0 ? 'dark:bg-green-900/30 bg-green-100 dark:text-green-400 text-green-700' : 'dark:bg-gray-800/40 bg-gray-100 dark:text-gray-500 text-gray-500'}`}>
                         {s.completedClasses} done
                       </span>
                     </div>
 
                     {/* Last class */}
                     <p className="text-xs text-[var(--t-text-muted)]">
-                      {s.lastClassDate
-                        ? new Date(s.lastClassDate).toLocaleDateString(
-                            "en-US",
-                            {
-                              month: "short",
-                              day: "numeric",
-                            },
-                          )
-                        : "None yet"}
-                    </p>
-
-                    {/* Next class */}
-                    <p className="text-xs text-[var(--t-text-muted)]">
-                      {s.nextClassDate
-                        ? new Date(s.nextClassDate).toLocaleDateString(
-                            "en-US",
-                            {
-                              month: "short",
-                              day: "numeric",
-                            },
-                          )
-                        : "None"}
+                      {s.lastClassDate ? new Date(s.lastClassDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'None yet'}
                     </p>
 
                     {/* Rating */}
                     <p className="text-xs dark:text-yellow-400 text-yellow-600">
-                      {s.latestReview
-                        ? `⭐ ${s.latestReview.rating.toFixed(1)}`
-                        : "No rating"}
+                      {s.latestReview ? `⭐ ${s.latestReview.rating.toFixed(1)}` : 'No rating'}
                     </p>
 
-                    {/* View Dashboard */}
-                    <button
-                      onClick={() =>
-                        router.push(`/student-dashboard/${s.studentId}`)
-                      }
-                      className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium
-                        dark:bg-purple-900/30 bg-purple-100
-                        text-[var(--t-nav-active-text)]
-                        dark:hover:bg-purple-800/50 hover:bg-purple-200
-                        dark:border dark:border-purple-700/30 border border-purple-200
-                        transition-colors whitespace-nowrap"
-                    >
-                      View Dashboard →
-                    </button>
+                    {/* Actions */}
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => setNoteTarget(s)}
+                        className="px-2 py-1.5 rounded-lg text-xs font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors whitespace-nowrap"
+                        title="Add note"
+                      >
+                        📝
+                      </button>
+                      {s.isUserRef ? (
+                        <button
+                          onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-colors whitespace-nowrap"
+                        >
+                          View Progress →
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-colors whitespace-nowrap"
+                        >
+                          View Dashboard →
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* ── Mobile cards ── */}
+            {/* Mobile cards */}
             <div className="sm:hidden space-y-3">
               {filtered.map((s) => (
-                <div key={s.studentId} className={`${card} p-4`}>
+                <div key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`} className={`${card} p-4`}>
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white font-bold">
-                      {s.studentName?.charAt(0)?.toUpperCase() ?? "?"}
-                    </div>
+                    {s.avatarUrl ? (
+                      <img src={s.avatarUrl} alt={s.studentName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white font-bold">
+                        {s.studentName?.charAt(0)?.toUpperCase() ?? '?'}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-[var(--t-text)]">
-                        {s.studentName}
-                      </p>
+                      <p className="font-semibold text-[var(--t-text)]">{s.studentName}</p>
                       <p className="text-xs text-[var(--t-text-muted)]">
-                        {s.parentEmail ?? ""}
-                        {s.age ? ` · Age ${s.age}` : ""}
+                        {s.spaceRank ? `${RANK_ICONS[s.spaceRank] ?? '🌟'} ${s.spaceRank.replace(/_/g, ' ')}` : s.studentGrade ?? ''}
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center mb-3">
-                    <div className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
-                      <p className="font-bold text-[var(--t-text)]">
-                        {s.totalClasses}
-                      </p>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        Total
-                      </p>
-                    </div>
-                    <div className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
-                      <p className="font-bold text-[var(--t-text)]">
-                        {s.completedClasses}
-                      </p>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        Done
-                      </p>
-                    </div>
-                    <div className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
-                      <p className="font-bold text-[var(--t-text)]">
-                        {s.pendingClasses}
-                      </p>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        Upcoming
-                      </p>
-                    </div>
+                    {[
+                      { label: 'Total', value: s.totalClasses },
+                      { label: 'Done', value: s.completedClasses },
+                      { label: 'Upcoming', value: s.pendingClasses },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="dark:bg-purple-900/20 bg-purple-50 rounded-lg p-2">
+                        <p className="font-bold text-[var(--t-text)]">{value}</p>
+                        <p className="text-xs text-[var(--t-text-muted)]">{label}</p>
+                      </div>
+                    ))}
                   </div>
 
-                  <button
-                    onClick={() =>
-                      router.push(`/student-dashboard/${s.studentId}`)
-                    }
-                    className="w-full py-2 rounded-xl text-sm font-medium
-                      dark:bg-purple-900/30 bg-purple-100
-                      text-[var(--t-nav-active-text)]
-                      dark:hover:bg-purple-800/50 hover:bg-purple-200
-                      transition-colors"
-                  >
-                    View Dashboard →
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNoteTarget(s)}
+                      className="flex-1 py-2 rounded-xl text-sm font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors"
+                    >
+                      📝 Note
+                    </button>
+                    <button
+                      onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
+                      className="flex-1 py-2 rounded-xl text-sm font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 transition-colors"
+                    >
+                      View →
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -351,16 +362,18 @@ function TeacherStudentsContent() {
         )}
       </div>
 
-      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
-          Fixed bottom-right. variant="teacher" → purple theme, Pilot persona.
-          Lumi can help teachers understand a student's engagement, suggest
-          teaching strategies, or navigate the platform.
-      ─────────────────────────────────────────────────────────────────────── */}
+      {noteTarget && (
+        <AddNoteModal
+          student={noteTarget}
+          onClose={() => setNoteTarget(null)}
+          onSaved={() => {}}
+        />
+      )}
+
       <LumiChat
         variant="teacher"
         context={`Teacher students roster — ${students.length} total cadets, ${upcoming} with upcoming classes`}
       />
-      {/* ──────────────────────────────────────────────────────────────────── */}
     </TeacherLayout>
   );
 }

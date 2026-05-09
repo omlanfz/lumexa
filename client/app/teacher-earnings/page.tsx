@@ -3,12 +3,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/axios";
 import TeacherLayout from "../../components/TeacherLayout";
-import { useTheme } from "../../components/ThemeProvider";
-// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
 import LumiChat from "../../components/LumiChat";
-// ──────────────────────────────────────────────────────────────────────────────
 
 interface EarningsItem {
   bookingId: string;
@@ -29,17 +26,80 @@ interface EarningsSummary {
   items: EarningsItem[];
 }
 
+interface MonthBucket {
+  key: string;
+  label: string;
+  earningsCents: number;
+  sessions: number;
+}
+
+interface MonthlyEarnings {
+  months: MonthBucket[];
+  trend: number | null;
+}
+
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
   rankTier: number;
   strikes: number;
 }
 
+function BarChart({ months }: { months: MonthBucket[] }) {
+  if (months.length === 0) return null;
+  const maxCents = Math.max(...months.map((m) => m.earningsCents), 1);
+
+  return (
+    <div className="flex items-end gap-2 sm:gap-3 h-40 w-full">
+      {months.map((m) => {
+        const pct = (m.earningsCents / maxCents) * 100;
+        const dollars = (m.earningsCents / 100).toFixed(0);
+        return (
+          <div
+            key={m.key}
+            className="flex-1 flex flex-col items-center gap-1 group"
+          >
+            <span className="text-xs text-[var(--t-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity">
+              ${dollars}
+            </span>
+            <div className="w-full relative flex flex-col justify-end" style={{ height: "120px" }}>
+              <div
+                className="w-full rounded-t-lg bg-gradient-to-t from-purple-700 to-purple-400 transition-all duration-500"
+                style={{ height: `${Math.max(pct, 4)}%` }}
+                title={`${m.label}: $${dollars} (${m.sessions} session${m.sessions !== 1 ? "s" : ""})`}
+              />
+            </div>
+            <span className="text-[10px] sm:text-xs text-[var(--t-text-muted)] truncate w-full text-center">
+              {m.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrendBadge({ trend }: { trend: number | null }) {
+  if (trend === null) return null;
+  const up = trend >= 0;
+  const label = `${up ? "+" : ""}${trend.toFixed(0)}% vs last month`;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+        up
+          ? "bg-green-500/15 text-green-400"
+          : "bg-red-500/15 text-red-400"
+      }`}
+    >
+      {up ? "▲" : "▼"} {label}
+    </span>
+  );
+}
+
 function TeacherEarningsContent() {
   const router = useRouter();
-  const { isDark } = useTheme();
 
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
+  const [monthly, setMonthly] = useState<MonthlyEarnings | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,16 +113,14 @@ function TeacherEarningsContent() {
 
     (async () => {
       try {
-        const [earningsRes, profileRes] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/earnings`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [earningsRes, profileRes, monthlyRes] = await Promise.all([
+          api.get("/teachers/me/earnings"),
+          api.get("/teachers/me/profile"),
+          api.get("/teachers/me/earnings/monthly"),
         ]);
         setSummary(earningsRes.data);
         setProfile(profileRes.data);
+        setMonthly(monthlyRes.data);
       } catch (e: any) {
         const m = e.response?.data?.message;
         setError(
@@ -87,9 +145,24 @@ function TeacherEarningsContent() {
   const avgClass = (summary?.avgPerClassCents ?? 0) / 100;
   const completed = summary?.completedClasses ?? 0;
   const items = summary?.items ?? [];
+  const months = monthly?.months ?? [];
+  const trend = monthly?.trend ?? null;
 
   const weeklyAvg =
     completed > 0 ? earned / Math.max(1, Math.ceil(completed / 4)) : 0;
+
+  // Next payout: next Monday (Stripe typically pays weekly on Mondays)
+  const nextPayoutDate = (() => {
+    const d = new Date();
+    const day = d.getDay();
+    const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
+    d.setDate(d.getDate() + daysUntilMonday);
+    return d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  })();
 
   return (
     <TeacherLayout
@@ -169,6 +242,73 @@ function TeacherEarningsContent() {
           ))}
         </div>
 
+        {/* ── Monthly bar chart + Next payout ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          {/* Bar chart */}
+          <div className={`${card} p-5 lg:col-span-2`}>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <p className="font-semibold text-[var(--t-text)]">
+                  Monthly Earnings
+                </p>
+                <p className="text-xs text-[var(--t-text-muted)]">
+                  Last 6 months
+                </p>
+              </div>
+              <TrendBadge trend={trend} />
+            </div>
+            {months.length > 0 ? (
+              <BarChart months={months} />
+            ) : (
+              <div className="h-40 flex items-center justify-center text-[var(--t-text-muted)] text-sm">
+                No data yet — complete your first class to see a chart.
+              </div>
+            )}
+          </div>
+
+          {/* Next payout card */}
+          <div className={`${card} p-5 flex flex-col justify-between`}>
+            <div>
+              <p className="font-semibold text-[var(--t-text)] mb-1">
+                Next Payout
+              </p>
+              <p className="text-xs text-[var(--t-text-muted)] mb-4">
+                Via Stripe Connect
+              </p>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-xl flex-shrink-0">
+                  🗓️
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--t-text)]">
+                    {nextPayoutDate}
+                  </p>
+                  <p className="text-xs text-[var(--t-text-muted)]">
+                    Weekly rolling payout
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center text-xl flex-shrink-0">
+                  💳
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-green-400">
+                    ${(weeklyAvg).toFixed(2)} est.
+                  </p>
+                  <p className="text-xs text-[var(--t-text-muted)]">
+                    Based on last 4 classes
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--t-text-faint)] mt-4 border-t border-[var(--t-nav-border)] pt-3">
+              Exact amount confirmed after class capture. Stripe Connect
+              required for direct payouts.
+            </p>
+          </div>
+        </div>
+
         {/* ── Strike impact ── */}
         {(profile?.strikes ?? 0) > 0 && (
           <div className="mb-6 p-4 rounded-2xl bg-amber-900/20 border border-amber-700/30 flex items-start gap-3">
@@ -200,7 +340,8 @@ function TeacherEarningsContent() {
                 Class History
               </p>
               <p className="text-xs text-[var(--t-text-muted)]">
-                Showing {items.length} of {items.length} classes
+                Showing {items.length} completed class
+                {items.length !== 1 ? "es" : ""}
               </p>
             </div>
           </div>
@@ -272,17 +413,10 @@ function TeacherEarningsContent() {
         </div>
       </div>
 
-      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
-          Fixed bottom-right. variant="teacher" → purple theme, Pilot persona.
-          Lumi can help teachers understand their earnings breakdown, what the
-          75/25 split means, how strikes affect payouts, or how to grow their
-          class count.
-      ─────────────────────────────────────────────────────────────────────── */}
       <LumiChat
         variant="teacher"
         context={`Teacher earnings page — $${earned.toFixed(2)} total earned across ${completed} completed classes`}
       />
-      {/* ──────────────────────────────────────────────────────────────────── */}
     </TeacherLayout>
   );
 }

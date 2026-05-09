@@ -289,7 +289,7 @@ export class TeachersService {
     };
   }
 
-  // ─── Get My Students ──────────────────────────────────────────────────────
+  // ─── Get My Students (unified: legacy Student + STUDENT-role users) ─────────
 
   async getMyStudents(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
@@ -303,9 +303,11 @@ export class TeachersService {
         paymentStatus: { in: ['PENDING', 'CAPTURED'] },
       },
       include: {
-        student: {
-          include: {
-            parent: { select: { email: true } },
+        student: { include: { parent: { select: { email: true } } } },
+        studentUser: {
+          select: {
+            id: true, fullName: true, avatarUrl: true, age: true,
+            grade: true, spaceRank: true, totalSessions: true,
           },
         },
         shift: { select: { start: true, end: true } },
@@ -314,49 +316,66 @@ export class TeachersService {
       orderBy: { shift: { start: 'asc' } },
     });
 
-    const studentMap = new Map<
-      string,
-      {
-        studentId: string;
-        studentName: string;
-        studentAge: number;
-        studentGrade: string | null;
-        studentSubject: string | null;
-        parentEmail: string;
-        totalClasses: number;
-        completedClasses: number;
-        pendingClasses: number;
-        lastClassDate: Date | null;
-        nextClassDate: Date | null;
-        reviews: { rating: number; comment: string | null }[];
-      }
-    >();
+    type Entry = {
+      studentId: string;
+      isUserRef: boolean;
+      studentName: string;
+      studentAge: number | null;
+      studentGrade: string | null;
+      avatarUrl: string | null;
+      spaceRank: string | null;
+      totalSessions: number;
+      totalClasses: number;
+      completedClasses: number;
+      pendingClasses: number;
+      lastClassDate: Date | null;
+      nextClassDate: Date | null;
+      reviews: { rating: number; comment: string | null }[];
+    };
 
+    const studentMap = new Map<string, Entry>();
     const now = new Date();
 
     for (const booking of bookings) {
-      const sid = booking.student.id;
+      const isUserRef = !!booking.studentUserId;
+      const key = isUserRef
+        ? `user:${booking.studentUserId}`
+        : `student:${booking.studentId}`;
 
-      if (!studentMap.has(sid)) {
-        studentMap.set(sid, {
-          studentId: sid,
-          studentName: booking.student.name,
-          studentAge: booking.student.age,
-          studentGrade: (booking.student as any).grade ?? null,
-          studentSubject: (booking.student as any).subject ?? null,
-          parentEmail: booking.student.parent.email,
-          totalClasses: 0,
-          completedClasses: 0,
-          pendingClasses: 0,
-          lastClassDate: null,
-          nextClassDate: null,
-          reviews: [],
-        });
+      if (!studentMap.has(key)) {
+        if (isUserRef && booking.studentUser) {
+          const u = booking.studentUser;
+          studentMap.set(key, {
+            studentId: u.id,
+            isUserRef: true,
+            studentName: u.fullName,
+            studentAge: u.age,
+            studentGrade: u.grade,
+            avatarUrl: u.avatarUrl ?? null,
+            spaceRank: u.spaceRank,
+            totalSessions: u.totalSessions,
+            totalClasses: 0, completedClasses: 0, pendingClasses: 0,
+            lastClassDate: null, nextClassDate: null, reviews: [],
+          });
+        } else if (!isUserRef && booking.student) {
+          const s = booking.student;
+          studentMap.set(key, {
+            studentId: s.id,
+            isUserRef: false,
+            studentName: s.name,
+            studentAge: s.age,
+            studentGrade: (s as any).grade ?? null,
+            avatarUrl: (s as any).avatarUrl ?? null,
+            spaceRank: null,
+            totalSessions: 0,
+            totalClasses: 0, completedClasses: 0, pendingClasses: 0,
+            lastClassDate: null, nextClassDate: null, reviews: [],
+          });
+        } else continue;
       }
 
-      const entry = studentMap.get(sid)!;
+      const entry = studentMap.get(key)!;
       entry.totalClasses++;
-
       const classStart = new Date(booking.shift.start);
 
       if (booking.paymentStatus === 'CAPTURED') {
@@ -371,38 +390,308 @@ export class TeachersService {
         }
       }
 
-      if (booking.review) {
-        entry.reviews.push(booking.review);
-      }
+      if (booking.review) entry.reviews.push(booking.review);
     }
 
     return Array.from(studentMap.values())
       .map((s) => ({
         studentId: s.studentId,
+        isUserRef: s.isUserRef,
         studentName: s.studentName,
         studentAge: s.studentAge,
         studentGrade: s.studentGrade,
-        studentSubject: s.studentSubject,
-        parentEmail: s.parentEmail,
+        avatarUrl: s.avatarUrl,
+        spaceRank: s.spaceRank,
+        totalSessions: s.totalSessions,
         totalClasses: s.totalClasses,
         completedClasses: s.completedClasses,
         pendingClasses: s.pendingClasses,
         lastClassDate: s.lastClassDate,
         nextClassDate: s.nextClassDate,
-        latestReview:
-          s.reviews.length > 0 ? s.reviews[s.reviews.length - 1] : null,
+        latestReview: s.reviews.length > 0 ? s.reviews[s.reviews.length - 1] : null,
       }))
       .sort((a, b) => {
         if (a.nextClassDate && b.nextClassDate) {
-          return (
-            new Date(a.nextClassDate).getTime() -
-            new Date(b.nextClassDate).getTime()
-          );
+          return new Date(a.nextClassDate).getTime() - new Date(b.nextClassDate).getTime();
         }
         if (a.nextClassDate) return -1;
         if (b.nextClassDate) return 1;
         return 0;
       });
+  }
+
+  // ─── Teacher Student Notes ─────────────────────────────────────────────────
+
+  async addStudentNote(
+    teacherUserId: string,
+    studentId: string,
+    isUserRef: boolean,
+    note: string,
+  ) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { userId: teacherUserId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher profile not found.');
+
+    return this.prisma.teacherStudentNote.create({
+      data: { teacherId: teacher.id, studentId, isUserRef, note },
+      select: { id: true, note: true, createdAt: true },
+    });
+  }
+
+  async getStudentNotes(
+    teacherUserId: string,
+    studentId: string,
+    isUserRef: boolean,
+  ) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { userId: teacherUserId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher profile not found.');
+
+    return this.prisma.teacherStudentNote.findMany({
+      where: { teacherId: teacher.id, studentId, isUserRef },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, note: true, createdAt: true },
+    });
+  }
+
+  // ─── Teacher Insights ──────────────────────────────────────────────────────
+
+  async getTeacherInsights(userId: string) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { userId },
+      select: { id: true, reviewCount: true },
+    });
+    if (!teacher) throw new NotFoundException('Teacher profile not found.');
+
+    if (teacher.reviewCount < 5) {
+      return {
+        insufficient: true,
+        reviewCount: teacher.reviewCount,
+        message: `Insights unlock after 5 reviews. You have ${teacher.reviewCount} so far.`,
+      };
+    }
+
+    const now = new Date();
+    const eightWeeksAgo = new Date(now.getTime() - 56 * 24 * 60 * 60 * 1000);
+
+    const [allReviews, allBookings] = await Promise.all([
+      this.prisma.review.findMany({
+        where: { teacherId: teacher.id },
+        select: { rating: true, comment: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.booking.findMany({
+        where: { shift: { teacherId: teacher.id } },
+        select: { paymentStatus: true, shift: { select: { start: true, end: true } } },
+      }),
+    ]);
+
+    // Rating trend — group by ISO week, last 8 weeks
+    const weeklyRatings = new Map<string, number[]>();
+    for (const r of allReviews) {
+      if (new Date(r.createdAt) < eightWeeksAgo) continue;
+      const d = new Date(r.createdAt);
+      const weekStart = new Date(d.setDate(d.getDate() - d.getDay()));
+      const key = weekStart.toISOString().slice(0, 10);
+      if (!weeklyRatings.has(key)) weeklyRatings.set(key, []);
+      weeklyRatings.get(key)!.push(r.rating);
+    }
+    const ratingTrend = Array.from(weeklyRatings.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([week, ratings]) => ({
+        week,
+        avg: Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10,
+        count: ratings.length,
+      }));
+
+    // Word frequency from comments
+    const stopWords = new Set(['the', 'a', 'an', 'is', 'was', 'very', 'and', 'or', 'to', 'of', 'in', 'my', 'he', 'she', 'we', 'her', 'his', 'with', 'it', 'that', 'are', 'for', 'this', 'but', 'at', 'be', 'has', 'had', 'by', 'on']);
+    const wordFreq = new Map<string, number>();
+    for (const r of allReviews) {
+      if (!r.comment) continue;
+      const words = r.comment.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/);
+      for (const w of words) {
+        if (w.length < 3 || stopWords.has(w)) continue;
+        wordFreq.set(w, (wordFreq.get(w) ?? 0) + 1);
+      }
+    }
+    const topWords = Array.from(wordFreq.entries())
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 15)
+      .map(([word, count]) => ({ word, count }));
+
+    // Top 3 positive quotes
+    const topQuotes = allReviews
+      .filter((r) => r.rating >= 4 && r.comment && r.comment.length > 20)
+      .slice(0, 3)
+      .map((r) => ({ rating: r.rating, comment: r.comment!, date: r.createdAt }));
+
+    // Session completion rate
+    const total = allBookings.length;
+    const captured = allBookings.filter((b) => b.paymentStatus === 'CAPTURED').length;
+    const completionRate = total > 0 ? Math.round((captured / total) * 100) : 0;
+
+    // Busiest day of week
+    const dayCount = [0, 0, 0, 0, 0, 0, 0];
+    for (const b of allBookings) {
+      if (b.paymentStatus === 'CAPTURED') {
+        dayCount[new Date(b.shift.start).getDay()]++;
+      }
+    }
+    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const busiestDayIdx = dayCount.indexOf(Math.max(...dayCount));
+
+    return {
+      insufficient: false,
+      ratingTrend,
+      topWords,
+      topQuotes,
+      completionRate,
+      busiestDay: DAYS[busiestDayIdx],
+      busiestDayCount: dayCount[busiestDayIdx],
+      totalReviews: allReviews.length,
+      totalSessions: captured,
+    };
+  }
+
+  // ─── Monthly earnings (last 6 months bar chart) ────────────────────────────
+
+  async getMonthlyEarnings(userId: string) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { userId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher profile not found.');
+
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+    sixMonthsAgo.setDate(1);
+    sixMonthsAgo.setHours(0, 0, 0, 0);
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        shift: { teacherId: teacher.id },
+        paymentStatus: 'CAPTURED',
+        createdAt: { gte: sixMonthsAgo },
+      },
+      select: { amountCents: true, shift: { select: { start: true } } },
+    });
+
+    const monthMap = new Map<string, { grossCents: number; sessions: number }>();
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      monthMap.set(key, { grossCents: 0, sessions: 0 });
+    }
+
+    for (const b of bookings) {
+      const d = new Date(b.shift.start);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const entry = monthMap.get(key);
+      if (entry) {
+        entry.grossCents += b.amountCents ?? 0;
+        entry.sessions++;
+      }
+    }
+
+    const months = Array.from(monthMap.entries()).map(([key, val]) => {
+      const [year, month] = key.split('-').map(Number);
+      const label = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short', year: '2-digit' });
+      return {
+        key,
+        label,
+        earningsCents: Math.round(val.grossCents * 0.75),
+        sessions: val.sessions,
+      };
+    });
+
+    const lastTwo = months.slice(-2);
+    const trend =
+      lastTwo.length === 2 && lastTwo[0].earningsCents > 0
+        ? Math.round(((lastTwo[1].earningsCents - lastTwo[0].earningsCents) / lastTwo[0].earningsCents) * 100)
+        : null;
+
+    return { months, trend };
+  }
+
+  // ─── Get Teacher Action Queue ──────────────────────────────────────────────
+
+  async getActionQueue(userId: string) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { userId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher profile not found.');
+
+    const now = new Date();
+
+    const [rescheduleRequests, cancellation] = await Promise.all([
+      this.prisma.rescheduleRequest.findMany({
+        where: { booking: { shift: { teacherId: teacher.id } }, status: 'PENDING' },
+        include: {
+          booking: {
+            include: {
+              student: { select: { name: true } },
+              studentUser: { select: { fullName: true } },
+              shift: { select: { start: true, end: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.teacherCancellation.findFirst({
+        where: { teacherId: teacher.id, month: now.getMonth() + 1, year: now.getFullYear() },
+      }),
+    ]);
+
+    return {
+      rescheduleRequests: rescheduleRequests.map((r) => ({
+        id: r.id,
+        bookingId: r.bookingId,
+        studentName: r.booking.studentUser?.fullName ?? r.booking.student?.name ?? 'Student',
+        currentStart: r.booking.shift.start,
+        proposedStart: r.newStart,
+        proposedEnd: r.newEnd,
+        reason: r.reason,
+        createdAt: r.createdAt,
+      })),
+      monthlyCancel: {
+        count: cancellation?.count ?? 0,
+        month: now.getMonth() + 1,
+        year: now.getFullYear(),
+      },
+    };
+  }
+
+  async acceptReschedule(teacherUserId: string, requestId: string) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { userId: teacherUserId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher profile not found.');
+
+    const request = await this.prisma.rescheduleRequest.findUnique({
+      where: { id: requestId },
+      include: { booking: { include: { shift: true } } },
+    });
+    if (!request) throw new NotFoundException('Request not found.');
+    if (request.booking.shift.teacherId !== teacher.id) {
+      throw new ForbiddenException('Not your booking.');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.shift.update({
+        where: { id: request.booking.shiftId },
+        data: { start: request.newStart, end: request.newEnd },
+      }),
+      this.prisma.rescheduleRequest.update({
+        where: { id: requestId },
+        data: { status: 'ACCEPTED' },
+      }),
+    ]);
+
+    return { success: true };
   }
 
   // ─── Get Public Profile ───────────────────────────────────────────────────

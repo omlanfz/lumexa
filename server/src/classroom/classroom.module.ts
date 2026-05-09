@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ClassroomService } from './classroom.service';
 import { ClassroomController } from './classroom.controller';
-
-// StripeService is @Global() — available automatically from PaymentsModule
+import { StudentsModule } from '../students/students.module';
 
 @Module({
+  imports: [StudentsModule],
   controllers: [ClassroomController],
   providers: [ClassroomService],
 })

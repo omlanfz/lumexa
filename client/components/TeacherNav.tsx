@@ -45,6 +45,12 @@ const NAV_ITEMS = [
     sub: "Reward Ledger",
   },
   {
+    href: "/teacher-dashboard/insights",
+    icon: "📊",
+    label: "Insights",
+    sub: "Mission Analytics",
+  },
+  {
     href: "/teacher-conduct",
     icon: "📋",
     label: "Guidelines",

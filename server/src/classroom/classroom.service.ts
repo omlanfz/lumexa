@@ -1,12 +1,33 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { StudentsService } from '../students/students.service';
+import { SpaceRank } from '@prisma/client';
 import { AccessToken } from 'livekit-server-sdk';
+
+const RANK_THRESHOLDS: { rank: SpaceRank; min: number }[] = [
+  { rank: 'STARCHILD', min: 0 },
+  { rank: 'EXPLORER', min: 5 },
+  { rank: 'COSMONAUT', min: 15 },
+  { rank: 'NAVIGATOR', min: 30 },
+  { rank: 'CAPTAIN', min: 60 },
+  { rank: 'GALAXY_COMMANDER', min: 100 },
+];
 
 @Injectable()
 export class ClassroomService {
   private readonly logger = new Logger(ClassroomService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private studentsService: StudentsService,
+  ) {}
+
+  private computeSpaceRank(sessions: number): SpaceRank {
+    for (let i = RANK_THRESHOLDS.length - 1; i >= 0; i--) {
+      if (sessions >= RANK_THRESHOLDS[i].min) return RANK_THRESHOLDS[i].rank;
+    }
+    return 'STARCHILD';
+  }
 
   async joinLab(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
@@ -209,6 +230,34 @@ export class ClassroomService {
             data: { paymentStatus: 'CAPTURED' },
           });
           this.logger.log(`Payment captured for booking ${bookingId}`);
+
+          // Award gems and badges for STUDENT-role users
+          if (booking.studentUserId) {
+            const updatedUser = await this.prisma.user.update({
+              where: { id: booking.studentUserId },
+              data: { totalSessions: { increment: 1 } },
+              select: { totalSessions: true, spaceRank: true },
+            });
+            const isFirst = updatedUser.totalSessions === 1;
+            const newRank = this.computeSpaceRank(updatedUser.totalSessions);
+            const rankChanged = newRank !== updatedUser.spaceRank;
+            if (rankChanged) {
+              await this.prisma.user.update({
+                where: { id: booking.studentUserId },
+                data: { spaceRank: newRank },
+              });
+              await this.studentsService.awardGems(
+                booking.studentUserId, 15, 'RANK_UP', `Ranked up to ${newRank}`,
+              );
+            }
+            const gemAmount = isFirst ? 15 : 5;
+            const gemType = isFirst ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
+            const gemDesc = isFirst ? 'First session bonus' : 'Session completion reward';
+            await Promise.all([
+              this.studentsService.awardGems(booking.studentUserId, gemAmount, gemType, gemDesc),
+              this.studentsService.checkAndAwardBadges(booking.studentUserId),
+            ]);
+          }
         }
       }
     } catch (err) {

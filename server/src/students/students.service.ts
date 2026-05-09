@@ -514,72 +514,117 @@ export class StudentsService {
       subjects: user.subjects,
       subjectBreakdown,
       rankHistory,
-      badges: this.computeBadges(
-        user.totalSessions,
-        user.streakWeeks,
-        completedBookings.length,
-      ),
+      badges: await this.getDbBadges(userId),
+      recentGemTransactions: await this.getRecentGemTransactions(userId),
       memberSince: user.createdAt,
       gemBalance: user.gemBalance,
       hasBillingContact: !!user.billingContactEmail,
     };
   }
 
-  private computeBadges(
-    totalSessions: number,
-    streakWeeks: number,
-    completedCount: number,
-  ) {
-    return [
-      {
-        id: 'first_session',
-        label: 'First Launch',
-        icon: '🚀',
-        earned: completedCount >= 1,
-      },
-      {
-        id: 'sessions_5',
-        label: 'Explorer',
-        icon: '🔭',
-        earned: totalSessions >= 5,
-      },
-      {
-        id: 'sessions_10',
-        label: 'Space Cadet',
-        icon: '🛸',
-        earned: totalSessions >= 10,
-      },
-      {
-        id: 'sessions_25',
-        label: 'Cosmonaut',
-        icon: '🌌',
-        earned: totalSessions >= 25,
-      },
-      {
-        id: 'sessions_50',
-        label: 'Star Captain',
-        icon: '⭐',
-        earned: totalSessions >= 50,
-      },
-      {
-        id: 'streak_3',
-        label: '3-Week Streak',
-        icon: '🔥',
-        earned: streakWeeks >= 3,
-      },
-      {
-        id: 'streak_8',
-        label: '8-Week Streak',
-        icon: '🌟',
-        earned: streakWeeks >= 8,
-      },
-      {
-        id: 'streak_12',
-        label: 'Galaxy Streak',
-        icon: '💫',
-        earned: streakWeeks >= 12,
-      },
+  // ─── Badge definitions ────────────────────────────────────────────────────
+
+  static readonly BADGE_DEFS = [
+    { type: 'FIRST_MISSION', label: 'First Launch', icon: '🚀' },
+    { type: 'STREAK_4', label: '4-Week Streak', icon: '🔥' },
+    { type: 'STREAK_8', label: '8-Week Streak', icon: '🌟' },
+    { type: 'STREAK_12', label: 'Galaxy Streak', icon: '💫' },
+    { type: 'RANK_EXPLORER', label: 'Explorer', icon: '🔭' },
+    { type: 'RANK_COSMONAUT', label: 'Cosmonaut', icon: '🛸' },
+    { type: 'RANK_NAVIGATOR', label: 'Navigator', icon: '🧭' },
+    { type: 'RANK_CAPTAIN', label: 'Captain', icon: '🎖️' },
+    { type: 'RANK_COMMANDER', label: 'Galaxy Commander', icon: '🌌' },
+    { type: 'COMEBACK_CADET', label: 'Comeback Cadet', icon: '🌠' },
+  ] as const;
+
+  private async getDbBadges(userId: string) {
+    const earned = await this.prisma.studentBadge.findMany({
+      where: { userId },
+      select: { type: true, earnedAt: true },
+    });
+    const earnedMap = new Map(earned.map((b) => [b.type, b.earnedAt]));
+    return StudentsService.BADGE_DEFS.map((def) => ({
+      id: def.type,
+      label: def.label,
+      icon: def.icon,
+      earned: earnedMap.has(def.type),
+      earnedAt: earnedMap.get(def.type) ?? null,
+    }));
+  }
+
+  private async getRecentGemTransactions(userId: string, limit = 10) {
+    return this.prisma.gemTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, amount: true, type: true, description: true, createdAt: true },
+    });
+  }
+
+  // ─── Award gems + log transaction ─────────────────────────────────────────
+
+  async awardGems(
+    userId: string,
+    amount: number,
+    type: string,
+    description: string,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { gemBalance: { increment: amount } },
+      }),
+      this.prisma.gemTransaction.create({
+        data: { userId, amount, type, description },
+      }),
+    ]);
+  }
+
+  // ─── Check and award badges (run after session captured) ──────────────────
+
+  async checkAndAwardBadges(userId: string): Promise<string[]> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { totalSessions: true, streakWeeks: true, spaceRank: true },
+    });
+    if (!user) return [];
+
+    const existingBadges = await this.prisma.studentBadge.findMany({
+      where: { userId },
+      select: { type: true },
+    });
+    const earned = new Set(existingBadges.map((b) => b.type));
+
+    const rankOrder = ['STARCHILD', 'EXPLORER', 'COSMONAUT', 'NAVIGATOR', 'CAPTAIN', 'GALAXY_COMMANDER'];
+    const rankIdx = rankOrder.indexOf(user.spaceRank);
+
+    const toAward: string[] = [];
+    const checks: { type: string; condition: boolean }[] = [
+      { type: 'FIRST_MISSION', condition: user.totalSessions >= 1 },
+      { type: 'STREAK_4', condition: user.streakWeeks >= 4 },
+      { type: 'STREAK_8', condition: user.streakWeeks >= 8 },
+      { type: 'STREAK_12', condition: user.streakWeeks >= 12 },
+      { type: 'RANK_EXPLORER', condition: rankIdx >= 1 },
+      { type: 'RANK_COSMONAUT', condition: rankIdx >= 2 },
+      { type: 'RANK_NAVIGATOR', condition: rankIdx >= 3 },
+      { type: 'RANK_CAPTAIN', condition: rankIdx >= 4 },
+      { type: 'RANK_COMMANDER', condition: rankIdx >= 5 },
     ];
+
+    for (const check of checks) {
+      if (check.condition && !earned.has(check.type)) {
+        toAward.push(check.type);
+      }
+    }
+
+    if (toAward.length > 0) {
+      await this.prisma.studentBadge.createMany({
+        data: toAward.map((type) => ({ userId, type })),
+        skipDuplicates: true,
+      });
+    }
+
+    return toAward;
   }
 
   // ─── Teacher list for teachers sub-page ──────────────────────────────────
@@ -649,73 +694,123 @@ export class StudentsService {
   async getMyRankings(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { totalSessions: true, spaceRank: true },
+      select: { totalSessions: true, spaceRank: true, subjects: true, createdAt: true },
     });
     if (!user) throw new NotFoundException('Student not found.');
 
-    const [higherCount, totalStudents, topStudents] = await Promise.all([
+    const now = new Date();
+    const cohortMonth = user.createdAt.getMonth() + 1;
+    const cohortYear = user.createdAt.getFullYear();
+    const cohortStart = new Date(cohortYear, cohortMonth - 1, 1);
+    const cohortEnd = new Date(cohortYear, cohortMonth, 1);
+
+    const [
+      globalHigher, globalTotal, topGlobal,
+      cohortHigher, cohortTotal, topCohort,
+      lastSnapshot,
+    ] = await Promise.all([
+      this.prisma.user.count({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE', totalSessions: { gt: user.totalSessions } },
+      }),
+      this.prisma.user.count({ where: { role: 'STUDENT', accountStatus: 'ACTIVE' } }),
+      this.prisma.user.findMany({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE', totalSessions: { gt: 0 } },
+        select: { id: true, fullName: true, avatarUrl: true, totalSessions: true, spaceRank: true },
+        orderBy: { totalSessions: 'desc' },
+        take: 20,
+      }),
       this.prisma.user.count({
         where: {
-          role: 'STUDENT',
-          accountStatus: 'ACTIVE',
+          role: 'STUDENT', accountStatus: 'ACTIVE',
+          createdAt: { gte: cohortStart, lt: cohortEnd },
           totalSessions: { gt: user.totalSessions },
         },
       }),
       this.prisma.user.count({
-        where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE', createdAt: { gte: cohortStart, lt: cohortEnd } },
       }),
       this.prisma.user.findMany({
         where: {
-          role: 'STUDENT',
-          accountStatus: 'ACTIVE',
+          role: 'STUDENT', accountStatus: 'ACTIVE',
+          createdAt: { gte: cohortStart, lt: cohortEnd },
           totalSessions: { gt: 0 },
         },
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true,
-          totalSessions: true,
-          spaceRank: true,
-        },
+        select: { id: true, fullName: true, avatarUrl: true, totalSessions: true, spaceRank: true },
         orderBy: { totalSessions: 'desc' },
         take: 20,
       }),
+      this.prisma.rankSnapshot.findFirst({
+        where: { userId, month: now.getMonth() === 0 ? 12 : now.getMonth(), year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear() },
+      }),
     ]);
 
-    // Ensure current user appears in the list even with 0 sessions
-    const currentInTop = topStudents.some((s) => s.id === userId);
-    if (!currentInTop) {
-      const currentUser = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          id: true,
-          fullName: true,
-          avatarUrl: true,
-          totalSessions: true,
-          spaceRank: true,
-        },
-      });
-      if (currentUser) topStudents.push(currentUser);
+    const globalRank = globalHigher + 1;
+    const cohortRank = cohortHigher + 1;
+
+    // Save snapshot for current month if not already saved
+    const snapMonth = now.getMonth() + 1;
+    const snapYear = now.getFullYear();
+    this.prisma.rankSnapshot.upsert({
+      where: { userId_month_year: { userId, month: snapMonth, year: snapYear } },
+      update: { globalRank, cohortRank },
+      create: { userId, globalRank, cohortRank, month: snapMonth, year: snapYear },
+    }).catch(() => {});
+
+    // Subject ranks
+    const subjectRanks: Record<string, { rank: number; total: number }> = {};
+    for (const subject of user.subjects) {
+      const [subHigher, subTotal] = await Promise.all([
+        this.prisma.user.count({
+          where: { role: 'STUDENT', accountStatus: 'ACTIVE', subjects: { has: subject }, totalSessions: { gt: user.totalSessions } },
+        }),
+        this.prisma.user.count({
+          where: { role: 'STUDENT', accountStatus: 'ACTIVE', subjects: { has: subject } },
+        }),
+      ]);
+      subjectRanks[subject] = { rank: subHigher + 1, total: subTotal };
     }
 
+    // Ensure current user in top lists
+    const ensureUser = (list: typeof topGlobal) => {
+      if (!list.some((s) => s.id === userId)) {
+        list.push({
+          id: userId,
+          fullName: '',
+          avatarUrl: null,
+          totalSessions: user.totalSessions,
+          spaceRank: user.spaceRank,
+        });
+      }
+      return list;
+    };
+    ensureUser(topGlobal);
+    ensureUser(topCohort);
+
+    const mapEntry = (s: (typeof topGlobal)[0], i: number) => ({
+      position: i + 1,
+      fullName: s.fullName,
+      avatarUrl: s.avatarUrl ?? null,
+      totalSessions: s.totalSessions,
+      spaceRank: s.spaceRank,
+      spaceRankIcon: rankMeta(s.spaceRank as SpaceRank).icon,
+      isCurrentUser: s.id === userId,
+    });
+
     const rankInfo = rankMeta(user.spaceRank);
+    const movedUp = lastSnapshot ? lastSnapshot.globalRank - globalRank : null;
 
     return {
-      globalRank: higherCount + 1,
-      totalStudents,
-      globalPercentile:
-        totalStudents > 1
-          ? Math.round((1 - higherCount / totalStudents) * 100)
-          : 100,
-      topStudents: topStudents.map((s, i) => ({
-        position: i + 1,
-        fullName: s.fullName,
-        avatarUrl: s.avatarUrl ?? null,
-        totalSessions: s.totalSessions,
-        spaceRank: s.spaceRank,
-        spaceRankIcon: (rankMeta(s.spaceRank as SpaceRank)).icon,
-        isCurrentUser: s.id === userId,
-      })),
+      globalRank,
+      totalStudents: globalTotal,
+      globalPercentile: globalTotal > 1 ? Math.round((1 - globalHigher / globalTotal) * 100) : 100,
+      topStudents: topGlobal.map(mapEntry),
+      cohortRank,
+      totalInCohort: cohortTotal,
+      cohortPercentile: cohortTotal > 1 ? Math.round((1 - cohortHigher / cohortTotal) * 100) : 100,
+      cohortMonth: user.createdAt.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      topCohort: topCohort.map(mapEntry),
+      subjectRanks,
+      movedUpThisMonth: movedUp,
       currentUserSessions: user.totalSessions,
       currentUserRank: user.spaceRank,
       currentUserRankIcon: rankInfo.icon,

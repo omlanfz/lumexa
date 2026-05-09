@@ -189,6 +189,94 @@ export class NotificationsService {
     ]);
   }
 
+  async sendStreakLostNotice(
+    studentEmail: string,
+    data: { studentName: string; streakWeeks: number },
+  ): Promise<void> {
+    const marketplaceUrl = `${process.env.FRONTEND_URL}/marketplace`;
+    await this.send(
+      studentEmail,
+      `🛸 Streak Lost — Come Back, ${data.studentName}!`,
+      `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d9488;">Comeback Cadet — Your Streak Reset</h2>
+        <p>Your <strong>${data.streakWeeks}-week streak</strong> has reset because you didn't have a session this week, and no freeze was available.</p>
+        <p>But the galaxy awaits! Every Cadet falls off orbit sometimes — the true pilots are the ones who climb back.</p>
+        <a href="${marketplaceUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 16px 0;">
+          Book a Session →
+        </a>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+          Earn streak freezes by booking regularly — they protect your streak on off weeks.
+        </p>
+      </div>
+      `,
+    );
+  }
+
+  async sendStreakFreezeUsedNotice(
+    studentEmail: string,
+    data: { studentName: string; streakWeeks: number; freezesRemaining: number },
+  ): Promise<void> {
+    await this.send(
+      studentEmail,
+      `❄️ Streak Freeze Used — Streak Saved!`,
+      `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #60a5fa;">❄️ Streak Freeze Activated</h2>
+        <p>You missed a session this week, but don't worry — a streak freeze was automatically used to protect your <strong>${data.streakWeeks}-week streak</strong>.</p>
+        <p>Freezes remaining: <strong>${data.freezesRemaining}</strong></p>
+        <p>Book a session next week to keep your streak going!</p>
+        <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
+          Streak freezes reset on the 1st of each month.
+        </p>
+      </div>
+      `,
+    );
+  }
+
+  async sendMonthlyDigest(
+    billingContactEmail: string,
+    data: {
+      studentName: string;
+      monthLabel: string;
+      sessionsThisMonth: number;
+      totalHoursThisMonth: number;
+      currentRank: string;
+      rankIcon: string;
+      streakWeeks: number;
+      nextSession: { start: Date; teacherName: string } | null;
+      marketplaceUrl: string;
+    },
+  ): Promise<void> {
+    const nextSessionText = data.nextSession
+      ? `<p><strong>📅 Next Session:</strong> ${new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(data.nextSession.start)} with ${data.nextSession.teacherName}</p>`
+      : `<p>No upcoming sessions booked. <a href="${data.marketplaceUrl}">Book one now →</a></p>`;
+
+    await this.send(
+      billingContactEmail,
+      `${data.studentName}'s Learning Report — ${data.monthLabel}`,
+      `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #0d9488;">${data.rankIcon} ${data.studentName}'s Monthly Report</h2>
+        <p style="color: #6b7280;">${data.monthLabel}</p>
+        <div style="background: #0f172a; color: #e2e8f0; padding: 20px; border-radius: 12px; margin: 20px 0;">
+          <p style="margin: 0 0 8px;"><strong>📚 Sessions this month:</strong> ${data.sessionsThisMonth}</p>
+          <p style="margin: 0 0 8px;"><strong>⏱️ Hours learned:</strong> ${data.totalHoursThisMonth}h</p>
+          <p style="margin: 0 0 8px;"><strong>🚀 Current rank:</strong> ${data.rankIcon} ${data.currentRank.replace(/_/g, ' ')}</p>
+          <p style="margin: 0;"><strong>🔥 Streak:</strong> ${data.streakWeeks} week${data.streakWeeks !== 1 ? 's' : ''}</p>
+        </div>
+        ${nextSessionText}
+        <a href="${data.marketplaceUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin-top: 16px;">
+          Book More Sessions →
+        </a>
+        <p style="color: #6b7280; font-size: 12px; margin-top: 24px;">
+          Lumexa · ${data.studentName}'s learning partner
+        </p>
+      </div>
+      `,
+    );
+  }
+
   async sendTeacherStrikeWarning(
     teacherEmail: string,
     strikes: number,

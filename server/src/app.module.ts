@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
@@ -24,6 +25,7 @@ import { LumiModule } from './lumi/lumi.module';
 import { TrialModule } from './trial/trial.module';
 import { GemsModule } from './gems/gems.module';
 import { CoursesModule } from './courses/courses.module';
+import { EngagementModule } from './engagement/engagement.module';
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { CoursesModule } from './courses/courses.module';
         limit: 20,
       },
     ]),
+    ScheduleModule.forRoot(),
 
     // ─── Static file serving (/static/* → /uploads/*) ──────────────────────
     ServeStaticModule.forRoot({
@@ -64,6 +67,7 @@ import { CoursesModule } from './courses/courses.module';
     CoursesModule,
     GemsModule,
     TrialModule,
+    EngagementModule,
   ],
   controllers: [AppController],
   providers: [

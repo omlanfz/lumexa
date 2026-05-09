@@ -35,11 +35,14 @@ model User {
   billingContactConsented Boolean       @default(false)
   billingContactConsentAt DateTime?
 
-  students        Student[]
-  teacherProfile  TeacherProfile?
-  gemWallet       GemWallet?
-  consentTokens   ConsentToken[]
-  studentBookings Booking[]      @relation("StudentBookings")
+  students         Student[]
+  teacherProfile   TeacherProfile?
+  gemWallet        GemWallet?
+  consentTokens    ConsentToken[]
+  studentBookings  Booking[]         @relation("StudentBookings")
+  badges           StudentBadge[]
+  gemTransactions  GemTransaction[]
+  rankSnapshots    RankSnapshot[]
 }
 
 model Student {
@@ -250,6 +253,56 @@ model TrialLead {
   createdAt   DateTime @default(now())
 
   @@index([status])
+}
+
+model TeacherStudentNote {
+  id        String   @id @default(uuid())
+  teacherId String
+  studentId String
+  isUserRef Boolean  @default(false)
+  note      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId, studentId])
+}
+
+model StudentBadge {
+  id       String   @id @default(uuid())
+  userId   String
+  type     String
+  earnedAt DateTime @default(now())
+  metadata Json?
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+model GemTransaction {
+  id          String   @id @default(uuid())
+  userId      String
+  amount      Int
+  type        String
+  description String
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+}
+
+model RankSnapshot {
+  id         String   @id @default(uuid())
+  userId     String
+  globalRank Int
+  cohortRank Int
+  month      Int
+  year       Int
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, month, year])
+  @@index([userId])
 }
 
 enum Role {
