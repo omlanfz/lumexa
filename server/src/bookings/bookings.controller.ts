@@ -125,18 +125,18 @@ export class BookingsController {
 
   // ── Parameterised routes — must come AFTER all literal routes ──────────────
 
-  // PARENT: get single booking (for payment page)
+  // PARENT + STUDENT: get single booking (for payment page)
   @Get(':bookingId')
   @UseGuards(RolesGuard)
-  @Roles(Role.PARENT)
+  @Roles(Role.PARENT, Role.STUDENT)
   getBooking(@Request() req: any, @Param('bookingId') bookingId: string) {
     return this.bookingsService.getBookingById(bookingId, req.user.userId);
   }
 
-  // PARENT: mock payment confirmation (dev only)
+  // PARENT + STUDENT: mock payment confirmation (dev only)
   @Post(':bookingId/mock-confirm')
   @UseGuards(RolesGuard)
-  @Roles(Role.PARENT)
+  @Roles(Role.PARENT, Role.STUDENT)
   mockConfirm(@Request() req: any, @Param('bookingId') bookingId: string) {
     return this.bookingsService.mockConfirmBooking(bookingId, req.user.userId);
   }

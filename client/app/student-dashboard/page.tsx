@@ -178,6 +178,7 @@ export default function StudentDashboardPage() {
   const [showCeremony, setShowCeremony] = useState(false);
   const [ceremonyRank, setCeremonyRank] = useState('');
   const [ceremonyIcon, setCeremonyIcon] = useState('');
+  const [showBookedBanner, setShowBookedBanner] = useState(false);
 
   useEffect(() => {
     const token = getStoredToken();
@@ -185,6 +186,12 @@ export default function StudentDashboardPage() {
 
     const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
+
+    if (window.location.search.includes('booked=true')) {
+      setShowBookedBanner(true);
+      setTimeout(() => setShowBookedBanner(false), 4000);
+      router.replace('/student-dashboard');
+    }
 
     fetchDashboard();
   }, [router]);
@@ -288,6 +295,12 @@ export default function StudentDashboardPage() {
           rankIcon={ceremonyIcon}
           onDismiss={handleCeremonyDismiss}
         />
+      )}
+
+      {showBookedBanner && (
+        <div className="flex items-center gap-3 px-5 py-3.5 bg-teal-500/15 border border-teal-500/30 rounded-xl text-teal-300 text-sm font-medium">
+          🚀 Mission assigned! Your session is confirmed.
+        </div>
       )}
 
       {/* Page header */}

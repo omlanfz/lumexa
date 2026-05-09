@@ -97,7 +97,9 @@ export class BookingsService {
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
-    if (!booking.student || booking.student.parent.id !== userId) {
+    const isParentOwner = booking.student?.parent?.id === userId;
+    const isStudentOwner = booking.studentUserId === userId;
+    if (!isParentOwner && !isStudentOwner) {
       throw new ForbiddenException('Access denied.');
     }
 
@@ -314,7 +316,9 @@ export class BookingsService {
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
-    if (!booking.student || booking.student.parent.id !== userId) {
+    const isParentOwner = booking.student?.parent?.id === userId;
+    const isStudentOwner = booking.studentUserId === userId;
+    if (!isParentOwner && !isStudentOwner) {
       throw new ForbiddenException('You do not own this booking.');
     }
     if (booking.paymentStatus === 'CAPTURED') {
