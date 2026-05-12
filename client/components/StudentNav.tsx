@@ -33,6 +33,7 @@ const NAV_ITEMS = [
   { href: '/student-dashboard/teachers', icon: '👨‍🚀', label: LABELS.STUDENT_TEACHERS.primary, sub: LABELS.STUDENT_TEACHERS.theme, exact: false },
   { href: '/student-dashboard/recordings', icon: '🎬', label: LABELS.STUDENT_RECORDINGS.primary, sub: LABELS.STUDENT_RECORDINGS.theme, exact: false },
   { href: '/student-dashboard/rankings', icon: '🏆', label: LABELS.STUDENT_RANKINGS.primary, sub: LABELS.STUDENT_RANKINGS.theme, exact: false },
+  { href: '/student-dashboard/settings', icon: '⚙️', label: LABELS.STUDENT_SETTINGS.primary, sub: LABELS.STUDENT_SETTINGS.theme, exact: false },
 ];
 
 const RANK_THRESHOLDS = [

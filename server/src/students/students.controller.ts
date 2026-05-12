@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -12,6 +13,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { RegisterStudentDto } from './dto/register-student.dto';
+import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
@@ -108,6 +110,20 @@ export class StudentsController {
   @Roles(Role.STUDENT)
   getMyRankings(@Request() req: any) {
     return this.studentsService.getMyRankings(req.user.userId);
+  }
+
+  @Patch('me')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.STUDENT)
+  updateMe(@Request() req: any, @Body() dto: UpdateStudentProfileDto) {
+    return this.studentsService.updateMyProfile(req.user.userId, dto);
+  }
+
+  @Post('me/deactivate')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.STUDENT)
+  deactivateMe(@Request() req: any) {
+    return this.studentsService.deactivateMyAccount(req.user.userId);
   }
 
   // ══════════════════════════════════════════════════════════════════════════

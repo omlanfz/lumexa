@@ -91,6 +91,7 @@ export const LABELS = {
   STUDENT_BOOK_CLASS: { primary: "Book Your Next Mission", theme: "Select Mission" },
   STUDENT_RANK_UP: { primary: "Mission Accomplished!", theme: "Rank Achieved" },
   STUDENT_REQUEST_TOPUP: { primary: "Request Top-Up", theme: "Request Credits" },
+  STUDENT_SETTINGS: { primary: "Settings", theme: "Pilot Configuration" },
   STUDENT_REGISTER: { primary: "Create Student Account", theme: "Initiate Launch" },
   STUDENT_LOGIN: { primary: "Student Log In", theme: "Access Mission Portal" },
 

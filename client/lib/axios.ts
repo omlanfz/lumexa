@@ -53,16 +53,12 @@ api.interceptors.response.use(
   (error) => {
     if (typeof window !== "undefined" && error?.response?.status === 401) {
       const path = window.location.pathname;
-      const isAuthPage =
-        path === "/login" ||
-        path === "/register" ||
-        path === "/student/login" ||
-        path === "/student/register";
+      const isAuthPage = path === "/login" || path === "/register";
 
       if (!isAuthPage) {
         const role = getStoredRole();
         clearAuth();
-        window.location.href = role === "STUDENT" ? "/student/login" : "/login";
+        window.location.href = "/login";
       }
     }
     return Promise.reject(error);

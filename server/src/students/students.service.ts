@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { RegisterStudentDto } from './dto/register-student.dto';
+import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
 import { Prisma, SpaceRank, AccountStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -247,6 +248,62 @@ export class StudentsService {
       rankIcon: rankInfo.icon,
       sessionsToNextRank: sessionsToNextRank(user.totalSessions),
     };
+  }
+
+  async updateMyProfile(userId: string, dto: UpdateStudentProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student profile not found.');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+        ...(dto.grade !== undefined && { grade: dto.grade }),
+        ...(dto.subjects !== undefined && { subjects: dto.subjects }),
+        ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        avatarUrl: true,
+        age: true,
+        grade: true,
+        subjects: true,
+        spaceRank: true,
+        totalSessions: true,
+        streakWeeks: true,
+        streakFreezes: true,
+        gemBalance: true,
+        accountStatus: true,
+      },
+    });
+
+    const rankInfo = rankMeta(updated.spaceRank);
+    return {
+      ...updated,
+      rankIcon: rankInfo.icon,
+      sessionsToNextRank: sessionsToNextRank(updated.totalSessions),
+    };
+  }
+
+  async deactivateMyAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student not found.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: 'DEACTIVATED' },
+    });
+
+    return { success: true };
   }
 
   async getMyDashboard(userId: string) {
