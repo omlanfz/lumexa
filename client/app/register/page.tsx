@@ -24,78 +24,127 @@ function useAuthTheme() {
   return { isDark, toggle };
 }
 
-type Role = "PARENT" | "TEACHER";
+type Role = "STUDENT" | "TEACHER";
 
-const ROLE_INFO: Record<
-  Role,
-  { icon: string; label: string; sub: string; desc: string }
-> = {
-  PARENT: {
-    icon: "👨‍👩‍👧",
-    label: "Parent",
-    sub: "Commander",
-    desc: "Book lessons and track your child's mission progress",
+const ROLE_INFO: Record<Role, { icon: string; label: string; sub: string; desc: string }> = {
+  STUDENT: {
+    icon: "🚀",
+    label: "Student",
+    sub: "Cadet",
+    desc: "Join classes, track your missions, and level up your space rank",
   },
   TEACHER: {
     icon: "🧑‍🏫",
     label: "Teacher",
     sub: "Pilot",
-    desc: "Create availability, teach cadets, earn per class",
+    desc: "Create availability, teach cadets, and earn per class",
   },
 };
+
+interface StudentForm {
+  fullName: string;
+  email: string;
+  password: string;
+  age: string;
+  grade: string;
+  subjects: string;
+  billingContactEmail: string;
+}
+
+interface TeacherForm {
+  fullName: string;
+  email: string;
+  password: string;
+}
 
 function RegisterContent() {
   const router = useRouter();
   const { isDark, toggle } = useAuthTheme();
 
-  const [role, setRole] = useState<Role>("PARENT");
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<Role>("STUDENT");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingConsent, setPendingConsent] = useState<string | null>(null);
+
+  // Shared fields
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Student-only fields
+  const [age, setAge] = useState("");
+  const [grade, setGrade] = useState("");
+  const [subjects, setSubjects] = useState("");
+  const [billingContactEmail, setBillingContactEmail] = useState("");
+
+  const parsedAge = parseInt(age, 10);
+  const needsConsent = !isNaN(parsedAge) && parsedAge < 16;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) {
-      setError("Full name is required");
-      return;
-    }
-    if (!email.trim()) {
-      setError("Email is required");
-      return;
-    }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters");
-      return;
-    }
-    setLoading(true);
     setError(null);
+
+    if (!fullName.trim()) { setError("Full name is required"); return; }
+    if (!email.trim()) { setError("Email is required"); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
+
+    if (role === "STUDENT") {
+      if (!age || isNaN(parsedAge) || parsedAge < 5 || parsedAge > 21) {
+        setError("Please enter a valid age (5–21)");
+        return;
+      }
+      if (needsConsent && !billingContactEmail.trim()) {
+        setError("A parent or guardian email is required for students under 16");
+        return;
+      }
+    }
+
+    setLoading(true);
     try {
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-        {
+      if (role === "STUDENT") {
+        const payload: Record<string, unknown> = {
           fullName: fullName.trim(),
           email: email.trim(),
           password,
-          role,
-        },
-      );
-      const { access_token, user } = res.data;
-      localStorage.setItem("token", access_token);
-      localStorage.setItem("user", JSON.stringify(user));
-      if (role === "PARENT") router.push("/dashboard");
-      else router.push("/teacher-dashboard");
-    } catch (err: any) {
-      const m = err.response?.data?.message;
-      setError(Array.isArray(m) ? m.join(", ") : (m ?? "Registration failed"));
+          age: parsedAge,
+          grade: grade.trim() || undefined,
+          subjects: subjects ? subjects.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
+        };
+        if (needsConsent) payload.billingContactEmail = billingContactEmail.trim();
+
+        const res = await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL}/students/register`,
+          payload,
+        );
+
+        if (res.data.status === "PENDING_CONSENT") {
+          setPendingConsent(res.data.message);
+        } else {
+          localStorage.setItem("token", res.data.access_token);
+          localStorage.setItem("user", JSON.stringify(res.data.user));
+          router.push("/student-dashboard");
+        }
+      } else {
+        const res = await axios.post(
+          `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
+          { fullName: fullName.trim(), email: email.trim(), password, role: "TEACHER" },
+        );
+        const { access_token, user } = res.data;
+        localStorage.setItem("token", access_token);
+        localStorage.setItem("user", JSON.stringify(user));
+        router.push("/teacher-dashboard");
+      }
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string | string[] } } };
+      const m = e.response?.data?.message;
+      setError(Array.isArray(m) ? m.join(", ") : (m ?? "Registration failed. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
-  // Theme classes
+  // ── Theme-aware classes ──────────────────────────────────────────────────────
   const bg = isDark
     ? "bg-gradient-to-br from-[#050D1A] via-[#0A1628] to-[#050D1A]"
     : "bg-gradient-to-br from-slate-50 via-blue-50/50 to-indigo-50";
@@ -110,10 +159,30 @@ function RegisterContent() {
   const subtitleCls = isDark ? "text-blue-400/50" : "text-blue-400";
   const cardTextMuted = isDark ? "text-blue-400/60" : "text-blue-400";
 
+  // Pending consent screen
+  if (pendingConsent) {
+    return (
+      <div className={`min-h-screen ${bg} flex items-center justify-center p-4`}>
+        <div className={`w-full max-w-md ${card} rounded-2xl p-8 text-center`}>
+          <div className="text-6xl mb-6">📨</div>
+          <h1 className={`text-2xl font-bold mb-3 ${titleCls}`}>Check Your Parent's Email</h1>
+          <p className={`${cardTextMuted} mb-2`}>{pendingConsent}</p>
+          <p className={`text-sm mb-8 ${subtitleCls}`}>
+            The consent link expires in 48 hours. Once approved, you can log in.
+          </p>
+          <button
+            onClick={() => router.push("/login")}
+            className="text-blue-500 hover:text-blue-400 text-sm underline"
+          >
+            Go to Log In
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className={`min-h-screen ${bg} flex items-center justify-center p-4 relative transition-colors duration-300`}
-    >
+    <div className={`min-h-screen ${bg} flex items-center justify-center p-4 relative transition-colors duration-300`}>
       {/* Stars decoration (dark only) */}
       {isDark && (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -176,9 +245,7 @@ function RegisterContent() {
           <p className={`text-xs font-semibold uppercase tracking-widest mb-1 ${subtitleCls}`}>
             Lumexa AI School
           </p>
-          <h1
-            className={`text-3xl font-bold tracking-tight uppercase ${titleCls}`}
-          >
+          <h1 className={`text-3xl font-bold tracking-tight uppercase ${titleCls}`}>
             Create Account
           </h1>
           <p className={`text-sm mt-1 ${subtitleCls}`}>Initiate Launch</p>
@@ -186,9 +253,7 @@ function RegisterContent() {
 
         {/* Role selector */}
         <div className="mb-6">
-          <p
-            className={`text-xs uppercase tracking-wider font-semibold mb-3 ${labelCls}`}
-          >
+          <p className={`text-xs uppercase tracking-wider font-semibold mb-3 ${labelCls}`}>
             I am a…
           </p>
           <div className="grid grid-cols-2 gap-3">
@@ -199,7 +264,7 @@ function RegisterContent() {
                 <button
                   key={r}
                   type="button"
-                  onClick={() => setRole(r)}
+                  onClick={() => { setRole(r); setError(null); }}
                   className={`p-4 rounded-xl border-2 text-left transition-all ${
                     isSelected
                       ? "border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-600/30"
@@ -210,9 +275,7 @@ function RegisterContent() {
                 >
                   <div className="text-2xl mb-1">{info.icon}</div>
                   <p className="font-bold text-sm">{info.label}</p>
-                  <p
-                    className={`text-xs ${isSelected ? "text-blue-200" : cardTextMuted}`}
-                  >
+                  <p className={`text-xs ${isSelected ? "text-blue-200" : cardTextMuted}`}>
                     {info.sub}
                   </p>
                 </button>
@@ -227,9 +290,7 @@ function RegisterContent() {
         {/* Form */}
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <label
-              className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}
-            >
+            <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
               Full Name
             </label>
             <input
@@ -242,9 +303,7 @@ function RegisterContent() {
           </div>
 
           <div>
-            <label
-              className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}
-            >
+            <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
               Email Address
             </label>
             <input
@@ -258,9 +317,7 @@ function RegisterContent() {
           </div>
 
           <div>
-            <label
-              className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}
-            >
+            <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
               Password
             </label>
             <div className="relative">
@@ -280,35 +337,104 @@ function RegisterContent() {
                 {showPassword ? "🙈" : "👁️"}
               </button>
             </div>
-            {/* Password strength */}
             {password.length > 0 && (
-              <div className="mt-2 flex gap-1">
+              <div className="mt-2 flex gap-1 items-center">
                 {[8, 12, 16].map((len, i) => (
                   <div
                     key={len}
                     className={`h-1 flex-1 rounded-full transition-colors ${
                       password.length >= len
-                        ? i === 0
-                          ? "bg-red-500"
-                          : i === 1
-                            ? "bg-yellow-500"
-                            : "bg-green-500"
-                        : isDark
-                          ? "bg-gray-700"
-                          : "bg-gray-200"
+                        ? i === 0 ? "bg-red-500" : i === 1 ? "bg-yellow-500" : "bg-green-500"
+                        : isDark ? "bg-gray-700" : "bg-gray-200"
                     }`}
                   />
                 ))}
                 <span className={`text-xs ml-1 ${cardTextMuted}`}>
-                  {password.length < 8
-                    ? "Weak"
-                    : password.length < 12
-                      ? "Fair"
-                      : "Strong"}
+                  {password.length < 8 ? "Weak" : password.length < 12 ? "Fair" : "Strong"}
                 </span>
               </div>
             )}
           </div>
+
+          {/* Student-only fields */}
+          {role === "STUDENT" && (
+            <>
+              <div>
+                <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
+                  Age
+                </label>
+                <input
+                  type="number"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                  placeholder="e.g. 14"
+                  min={5}
+                  max={21}
+                  className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls}`}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
+                  Grade{" "}
+                  <span className={`font-normal normal-case ${subtitleCls}`}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={grade}
+                  onChange={(e) => setGrade(e.target.value)}
+                  placeholder="e.g. Grade 9"
+                  className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls}`}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
+                  Subjects{" "}
+                  <span className={`font-normal normal-case ${subtitleCls}`}>(optional, comma-separated)</span>
+                </label>
+                <input
+                  type="text"
+                  value={subjects}
+                  onChange={(e) => setSubjects(e.target.value)}
+                  placeholder="e.g. Math, Science, English"
+                  className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls}`}
+                />
+              </div>
+
+              {needsConsent && (
+                <div className={`p-4 rounded-xl space-y-3 ${
+                  isDark ? "bg-yellow-900/20 border border-yellow-700/30" : "bg-yellow-50 border border-yellow-200"
+                }`}>
+                  <p className={`text-sm ${isDark ? "text-yellow-300" : "text-yellow-700"}`}>
+                    Students under 16 require a parent or guardian to approve their account before they can log in.
+                  </p>
+                  <div>
+                    <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
+                      Parent / Guardian Email
+                    </label>
+                    <input
+                      type="email"
+                      value={billingContactEmail}
+                      onChange={(e) => setBillingContactEmail(e.target.value)}
+                      placeholder="parent@example.com"
+                      className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls}`}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {role === "TEACHER" && (
+            <div className={`p-3 rounded-xl text-xs ${
+              isDark
+                ? "bg-purple-900/20 border border-purple-800/30 text-purple-300"
+                : "bg-purple-50 border border-purple-200 text-purple-700"
+            }`}>
+              🛸 As a Pilot, you'll complete profile verification before appearing in the marketplace.
+            </div>
+          )}
 
           {error && (
             <div className="p-3 rounded-xl bg-red-900/20 border border-red-700/30 text-red-400 text-sm">
@@ -324,31 +450,16 @@ function RegisterContent() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Creating account…
+                {role === "STUDENT" && needsConsent ? "Sending consent email…" : "Creating account…"}
               </span>
             ) : (
               <span>
-                Create Account
-                <span className="block text-xs font-normal opacity-70">
-                  Initiate Launch 🚀
-                </span>
+                {role === "STUDENT" && needsConsent ? "Create Account & Send Consent Email" : "Create Account"}
+                <span className="block text-xs font-normal opacity-70">Initiate Launch 🚀</span>
               </span>
             )}
           </button>
         </form>
-
-        {role === "TEACHER" && (
-          <div
-            className={`mt-4 p-3 rounded-xl text-xs ${
-              isDark
-                ? "bg-purple-900/20 border border-purple-800/30 text-purple-300"
-                : "bg-purple-50 border border-purple-200 text-purple-700"
-            }`}
-          >
-            🛸 As a Pilot, you'll complete profile verification before appearing
-            in the marketplace.
-          </div>
-        )}
 
         <p className={`text-center text-sm mt-5 ${cardTextMuted}`}>
           Already have an account?{" "}
@@ -359,26 +470,6 @@ function RegisterContent() {
             Log In
           </button>
         </p>
-
-        {/* Student portal entry */}
-        <div className={`mt-4 p-3 rounded-xl border ${isDark ? "border-teal-800/40 bg-teal-900/10" : "border-teal-200 bg-teal-50"} text-center`}>
-          <p className={`text-xs ${isDark ? "text-teal-400/70" : "text-teal-600"}`}>
-            Are you a student?{" "}
-            <button
-              onClick={() => router.push("/student/register")}
-              className={`font-semibold ${isDark ? "text-teal-400 hover:text-teal-300" : "text-teal-600 hover:text-teal-700"} transition-colors`}
-            >
-              Student Sign Up →
-            </button>
-            {" · "}
-            <button
-              onClick={() => router.push("/student/login")}
-              className={`font-semibold ${isDark ? "text-teal-400 hover:text-teal-300" : "text-teal-600 hover:text-teal-700"} transition-colors`}
-            >
-              Student Login
-            </button>
-          </p>
-        </div>
       </div>
     </div>
   );

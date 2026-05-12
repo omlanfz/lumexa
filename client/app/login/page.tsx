@@ -238,26 +238,6 @@ function LoginContent() {
           </button>
         </p>
 
-        {/* Student portal entry */}
-        <div className={`mt-4 p-3 rounded-xl border ${isDark ? "border-teal-800/40 bg-teal-900/10" : "border-teal-200 bg-teal-50"} text-center`}>
-          <p className={`text-xs ${isDark ? "text-teal-400/70" : "text-teal-600"}`}>
-            Are you a student?{" "}
-            <button
-              onClick={() => router.push("/student/login")}
-              className={`font-semibold ${isDark ? "text-teal-400 hover:text-teal-300" : "text-teal-600 hover:text-teal-700"} transition-colors`}
-            >
-              Student Login →
-            </button>
-            {" · "}
-            <button
-              onClick={() => router.push("/student/register")}
-              className={`font-semibold ${isDark ? "text-teal-400 hover:text-teal-300" : "text-teal-600 hover:text-teal-700"} transition-colors`}
-            >
-              Sign Up
-            </button>
-          </p>
-        </div>
-
         {/* Space decoration */}
         <p
           className={`text-center text-xs mt-4 ${isDark ? "text-blue-900/60" : "text-blue-200"}`}

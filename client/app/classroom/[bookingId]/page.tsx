@@ -23,7 +23,7 @@ export default function StarLabPage({ params }: PageProps) {
     const authToken = getStoredToken();
     if (!authToken) {
       const role = getStoredRole();
-      router.push(role === 'STUDENT' ? '/student/login' : '/login');
+      router.push('/login');
       return;
     }
 

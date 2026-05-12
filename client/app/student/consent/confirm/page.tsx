@@ -50,10 +50,10 @@ function ConsentConfirmContent() {
           <h1 className="text-2xl font-bold text-white mb-3">Account Activated!</h1>
           <p className="text-gray-400 mb-8">{message}</p>
           <Link
-            href="/student/login"
+            href="/login"
             className="inline-block bg-teal-500 hover:bg-teal-400 text-black font-semibold px-8 py-3 rounded-lg transition-colors"
           >
-            Student Log In
+            Log In
           </Link>
         </>
       )}

@@ -128,7 +128,7 @@ function MarketplaceContent() {
 
   const handleBook = async () => {
     if (!hasToken) {
-      router.push(isStudent ? '/student/login' : '/login');
+      router.push('/login');
       return;
     }
     if (!selectedShiftId) {
@@ -460,7 +460,7 @@ function MarketplaceContent() {
               </button>
             ) : (
               <button
-                onClick={() => router.push(isStudent ? '/student/login' : '/login')}
+                onClick={() => router.push('/login')}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors"
               >
                 Log In to Book

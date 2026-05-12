@@ -44,7 +44,7 @@ export default function StudentLessonsPage() {
 
   useEffect(() => {
     const token = getStoredToken();
-    if (!token) { router.push('/student/login'); return; }
+    if (!token) { router.push('/login'); return; }
     const role = getStoredRole();
     if (role !== 'STUDENT') { router.push('/login'); return; }
   }, [router]);

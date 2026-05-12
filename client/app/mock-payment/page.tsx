@@ -17,7 +17,7 @@ function MockPaymentContent() {
     const token = getStoredToken();
     if (!token) {
       const role = getStoredRole();
-      router.push(role === 'STUDENT' ? '/student/login' : '/login');
+      router.push('/login');
       return;
     }
 

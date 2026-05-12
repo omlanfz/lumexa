@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
@@ -59,6 +60,22 @@ export class AuthService {
       // Same message for both "user not found" and "wrong password"
       // prevents email enumeration attacks
       throw new UnauthorizedException('Invalid email or password.');
+    }
+
+    // For STUDENT accounts, check accountStatus before issuing token
+    if (user.role === 'STUDENT') {
+      const status = (user as any).accountStatus as string | undefined;
+      if (status === 'PENDING_CONSENT') {
+        throw new ForbiddenException(
+          'Your account is awaiting parental consent. Please check the email sent to your billing contact.',
+        );
+      }
+      if (status === 'SUSPENDED') {
+        throw new ForbiddenException('This account has been suspended.');
+      }
+      if (status === 'DEACTIVATED') {
+        throw new ForbiddenException('This account has been deactivated.');
+      }
     }
 
     const payload = {

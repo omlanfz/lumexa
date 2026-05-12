@@ -89,7 +89,7 @@ export default function StudentNav({
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    router.push('/student/login');
+    router.push('/login');
   };
 
   const progress = rankProgress(totalSessions, spaceRank);

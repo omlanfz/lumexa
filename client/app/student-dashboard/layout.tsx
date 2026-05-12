@@ -39,7 +39,7 @@ export default function StudentDashboardLayout({
     const user = parseStoredUser();
 
     if (!token || !user) {
-      router.push('/student/login');
+      router.push('/login');
       return;
     }
 
@@ -59,7 +59,7 @@ export default function StudentDashboardLayout({
         setChecked(true);
       })
       .catch(() => {
-        router.push('/student/login');
+        router.push('/login');
       });
   }, [router]);
 
