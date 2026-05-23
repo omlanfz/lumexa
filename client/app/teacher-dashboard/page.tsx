@@ -19,7 +19,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/axios";
 import TeacherNav from "../../components/TeacherNav";
 import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
@@ -201,16 +201,9 @@ function TeacherDashboardContent() {
     (async () => {
       try {
         const [statsRes, nextRes, profileRes] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/stats`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/next-class`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          ),
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          api.get('/teachers/me/stats'),
+          api.get('/teachers/me/next-class'),
+          api.get('/teachers/me/profile'),
         ]);
 
         setStats(statsRes.data);
@@ -251,10 +244,10 @@ function TeacherDashboardContent() {
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="dark:text-purple-400 text-purple-500 text-sm mt-4">
+          <p className="text-[var(--t-text-muted)] text-sm mt-4">
             Preparing your flight deck…
           </p>
         </div>
@@ -275,8 +268,7 @@ function TeacherDashboardContent() {
     return false;
   });
 
-  const card =
-    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+  const card = "t-card shadow-sm";
 
   return (
     <TeacherLayout
@@ -304,10 +296,10 @@ function TeacherDashboardContent() {
           <div className="mb-6 p-4 rounded-xl border dark:bg-amber-900/20 dark:border-amber-700/30 bg-amber-50 border-amber-200 flex items-start gap-3">
             <span className="text-2xl flex-shrink-0">🛸</span>
             <div className="flex-1">
-              <p className="font-semibold text-sm dark:text-amber-300 text-amber-800">
+              <p className="font-semibold text-sm text-amber-700 dark:text-amber-300">
                 Complete your pilot profile to attract more cadets
               </p>
-              <p className="text-xs mt-0.5 dark:text-amber-400/70 text-amber-600">
+              <p className="text-xs mt-0.5 text-amber-600 dark:text-amber-400/70">
                 Add your bio, subjects, and availability to appear in more
                 search results.
               </p>
@@ -322,12 +314,12 @@ function TeacherDashboardContent() {
         )}
 
         {/* ── Daily Mission Brief ────────────────────────────────────── */}
-        <div className="mb-6 px-5 py-4 rounded-2xl border relative overflow-hidden dark:bg-purple-900/20 dark:border-purple-700/30 bg-purple-50 border-purple-200">
+        <div className="mb-6 px-5 py-4 rounded-2xl border relative overflow-hidden bg-[var(--t-surface)] border-[var(--t-nav-border)]">
           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <p className="text-sm font-medium dark:text-purple-300 text-purple-600">
+          <p className="text-sm font-medium text-[var(--t-text-muted)]">
             Daily Mission Brief
           </p>
-          <p className="text-base sm:text-lg font-bold mt-1 dark:text-white text-purple-900">
+          <p className="text-base sm:text-lg font-bold mt-1 text-[var(--t-text)]">
             {dailyBrief}
           </p>
         </div>
@@ -344,13 +336,13 @@ function TeacherDashboardContent() {
                 {rankInfo?.rankIcon ?? "🌱"}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
+                <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">
                   Space Rank
                 </p>
-                <p className="text-xl font-bold leading-tight mt-0.5 dark:text-purple-100 text-purple-900">
+                <p className="text-xl font-bold leading-tight mt-0.5 text-[var(--t-text)]">
                   {rankInfo?.rankName ?? "Cadet"}
                 </p>
-                <p className="text-sm dark:text-purple-300 text-purple-600">
+                <p className="text-sm text-[var(--t-text-muted)]">
                   {(rankInfo?.points ?? 0).toLocaleString()} pts
                 </p>
               </div>
@@ -358,37 +350,37 @@ function TeacherDashboardContent() {
 
             <div className="mt-4">
               <div className="flex justify-between text-xs mb-1">
-                <span className="dark:text-purple-300/60 text-purple-400">
+                <span className="text-[var(--t-text-muted)]">
                   Progress to next rank
                 </span>
-                <span className="dark:text-purple-300/60 text-purple-400">
+                <span className="text-[var(--t-text-muted)]">
                   {rankInfo?.progressPercent ?? 0}%
                 </span>
               </div>
-              <div className="h-2 rounded-full dark:bg-gray-800 bg-purple-100">
+              <div className="h-2 rounded-full bg-[var(--t-surface)]">
                 <div
                   className={`h-full rounded-full bg-gradient-to-r ${RANK_COLORS[rankInfo?.rankTier ?? 0]} transition-all duration-700`}
                   style={{ width: `${rankInfo?.progressPercent ?? 0}%` }}
                 />
               </div>
-              <p className="text-xs mt-1 dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs mt-1 text-[var(--t-text-muted)]">
                 {(rankInfo?.pointsToNext ?? 0).toLocaleString()} pts to{" "}
                 {RANK_NAMES[(rankInfo?.rankTier ?? 0) + 1] ?? "max"}
               </p>
             </div>
 
-            <div className="mt-3 pt-3 border-t dark:border-purple-900/20 border-purple-100 flex items-center justify-between">
+            <div className="mt-3 pt-3 border-t border-[var(--t-nav-border)] flex items-center justify-between">
               <div>
-                <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                <p className="text-xs text-[var(--t-text-muted)]">
                   This week
                 </p>
-                <p className="text-sm font-bold dark:text-purple-300 text-purple-600">
+                <p className="text-sm font-bold text-[var(--t-text-muted)]">
                   +{rankInfo?.weeklyPoints ?? 0} pts
                 </p>
               </div>
               <button
                 onClick={() => router.push("/leaderboard")}
-                className="text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-800/40 bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"
+                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
               >
                 View Rankings
               </button>
@@ -399,14 +391,14 @@ function TeacherDashboardContent() {
           <div className={`${card} p-4 flex flex-col justify-between`}>
             <div>
               <span className="text-2xl">📚</span>
-              <p className="text-xs uppercase tracking-wide mt-2 dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs uppercase tracking-wide mt-2 text-[var(--t-text-muted)]">
                 Classes Taught
               </p>
-              <p className="text-3xl font-bold mt-1 dark:text-purple-100 text-purple-900">
+              <p className="text-3xl font-bold mt-1 text-[var(--t-text)]">
                 {completedClasses}
               </p>
             </div>
-            <p className="text-xs dark:text-purple-300/60 text-purple-400">
+            <p className="text-xs text-[var(--t-text-muted)]">
               {stats?.upcomingClasses ?? 0} upcoming
             </p>
           </div>
@@ -415,14 +407,14 @@ function TeacherDashboardContent() {
           <div className={`${card} p-4 flex flex-col justify-between`}>
             <div>
               <span className="text-2xl">⭐</span>
-              <p className="text-xs uppercase tracking-wide mt-2 dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs uppercase tracking-wide mt-2 text-[var(--t-text-muted)]">
                 Rating
               </p>
-              <p className="text-3xl font-bold mt-1 dark:text-purple-100 text-purple-900">
+              <p className="text-3xl font-bold mt-1 text-[var(--t-text)]">
                 {stats?.ratingAvg ? stats.ratingAvg.toFixed(1) : "—"}
               </p>
             </div>
-            <p className="text-xs dark:text-purple-300/60 text-purple-400">
+            <p className="text-xs text-[var(--t-text-muted)]">
               {stats?.reviewCount ?? 0} reviews
               {(stats?.strikes ?? 0) > 0 && (
                 <span className="text-red-400 ml-2">
@@ -436,16 +428,16 @@ function TeacherDashboardContent() {
           <div className={`${card} p-4 flex flex-col justify-between`}>
             <div>
               <span className="text-2xl">💰</span>
-              <p className="text-xs uppercase tracking-wide mt-2 dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs uppercase tracking-wide mt-2 text-[var(--t-text-muted)]">
                 Earnings
               </p>
-              <p className="text-3xl font-bold mt-1 dark:text-green-400 text-green-600">
+              <p className="text-3xl font-bold mt-1 text-green-600 dark:text-green-400">
                 ${teacherEarnings.toFixed(0)}
               </p>
             </div>
             <button
               onClick={() => router.push("/teacher-earnings")}
-              className="text-xs dark:text-purple-400 dark:hover:text-purple-300 text-purple-600 hover:text-purple-500 transition-colors text-left"
+              className="text-xs text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors text-left"
             >
               View details →
             </button>
@@ -471,13 +463,13 @@ function TeacherDashboardContent() {
 
                 <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400">
+                    <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">
                       Upcoming Mission
                     </p>
-                    <p className="text-lg font-bold mt-0.5 dark:text-purple-100 text-purple-900">
+                    <p className="text-lg font-bold mt-0.5 text-[var(--t-text)]">
                       Class with {nextClass.studentName}
                     </p>
-                    <p className="text-sm dark:text-purple-300/60 text-purple-400">
+                    <p className="text-sm text-[var(--t-text-muted)]">
                       {new Date(nextClass.start).toLocaleDateString("en-US", {
                         weekday: "short",
                         month: "short",
@@ -502,7 +494,7 @@ function TeacherDashboardContent() {
 
                 {/* Countdown */}
                 <div className="flex items-center gap-3 flex-wrap">
-                  <p className="text-xs dark:text-purple-300/60 text-purple-400 mr-1">
+                  <p className="text-xs text-[var(--t-text-muted)] mr-1">
                     Starts in:
                   </p>
                   {[
@@ -512,12 +504,12 @@ function TeacherDashboardContent() {
                   ].map(({ val, label }) => (
                     <div
                       key={label}
-                      className="text-center px-3 py-2 rounded-xl dark:bg-purple-900/30 bg-purple-100"
+                      className="text-center px-3 py-2 rounded-xl bg-[var(--t-nav-active)]"
                     >
-                      <p className="text-2xl font-bold tabular-nums dark:text-purple-100 text-purple-900">
+                      <p className="text-2xl font-bold tabular-nums text-[var(--t-text)]">
                         {String(val).padStart(2, "0")}
                       </p>
-                      <p className="text-xs dark:text-purple-300/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         {label}
                       </p>
                     </div>
@@ -525,8 +517,8 @@ function TeacherDashboardContent() {
                 </div>
 
                 {/* Warning + join */}
-                <div className="mt-4 pt-4 border-t dark:border-purple-900/20 border-purple-100 flex items-center justify-between flex-wrap gap-2">
-                  <p className="text-xs dark:text-amber-400/70 text-amber-600">
+                <div className="mt-4 pt-4 border-t border-[var(--t-nav-border)] flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-xs text-amber-600 dark:text-amber-400/70">
                     ⚠️ Join on time to avoid a strike.
                   </p>
                   {nextClass.msUntilStart <= 600000 && (
@@ -546,10 +538,10 @@ function TeacherDashboardContent() {
                 className={`${card} p-5 flex flex-col items-center justify-center text-center min-h-[200px]`}
               >
                 <span className="text-4xl mb-3">🌌</span>
-                <p className="font-semibold dark:text-purple-100 text-purple-900">
+                <p className="font-semibold text-[var(--t-text)]">
                   No upcoming missions
                 </p>
-                <p className="text-sm mt-1 dark:text-purple-300/60 text-purple-400">
+                <p className="text-sm mt-1 text-[var(--t-text-muted)]">
                   Add availability slots so cadets can book you.
                 </p>
                 <button
@@ -564,7 +556,7 @@ function TeacherDashboardContent() {
 
           {/* Badges */}
           <div className={`${card} p-5`}>
-            <p className="text-xs uppercase tracking-wide font-medium mb-3 dark:text-purple-300/60 text-purple-400">
+            <p className="text-xs uppercase tracking-wide font-medium mb-3 text-[var(--t-text-muted)]">
               Mission Badges
             </p>
             <div className="grid grid-cols-3 gap-2">
@@ -577,8 +569,8 @@ function TeacherDashboardContent() {
                     className={[
                       "aspect-square rounded-xl flex items-center justify-center text-xl transition-all cursor-help",
                       earned
-                        ? "dark:bg-purple-600/30 dark:border dark:border-purple-500/40 bg-purple-100 border border-purple-300"
-                        : "dark:bg-gray-800/40 dark:border dark:border-gray-700/30 bg-gray-100 border border-gray-200 opacity-30 grayscale",
+                        ? "bg-[var(--t-nav-active)] border border-[var(--t-border-strong)]"
+                        : "bg-[var(--t-surface)] border border-[var(--t-border)] opacity-30 grayscale",
                     ].join(" ")}
                   >
                     {a.icon}
@@ -586,7 +578,7 @@ function TeacherDashboardContent() {
                 );
               })}
             </div>
-            <p className="text-xs mt-3 dark:text-purple-300/60 text-purple-400">
+            <p className="text-xs mt-3 text-[var(--t-text-muted)]">
               {earnedAchievements.length}/{ACHIEVEMENTS.length} earned
             </p>
           </div>
@@ -624,13 +616,13 @@ function TeacherDashboardContent() {
             <button
               key={item.path}
               onClick={() => router.push(item.path)}
-              className={`${card} p-4 text-left dark:hover:border-purple-500/40 hover:border-purple-300 transition-all`}
+              className={`${card} p-4 text-left hover:border-[var(--t-border-strong)] transition-all`}
             >
               <span className="text-2xl">{item.icon}</span>
-              <p className="text-sm font-medium mt-2 dark:text-purple-100 text-purple-900">
+              <p className="text-sm font-medium mt-2 text-[var(--t-text)]">
                 {item.label}
               </p>
-              <p className="text-xs dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs text-[var(--t-text-muted)]">
                 {item.sub}
               </p>
             </button>
@@ -640,12 +632,12 @@ function TeacherDashboardContent() {
         {/* ── Profile summary row ────────────────────────────────────── */}
         <div className={`${card} p-5`}>
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold dark:text-purple-100 text-purple-900">
+            <p className="font-semibold text-[var(--t-text)]">
               Your Pilot Profile
             </p>
             <button
               onClick={() => router.push("/teacher-profile")}
-              className="text-xs px-3 py-1.5 rounded-lg dark:bg-purple-900/30 dark:text-purple-300 dark:hover:bg-purple-800/40 bg-purple-100 text-purple-600 hover:bg-purple-200 transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
             >
               Edit
             </button>
@@ -653,38 +645,38 @@ function TeacherDashboardContent() {
           {/* FIX Issue 6 (mobile): was grid-cols-4 — 2 cols on mobile */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <p className="text-xs dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs text-[var(--t-text-muted)]">
                 Rate per hour
               </p>
-              <p className="text-lg font-bold dark:text-purple-100 text-purple-900">
+              <p className="text-lg font-bold text-[var(--t-text)]">
                 ${profile?.hourlyRate ?? 25}
               </p>
             </div>
             <div>
-              <p className="text-xs dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs text-[var(--t-text-muted)]">
                 Subjects
               </p>
-              <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
+              <p className="text-sm font-medium text-[var(--t-text)]">
                 {profile?.subjects?.length
                   ? profile.subjects.join(", ")
                   : "Not set"}
               </p>
             </div>
             <div>
-              <p className="text-xs dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs text-[var(--t-text-muted)]">
                 Grades
               </p>
-              <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
+              <p className="text-sm font-medium text-[var(--t-text)]">
                 {profile?.grades?.length
                   ? profile.grades.join(", ")
                   : "Not set"}
               </p>
             </div>
             <div>
-              <p className="text-xs dark:text-purple-300/60 text-purple-400">
+              <p className="text-xs text-[var(--t-text-muted)]">
                 Bio
               </p>
-              <p className="text-sm dark:text-purple-100 text-purple-900 truncate">
+              <p className="text-sm text-[var(--t-text)] truncate">
                 {profile?.bio ?? "No bio yet"}
               </p>
             </div>
@@ -711,7 +703,7 @@ export default function TeacherDashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

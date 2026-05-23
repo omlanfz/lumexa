@@ -45,6 +45,12 @@ const NAV_ITEMS = [
     sub: "Reward Ledger",
   },
   {
+    href: "/teacher-dashboard/insights",
+    icon: "📊",
+    label: "Insights",
+    sub: "Mission Analytics",
+  },
+  {
     href: "/teacher-conduct",
     icon: "📋",
     label: "Guidelines",
@@ -142,23 +148,22 @@ export default function TeacherNav({
   // Shared sidebar content
   const SidebarContent = () => (
     <>
-      {/* Header — FIX: Logo always visible, just scaled in collapsed mode */}
+      {/* Header */}
       <div
-        className={`flex items-center border-b dark:border-purple-900/20 border-purple-100 flex-shrink-0 transition-all duration-300 ${collapsed ? "justify-center px-2 py-4" : "justify-between px-4 py-5"}`}
+        className={`flex items-center border-b flex-shrink-0 transition-all duration-300 border-[var(--t-nav-border)] ${collapsed ? "justify-center px-2 py-4" : "justify-between px-4 py-5"}`}
       >
-        {/* CHANGE: Logo never hidden — shows icon only when collapsed */}
         <div
           className={`flex items-center gap-2 min-w-0 ${collapsed ? "justify-center" : ""}`}
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0 text-white text-sm font-bold">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center flex-shrink-0 text-white text-sm font-bold shadow-sm">
             L
           </div>
           {!collapsed && (
             <div className="overflow-hidden">
-              <p className="font-bold dark:text-white text-purple-900 text-sm leading-tight truncate">
+              <p className="font-bold text-[var(--t-text)] text-sm leading-tight truncate">
                 Lumexa
               </p>
-              <p className="text-xs dark:text-purple-400 text-purple-400 truncate">
+              <p className="text-xs text-[var(--t-accent)] truncate opacity-70">
                 Flight Deck
               </p>
             </div>
@@ -167,7 +172,7 @@ export default function TeacherNav({
         {/* Collapse toggle — desktop only */}
         <button
           onClick={toggleCollapsed}
-          className="hidden lg:flex items-center justify-center w-6 h-6 rounded-md dark:text-purple-400 text-purple-400 dark:hover:bg-purple-900/30 hover:bg-purple-100 transition-colors flex-shrink-0"
+          className="hidden lg:flex items-center justify-center w-6 h-6 rounded-md text-[var(--t-text-muted)] hover:bg-[var(--t-nav-active)] transition-colors flex-shrink-0"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
@@ -177,12 +182,12 @@ export default function TeacherNav({
 
       {/* Profile section */}
       <div
-        className={`relative border-b dark:border-purple-900/20 border-purple-100 flex-shrink-0 ${collapsed ? "px-2 py-3" : "px-4 py-3"}`}
+        className={`relative border-b flex-shrink-0 border-[var(--t-nav-border)] ${collapsed ? "px-2 py-3" : "px-4 py-3"}`}
         data-profile-menu
       >
         <button
           onClick={() => setShowProfileMenu((p) => !p)}
-          className={`flex items-center gap-3 w-full rounded-xl cursor-pointer transition-colors dark:hover:bg-purple-900/20 hover:bg-purple-50 p-2 ${collapsed ? "justify-center" : ""}`}
+          className={`flex items-center gap-3 w-full rounded-xl cursor-pointer transition-colors hover:bg-[var(--t-nav-active)] p-2 ${collapsed ? "justify-center" : ""}`}
           aria-expanded={showProfileMenu}
           aria-haspopup="true"
         >
@@ -193,10 +198,10 @@ export default function TeacherNav({
                 alt={teacherName}
                 width={36}
                 height={36}
-                className="rounded-full object-cover w-9 h-9 ring-2 ring-purple-500/30"
+                className="rounded-full object-cover w-9 h-9 ring-2 ring-[var(--t-accent)]/30"
               />
             ) : (
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-semibold text-sm">
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center text-white font-semibold text-sm">
                 {teacherName.charAt(0).toUpperCase()}
               </div>
             )}
@@ -208,10 +213,10 @@ export default function TeacherNav({
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium dark:text-purple-100 text-purple-900 truncate">
+              <p className="text-sm font-medium text-[var(--t-text)] truncate">
                 {teacherName}
               </p>
-              <p className="text-xs dark:text-purple-400 text-purple-500 truncate">
+              <p className="text-xs text-[var(--t-text-muted)] truncate">
                 {rankIcon} {rankName}
               </p>
             </div>
@@ -219,13 +224,13 @@ export default function TeacherNav({
         </button>
 
         {showProfileMenu && (
-          <div className="absolute left-2 right-2 top-full mt-1 rounded-xl border dark:border-purple-900/40 bg-white dark:bg-[#12082a] border-purple-100 overflow-hidden shadow-xl z-50">
+          <div className="absolute left-2 right-2 top-full mt-1 rounded-xl border border-[var(--t-border)] bg-[var(--t-surface)] overflow-hidden shadow-xl z-50">
             <button
               onClick={() => {
                 fileInputRef.current?.click();
                 setShowProfileMenu(false);
               }}
-              className="w-full px-4 py-2.5 text-sm text-left dark:text-purple-200 text-purple-700 dark:hover:bg-purple-900/30 hover:bg-purple-50 transition-colors"
+              className="w-full px-4 py-2.5 text-sm text-left text-[var(--t-text)] hover:bg-[var(--t-nav-active)] transition-colors"
             >
               📷 Change Photo
             </button>
@@ -234,21 +239,21 @@ export default function TeacherNav({
                 router.push("/teacher-profile");
                 setShowProfileMenu(false);
               }}
-              className="w-full px-4 py-2.5 text-sm text-left dark:text-purple-200 text-purple-700 dark:hover:bg-purple-900/30 hover:bg-purple-50 transition-colors"
+              className="w-full px-4 py-2.5 text-sm text-left text-[var(--t-text)] hover:bg-[var(--t-nav-active)] transition-colors"
             >
               ⚙️ Edit Profile
             </button>
-            <div className="border-t dark:border-purple-900/30 border-purple-100" />
+            <div className="border-t border-[var(--t-border)]" />
             <button
               onClick={logout}
-              className="w-full px-4 py-2.5 text-sm text-left text-red-400 dark:hover:bg-red-900/20 hover:bg-red-50 transition-colors"
+              className="w-full px-4 py-2.5 text-sm text-left text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
               🚫 Log Out
             </button>
           </div>
         )}
         {uploadError && !collapsed && (
-          <p className="text-xs text-red-400 px-2 mt-1">{uploadError}</p>
+          <p className="text-xs text-red-500 dark:text-red-400 px-2 mt-1">{uploadError}</p>
         )}
         <input
           ref={fileInputRef}
@@ -279,8 +284,8 @@ export default function TeacherNav({
               }}
               className={`w-full flex items-center gap-3 rounded-xl text-left transition-all cursor-pointer ${
                 isActive
-                  ? "dark:bg-purple-600/20 bg-purple-100 dark:text-purple-200 text-purple-700 dark:border dark:border-purple-600/30"
-                  : "dark:text-purple-300/70 text-purple-500 dark:hover:bg-purple-900/20 hover:bg-purple-50"
+                  ? "bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] border border-[var(--t-border-strong)]"
+                  : "text-[var(--t-text-muted)] hover:bg-[var(--t-nav-hover)] hover:text-[var(--t-text)]"
               } ${collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"}`}
               title={collapsed ? `${item.label} · ${item.sub}` : undefined}
               aria-current={isActive ? "page" : undefined}
@@ -305,11 +310,11 @@ export default function TeacherNav({
 
       {/* Bottom */}
       <div
-        className={`flex-shrink-0 border-t dark:border-purple-900/20 border-purple-100 ${collapsed ? "p-2" : "p-3"}`}
+        className={`flex-shrink-0 border-t border-[var(--t-nav-border)] ${collapsed ? "p-2" : "p-3"}`}
       >
-        <ThemeToggle />
+        <ThemeToggle variant="teacher" />
         <p
-          className={`text-xs dark:text-purple-800 text-purple-300 text-center mt-2 ${collapsed ? "hidden" : ""}`}
+          className={`text-xs text-[var(--t-text-faint)] text-center mt-2 ${collapsed ? "hidden" : ""}`}
         >
           Lumexa v1.0
         </p>
@@ -322,10 +327,10 @@ export default function TeacherNav({
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 flex items-center justify-center rounded-xl dark:bg-[#0A0714] bg-white border dark:border-purple-900/40 border-purple-100 shadow-lg cursor-pointer"
+        className="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--t-nav-bg)] border border-[var(--t-nav-border)] shadow-lg cursor-pointer"
         aria-label="Open navigation menu"
       >
-        <span className="text-purple-500">☰</span>
+        <span style={{ color: "var(--t-accent)" }}>☰</span>
       </button>
 
       {/* Mobile overlay */}
@@ -339,14 +344,14 @@ export default function TeacherNav({
 
       {/* Mobile sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-screen w-64 flex flex-col z-50 lg:hidden transition-transform duration-300 dark:bg-[#0A0714] bg-white border-r dark:border-purple-900/30 border-purple-100 ${
+        className={`fixed top-0 left-0 h-screen w-64 flex flex-col z-50 lg:hidden transition-transform duration-300 bg-[var(--t-nav-bg)] border-r border-[var(--t-nav-border)] ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="Mobile navigation"
       >
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg dark:text-purple-400 text-purple-500 dark:hover:bg-purple-900/30 hover:bg-purple-100 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-lg text-[var(--t-text-muted)] hover:bg-[var(--t-nav-active)] transition-colors cursor-pointer"
           aria-label="Close navigation menu"
         >
           ✕
@@ -356,7 +361,7 @@ export default function TeacherNav({
 
       {/* Desktop sidebar — CHANGE: flex-shrink-0 prevents content crush */}
       <aside
-        className={`hidden lg:flex flex-col flex-shrink-0 h-screen sticky top-0 transition-all duration-300 dark:bg-[#0A0714] bg-white border-r dark:border-purple-900/30 border-purple-100 ${
+        className={`hidden lg:flex flex-col flex-shrink-0 h-screen sticky top-0 transition-all duration-300 bg-[var(--t-nav-bg)] border-r border-[var(--t-nav-border)] ${
           collapsed ? "w-[72px]" : "w-64"
         }`}
         aria-label="Desktop navigation"

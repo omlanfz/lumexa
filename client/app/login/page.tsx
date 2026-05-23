@@ -3,7 +3,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/axios";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -44,15 +44,13 @@ function LoginContent() {
     setLoading(true);
     setError(null);
     try {
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/auth/login`,
-        { email, password },
-      );
+      const res = await api.post('/auth/login', { email, password });
       const { access_token, user } = res.data;
       localStorage.setItem("token", access_token);
       localStorage.setItem("user", JSON.stringify(user));
       if (user.role === "TEACHER") router.push("/teacher-dashboard");
       else if (user.role === "ADMIN") router.push("/admin");
+      else if (user.role === "STUDENT") router.push("/student-dashboard");
       else router.push("/dashboard");
     } catch (err: any) {
       const m = err.response?.data?.message;

@@ -4,13 +4,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PurchaseGemsDto } from './dto/purchase-gems.dto';
 
 @Injectable()
 export class GemsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
-  /** Get or create the wallet for a user */
   async getWallet(userId: string) {
     let wallet = await this.prisma.gemWallet.findUnique({
       where: { userId },
@@ -30,11 +33,6 @@ export class GemsService {
     return wallet;
   }
 
-  /**
-   * Create a pending gem purchase.
-   * For STRIPE: a separate webhook completes it.
-   * For BKASH/BANK_TRANSFER: admin manually approves via /gems/purchases/:id/approve.
-   */
   async initiatePurchase(userId: string, dto: PurchaseGemsDto) {
     const wallet = await this.getOrCreateWallet(userId);
 
@@ -45,7 +43,7 @@ export class GemsService {
         amountCents: dto.amountCents,
         currency: dto.currency,
         paymentMethod: dto.paymentMethod,
-        status: dto.paymentMethod === 'BANK_TRANSFER' ? 'PENDING' : 'PENDING',
+        status: 'PENDING',
         externalRef: dto.externalRef,
         proofUrl: dto.proofUrl,
       },
@@ -54,10 +52,6 @@ export class GemsService {
     return { purchaseId: purchase.id };
   }
 
-  /**
-   * Approve a pending purchase (admin action for BANK_TRANSFER / BKASH).
-   * Atomically adds gems to wallet balance.
-   */
   async approvePurchase(purchaseId: string) {
     const purchase = await this.prisma.gemPurchase.findUnique({
       where: { id: purchaseId },
@@ -81,15 +75,11 @@ export class GemsService {
     return updatedPurchase;
   }
 
-  /**
-   * Complete a Stripe purchase after webhook confirms payment.
-   * Called internally from the payments/webhook handler.
-   */
   async completeStripePurchase(stripePaymentIntentId: string) {
     const purchase = await this.prisma.gemPurchase.findFirst({
       where: { externalRef: stripePaymentIntentId, status: 'PENDING' },
     });
-    if (!purchase) return; // idempotent
+    if (!purchase) return;
 
     await this.prisma.$transaction([
       this.prisma.gemPurchase.update({
@@ -103,16 +93,55 @@ export class GemsService {
     ]);
   }
 
-  /** Deduct gems from wallet (called when booking a lesson) */
   async spend(userId: string, gems: number) {
     const wallet = await this.prisma.gemWallet.findUnique({ where: { userId } });
     if (!wallet) throw new NotFoundException('Gem wallet not found');
-    if (wallet.balance < gems) throw new BadRequestException('Insufficient gem balance');
+    if (wallet.balance < gems)
+      throw new BadRequestException('Insufficient gem balance');
 
     return this.prisma.gemWallet.update({
       where: { userId },
       data: { balance: { decrement: gems } },
     });
+  }
+
+  // ─── Student: request a top-up from billing contact ───────────────────────
+
+  async requestTopup(studentUserId: string, gems: number) {
+    if (gems < 1 || gems > 10000) {
+      throw new BadRequestException('Gems must be between 1 and 10,000.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: studentUserId },
+      select: {
+        fullName: true,
+        email: true,
+        billingContactEmail: true,
+        role: true,
+      },
+    });
+
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student not found.');
+    }
+    if (!user.billingContactEmail) {
+      throw new BadRequestException(
+        'No billing contact on file. Please contact support to add one.',
+      );
+    }
+
+    this.notifications
+      .sendGemTopupRequest(user.billingContactEmail, {
+        studentName: user.fullName,
+        gems,
+        studentEmail: user.email,
+      })
+      .catch(() => {});
+
+    return {
+      message: `Top-up request sent to your billing contact.`,
+    };
   }
 
   private async getOrCreateWallet(userId: string) {

@@ -1,21 +1,5 @@
-// FILE PATH: server/src/bookings/bookings.controller.ts
-//
-// ─── Issue 17 Fix: GET /bookings/my route ordering ─────────────────────────
-//
-// ROOT CAUSE:
-//   Express (and NestJS) matches routes in declaration order.
-//   In the previous version GET 'my' was declared AFTER GET ':bookingId'.
-//   When the frontend called GET /bookings/my, Express captured "my" as the
-//   bookingId param and forwarded to getBookingById(), which tried to find a
-//   booking with id "my", failed, and returned 404.
-//
-// FIX:
-//   Move GET 'my' to the TOP of the controller — before any parameterised
-//   routes — so it is matched as a literal string path first.
-//
-// RULE: Any route with a literal path segment (e.g. "my", "marketplace",
-//       "leaderboard") MUST be declared before parameterised routes
-//       (e.g. ":bookingId") in the same controller.
+// Named routes BEFORE parameterised routes — NestJS routing rule.
+// See comment in original file for full explanation.
 
 import {
   Controller,
@@ -38,6 +22,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -59,6 +44,11 @@ class SubmitReviewDto {
   comment?: string;
 }
 
+class CreateStudentBookingDto {
+  @IsUUID()
+  shiftId: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 @Controller('bookings')
@@ -66,18 +56,14 @@ class SubmitReviewDto {
 export class BookingsController {
   constructor(private readonly bookingsService: BookingsService) {}
 
-  // ─── Marketplace ─────────────────────────────────────────────────────────────
-  // IMPORTANT: Literal routes ("marketplace", "my") MUST appear before
-  // parameterised routes (":bookingId") to avoid Express treating the
-  // literal segment as a param value.
+  // ── Literal routes first (before all :param routes) ──────────────────────
+
   @Get('marketplace')
   getMarketplace(@Query('page') page = '1', @Query('limit') limit = '20') {
     return this.bookingsService.getMarketplace(+page, +limit);
   }
 
-  // ─── Parent's own bookings ────────────────────────────────────────────────────
-  // Issue 17 fix: moved BEFORE GET :bookingId so "my" is never matched as a
-  // bookingId param.
+  // PARENT's own bookings
   @Get('my')
   @UseGuards(RolesGuard)
   @Roles(Role.PARENT)
@@ -85,7 +71,32 @@ export class BookingsController {
     return this.bookingsService.getMyBookings(req.user.userId);
   }
 
-  // ─── Book a Shift ─────────────────────────────────────────────────────────────
+  // STUDENT: book a shift
+  @Post('student')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  bookStudentShift(
+    @Request() req: any,
+    @Body() dto: CreateStudentBookingDto,
+  ) {
+    return this.bookingsService.bookStudentShift(req.user.userId, dto.shiftId);
+  }
+
+  // STUDENT: cancel a booking (DELETE /bookings/student/:bookingId)
+  @Delete('student/:bookingId')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  cancelStudentBooking(
+    @Request() req: any,
+    @Param('bookingId') bookingId: string,
+  ) {
+    return this.bookingsService.cancelStudentBooking(
+      req.user.userId,
+      bookingId,
+    );
+  }
+
+  // PARENT: book a shift
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.PARENT)
@@ -97,25 +108,40 @@ export class BookingsController {
     );
   }
 
-  // ─── Get Single Booking ───────────────────────────────────────────────────────
-  // IMPORTANT: This parameterised route MUST come AFTER all literal routes
-  // ("marketplace", "my", "stripe/onboard", "stripe/verify") declared above.
+  // Stripe Connect (POST — no collision risk with GET :bookingId)
+  @Post('stripe/onboard')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getStripeOnboardingLink(@Request() req: any) {
+    return this.bookingsService.getStripeOnboardingLink(req.user.userId);
+  }
+
+  @Post('stripe/verify')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  verifyStripeOnboarding(@Request() req: any) {
+    return this.bookingsService.verifyStripeOnboarding(req.user.userId);
+  }
+
+  // ── Parameterised routes — must come AFTER all literal routes ──────────────
+
+  // PARENT + STUDENT: get single booking (for payment page)
   @Get(':bookingId')
   @UseGuards(RolesGuard)
-  @Roles(Role.PARENT)
+  @Roles(Role.PARENT, Role.STUDENT)
   getBooking(@Request() req: any, @Param('bookingId') bookingId: string) {
     return this.bookingsService.getBookingById(bookingId, req.user.userId);
   }
 
-  // ─── Mock Payment Confirmation ────────────────────────────────────────────────
+  // PARENT + STUDENT: mock payment confirmation (dev only)
   @Post(':bookingId/mock-confirm')
   @UseGuards(RolesGuard)
-  @Roles(Role.PARENT)
+  @Roles(Role.PARENT, Role.STUDENT)
   mockConfirm(@Request() req: any, @Param('bookingId') bookingId: string) {
     return this.bookingsService.mockConfirmBooking(bookingId, req.user.userId);
   }
 
-  // ─── Submit Post-Class Review ─────────────────────────────────────────────────
+  // PARENT: submit review
   @Post(':bookingId/review')
   @UseGuards(RolesGuard)
   @Roles(Role.PARENT)
@@ -132,28 +158,28 @@ export class BookingsController {
     );
   }
 
-  // ─── Cancel Booking ───────────────────────────────────────────────────────────
+  // STUDENT: submit review
+  @Post(':bookingId/student-review')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  submitStudentReview(
+    @Request() req: any,
+    @Param('bookingId') bookingId: string,
+    @Body() dto: SubmitReviewDto,
+  ) {
+    return this.bookingsService.submitStudentReview(
+      bookingId,
+      req.user.userId,
+      dto.rating,
+      dto.comment,
+    );
+  }
+
+  // PARENT: cancel booking
   @Delete(':bookingId')
   @UseGuards(RolesGuard)
   @Roles(Role.PARENT)
   cancelBooking(@Request() req: any, @Param('bookingId') bookingId: string) {
     return this.bookingsService.cancelBooking(req.user.userId, bookingId);
-  }
-
-  // ─── Stripe Connect ───────────────────────────────────────────────────────────
-  // These are POST routes so there's no collision risk with GET :bookingId,
-  // but they are placed here for clarity.
-  @Post('stripe/onboard')
-  @UseGuards(RolesGuard)
-  @Roles(Role.TEACHER)
-  getStripeOnboardingLink(@Request() req: any) {
-    return this.bookingsService.getStripeOnboardingLink(req.user.userId);
-  }
-
-  @Post('stripe/verify')
-  @UseGuards(RolesGuard)
-  @Roles(Role.TEACHER)
-  verifyStripeOnboarding(@Request() req: any) {
-    return this.bookingsService.verifyStripeOnboarding(req.user.userId);
   }
 }

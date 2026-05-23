@@ -2,11 +2,50 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
+  BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateStudentDto } from './dto/create-student.dto';
+import { RegisterStudentDto } from './dto/register-student.dto';
+import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
+import { Prisma, SpaceRank, AccountStatus } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Space Rank Helpers ───────────────────────────────────────────────────────
+
+const RANK_THRESHOLDS: { rank: SpaceRank; min: number; icon: string }[] = [
+  { rank: 'STARCHILD', min: 0, icon: '🌟' },
+  { rank: 'EXPLORER', min: 5, icon: '🔭' },
+  { rank: 'COSMONAUT', min: 15, icon: '🛸' },
+  { rank: 'NAVIGATOR', min: 30, icon: '🧭' },
+  { rank: 'CAPTAIN', min: 60, icon: '🎖️' },
+  { rank: 'GALAXY_COMMANDER', min: 100, icon: '🌌' },
+];
+
+function computeSpaceRank(sessions: number): SpaceRank {
+  for (let i = RANK_THRESHOLDS.length - 1; i >= 0; i--) {
+    if (sessions >= RANK_THRESHOLDS[i].min) return RANK_THRESHOLDS[i].rank;
+  }
+  return 'STARCHILD';
+}
+
+function rankMeta(rank: SpaceRank) {
+  return RANK_THRESHOLDS.find((t) => t.rank === rank) ?? RANK_THRESHOLDS[0];
+}
+
+function sessionsToNextRank(sessions: number): number | null {
+  for (const tier of RANK_THRESHOLDS) {
+    if (sessions < tier.min) return tier.min - sessions;
+  }
+  return null;
+}
+
+// ─── Legacy helpers (parent-proxy pattern) ───────────────────────────────────
 
 function getSpaceRank(completedClasses: number) {
   if (completedClasses >= 40) return { tier: 'Admiral', icon: '💫', level: 5 };
@@ -31,21 +70,819 @@ function classesToNextRank(completedClasses: number): number | null {
 
 @Injectable()
 export class StudentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private jwtService: JwtService,
+    private notifications: NotificationsService,
+  ) {}
 
-  // ─── Create student ────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // STUDENT SELF-AUTH METHODS (new architecture)
+  // ══════════════════════════════════════════════════════════════════════════
 
-  async create(userId: string, dto: CreateStudentDto) {
-    return this.prisma.student.create({
+  async registerStudent(dto: RegisterStudentDto) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+    if (existing) {
+      throw new ConflictException('An account with this email already exists.');
+    }
+
+    const needsConsent = dto.age < 16;
+    if (needsConsent && !dto.billingContactEmail) {
+      throw new BadRequestException(
+        'A parent or guardian email is required for students under 16.',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 12);
+    const accountStatus: AccountStatus = needsConsent
+      ? 'PENDING_CONSENT'
+      : 'ACTIVE';
+
+    const user = await this.prisma.user.create({
       data: {
-        parentId: userId,
-        name: dto.name,
+        email: dto.email,
+        password: hashedPassword,
+        fullName: dto.fullName,
+        role: 'STUDENT',
         age: dto.age,
+        grade: dto.grade ?? null,
+        subjects: dto.subjects ?? [],
+        accountStatus,
+        billingContactEmail: dto.billingContactEmail ?? null,
+        spaceRank: 'STARCHILD',
+        totalSessions: 0,
+        streakWeeks: 0,
+        streakFreezes: 1,
+        gemBalance: 0,
       },
+    });
+
+    if (needsConsent) {
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+      await this.prisma.consentToken.create({
+        data: { userId: user.id, token, expiresAt },
+      });
+
+      const consentUrl = `${process.env.FRONTEND_URL}/student/consent/confirm?token=${token}`;
+
+      // Fire-and-forget: send consent email to billing contact
+      this.notifications
+        .sendConsentRequest(dto.billingContactEmail!, {
+          studentName: dto.fullName,
+          consentUrl,
+          expiresHours: 48,
+        })
+        .catch(() => {});
+
+      return {
+        status: 'PENDING_CONSENT' as const,
+        message: `Consent email sent to ${this.maskEmail(dto.billingContactEmail!)}. Account activates after approval.`,
+        consentToken: token,
+        billingContactEmail: dto.billingContactEmail!,
+        userId: user.id,
+      };
+    }
+
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    const access_token = this.jwtService.sign(payload);
+
+    return {
+      status: 'ACTIVE' as const,
+      access_token,
+      user: this.safeUser(user),
+    };
+  }
+
+  async loginStudent(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    const valid = user && (await bcrypt.compare(password, user.password));
+
+    if (!user || !valid || user.role !== 'STUDENT') {
+      throw new UnauthorizedException('Invalid email or password.');
+    }
+    if (user.accountStatus === 'PENDING_CONSENT') {
+      throw new ForbiddenException(
+        'Your account is awaiting parental consent. Please check the email sent to your billing contact.',
+      );
+    }
+    if (user.accountStatus === 'SUSPENDED') {
+      throw new ForbiddenException('This account has been suspended.');
+    }
+    if (user.accountStatus === 'DEACTIVATED') {
+      throw new ForbiddenException('This account has been deactivated.');
+    }
+
+    const payload = { sub: user.id, email: user.email, role: user.role };
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: this.safeUser(user),
+    };
+  }
+
+  async confirmConsent(token: string) {
+    const record = await this.prisma.consentToken.findUnique({
+      where: { token },
+    });
+
+    if (!record) throw new NotFoundException('Consent link is invalid.');
+    if (record.usedAt) {
+      throw new BadRequestException('This consent link has already been used.');
+    }
+    if (record.expiresAt < new Date()) {
+      throw new BadRequestException(
+        'This consent link has expired. Please ask the student to register again.',
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: {
+          accountStatus: 'ACTIVE',
+          billingContactConsented: true,
+          billingContactConsentAt: new Date(),
+        },
+      }),
+      this.prisma.consentToken.update({
+        where: { token },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    return { message: 'Account activated. The student can now log in.' };
+  }
+
+  async getMyProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        avatarUrl: true,
+        age: true,
+        grade: true,
+        subjects: true,
+        spaceRank: true,
+        totalSessions: true,
+        streakWeeks: true,
+        streakFreezes: true,
+        gemBalance: true,
+        accountStatus: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student profile not found.');
+    }
+
+    const rankInfo = rankMeta(user.spaceRank);
+    return {
+      ...user,
+      rankIcon: rankInfo.icon,
+      sessionsToNextRank: sessionsToNextRank(user.totalSessions),
+    };
+  }
+
+  async updateMyProfile(userId: string, dto: UpdateStudentProfileDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student profile not found.');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(dto.fullName !== undefined && { fullName: dto.fullName }),
+        ...(dto.grade !== undefined && { grade: dto.grade }),
+        ...(dto.subjects !== undefined && { subjects: dto.subjects }),
+        ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        avatarUrl: true,
+        age: true,
+        grade: true,
+        subjects: true,
+        spaceRank: true,
+        totalSessions: true,
+        streakWeeks: true,
+        streakFreezes: true,
+        gemBalance: true,
+        accountStatus: true,
+      },
+    });
+
+    const rankInfo = rankMeta(updated.spaceRank);
+    return {
+      ...updated,
+      rankIcon: rankInfo.icon,
+      sessionsToNextRank: sessionsToNextRank(updated.totalSessions),
+    };
+  }
+
+  async deactivateMyAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!user || user.role !== 'STUDENT') {
+      throw new NotFoundException('Student not found.');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: 'DEACTIVATED' },
+    });
+
+    return { success: true };
+  }
+
+  async getMyDashboard(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        spaceRank: true,
+        totalSessions: true,
+        streakWeeks: true,
+        streakFreezes: true,
+        gemBalance: true,
+        billingContactEmail: true,
+      },
+    });
+
+    if (!user) throw new NotFoundException('Student not found.');
+
+    const now = new Date();
+
+    const bookings = await this.prisma.booking.findMany({
+      where: {
+        studentUserId: userId,
+        paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+      },
+      include: {
+        shift: {
+          include: {
+            teacher: {
+              include: {
+                user: { select: { fullName: true, avatarUrl: true } },
+              },
+            },
+          },
+        },
+        review: { select: { id: true, rating: true } },
+      },
+      orderBy: { shift: { start: 'asc' } },
+    });
+
+    const captured = bookings.filter((b) => b.paymentStatus === 'CAPTURED');
+    const upcoming = bookings.filter((b) => new Date(b.shift.start) > now);
+
+    const nextBooking =
+      upcoming.length > 0
+        ? {
+            bookingId: upcoming[0].id,
+            classStart: upcoming[0].shift.start,
+            classEnd: upcoming[0].shift.end,
+            teacherName: upcoming[0].shift.teacher.user.fullName,
+            teacherAvatarUrl: upcoming[0].shift.teacher.user.avatarUrl,
+          }
+        : null;
+
+    const pendingReview =
+      captured
+        .filter((b) => new Date(b.shift.end) < now && !b.review)
+        .sort(
+          (a, b) =>
+            new Date(b.shift.end).getTime() - new Date(a.shift.end).getTime(),
+        )[0] ?? null;
+
+    const recentSessions = captured
+      .filter((b) => new Date(b.shift.end) < now)
+      .sort(
+        (a, b) =>
+          new Date(b.shift.end).getTime() - new Date(a.shift.end).getTime(),
+      )
+      .slice(0, 5)
+      .map((b) => ({
+        bookingId: b.id,
+        classStart: b.shift.start,
+        classEnd: b.shift.end,
+        teacherName: b.shift.teacher.user.fullName,
+        teacherAvatarUrl: b.shift.teacher.user.avatarUrl,
+        durationMinutes: Math.round(
+          (new Date(b.shift.end).getTime() -
+            new Date(b.shift.start).getTime()) /
+            60000,
+        ),
+        hasReview: !!b.review,
+      }));
+
+    const rankInfo = rankMeta(user.spaceRank);
+
+    return {
+      student: {
+        id: user.id,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        spaceRank: user.spaceRank,
+        rankIcon: rankInfo.icon,
+        totalSessions: user.totalSessions,
+        streakWeeks: user.streakWeeks,
+        streakFreezes: user.streakFreezes,
+        gemBalance: user.gemBalance,
+        hasBillingContact: !!user.billingContactEmail,
+        sessionsToNextRank: sessionsToNextRank(user.totalSessions),
+      },
+      upcomingBooking: nextBooking,
+      pendingReview: pendingReview
+        ? {
+            bookingId: pendingReview.id,
+            classStart: pendingReview.shift.start,
+            teacherName: pendingReview.shift.teacher.user.fullName,
+            teacherAvatarUrl: pendingReview.shift.teacher.user.avatarUrl,
+          }
+        : null,
+      recentSessions,
+      stats: {
+        totalSessions: user.totalSessions,
+        upcomingCount: upcoming.length,
+        spaceRank: user.spaceRank,
+        streakWeeks: user.streakWeeks,
+        gemBalance: user.gemBalance,
+      },
+    };
+  }
+
+  // ─── Paginated lesson list for lessons sub-page ───────────────────────────
+
+  async getMyLessons(
+    userId: string,
+    status: 'upcoming' | 'completed' | 'all' = 'all',
+    page = 1,
+    limit = 10,
+  ) {
+    const now = new Date();
+
+    const where: Prisma.BookingWhereInput = { studentUserId: userId };
+    if (status === 'upcoming') {
+      where.paymentStatus = { notIn: ['REFUNDED'] };
+      where.shift = { start: { gt: now } };
+    } else if (status === 'completed') {
+      where.paymentStatus = 'CAPTURED';
+      where.shift = { end: { lt: now } };
+    } else {
+      where.paymentStatus = { notIn: ['REFUNDED'] };
+    }
+
+    const [bookings, total] = await Promise.all([
+      this.prisma.booking.findMany({
+        where,
+        include: {
+          shift: {
+            include: {
+              teacher: {
+                include: {
+                  user: { select: { fullName: true, avatarUrl: true } },
+                },
+              },
+            },
+          },
+          review: { select: { id: true, rating: true, comment: true } },
+        },
+        orderBy: {
+          shift: { start: status === 'upcoming' ? 'asc' : 'desc' },
+        },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.booking.count({ where }),
+    ]);
+
+    return {
+      bookings: bookings.map((b) => ({
+        bookingId: b.id,
+        status: b.paymentStatus,
+        classStart: b.shift.start,
+        classEnd: b.shift.end,
+        teacherName: b.shift.teacher.user.fullName,
+        teacherAvatarUrl: b.shift.teacher.user.avatarUrl ?? null,
+        durationMinutes: Math.round(
+          (new Date(b.shift.end).getTime() -
+            new Date(b.shift.start).getTime()) /
+            60000,
+        ),
+        review: b.review
+          ? { id: b.review.id, rating: b.review.rating, comment: b.review.comment }
+          : null,
+        recordingUrl: b.recordingUrl ?? null,
+        isUpcoming: new Date(b.shift.start) > now,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  // ─── Progress / stats for progress sub-page ───────────────────────────────
+
+  async getMyProgress(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        spaceRank: true,
+        totalSessions: true,
+        streakWeeks: true,
+        streakFreezes: true,
+        gemBalance: true,
+        subjects: true,
+        createdAt: true,
+        billingContactEmail: true,
+      },
+    });
+    if (!user) throw new NotFoundException('Student not found.');
+
+    const completedBookings = await this.prisma.booking.findMany({
+      where: { studentUserId: userId, paymentStatus: 'CAPTURED' },
+      select: {
+        shift: {
+          select: {
+            start: true,
+            end: true,
+            teacher: { select: { subjects: true } },
+          },
+        },
+      },
+    });
+
+    const totalMinutes = completedBookings.reduce((sum, b) => {
+      return (
+        sum +
+        Math.round(
+          (new Date(b.shift.end).getTime() -
+            new Date(b.shift.start).getTime()) /
+            60000,
+        )
+      );
+    }, 0);
+
+    // Subject breakdown from teacher subjects
+    const subjectMap = new Map<string, number>();
+    for (const b of completedBookings) {
+      for (const subj of b.shift.teacher.subjects) {
+        subjectMap.set(subj, (subjectMap.get(subj) ?? 0) + 1);
+      }
+    }
+    const subjectBreakdown = Array.from(subjectMap.entries())
+      .map(([subject, count]) => ({ subject, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Rank journey — show unlocked + next locked tier
+    const rankHistory = RANK_THRESHOLDS.map((t) => ({
+      rank: t.rank,
+      icon: t.icon,
+      minSessions: t.min,
+      unlocked: user.totalSessions >= t.min,
+    }));
+
+    const rankInfo = rankMeta(user.spaceRank);
+    const toNext = sessionsToNextRank(user.totalSessions);
+
+    return {
+      spaceRank: user.spaceRank,
+      rankIcon: rankInfo.icon,
+      totalSessions: user.totalSessions,
+      totalHours: Math.round((totalMinutes / 60) * 10) / 10,
+      streakWeeks: user.streakWeeks,
+      streakFreezes: user.streakFreezes,
+      sessionsToNextRank: toNext,
+      subjects: user.subjects,
+      subjectBreakdown,
+      rankHistory,
+      badges: await this.getDbBadges(userId),
+      recentGemTransactions: await this.getRecentGemTransactions(userId),
+      memberSince: user.createdAt,
+      gemBalance: user.gemBalance,
+      hasBillingContact: !!user.billingContactEmail,
+    };
+  }
+
+  // ─── Badge definitions ────────────────────────────────────────────────────
+
+  static readonly BADGE_DEFS = [
+    { type: 'FIRST_MISSION', label: 'First Launch', icon: '🚀' },
+    { type: 'STREAK_4', label: '4-Week Streak', icon: '🔥' },
+    { type: 'STREAK_8', label: '8-Week Streak', icon: '🌟' },
+    { type: 'STREAK_12', label: 'Galaxy Streak', icon: '💫' },
+    { type: 'RANK_EXPLORER', label: 'Explorer', icon: '🔭' },
+    { type: 'RANK_COSMONAUT', label: 'Cosmonaut', icon: '🛸' },
+    { type: 'RANK_NAVIGATOR', label: 'Navigator', icon: '🧭' },
+    { type: 'RANK_CAPTAIN', label: 'Captain', icon: '🎖️' },
+    { type: 'RANK_COMMANDER', label: 'Galaxy Commander', icon: '🌌' },
+    { type: 'COMEBACK_CADET', label: 'Comeback Cadet', icon: '🌠' },
+  ] as const;
+
+  private async getDbBadges(userId: string) {
+    const earned = await this.prisma.studentBadge.findMany({
+      where: { userId },
+      select: { type: true, earnedAt: true },
+    });
+    const earnedMap = new Map(earned.map((b) => [b.type, b.earnedAt]));
+    return StudentsService.BADGE_DEFS.map((def) => ({
+      id: def.type,
+      label: def.label,
+      icon: def.icon,
+      earned: earnedMap.has(def.type),
+      earnedAt: earnedMap.get(def.type) ?? null,
+    }));
+  }
+
+  private async getRecentGemTransactions(userId: string, limit = 10) {
+    return this.prisma.gemTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      select: { id: true, amount: true, type: true, description: true, createdAt: true },
     });
   }
 
-  // ─── List all students for a parent ────────────────────────────────────────
+  // ─── Award gems + log transaction ─────────────────────────────────────────
+
+  async awardGems(
+    userId: string,
+    amount: number,
+    type: string,
+    description: string,
+  ): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { gemBalance: { increment: amount } },
+      }),
+      this.prisma.gemTransaction.create({
+        data: { userId, amount, type, description },
+      }),
+    ]);
+  }
+
+  // ─── Check and award badges (run after session captured) ──────────────────
+
+  async checkAndAwardBadges(userId: string): Promise<string[]> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { totalSessions: true, streakWeeks: true, spaceRank: true },
+    });
+    if (!user) return [];
+
+    const existingBadges = await this.prisma.studentBadge.findMany({
+      where: { userId },
+      select: { type: true },
+    });
+    const earned = new Set(existingBadges.map((b) => b.type));
+
+    const rankOrder = ['STARCHILD', 'EXPLORER', 'COSMONAUT', 'NAVIGATOR', 'CAPTAIN', 'GALAXY_COMMANDER'];
+    const rankIdx = rankOrder.indexOf(user.spaceRank);
+
+    const toAward: string[] = [];
+    const checks: { type: string; condition: boolean }[] = [
+      { type: 'FIRST_MISSION', condition: user.totalSessions >= 1 },
+      { type: 'STREAK_4', condition: user.streakWeeks >= 4 },
+      { type: 'STREAK_8', condition: user.streakWeeks >= 8 },
+      { type: 'STREAK_12', condition: user.streakWeeks >= 12 },
+      { type: 'RANK_EXPLORER', condition: rankIdx >= 1 },
+      { type: 'RANK_COSMONAUT', condition: rankIdx >= 2 },
+      { type: 'RANK_NAVIGATOR', condition: rankIdx >= 3 },
+      { type: 'RANK_CAPTAIN', condition: rankIdx >= 4 },
+      { type: 'RANK_COMMANDER', condition: rankIdx >= 5 },
+    ];
+
+    for (const check of checks) {
+      if (check.condition && !earned.has(check.type)) {
+        toAward.push(check.type);
+      }
+    }
+
+    if (toAward.length > 0) {
+      await this.prisma.studentBadge.createMany({
+        data: toAward.map((type) => ({ userId, type })),
+        skipDuplicates: true,
+      });
+    }
+
+    return toAward;
+  }
+
+  // ─── Teacher list for teachers sub-page ──────────────────────────────────
+
+  async getMyTeachers(userId: string) {
+    const bookings = await this.prisma.booking.findMany({
+      where: { studentUserId: userId, paymentStatus: 'CAPTURED' },
+      include: {
+        shift: {
+          include: {
+            teacher: {
+              include: {
+                user: { select: { id: true, fullName: true, avatarUrl: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { shift: { start: 'desc' } },
+    });
+
+    type TeacherEntry = {
+      id: string;
+      ratingAvg: number;
+      reviewCount: number;
+      subjects: string[];
+      hourlyRate: number;
+      user: { fullName: string; avatarUrl: string | null };
+      sessionCount: number;
+      lastSession: Date;
+    };
+
+    const teacherMap = new Map<string, TeacherEntry>();
+
+    for (const b of bookings) {
+      const t = b.shift.teacher;
+      if (!teacherMap.has(t.id)) {
+        teacherMap.set(t.id, {
+          id: t.id,
+          ratingAvg: t.ratingAvg,
+          reviewCount: t.reviewCount,
+          subjects: t.subjects,
+          hourlyRate: t.hourlyRate,
+          user: { fullName: t.user.fullName, avatarUrl: t.user.avatarUrl ?? null },
+          sessionCount: 0,
+          lastSession: new Date(b.shift.start),
+        });
+      }
+      teacherMap.get(t.id)!.sessionCount++;
+    }
+
+    return Array.from(teacherMap.values()).map((t) => ({
+      teacherProfileId: t.id,
+      fullName: t.user.fullName,
+      avatarUrl: t.user.avatarUrl,
+      ratingAvg: t.ratingAvg,
+      reviewCount: t.reviewCount,
+      subjects: t.subjects,
+      hourlyRate: t.hourlyRate,
+      sessionCount: t.sessionCount,
+      lastSession: t.lastSession,
+    }));
+  }
+
+  // ─── Rankings for rankings sub-page ──────────────────────────────────────
+
+  async getMyRankings(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { totalSessions: true, spaceRank: true, subjects: true, createdAt: true },
+    });
+    if (!user) throw new NotFoundException('Student not found.');
+
+    const now = new Date();
+    const cohortMonth = user.createdAt.getMonth() + 1;
+    const cohortYear = user.createdAt.getFullYear();
+    const cohortStart = new Date(cohortYear, cohortMonth - 1, 1);
+    const cohortEnd = new Date(cohortYear, cohortMonth, 1);
+
+    const [
+      globalHigher, globalTotal, topGlobal,
+      cohortHigher, cohortTotal, topCohort,
+      lastSnapshot,
+    ] = await Promise.all([
+      this.prisma.user.count({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE', totalSessions: { gt: user.totalSessions } },
+      }),
+      this.prisma.user.count({ where: { role: 'STUDENT', accountStatus: 'ACTIVE' } }),
+      this.prisma.user.findMany({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE', totalSessions: { gt: 0 } },
+        select: { id: true, fullName: true, avatarUrl: true, totalSessions: true, spaceRank: true },
+        orderBy: { totalSessions: 'desc' },
+        take: 20,
+      }),
+      this.prisma.user.count({
+        where: {
+          role: 'STUDENT', accountStatus: 'ACTIVE',
+          createdAt: { gte: cohortStart, lt: cohortEnd },
+          totalSessions: { gt: user.totalSessions },
+        },
+      }),
+      this.prisma.user.count({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE', createdAt: { gte: cohortStart, lt: cohortEnd } },
+      }),
+      this.prisma.user.findMany({
+        where: {
+          role: 'STUDENT', accountStatus: 'ACTIVE',
+          createdAt: { gte: cohortStart, lt: cohortEnd },
+          totalSessions: { gt: 0 },
+        },
+        select: { id: true, fullName: true, avatarUrl: true, totalSessions: true, spaceRank: true },
+        orderBy: { totalSessions: 'desc' },
+        take: 20,
+      }),
+      this.prisma.rankSnapshot.findFirst({
+        where: { userId, month: now.getMonth() === 0 ? 12 : now.getMonth(), year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear() },
+      }),
+    ]);
+
+    const globalRank = globalHigher + 1;
+    const cohortRank = cohortHigher + 1;
+
+    // Save snapshot for current month if not already saved
+    const snapMonth = now.getMonth() + 1;
+    const snapYear = now.getFullYear();
+    this.prisma.rankSnapshot.upsert({
+      where: { userId_month_year: { userId, month: snapMonth, year: snapYear } },
+      update: { globalRank, cohortRank },
+      create: { userId, globalRank, cohortRank, month: snapMonth, year: snapYear },
+    }).catch(() => {});
+
+    // Subject ranks
+    const subjectRanks: Record<string, { rank: number; total: number }> = {};
+    for (const subject of user.subjects) {
+      const [subHigher, subTotal] = await Promise.all([
+        this.prisma.user.count({
+          where: { role: 'STUDENT', accountStatus: 'ACTIVE', subjects: { has: subject }, totalSessions: { gt: user.totalSessions } },
+        }),
+        this.prisma.user.count({
+          where: { role: 'STUDENT', accountStatus: 'ACTIVE', subjects: { has: subject } },
+        }),
+      ]);
+      subjectRanks[subject] = { rank: subHigher + 1, total: subTotal };
+    }
+
+    // Ensure current user in top lists
+    const ensureUser = (list: typeof topGlobal) => {
+      if (!list.some((s) => s.id === userId)) {
+        list.push({
+          id: userId,
+          fullName: '',
+          avatarUrl: null,
+          totalSessions: user.totalSessions,
+          spaceRank: user.spaceRank,
+        });
+      }
+      return list;
+    };
+    ensureUser(topGlobal);
+    ensureUser(topCohort);
+
+    const mapEntry = (s: (typeof topGlobal)[0], i: number) => ({
+      position: i + 1,
+      fullName: s.fullName,
+      avatarUrl: s.avatarUrl ?? null,
+      totalSessions: s.totalSessions,
+      spaceRank: s.spaceRank,
+      spaceRankIcon: rankMeta(s.spaceRank as SpaceRank).icon,
+      isCurrentUser: s.id === userId,
+    });
+
+    const rankInfo = rankMeta(user.spaceRank);
+    const movedUp = lastSnapshot ? lastSnapshot.globalRank - globalRank : null;
+
+    return {
+      globalRank,
+      totalStudents: globalTotal,
+      globalPercentile: globalTotal > 1 ? Math.round((1 - globalHigher / globalTotal) * 100) : 100,
+      topStudents: topGlobal.map(mapEntry),
+      cohortRank,
+      totalInCohort: cohortTotal,
+      cohortPercentile: cohortTotal > 1 ? Math.round((1 - cohortHigher / cohortTotal) * 100) : 100,
+      cohortMonth: user.createdAt.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      topCohort: topCohort.map(mapEntry),
+      subjectRanks,
+      movedUpThisMonth: movedUp,
+      currentUserSessions: user.totalSessions,
+      currentUserRank: user.spaceRank,
+      currentUserRankIcon: rankInfo.icon,
+    };
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PARENT-PROXY METHODS (legacy, unchanged)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async create(userId: string, dto: CreateStudentDto) {
+    return this.prisma.student.create({
+      data: { parentId: userId, name: dto.name, age: dto.age },
+    });
+  }
 
   async findAllForParent(userId: string) {
     return this.prisma.student.findMany({
@@ -54,10 +891,6 @@ export class StudentsService {
     });
   }
 
-  // ─── Student dashboard data ────────────────────────────────────────────────
-  // Returns all data needed for the student hub page.
-  // Parent must own the student — returns 403 otherwise.
-
   async getStudentDashboard(studentId: string, parentId: string) {
     const student = await this.prisma.student.findFirst({
       where: { id: studentId, parentId },
@@ -65,8 +898,6 @@ export class StudentsService {
     if (!student) throw new NotFoundException('Student not found.');
 
     const now = new Date();
-
-    // Fetch all non-refunded bookings for this student
     const bookings = await this.prisma.booking.findMany({
       where: {
         studentId,
@@ -133,10 +964,6 @@ export class StudentsService {
     };
   }
 
-  // ─── Student bookings (lesson history) ────────────────────────────────────
-  // Paginated list of all bookings for a student.
-  // Parent must own the student.
-
   async getStudentBookings(
     studentId: string,
     parentId: string,
@@ -150,8 +977,6 @@ export class StudentsService {
     if (!student) throw new NotFoundException('Student not found.');
 
     const now = new Date();
-
-    // Build where clause based on filter
     let statusFilter: object = {
       paymentStatus: { in: ['PENDING', 'CAPTURED'] },
     };
@@ -166,11 +991,7 @@ export class StudentsService {
 
     const [bookings, total] = await Promise.all([
       this.prisma.booking.findMany({
-        where: {
-          studentId,
-          ...statusFilter,
-          shift: shiftFilter,
-        },
+        where: { studentId, ...statusFilter, shift: shiftFilter },
         include: {
           shift: {
             include: {
@@ -188,11 +1009,7 @@ export class StudentsService {
         take: limit,
       }),
       this.prisma.booking.count({
-        where: {
-          studentId,
-          ...statusFilter,
-          shift: shiftFilter,
-        },
+        where: { studentId, ...statusFilter, shift: shiftFilter },
       }),
     ]);
 
@@ -220,10 +1037,6 @@ export class StudentsService {
     };
   }
 
-  // ─── Student leaderboard ───────────────────────────────────────────────────
-  // Returns all students ranked by completed classes.
-  // Accessible by any parent.
-
   async getLeaderboard(currentStudentId?: string) {
     const students = await this.prisma.student.findMany({
       select: {
@@ -250,7 +1063,6 @@ export class StudentsService {
       .sort((a, b) => b.completedClasses - a.completedClasses)
       .map((s, i) => ({ ...s, position: i + 1 }));
 
-    // If current student has 0 classes they're at the bottom, mark them
     if (currentStudentId) {
       const inList = ranked.find((r) => r.studentId === currentStudentId);
       if (!inList) {
@@ -267,5 +1079,47 @@ export class StudentsService {
     }
 
     return ranked;
+  }
+
+  // ─── Private helpers ────────────────────────────────────────────────────────
+
+  private safeUser(user: {
+    id: string;
+    email: string;
+    fullName: string;
+    role: string;
+    avatarUrl: string | null;
+    age: number | null;
+    grade: string | null;
+    subjects: string[];
+    spaceRank: SpaceRank;
+    totalSessions: number;
+    streakWeeks: number;
+    streakFreezes: number;
+    gemBalance: number;
+    accountStatus: AccountStatus;
+  }) {
+    return {
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      role: user.role,
+      avatarUrl: user.avatarUrl,
+      age: user.age,
+      grade: user.grade,
+      subjects: user.subjects,
+      spaceRank: user.spaceRank,
+      totalSessions: user.totalSessions,
+      streakWeeks: user.streakWeeks,
+      streakFreezes: user.streakFreezes,
+      gemBalance: user.gemBalance,
+      accountStatus: user.accountStatus,
+    };
+  }
+
+  private maskEmail(email: string): string {
+    const [local, domain] = email.split('@');
+    if (!domain) return email;
+    return `${local.slice(0, 2)}***@${domain}`;
   }
 }

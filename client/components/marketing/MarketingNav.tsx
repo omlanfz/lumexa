@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
+import { parseStoredUser } from "@/lib/storage";
 
 function useNavTheme() {
   const [isDark, setIsDark] = useState(false);
@@ -48,10 +49,11 @@ export default function MarketingNav() {
   }, []);
 
   const handleDashboard = () => {
-    const user = JSON.parse(localStorage.getItem("user") ?? "null");
+    const user = parseStoredUser();
     if (!user) { router.push("/login"); return; }
     if (user.role === "TEACHER") router.push("/teacher-dashboard");
     else if (user.role === "ADMIN") router.push("/admin");
+    else if (user.role === "STUDENT") router.push("/student-dashboard");
     else {
       const last = localStorage.getItem("last_student_id");
       router.push(last ? `/student-dashboard/${last}` : "/dashboard");

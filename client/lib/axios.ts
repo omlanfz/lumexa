@@ -25,6 +25,7 @@
 // login/logout state changes are picked up immediately.
 
 import axios from "axios";
+import { getStoredRole, clearAuth } from "@/lib/storage";
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL,
@@ -46,19 +47,17 @@ api.interceptors.request.use(
   (error) => Promise.reject(error),
 );
 
-// ── Response interceptor: redirect to /login on 401 ───────────────────────────
+// ── Response interceptor: redirect to correct login on 401 ───────────────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (typeof window !== "undefined" && error?.response?.status === 401) {
-      // Only redirect if not already on an auth page
-      const isAuthPage =
-        window.location.pathname === "/login" ||
-        window.location.pathname === "/register";
+      const path = window.location.pathname;
+      const isAuthPage = path === "/login" || path === "/register";
+
       if (!isAuthPage) {
-        // Clear stale tokens and send to login
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
+        const role = getStoredRole();
+        clearAuth();
         window.location.href = "/login";
       }
     }

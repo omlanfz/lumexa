@@ -3,12 +3,9 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/axios";
 import TeacherLayout from "../../components/TeacherLayout";
-import { useTheme } from "../../components/ThemeProvider";
-// ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
 import LumiChat from "../../components/LumiChat";
-// ──────────────────────────────────────────────────────────────────────────────
 
 interface EarningsItem {
   bookingId: string;
@@ -29,17 +26,80 @@ interface EarningsSummary {
   items: EarningsItem[];
 }
 
+interface MonthBucket {
+  key: string;
+  label: string;
+  earningsCents: number;
+  sessions: number;
+}
+
+interface MonthlyEarnings {
+  months: MonthBucket[];
+  trend: number | null;
+}
+
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
   rankTier: number;
   strikes: number;
 }
 
+function BarChart({ months }: { months: MonthBucket[] }) {
+  if (months.length === 0) return null;
+  const maxCents = Math.max(...months.map((m) => m.earningsCents), 1);
+
+  return (
+    <div className="flex items-end gap-2 sm:gap-3 h-40 w-full">
+      {months.map((m) => {
+        const pct = (m.earningsCents / maxCents) * 100;
+        const dollars = (m.earningsCents / 100).toFixed(0);
+        return (
+          <div
+            key={m.key}
+            className="flex-1 flex flex-col items-center gap-1 group"
+          >
+            <span className="text-xs text-[var(--t-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity">
+              ${dollars}
+            </span>
+            <div className="w-full relative flex flex-col justify-end" style={{ height: "120px" }}>
+              <div
+                className="w-full rounded-t-lg bg-gradient-to-t from-purple-700 to-purple-400 transition-all duration-500"
+                style={{ height: `${Math.max(pct, 4)}%` }}
+                title={`${m.label}: $${dollars} (${m.sessions} session${m.sessions !== 1 ? "s" : ""})`}
+              />
+            </div>
+            <span className="text-[10px] sm:text-xs text-[var(--t-text-muted)] truncate w-full text-center">
+              {m.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function TrendBadge({ trend }: { trend: number | null }) {
+  if (trend === null) return null;
+  const up = trend >= 0;
+  const label = `${up ? "+" : ""}${trend.toFixed(0)}% vs last month`;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+        up
+          ? "bg-green-500/15 text-green-400"
+          : "bg-red-500/15 text-red-400"
+      }`}
+    >
+      {up ? "▲" : "▼"} {label}
+    </span>
+  );
+}
+
 function TeacherEarningsContent() {
   const router = useRouter();
-  const { isDark } = useTheme();
 
   const [summary, setSummary] = useState<EarningsSummary | null>(null);
+  const [monthly, setMonthly] = useState<MonthlyEarnings | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,16 +113,14 @@ function TeacherEarningsContent() {
 
     (async () => {
       try {
-        const [earningsRes, profileRes] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/earnings`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+        const [earningsRes, profileRes, monthlyRes] = await Promise.all([
+          api.get("/teachers/me/earnings"),
+          api.get("/teachers/me/profile"),
+          api.get("/teachers/me/earnings/monthly"),
         ]);
         setSummary(earningsRes.data);
         setProfile(profileRes.data);
+        setMonthly(monthlyRes.data);
       } catch (e: any) {
         const m = e.response?.data?.message;
         setError(
@@ -74,12 +132,11 @@ function TeacherEarningsContent() {
     })();
   }, [router]);
 
-  const card =
-    "rounded-2xl border dark:bg-gray-900/40 dark:border-purple-900/30 bg-white border-purple-100 shadow-sm";
+  const card = "t-card shadow-sm";
 
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
         <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -88,9 +145,24 @@ function TeacherEarningsContent() {
   const avgClass = (summary?.avgPerClassCents ?? 0) / 100;
   const completed = summary?.completedClasses ?? 0;
   const items = summary?.items ?? [];
+  const months = monthly?.months ?? [];
+  const trend = monthly?.trend ?? null;
 
   const weeklyAvg =
     completed > 0 ? earned / Math.max(1, Math.ceil(completed / 4)) : 0;
+
+  // Next payout: next Monday (Stripe typically pays weekly on Mondays)
+  const nextPayoutDate = (() => {
+    const d = new Date();
+    const day = d.getDay();
+    const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
+    d.setDate(d.getDate() + daysUntilMonday);
+    return d.toLocaleDateString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  })();
 
   return (
     <TeacherLayout
@@ -102,16 +174,16 @@ function TeacherEarningsContent() {
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold dark:text-purple-100 text-purple-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
               Earnings
             </h1>
-            <p className="text-sm dark:text-purple-400/60 text-purple-400">
+            <p className="text-sm text-[var(--t-text-muted)]">
               Reward Ledger ✦
             </p>
           </div>
           <button
             onClick={() => router.push("/teacher-conduct")}
-            className="text-xs px-3 py-2 rounded-xl dark:bg-purple-900/30 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-900/50 hover:bg-purple-200 transition-colors"
+            className="text-xs px-3 py-2 rounded-xl bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
           >
             📋 View Penalty Rules
           </button>
@@ -131,43 +203,110 @@ function TeacherEarningsContent() {
               label: "Total Earned",
               value: `$${earned.toFixed(2)}`,
               sub: "your 75% share",
-              color: "dark:text-green-400 text-green-600",
+              color: "text-green-600 dark:text-green-400",
             },
             {
               icon: "📚",
               label: "Total Classes",
               value: completed.toString(),
               sub: "completed sessions",
-              color: "dark:text-purple-100 text-purple-900",
+              color: "text-[var(--t-text)]",
             },
             {
               icon: "📊",
               label: "Avg per Class",
               value: `$${avgClass.toFixed(2)}`,
               sub: "per completed class",
-              color: "dark:text-blue-400 text-blue-600",
+              color: "text-blue-600 dark:text-blue-400",
             },
             {
               icon: "📅",
               label: "Est. Monthly",
               value: `$${(weeklyAvg * 4).toFixed(0)}`,
               sub: "based on history",
-              color: "dark:text-purple-100 text-purple-900",
+              color: "text-[var(--t-text)]",
             },
           ].map((s) => (
             <div key={s.label} className={`${card} p-4`}>
               <span className="text-xl">{s.icon}</span>
-              <p className="text-xs uppercase tracking-wide dark:text-purple-300/60 text-purple-400 mt-2">
+              <p className="text-xs uppercase tracking-wide text-[var(--t-text-muted)] mt-2">
                 {s.label}
               </p>
               <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>
                 {s.value}
               </p>
-              <p className="text-xs dark:text-purple-400/50 text-purple-400 mt-0.5">
+              <p className="text-xs text-[var(--t-text-muted)] mt-0.5">
                 {s.sub}
               </p>
             </div>
           ))}
+        </div>
+
+        {/* ── Monthly bar chart + Next payout ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          {/* Bar chart */}
+          <div className={`${card} p-5 lg:col-span-2`}>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <p className="font-semibold text-[var(--t-text)]">
+                  Monthly Earnings
+                </p>
+                <p className="text-xs text-[var(--t-text-muted)]">
+                  Last 6 months
+                </p>
+              </div>
+              <TrendBadge trend={trend} />
+            </div>
+            {months.length > 0 ? (
+              <BarChart months={months} />
+            ) : (
+              <div className="h-40 flex items-center justify-center text-[var(--t-text-muted)] text-sm">
+                No data yet — complete your first class to see a chart.
+              </div>
+            )}
+          </div>
+
+          {/* Next payout card */}
+          <div className={`${card} p-5 flex flex-col justify-between`}>
+            <div>
+              <p className="font-semibold text-[var(--t-text)] mb-1">
+                Next Payout
+              </p>
+              <p className="text-xs text-[var(--t-text-muted)] mb-4">
+                Via Stripe Connect
+              </p>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-xl flex-shrink-0">
+                  🗓️
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--t-text)]">
+                    {nextPayoutDate}
+                  </p>
+                  <p className="text-xs text-[var(--t-text-muted)]">
+                    Weekly rolling payout
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center text-xl flex-shrink-0">
+                  💳
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-green-400">
+                    ${(weeklyAvg).toFixed(2)} est.
+                  </p>
+                  <p className="text-xs text-[var(--t-text-muted)]">
+                    Based on last 4 classes
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--t-text-faint)] mt-4 border-t border-[var(--t-nav-border)] pt-3">
+              Exact amount confirmed after class capture. Stripe Connect
+              required for direct payouts.
+            </p>
+          </div>
         </div>
 
         {/* ── Strike impact ── */}
@@ -195,13 +334,14 @@ function TeacherEarningsContent() {
 
         {/* ── Class history ── */}
         <div className={`${card} overflow-hidden`}>
-          <div className="px-4 sm:px-5 py-4 border-b dark:border-purple-900/20 border-purple-100 flex items-center justify-between">
+          <div className="px-4 sm:px-5 py-4 border-b border-[var(--t-nav-border)] flex items-center justify-between">
             <div>
-              <p className="font-semibold dark:text-purple-100 text-purple-900">
+              <p className="font-semibold text-[var(--t-text)]">
                 Class History
               </p>
-              <p className="text-xs dark:text-purple-400/60 text-purple-400">
-                Showing {items.length} of {items.length} classes
+              <p className="text-xs text-[var(--t-text-muted)]">
+                Showing {items.length} completed class
+                {items.length !== 1 ? "es" : ""}
               </p>
             </div>
           </div>
@@ -209,10 +349,10 @@ function TeacherEarningsContent() {
           {items.length === 0 ? (
             <div className="p-10 sm:p-16 text-center">
               <p className="text-4xl mb-3">💰</p>
-              <p className="font-semibold dark:text-purple-100 text-purple-900">
+              <p className="font-semibold text-[var(--t-text)]">
                 No completed classes yet
               </p>
-              <p className="text-sm dark:text-purple-400/60 text-purple-400 mt-1">
+              <p className="text-sm text-[var(--t-text-muted)] mt-1">
                 Earnings appear here after a class is completed.
               </p>
               <button
@@ -225,12 +365,12 @@ function TeacherEarningsContent() {
           ) : (
             <>
               {/* Table header — desktop only */}
-              <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 border-b dark:border-purple-900/20 border-purple-100">
+              <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
                 {["Student & Date", "Duration", "Gross", "Your Share"].map(
                   (h) => (
                     <p
                       key={h}
-                      className="text-xs uppercase tracking-wide font-medium dark:text-purple-300/60 text-purple-400"
+                      className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]"
                     >
                       {h}
                     </p>
@@ -238,17 +378,17 @@ function TeacherEarningsContent() {
                 )}
               </div>
 
-              <div className="divide-y dark:divide-purple-900/20 divide-purple-100">
+              <div className="divide-y divide-[var(--t-nav-border)]">
                 {items.map((item) => (
                   <div
                     key={item.bookingId}
-                    className="px-4 sm:px-5 py-3 sm:py-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
+                    className="px-4 sm:px-5 py-3 sm:py-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center hover:bg-[var(--t-nav-hover)] transition-colors"
                   >
                     <div>
-                      <p className="text-sm font-medium dark:text-purple-100 text-purple-900">
+                      <p className="text-sm font-medium text-[var(--t-text)]">
                         {item.studentName ?? "Student"}
                       </p>
-                      <p className="text-xs dark:text-purple-400/60 text-purple-400">
+                      <p className="text-xs text-[var(--t-text-muted)]">
                         {new Date(item.date).toLocaleDateString("en-US", {
                           month: "short",
                           day: "numeric",
@@ -256,13 +396,13 @@ function TeacherEarningsContent() {
                         })}
                       </p>
                     </div>
-                    <p className="text-sm dark:text-purple-300/70 text-purple-600">
+                    <p className="text-sm text-[var(--t-text-muted)]">
                       {item.durationMinutes ?? 60} min
                     </p>
-                    <p className="text-sm dark:text-purple-300/70 text-purple-600">
+                    <p className="text-sm text-[var(--t-text-muted)]">
                       ${((item.grossCents ?? 0) / 100).toFixed(2)}
                     </p>
-                    <p className="text-sm font-bold dark:text-green-400 text-green-600">
+                    <p className="text-sm font-bold text-green-600 dark:text-green-400">
                       ${((item.teacherCents ?? 0) / 100).toFixed(2)}
                     </p>
                   </div>
@@ -273,17 +413,10 @@ function TeacherEarningsContent() {
         </div>
       </div>
 
-      {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
-          Fixed bottom-right. variant="teacher" → purple theme, Pilot persona.
-          Lumi can help teachers understand their earnings breakdown, what the
-          75/25 split means, how strikes affect payouts, or how to grow their
-          class count.
-      ─────────────────────────────────────────────────────────────────────── */}
       <LumiChat
         variant="teacher"
         context={`Teacher earnings page — $${earned.toFixed(2)} total earned across ${completed} completed classes`}
       />
-      {/* ──────────────────────────────────────────────────────────────────── */}
     </TeacherLayout>
   );
 }
@@ -292,7 +425,7 @@ export default function TeacherEarningsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex items-center justify-center h-screen dark:bg-[#0A0714] bg-[#FAF5FF]">
+        <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
           <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       }

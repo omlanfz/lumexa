@@ -8,7 +8,9 @@ import {
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StudentsService } from '../students/students.service';
 import { calculateRefundAmount } from './cancellation.policy';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class BookingsService {
@@ -16,6 +18,7 @@ export class BookingsService {
     private prisma: PrismaService,
     private stripe: StripeService,
     private notifications: NotificationsService,
+    private studentsService: StudentsService,
   ) {}
 
   // ─── Marketplace ────────────────────────────────────────────────────────────
@@ -50,7 +53,7 @@ export class BookingsService {
     };
   }
 
-  async getMyBookings(parentId: string): Promise<any[]> {
+  async getMyBookings(parentId: string): Promise<unknown[]> {
     return this.prisma.booking.findMany({
       where: {
         student: { parentId },
@@ -94,14 +97,16 @@ export class BookingsService {
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
-    if (booking.student.parent.id !== userId) {
+    const isParentOwner = booking.student?.parent?.id === userId;
+    const isStudentOwner = booking.studentUserId === userId;
+    if (!isParentOwner && !isStudentOwner) {
       throw new ForbiddenException('Access denied.');
     }
 
     return booking;
   }
 
-  // ─── Book Shift ──────────────────────────────────────────────────────────────
+  // ─── Book Shift (PARENT role) ────────────────────────────────────────────────
 
   async bookShift(userId: string, shiftId: string, studentId: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -192,8 +197,107 @@ export class BookingsService {
     });
   }
 
+  // ─── Book Shift (STUDENT role) ───────────────────────────────────────────────
+
+  async bookStudentShift(studentUserId: string, shiftId: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const shift = await tx.shift.findUnique({
+        where: { id: shiftId },
+        include: {
+          teacher: {
+            include: {
+              user: { select: { email: true, fullName: true } },
+            },
+          },
+        },
+      });
+
+      if (!shift) throw new NotFoundException('Shift not found.');
+      if (shift.isBooked)
+        throw new ConflictException('This slot is already taken.');
+      if (shift.start < new Date()) {
+        throw new BadRequestException(
+          'Cannot book a shift that has already started.',
+        );
+      }
+      if (shift.teacher.isSuspended) {
+        throw new BadRequestException(
+          'This teacher is not currently available.',
+        );
+      }
+
+      const student = await tx.user.findUnique({
+        where: { id: studentUserId },
+        select: {
+          id: true,
+          email: true,
+          fullName: true,
+          accountStatus: true,
+          role: true,
+        },
+      });
+      if (!student || student.role !== Role.STUDENT) {
+        throw new NotFoundException('Student account not found.');
+      }
+      if (student.accountStatus !== 'ACTIVE') {
+        throw new ForbiddenException(
+          'Account must be active to book sessions.',
+        );
+      }
+
+      await tx.shift.update({
+        where: { id: shiftId },
+        data: { isBooked: true },
+      });
+
+      const booking = await tx.booking.create({
+        data: {
+          shiftId,
+          studentUserId,
+          paymentStatus: 'PENDING',
+          amountCents: shift.teacher.hourlyRate * 100,
+        },
+      });
+
+      let clientSecret: string | null = null;
+
+      if (
+        shift.teacher.stripeAccountId &&
+        shift.teacher.stripeOnboarded &&
+        process.env.STRIPE_SECRET_KEY
+      ) {
+        const intent = await this.stripe.createPaymentIntent(
+          shift.teacher.hourlyRate * 100,
+          shift.teacher.stripeAccountId,
+          booking.id,
+        );
+
+        await tx.booking.update({
+          where: { id: booking.id },
+          data: { paymentIntentId: intent.id },
+        });
+
+        clientSecret = intent.client_secret;
+      }
+
+      this.notifications
+        .sendBookingConfirmation(student.email, {
+          teacherName: shift.teacher.user.fullName,
+          classStart: shift.start,
+          classEnd: shift.end,
+          bookingId: booking.id,
+        })
+        .catch(() => {});
+
+      return {
+        bookingId: booking.id,
+        ...(clientSecret && { clientSecret }),
+        message: 'Booking confirmed.',
+      };
+    });
+  }
+
   // ─── Mock Payment Confirmation ───────────────────────────────────────────────
-  // Development only — blocked in production.
 
   async mockConfirmBooking(bookingId: string, userId: string) {
     if (process.env.NODE_ENV === 'production') {
@@ -212,7 +316,9 @@ export class BookingsService {
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
-    if (booking.student.parent.id !== userId) {
+    const isParentOwner = booking.student?.parent?.id === userId;
+    const isStudentOwner = booking.studentUserId === userId;
+    if (!isParentOwner && !isStudentOwner) {
       throw new ForbiddenException('You do not own this booking.');
     }
     if (booking.paymentStatus === 'CAPTURED') {
@@ -230,7 +336,7 @@ export class BookingsService {
     return { message: 'Payment confirmed (mock).', bookingId };
   }
 
-  // ─── Cancel Booking ──────────────────────────────────────────────────────────
+  // ─── Cancel Booking (PARENT role) ────────────────────────────────────────────
 
   async cancelBooking(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
@@ -254,7 +360,7 @@ export class BookingsService {
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
-    if (booking.student.parentId !== userId) {
+    if (!booking.student || booking.student.parentId !== userId) {
       throw new ForbiddenException('You can only cancel your own bookings.');
     }
     if (booking.paymentStatus === 'REFUNDED') {
@@ -302,18 +408,60 @@ export class BookingsService {
     return { message: 'Booking cancelled.', refundCents, reason };
   }
 
-  // ─── Submit Review ───────────────────────────────────────────────────────────
-  // Parent submits a 1–5 star rating + optional comment after class completes.
-  //
-  // Rules enforced here:
-  //   - Only the parent who owns the booking can submit
-  //   - Booking must be CAPTURED (class completed + paid)
-  //   - One review per booking (DB unique constraint catches duplicates)
-  //   - Rating must be 1–5
-  //
-  // After saving the review, we atomically recalculate the teacher's
-  // ratingAvg and reviewCount using an aggregate query + a single update.
-  // This keeps the denormalized fields accurate without a full table scan.
+  // ─── Cancel Booking (STUDENT role) ───────────────────────────────────────────
+
+  async cancelStudentBooking(studentUserId: string, bookingId: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        shift: {
+          include: {
+            teacher: {
+              include: {
+                user: { select: { email: true, fullName: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found.');
+    if (booking.studentUserId !== studentUserId) {
+      throw new ForbiddenException('You can only cancel your own bookings.');
+    }
+    if (booking.paymentStatus === 'REFUNDED') {
+      throw new BadRequestException('This booking is already cancelled.');
+    }
+
+    const { refundCents, reason } = calculateRefundAmount(
+      booking.shift.start,
+      booking.amountCents ?? 0,
+    );
+
+    if (booking.paymentIntentId && refundCents > 0) {
+      if (booking.paymentStatus === 'CAPTURED') {
+        await this.stripe.refundPartial(booking.paymentIntentId, refundCents);
+      } else {
+        await this.stripe.cancelPayment(booking.paymentIntentId);
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.booking.update({
+        where: { id: bookingId },
+        data: { paymentStatus: 'REFUNDED' },
+      }),
+      this.prisma.shift.update({
+        where: { id: booking.shiftId },
+        data: { isBooked: false },
+      }),
+    ]);
+
+    return { message: 'Booking cancelled.', refundCents, reason };
+  }
+
+  // ─── Submit Review (PARENT role) ─────────────────────────────────────────────
 
   async submitReview(
     bookingId: string,
@@ -321,14 +469,12 @@ export class BookingsService {
     rating: number,
     comment: string | undefined,
   ) {
-    // Validate rating range
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
       throw new BadRequestException(
         'Rating must be a whole number from 1 to 5.',
       );
     }
 
-    // Load the booking with everything we need for authorization
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -340,25 +486,22 @@ export class BookingsService {
             teacher: { select: { id: true } },
           },
         },
-        review: true, // check if review already exists
+        review: true,
       },
     });
 
     if (!booking) throw new NotFoundException('Booking not found.');
 
-    // Authorization: only the parent who owns the booking can review
-    if (booking.student.parent.id !== userId) {
+    if (!booking.student || booking.student.parent.id !== userId) {
       throw new ForbiddenException('You can only review your own bookings.');
     }
 
-    // Only reviewable once the class is paid and complete
     if (booking.paymentStatus !== 'CAPTURED') {
       throw new BadRequestException(
         'Reviews can only be submitted after the class has been completed and payment captured.',
       );
     }
 
-    // Prevent duplicate review (belt-and-suspenders — DB unique also enforces this)
     if (booking.review) {
       throw new ConflictException(
         'You have already submitted a review for this class.',
@@ -367,9 +510,7 @@ export class BookingsService {
 
     const teacherId = booking.shift.teacher.id;
 
-    // Transaction: save the review, then recalculate ratingAvg and reviewCount atomically
     return this.prisma.$transaction(async (tx) => {
-      // 1. Create the review
       const review = await tx.review.create({
         data: {
           bookingId,
@@ -380,18 +521,16 @@ export class BookingsService {
         },
       });
 
-      // 2. Recalculate ratingAvg and reviewCount from all reviews for this teacher
       const agg = await tx.review.aggregate({
         where: { teacherId },
         _avg: { rating: true },
         _count: { rating: true },
       });
 
-      // 3. Update the denormalized fields on TeacherProfile
       await tx.teacherProfile.update({
         where: { id: teacherId },
         data: {
-          ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10, // round to 1 dp
+          ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10,
           reviewCount: agg._count.rating,
         },
       });
@@ -402,6 +541,112 @@ export class BookingsService {
         rating: review.rating,
       };
     });
+  }
+
+  // ─── Submit Review (STUDENT role) ────────────────────────────────────────────
+
+  async submitStudentReview(
+    bookingId: string,
+    studentUserId: string,
+    rating: number,
+    comment: string | undefined,
+  ) {
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      throw new BadRequestException(
+        'Rating must be a whole number from 1 to 5.',
+      );
+    }
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        shift: {
+          include: {
+            teacher: { select: { id: true } },
+          },
+        },
+        review: true,
+      },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found.');
+
+    if (booking.studentUserId !== studentUserId) {
+      throw new ForbiddenException('You can only review your own bookings.');
+    }
+
+    if (booking.paymentStatus !== 'CAPTURED') {
+      throw new BadRequestException(
+        'Reviews can only be submitted after the class has been completed and payment captured.',
+      );
+    }
+
+    if (booking.review) {
+      throw new ConflictException(
+        'You have already submitted a review for this class.',
+      );
+    }
+
+    const teacherId = booking.shift.teacher.id;
+
+    return this.prisma.$transaction(async (tx) => {
+      const review = await tx.review.create({
+        data: {
+          bookingId,
+          teacherId,
+          rating,
+          comment: comment?.trim() || null,
+          submittedByStudentId: studentUserId,
+        },
+      });
+
+      const agg = await tx.review.aggregate({
+        where: { teacherId },
+        _avg: { rating: true },
+        _count: { rating: true },
+      });
+
+      await tx.teacherProfile.update({
+        where: { id: teacherId },
+        data: {
+          ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10,
+          reviewCount: agg._count.rating,
+        },
+      });
+
+      const result = {
+        message: 'Review submitted. Thank you for your feedback!',
+        reviewId: review.id,
+        rating: review.rating,
+      };
+
+      // Award bonus gems for 5-star review (fire-and-forget)
+      if (rating === 5) {
+        this.studentsService
+          .awardGems(studentUserId, 3, 'FIVE_STAR_REVIEW', '5-star review bonus')
+          .catch(() => {});
+      }
+
+      return result;
+    });
+  }
+
+  // ─── Post-capture gamification trigger ────────────────────────────────────────
+
+  async triggerSessionCompletedRewards(studentUserId: string, isFirstSession: boolean) {
+    const gems = isFirstSession ? 15 : 5; // 10 first-session + 5 session = 15 first time
+    const type = isFirstSession ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
+    const desc = isFirstSession ? 'First session completion bonus' : 'Session completion reward';
+
+    await Promise.all([
+      this.studentsService.awardGems(studentUserId, gems, type, desc),
+      this.studentsService.checkAndAwardBadges(studentUserId),
+    ]);
+
+    if (isFirstSession) {
+      // Award rank-up gems (FIRST_MISSION badge)
+      await this.studentsService.awardGems(studentUserId, 10, 'FIRST_SESSION_BONUS', 'First mission bonus');
+    }
   }
 
   // ─── Stripe Connect ──────────────────────────────────────────────────────────

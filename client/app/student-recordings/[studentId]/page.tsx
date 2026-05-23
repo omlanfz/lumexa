@@ -69,8 +69,8 @@ function RecordingsContent() {
   }, [studentId, router]);
 
   return (
-    <div className="min-h-screen dark:bg-[#050A1A] bg-blue-50">
-      <div className="border-b dark:border-blue-900/20 border-blue-100 px-6 py-4 flex items-center gap-4 dark:bg-[#060D1F] bg-white">
+    <div className="min-h-screen bg-[var(--s-bg)]">
+      <div className="border-b border-[var(--s-nav-border)] px-6 py-4 flex items-center gap-4 bg-[var(--s-nav-bg)]">
         <button
           onClick={() => router.back()}
           className="text-blue-400 hover:text-blue-300 cursor-pointer"
@@ -79,10 +79,10 @@ function RecordingsContent() {
           ←
         </button>
         <div>
-          <h1 className="font-bold dark:text-white text-blue-900">
+          <h1 className="font-bold text-[var(--s-text)]">
             Recordings
           </h1>
-          <p className="text-xs dark:text-blue-400 text-blue-500">
+          <p className="text-xs text-[var(--s-text-muted)]">
             {studentName}'s Replays
           </p>
         </div>
@@ -99,7 +99,7 @@ function RecordingsContent() {
             <p className="dark:text-blue-300 text-blue-700 font-semibold text-lg mb-2">
               No recordings yet
             </p>
-            <p className="dark:text-blue-400 text-blue-500">
+            <p className="text-[var(--s-text-muted)]">
               Recordings will appear here after completed classes.
             </p>
             <p className="text-xs dark:text-blue-500 text-blue-400 mt-2">
@@ -111,16 +111,16 @@ function RecordingsContent() {
             {recordings.map((r) => (
               <div
                 key={r.bookingId}
-                className="dark:bg-white/5 bg-white rounded-2xl border dark:border-blue-900/20 border-blue-100 p-5 flex items-center gap-4"
+                className="s-card p-5 flex items-center gap-4"
               >
                 <div className="w-12 h-12 rounded-xl dark:bg-blue-900/30 bg-blue-100 flex items-center justify-center text-2xl flex-shrink-0">
                   🎬
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium dark:text-white text-blue-900">
+                  <p className="font-medium text-[var(--s-text)]">
                     Class with {r.teacherName}
                   </p>
-                  <p className="text-xs dark:text-blue-400 text-blue-500">
+                  <p className="text-xs text-[var(--s-text-muted)]">
                     {r.classDate
                       ? new Date(r.classDate).toLocaleDateString("en-US", {
                           weekday: "short",
@@ -169,7 +169,7 @@ export default function RecordingsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen dark:bg-[#050A1A] flex items-center justify-center">
+        <div className="min-h-screen bg-[var(--s-bg)] flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
         </div>
       }

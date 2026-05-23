@@ -198,7 +198,7 @@ export default function AboutPage() {
                 className="p-6 bg-white dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-800 rounded-2xl text-center card-hover"
               >
                 <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 mx-auto mb-4 flex items-center justify-center text-2xl shadow-lg shadow-purple-200 dark:shadow-purple-900/40">
-                  {t.name === "Fairooz Omlan" ? "👨‍💻" : t.name === "Our Teacher Network" ? "👩‍🏫" : "🚀"}
+                  {t.name === "Fairooz Omlan" ? "👨‍💻" : t.name === "Our Teacher Network" ? "👩‍🏫" : "🧑‍🎓"}
                 </div>
                 <h3 className="font-bold mb-1 text-[#0F172A] dark:text-white">{t.name}</h3>
                 <p className="text-purple-600 dark:text-purple-400 text-xs font-semibold mb-3">{t.role}</p>

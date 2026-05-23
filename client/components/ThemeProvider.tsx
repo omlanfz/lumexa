@@ -25,6 +25,7 @@ import {
   useState,
   ReactNode,
 } from "react";
+import { migrateStorage } from "@/lib/storage";
 
 type Theme = "dark" | "light";
 
@@ -56,6 +57,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Run storage migration first — clears stale/corrupted auth data from
+    // before the student-centric refactor so JSON.parse never sees "undefined".
+    migrateStorage();
     const saved = (localStorage.getItem("lumexa-theme") as Theme) ?? "light";
     setTheme(saved);
     applyTheme(saved);

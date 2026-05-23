@@ -3,6 +3,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Body,
   Param,
@@ -18,6 +19,7 @@ import { Role } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsNumber,
   IsOptional,
   IsString,
@@ -25,6 +27,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
 
@@ -43,6 +46,13 @@ class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(100) qualification?: string;
   @IsOptional() @IsString() @MaxLength(100) country?: string;
   @IsOptional() @IsString() @MaxLength(100) city?: string;
+}
+
+class AddNoteDto {
+  @IsString() @MaxLength(2000) note: string;
+  @IsOptional() @IsBoolean()
+  @Transform(({ value }) => value === true || value === 'true')
+  isUserRef?: boolean;
 }
 
 // ── Controller ────────────────────────────────────────────────────────────────
@@ -154,6 +164,74 @@ export class TeachersController {
   @Roles(Role.TEACHER)
   getMyRank(@Request() req: any) {
     return this.teachersService.getMyRank(req.user.userId);
+  }
+
+  /** GET /teachers/me/insights */
+  @Get('me/insights')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getInsights(@Request() req: any) {
+    return this.teachersService.getTeacherInsights(req.user.userId);
+  }
+
+  /** GET /teachers/me/earnings/monthly — last 6 months bar chart */
+  @Get('me/earnings/monthly')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getMonthlyEarnings(@Request() req: any) {
+    return this.teachersService.getMonthlyEarnings(req.user.userId);
+  }
+
+  /** GET /teachers/me/action-queue */
+  @Get('me/action-queue')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getActionQueue(@Request() req: any) {
+    return this.teachersService.getActionQueue(req.user.userId);
+  }
+
+  /** POST /teachers/me/action-queue/reschedule/:requestId/accept */
+  @Post('me/action-queue/reschedule/:requestId/accept')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  acceptReschedule(
+    @Request() req: any,
+    @Param('requestId') requestId: string,
+  ) {
+    return this.teachersService.acceptReschedule(req.user.userId, requestId);
+  }
+
+  /** POST /teachers/me/students/:studentId/notes */
+  @Post('me/students/:studentId/notes')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  addNote(
+    @Request() req: any,
+    @Param('studentId') studentId: string,
+    @Body() dto: AddNoteDto,
+  ) {
+    return this.teachersService.addStudentNote(
+      req.user.userId,
+      studentId,
+      dto.isUserRef ?? false,
+      dto.note,
+    );
+  }
+
+  /** GET /teachers/me/students/:studentId/notes */
+  @Get('me/students/:studentId/notes')
+  @UseGuards(RolesGuard)
+  @Roles(Role.TEACHER)
+  getNotes(
+    @Request() req: any,
+    @Param('studentId') studentId: string,
+    @Query('isUserRef') isUserRef: string,
+  ) {
+    return this.teachersService.getStudentNotes(
+      req.user.userId,
+      studentId,
+      isUserRef === 'true',
+    );
   }
 
   // ── PUBLIC ────────────────────────────────────────────────────────────────
