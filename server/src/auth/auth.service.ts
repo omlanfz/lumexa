@@ -31,7 +31,7 @@ export class AuthService {
       throw new ConflictException('An account with this email already exists.');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12); // 12 rounds for production
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     const user = await this.usersService.createUser({
       email,
@@ -44,12 +44,16 @@ export class AuthService {
       await this.usersService.createTeacherProfile(user.id);
     }
 
-    // Return safe user data (never return the password hash)
+    const payload = { email: user.email, sub: user.id, role: user.role };
+
     return {
-      id: user.id,
-      email: user.email,
-      fullName: user.fullName,
-      role: user.role,
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
     };
   }
 
@@ -67,7 +71,7 @@ export class AuthService {
 
     // For STUDENT accounts, check accountStatus before issuing token
     if (user.role === 'STUDENT') {
-      const status = (user as any).accountStatus as string | undefined;
+      const status = user.accountStatus as string | undefined;
       if (status === 'PENDING_CONSENT') {
         throw new ForbiddenException(
           'Your account is awaiting parental consent. Please check the email sent to your billing contact.',

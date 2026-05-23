@@ -19,7 +19,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/axios";
 import TeacherNav from "../../components/TeacherNav";
 import TeacherLayout from "../../components/TeacherLayout";
 import { useTheme } from "../../components/ThemeProvider";
@@ -201,16 +201,9 @@ function TeacherDashboardContent() {
     (async () => {
       try {
         const [statsRes, nextRes, profileRes] = await Promise.all([
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/stats`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get(
-            `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/next-class`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          ),
-          axios.get(`${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          api.get('/teachers/me/stats'),
+          api.get('/teachers/me/next-class'),
+          api.get('/teachers/me/profile'),
         ]);
 
         setStats(statsRes.data);

@@ -195,6 +195,9 @@ export class TeachersService {
         student: {
           select: { name: true, age: true, grade: true, subject: true },
         },
+        studentUser: {
+          select: { fullName: true },
+        },
         shift: { select: { start: true, end: true } },
       },
       orderBy: {
@@ -206,12 +209,19 @@ export class TeachersService {
 
     return {
       bookingId: nextBooking.id,
-      studentName: nextBooking.student.name,
-      studentAge: nextBooking.student.age,
-      studentGrade: nextBooking.student.grade,
-      studentSubject: nextBooking.student.subject,
-      classStart: nextBooking.shift.start,
-      classEnd: nextBooking.shift.end,
+      studentName:
+        nextBooking.student?.name ??
+        nextBooking.studentUser?.fullName ??
+        'Student',
+      studentAge: nextBooking.student?.age ?? null,
+      studentGrade: nextBooking.student?.grade ?? null,
+      studentSubject: nextBooking.student?.subject ?? null,
+      start: nextBooking.shift.start,
+      end: nextBooking.shift.end,
+      msUntilStart: Math.max(
+        0,
+        nextBooking.shift.start.getTime() - Date.now(),
+      ),
     };
   }
 
@@ -231,6 +241,7 @@ export class TeachersService {
         },
         include: {
           student: { select: { name: true } },
+          studentUser: { select: { fullName: true } },
           shift: { select: { start: true, end: true } },
           review: { select: { rating: true, comment: true } },
         },
@@ -253,7 +264,7 @@ export class TeachersService {
         bookingId: b.id,
         classDate: b.shift.start,
         classEnd: b.shift.end,
-        studentName: b.student.name,
+        studentName: b.student?.name ?? b.studentUser?.fullName ?? 'Student',
         grossDollars: (grossCents / 100).toFixed(2),
         earningsDollars: (teacherCents / 100).toFixed(2),
         review: b.review

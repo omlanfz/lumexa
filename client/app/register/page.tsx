@@ -3,7 +3,7 @@
 
 import { Suspense, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
+import api from "@/lib/axios";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -113,10 +113,7 @@ function RegisterContent() {
         };
         if (needsConsent) payload.billingContactEmail = billingContactEmail.trim();
 
-        const res = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/students/register`,
-          payload,
-        );
+        const res = await api.post('/students/register', payload);
 
         if (res.data.status === "PENDING_CONSENT") {
           setPendingConsent(res.data.message);
@@ -126,10 +123,9 @@ function RegisterContent() {
           router.push("/student-dashboard");
         }
       } else {
-        const res = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/register`,
-          { fullName: fullName.trim(), email: email.trim(), password, role: "TEACHER" },
-        );
+        const res = await api.post('/auth/register', {
+          fullName: fullName.trim(), email: email.trim(), password, role: "TEACHER",
+        });
         const { access_token, user } = res.data;
         localStorage.setItem("token", access_token);
         localStorage.setItem("user", JSON.stringify(user));
