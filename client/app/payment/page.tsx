@@ -101,16 +101,16 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
     { code: "Course 3", name: "Machine Learning Projects" },
   ],
   digital: [
-    { code: "Course 1", name: "Build Your Digital Identity" },
-    { code: "Course 2", name: "Freelancing Fundamentals" },
-    { code: "Course 3", name: "LinkedIn and Professional Presence" },
+    { code: "Course 1", name: "Build Your Professional Identity" },
+    { code: "Course 2", name: "Skills That Pay" },
+    { code: "Course 3", name: "Professional Presence & Opportunity Building" },
   ],
   "game-creator":        [{ code: "Course 1", name: "Roblox World Builder" }, { code: "Course 2", name: "Python Arcade Games" }, { code: "Course 3", name: "Advanced Game Design" }],
   "ai-builder":          [{ code: "Course 1", name: "Python and AI Foundations" }, { code: "Course 2", name: "Computer Vision Projects" }, { code: "Course 3", name: "Language Models and Chatbots" }],
   "web-developer":       [{ code: "Course 1", name: "HTML and CSS Mastery" }, { code: "Course 2", name: "JavaScript and Interactivity" }, { code: "Course 3", name: "React and Full-Stack Web" }],
   "little-coders":       [{ code: "Course 1", name: "Scratch Adventures" }, { code: "Course 2", name: "Python for Young Builders" }, { code: "Course 3", name: "AI for Kids: Smart Projects" }],
   "data-scientist":      [{ code: "Course 1", name: "Python for Data" }, { code: "Course 2", name: "Data Visualisation" }, { code: "Course 3", name: "Machine Learning Projects" }],
-  "digital-independence":[{ code: "Course 1", name: "Build Your Digital Identity" }, { code: "Course 2", name: "Freelancing Fundamentals" }, { code: "Course 3", name: "LinkedIn and Professional Presence" }],
+  "digital-independence":[{ code: "Course 1", name: "Build Your Professional Identity" }, { code: "Course 2", name: "Skills That Pay" }, { code: "Course 3", name: "Professional Presence & Opportunity Building" }],
 };
 
 const PATHWAY_LABELS: Record<string, string> = {
