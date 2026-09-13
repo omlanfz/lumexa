@@ -33,59 +33,49 @@ const steps = [
   },
 ];
 
-const milestones = [
+const odysseyStages = [
   {
-    level: "Level 1",
-    name: "Explorer",
-    emoji: "🔭",
-    weeks: "Weeks 1–4",
-    tagline: "Think like a coder",
-    description: "Your child learns how computers think, writes their first real code, and discovers what they want to build.",
-    skills: ["Computational thinking", "First programs in Scratch or Python", "Logic and problem-solving"],
+    stage: "Stage 1",
+    name: "Foundation",
+    emoji: "🕹️",
+    weeks: "Weeks 1–24",
+    tagline: "Scratch · Python · Arcade Games",
+    description: "Building real coding instincts from zero, one playable project at a time.",
     textColor: "text-amber-600",
     border: "border-amber-200",
     bg: "bg-amber-50",
-    checkColor: "text-amber-600",
   },
   {
-    level: "Level 2",
-    name: "Builder",
-    emoji: "🔨",
-    weeks: "Weeks 5–12",
-    tagline: "Ship your first real project",
-    description: "From concept to code to finished product. Your child builds their first complete project and shares it.",
-    skills: ["Complete a real project", "Debugging and testing", "Version control basics"],
+    stage: "Stage 2",
+    name: "Create & Apply",
+    emoji: "🌐",
+    weeks: "Weeks 25–48",
+    tagline: "HTML/CSS · Digital Identity · JavaScript",
+    description: "Real websites, a professional online identity, and interactive JavaScript projects.",
     textColor: "text-blue-600",
     border: "border-blue-200",
     bg: "bg-blue-50",
-    checkColor: "text-blue-600",
   },
   {
-    level: "Level 3",
-    name: "Creator",
-    emoji: "⚡",
-    weeks: "Weeks 13–20",
-    tagline: "Build a portfolio of 3 projects",
-    description: "Your child works like a junior developer: planning features, writing clean code, and iterating. Three finished projects, ready to show.",
-    skills: ["Advanced project architecture", "APIs and databases", "3 portfolio projects done"],
+    stage: "Stage 3",
+    name: "Explore & Advance",
+    emoji: "🔭",
+    weeks: "Weeks 49–72",
+    tagline: "Data · AI Foundations · Roblox",
+    description: "A guided tour of data, AI, and 3D worlds before choosing a specialty.",
     textColor: "text-purple-600",
     border: "border-purple-200",
     bg: "bg-purple-50",
-    checkColor: "text-purple-600",
   },
-  {
-    level: "Level 4",
-    name: "AI Innovator",
-    emoji: "🚀",
-    weeks: "Week 21+",
-    tagline: "Use AI to solve real problems",
-    description: "The top tier. Your child integrates AI into their own projects, building tools that would impress most adults.",
-    skills: ["Machine learning models", "AI API integration", "Real-world impact projects"],
-    textColor: "text-teal-600",
-    border: "border-teal-200",
-    bg: "bg-teal-50",
-    checkColor: "text-teal-600",
-  },
+];
+
+const nextPathways = [
+  { emoji: "🎮", label: "Game Creator", textColor: "text-red-600 dark:text-red-400" },
+  { emoji: "🤖", label: "AI Builder", textColor: "text-purple-600 dark:text-purple-400" },
+  { emoji: "🌐", label: "Web Developer", textColor: "text-blue-600 dark:text-blue-400" },
+  { emoji: "🌟", label: "Little Coders", textColor: "text-amber-600 dark:text-amber-400" },
+  { emoji: "📊", label: "Data Scientist", textColor: "text-teal-600 dark:text-teal-400" },
+  { emoji: "💼", label: "Digital Independence", textColor: "text-green-600 dark:text-green-400" },
 ];
 
 export default function HowItWorksSection() {
@@ -141,84 +131,96 @@ export default function HowItWorksSection() {
             </span>
           </h2>
           <p className="text-[#334155] dark:text-gray-400 max-w-xl mx-auto">
-            Every student progresses through 4 milestone levels. You see exactly where they are and where they&apos;re headed.
+            Every student starts with Lumexa Odyssey: three guided stages before choosing where to specialize.
           </p>
         </div>
 
-        {/* Desktop: horizontal timeline */}
-        <div className="hidden md:grid grid-cols-4 gap-0 relative mb-12">
+        {/* Desktop: horizontal timeline (3 stages) */}
+        <div className="hidden md:grid grid-cols-3 gap-0 relative mb-10">
           {/* Connecting line */}
-          <div className="absolute top-10 left-[12.5%] right-[12.5%] h-0.5 bg-gradient-to-r from-amber-300 via-purple-300 to-teal-300 dark:from-amber-600/50 dark:via-purple-600/50 dark:to-teal-600/50" />
+          <div className="absolute top-10 left-[16.6%] right-[16.6%] h-0.5 bg-gradient-to-r from-amber-300 via-blue-300 to-purple-300 dark:from-amber-600/50 dark:via-blue-600/50 dark:to-purple-600/50" />
 
-          {milestones.map((m) => (
-            <div key={m.name} className="relative flex flex-col items-center text-center px-3">
+          {odysseyStages.map((s) => (
+            <div key={s.name} className="relative flex flex-col items-center text-center px-3">
               {/* Circle */}
-              <div className={`relative z-10 w-20 h-20 rounded-full ${m.bg} border-2 ${m.border} flex items-center justify-center mb-4 shadow-sm hover:scale-110 transition-transform duration-200`}>
-                <span className="text-3xl">{m.emoji}</span>
+              <div className={`relative z-10 w-20 h-20 rounded-full ${s.bg} border-2 ${s.border} flex items-center justify-center mb-4 shadow-sm hover:scale-110 transition-transform duration-200`}>
+                <span className="text-3xl">{s.emoji}</span>
               </div>
 
-              <span className={`text-[10px] font-bold uppercase tracking-widest ${m.textColor} mb-1`}>
-                {m.level}
+              <span className={`text-[10px] font-bold uppercase tracking-widest ${s.textColor} mb-1`}>
+                {s.stage}
               </span>
-              <h3 className={`text-lg font-black ${m.textColor} mb-1`}>{m.name}</h3>
-              <p className="text-[#94A3B8] dark:text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-2">{m.weeks}</p>
-              <p className="text-[#0F172A] dark:text-white text-xs font-semibold mb-2">{m.tagline}</p>
-              <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{m.description}</p>
+              <h3 className={`text-lg font-black ${s.textColor} mb-1`}>{s.name}</h3>
+              <p className="text-[#94A3B8] dark:text-gray-500 text-[10px] font-semibold uppercase tracking-wider mb-2">{s.weeks}</p>
+              <p className="text-[#0F172A] dark:text-white text-xs font-semibold mb-2">{s.tagline}</p>
+              <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{s.description}</p>
             </div>
           ))}
         </div>
 
-        {/* Skills grid (desktop) */}
-        <div className="hidden md:grid grid-cols-4 gap-4 mt-4 mb-12">
-          {milestones.map((m) => (
-            <div key={m.name + "-skills"} className="space-y-1.5">
-              {m.skills.map((s) => (
-                <div key={s} className="flex items-start gap-1.5 text-xs text-[#64748B] dark:text-gray-400">
-                  <span className={`${m.checkColor} mt-0.5 flex-shrink-0`}>✓</span>
-                  {s}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Mobile: vertical timeline */}
-        <div className="md:hidden space-y-3 mb-12">
-          {milestones.map((m, idx) => (
-            <div key={m.name} className="relative">
-              <div className={`flex gap-4 p-5 rounded-2xl border ${m.border} ${m.bg}`}>
+        {/* Mobile: vertical timeline (3 stages) */}
+        <div className="md:hidden space-y-3 mb-6">
+          {odysseyStages.map((s, idx) => (
+            <div key={s.name} className="relative">
+              <div className={`flex gap-4 p-5 rounded-2xl border ${s.border} ${s.bg}`}>
                 <div className="flex-shrink-0">
-                  <div className={`w-14 h-14 rounded-full ${m.bg} border-2 ${m.border} flex items-center justify-center text-2xl`}>
-                    {m.emoji}
+                  <div className={`w-14 h-14 rounded-full ${s.bg} border-2 ${s.border} flex items-center justify-center text-2xl`}>
+                    {s.emoji}
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-[10px] font-bold uppercase tracking-widest ${m.textColor}`}>{m.level}</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${s.textColor}`}>{s.stage}</span>
                     <span className="text-[#CBD5E1] dark:text-gray-600 text-[10px]">·</span>
-                    <span className="text-[#94A3B8] dark:text-gray-500 text-[10px]">{m.weeks}</span>
+                    <span className="text-[#94A3B8] dark:text-gray-500 text-[10px]">{s.weeks}</span>
                   </div>
-                  <h3 className={`font-black text-base ${m.textColor} mb-1`}>{m.name}</h3>
-                  <p className="text-[#0F172A] dark:text-white text-xs font-semibold mb-1">{m.tagline}</p>
-                  <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{m.description}</p>
+                  <h3 className={`font-black text-base ${s.textColor} mb-1`}>{s.name}</h3>
+                  <p className="text-[#0F172A] dark:text-white text-xs font-semibold mb-1">{s.tagline}</p>
+                  <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed">{s.description}</p>
                 </div>
               </div>
-              {idx < milestones.length - 1 && (
+              {idx < odysseyStages.length - 1 && (
                 <div className="w-0.5 h-4 bg-gradient-to-b from-[#E2E8F0] to-[#CBD5E1] dark:from-gray-700 dark:to-gray-800 mx-auto mt-1" />
               )}
             </div>
           ))}
         </div>
 
-        <div className="text-center">
-          <p className="text-[#64748B] dark:text-gray-500 text-sm mb-4">
-            Most students reach Level 3 (Creator) within 5-6 months.
+        {/* Connector into the destination node */}
+        <div className="flex justify-center mb-4">
+          <svg className="w-5 h-5 text-[#CBD5E1] dark:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+        </div>
+
+        {/* Destination: Choose Your Path (not a stage — fans out into the 6 pathways) */}
+        <div className="max-w-2xl mx-auto text-center p-6 sm:p-8 rounded-2xl border-2 border-dashed border-teal-200 dark:border-teal-700/50 bg-teal-50/60 dark:bg-teal-900/10 mb-12">
+          <div className="w-16 h-16 rounded-full bg-teal-50 dark:bg-teal-900/30 border-2 border-teal-200 dark:border-teal-700/50 flex items-center justify-center mx-auto mb-3 shadow-sm">
+            <span className="text-2xl">🚀</span>
+          </div>
+          <h3 className="text-lg font-black text-teal-600 dark:text-teal-400 mb-1">Choose Your Path</h3>
+          <p className="text-[#64748B] dark:text-gray-400 text-xs leading-relaxed mb-5 max-w-md mx-auto">
+            After Odyssey, every student picks a specialized pathway to go deep — based on real experience, not guesswork.
           </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {nextPathways.map((p) => (
+              <span
+                key={p.label}
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-white dark:bg-gray-800/60 border border-[#E2E8F0] dark:border-gray-700/60 ${p.textColor}`}
+              >
+                <span>{p.emoji}</span>
+                {p.label}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <div className="text-center">
           <Link
             href="/trial"
             className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-bold rounded-xl shadow-lg shadow-purple-100 dark:shadow-purple-900/30 transition-all hover:scale-[1.02] active:scale-95"
           >
-            Start Their Journey Free
+            Start Odyssey Free
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>

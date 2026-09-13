@@ -538,6 +538,52 @@ function CoursesContent() {
         </div>
       </section>
 
+      {/* Flagship: Lumexa Odyssey — sits above the pathway tabs, not part of them */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 mb-10">
+        <div className="relative rounded-3xl p-[2px] bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 glow-pulse">
+          <div className="rounded-[22px] bg-white dark:bg-gray-900 p-6 sm:p-8">
+            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white mb-4">
+              🚀 Flagship · Start Here
+            </span>
+
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">Lumexa Odyssey</h2>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
+                    Ages 12–18
+                  </span>
+                </div>
+                <p className="font-bold text-sm bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent mb-1">
+                  Your child&apos;s complete coding journey
+                </p>
+                <p className="text-[#94A3B8] dark:text-gray-500 text-xs mb-3">72 lessons · 9 courses · 3 stages</p>
+                <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed max-w-xl">
+                  Start from zero. Explore games, web, data and AI. Then discover the path that&apos;s right for them.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
+                <a
+                  href="/curriculums/lumexa-odyssey-curriculum.pdf"
+                  download
+                  className="inline-flex items-center justify-center gap-1.5 px-5 py-3 text-sm font-bold rounded-xl border-2 border-purple-200 dark:border-purple-700/50 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all"
+                >
+                  <DownloadIcon className="w-4 h-4" />
+                  View Odyssey Curriculum
+                </a>
+                <Link
+                  href="/trial"
+                  className="inline-flex items-center justify-center px-5 py-3 text-sm font-bold text-white rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 hover:opacity-90 transition-all shadow-md shadow-purple-900/20"
+                >
+                  Free Trial
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Filter tabs */}
       <div className="sticky top-16 z-20 bg-[#F7F9FF]/95 dark:bg-[#050D1A]/95 backdrop-blur border-b border-[#E2E8F0] dark:border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
