@@ -4,6 +4,19 @@ import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
+function DownloadIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+      />
+    </svg>
+  );
+}
+
 const pathways = [
   {
     id: "game",
@@ -16,6 +29,7 @@ const pathways = [
     badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
     accent: "text-red-600 dark:text-red-400",
     dot: "bg-red-500",
+    curriculumFile: "game-creator-path-curriculum.pdf",
     courses: [
       {
         number: "01",
@@ -90,6 +104,7 @@ const pathways = [
     badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
     accent: "text-purple-600 dark:text-purple-400",
     dot: "bg-purple-500",
+    curriculumFile: "ai-builder-path-curriculum.pdf",
     featured: true,
     courses: [
       {
@@ -165,6 +180,7 @@ const pathways = [
     badge: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
     accent: "text-blue-600 dark:text-blue-400",
     dot: "bg-blue-500",
+    curriculumFile: "web-developer-path-curriculum.pdf",
     courses: [
       {
         number: "07",
@@ -239,6 +255,7 @@ const pathways = [
     badge: "bg-amber-100 dark:bg-yellow-900/30 text-amber-700 dark:text-yellow-300",
     accent: "text-amber-600 dark:text-yellow-400",
     dot: "bg-amber-500",
+    curriculumFile: "little-coders-path-curriculum.pdf",
     courses: [
       {
         number: "10",
@@ -313,6 +330,7 @@ const pathways = [
     badge: "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300",
     accent: "text-teal-600 dark:text-teal-400",
     dot: "bg-teal-500",
+    curriculumFile: "data-scientist-path-curriculum.pdf",
     courses: [
       {
         number: "13",
@@ -387,6 +405,7 @@ const pathways = [
     badge: "bg-green-900/30 text-green-300",
     accent: "text-green-400",
     dot: "bg-green-400",
+    curriculumFile: "digital-independence-path-curriculum.pdf",
     courses: [
       {
         number: "16",
@@ -573,6 +592,14 @@ function CoursesContent() {
                     {pathway.courses.length} courses ·{" "}
                     {pathway.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
                   </p>
+                  <a
+                    href={`/curriculums/${pathway.curriculumFile}`}
+                    download
+                    className={`inline-flex items-center gap-1.5 mt-3 px-3.5 py-2 rounded-xl border ${pathway.border} ${pathway.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all shadow-sm`}
+                  >
+                    <DownloadIcon className="w-4 h-4" />
+                    Download Curriculum
+                  </a>
                 </div>
               </div>
               <div className="flex gap-2 flex-shrink-0">
