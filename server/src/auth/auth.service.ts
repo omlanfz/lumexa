@@ -72,11 +72,6 @@ export class AuthService {
     // For STUDENT accounts, check accountStatus before issuing token
     if (user.role === 'STUDENT') {
       const status = user.accountStatus as string | undefined;
-      if (status === 'PENDING_CONSENT') {
-        throw new ForbiddenException(
-          'Your account is awaiting parental consent. Please check the email sent to your billing contact.',
-        );
-      }
       if (status === 'SUSPENDED') {
         throw new ForbiddenException('This account has been suspended.');
       }

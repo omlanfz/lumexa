@@ -14,7 +14,6 @@ import { RegisterStudentDto } from './dto/register-student.dto';
 import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
 import { Prisma, SpaceRank, AccountStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import * as crypto from 'crypto';
 
 // ─── Space Rank Helpers ───────────────────────────────────────────────────────
 
@@ -88,17 +87,7 @@ export class StudentsService {
       throw new ConflictException('An account with this email already exists.');
     }
 
-    const needsConsent = dto.age < 16;
-    if (needsConsent && !dto.billingContactEmail) {
-      throw new BadRequestException(
-        'A parent or guardian email is required for students under 16.',
-      );
-    }
-
     const hashedPassword = await bcrypt.hash(dto.password, 12);
-    const accountStatus: AccountStatus = needsConsent
-      ? 'PENDING_CONSENT'
-      : 'ACTIVE';
 
     const user = await this.prisma.user.create({
       data: {
@@ -109,8 +98,7 @@ export class StudentsService {
         age: dto.age,
         grade: dto.grade ?? null,
         subjects: dto.subjects ?? [],
-        accountStatus,
-        billingContactEmail: dto.billingContactEmail ?? null,
+        accountStatus: 'ACTIVE',
         spaceRank: 'STARCHILD',
         totalSessions: 0,
         streakWeeks: 0,
@@ -118,34 +106,6 @@ export class StudentsService {
         gemBalance: 0,
       },
     });
-
-    if (needsConsent) {
-      const token = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-
-      await this.prisma.consentToken.create({
-        data: { userId: user.id, token, expiresAt },
-      });
-
-      const consentUrl = `${process.env.FRONTEND_URL}/student/consent/confirm?token=${token}`;
-
-      // Fire-and-forget: send consent email to billing contact
-      this.notifications
-        .sendConsentRequest(dto.billingContactEmail!, {
-          studentName: dto.fullName,
-          consentUrl,
-          expiresHours: 48,
-        })
-        .catch(() => {});
-
-      return {
-        status: 'PENDING_CONSENT' as const,
-        message: `Consent email sent to ${this.maskEmail(dto.billingContactEmail!)}. Account activates after approval.`,
-        consentToken: token,
-        billingContactEmail: dto.billingContactEmail!,
-        userId: user.id,
-      };
-    }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     const access_token = this.jwtService.sign(payload);
@@ -164,11 +124,6 @@ export class StudentsService {
     if (!user || !valid || user.role !== 'STUDENT') {
       throw new UnauthorizedException('Invalid email or password.');
     }
-    if (user.accountStatus === 'PENDING_CONSENT') {
-      throw new ForbiddenException(
-        'Your account is awaiting parental consent. Please check the email sent to your billing contact.',
-      );
-    }
     if (user.accountStatus === 'SUSPENDED') {
       throw new ForbiddenException('This account has been suspended.');
     }
@@ -181,39 +136,6 @@ export class StudentsService {
       access_token: this.jwtService.sign(payload),
       user: this.safeUser(user),
     };
-  }
-
-  async confirmConsent(token: string) {
-    const record = await this.prisma.consentToken.findUnique({
-      where: { token },
-    });
-
-    if (!record) throw new NotFoundException('Consent link is invalid.');
-    if (record.usedAt) {
-      throw new BadRequestException('This consent link has already been used.');
-    }
-    if (record.expiresAt < new Date()) {
-      throw new BadRequestException(
-        'This consent link has expired. Please ask the student to register again.',
-      );
-    }
-
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: record.userId },
-        data: {
-          accountStatus: 'ACTIVE',
-          billingContactConsented: true,
-          billingContactConsentAt: new Date(),
-        },
-      }),
-      this.prisma.consentToken.update({
-        where: { token },
-        data: { usedAt: new Date() },
-      }),
-    ]);
-
-    return { message: 'Account activated. The student can now log in.' };
   }
 
   async getMyProfile(userId: string) {
@@ -1115,11 +1037,5 @@ export class StudentsService {
       gemBalance: user.gemBalance,
       accountStatus: user.accountStatus,
     };
-  }
-
-  private maskEmail(email: string): string {
-    const [local, domain] = email.split('@');
-    if (!domain) return email;
-    return `${local.slice(0, 2)}***@${domain}`;
   }
 }
