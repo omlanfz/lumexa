@@ -50,11 +50,6 @@ export class StudentsController {
     return this.studentsService.loginStudent(dto.email, dto.password);
   }
 
-  @Post('consent/confirm/:token')
-  confirmConsent(@Param('token') token: string) {
-    return this.studentsService.confirmConsent(token);
-  }
-
   // ══════════════════════════════════════════════════════════════════════════
   // STUDENT SELF-AUTH ROUTES (STUDENT role JWT)
   // Named sub-routes (me/lessons, me/progress, etc.) BEFORE parameterised

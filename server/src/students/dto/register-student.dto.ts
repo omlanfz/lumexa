@@ -39,9 +39,4 @@ export class RegisterStudentDto {
   @IsArray()
   @IsString({ each: true })
   subjects?: string[];
-
-  // Required when age < 16 (COPPA age-gate)
-  @IsOptional()
-  @IsEmail({}, { message: 'Billing contact must be a valid email address.' })
-  billingContactEmail?: string;
 }

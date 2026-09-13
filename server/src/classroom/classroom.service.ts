@@ -34,6 +34,7 @@ export class ClassroomService {
       where: { id: bookingId },
       include: {
         student: true,
+        studentUser: true,
         shift: {
           include: {
             teacher: {
@@ -73,8 +74,10 @@ export class ClassroomService {
 
     if (booking.shift.teacher.userId === userId) {
       participantName = booking.shift.teacher.user.fullName + ' (Teacher)';
-    } else if (booking.student.parentId === userId) {
+    } else if (booking.student?.parentId === userId) {
       participantName = booking.student.name + ' (Student)';
+    } else if (booking.studentUser?.id === userId) {
+      participantName = booking.studentUser.fullName + ' (Student)';
     } else {
       throw new BadRequestException(
         'Access denied: you are not assigned to this classroom.',

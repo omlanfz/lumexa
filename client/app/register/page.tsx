@@ -65,7 +65,6 @@ function RegisterContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingConsent, setPendingConsent] = useState<string | null>(null);
 
   // Shared fields
   const [fullName, setFullName] = useState("");
@@ -76,10 +75,8 @@ function RegisterContent() {
   const [age, setAge] = useState("");
   const [grade, setGrade] = useState("");
   const [subjects, setSubjects] = useState("");
-  const [billingContactEmail, setBillingContactEmail] = useState("");
 
   const parsedAge = parseInt(age, 10);
-  const needsConsent = !isNaN(parsedAge) && parsedAge < 16;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,10 +89,6 @@ function RegisterContent() {
     if (role === "STUDENT") {
       if (!age || isNaN(parsedAge) || parsedAge < 5 || parsedAge > 21) {
         setError("Please enter a valid age (5–21)");
-        return;
-      }
-      if (needsConsent && !billingContactEmail.trim()) {
-        setError("A parent or guardian email is required for students under 16");
         return;
       }
     }
@@ -111,17 +104,12 @@ function RegisterContent() {
           grade: grade.trim() || undefined,
           subjects: subjects ? subjects.split(",").map((s) => s.trim()).filter(Boolean) : undefined,
         };
-        if (needsConsent) payload.billingContactEmail = billingContactEmail.trim();
 
         const res = await api.post('/students/register', payload);
 
-        if (res.data.status === "PENDING_CONSENT") {
-          setPendingConsent(res.data.message);
-        } else {
-          localStorage.setItem("token", res.data.access_token);
-          localStorage.setItem("user", JSON.stringify(res.data.user));
-          router.push("/student-dashboard");
-        }
+        localStorage.setItem("token", res.data.access_token);
+        localStorage.setItem("user", JSON.stringify(res.data.user));
+        router.push("/student-dashboard");
       } else {
         const res = await api.post('/auth/register', {
           fullName: fullName.trim(), email: email.trim(), password, role: "TEACHER",
@@ -154,28 +142,6 @@ function RegisterContent() {
   const titleCls = isDark ? "text-blue-400" : "text-blue-600";
   const subtitleCls = isDark ? "text-blue-400/50" : "text-blue-400";
   const cardTextMuted = isDark ? "text-blue-400/60" : "text-blue-400";
-
-  // Pending consent screen
-  if (pendingConsent) {
-    return (
-      <div className={`min-h-screen ${bg} flex items-center justify-center p-4`}>
-        <div className={`w-full max-w-md ${card} rounded-2xl p-8 text-center`}>
-          <div className="text-6xl mb-6">📨</div>
-          <h1 className={`text-2xl font-bold mb-3 ${titleCls}`}>Check Your Parent's Email</h1>
-          <p className={`${cardTextMuted} mb-2`}>{pendingConsent}</p>
-          <p className={`text-sm mb-8 ${subtitleCls}`}>
-            The consent link expires in 48 hours. Once approved, you can log in.
-          </p>
-          <button
-            onClick={() => router.push("/login")}
-            className="text-blue-500 hover:text-blue-400 text-sm underline"
-          >
-            Go to Log In
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={`min-h-screen ${bg} flex items-center justify-center p-4 relative transition-colors duration-300`}>
@@ -398,27 +364,6 @@ function RegisterContent() {
                 />
               </div>
 
-              {needsConsent && (
-                <div className={`p-4 rounded-xl space-y-3 ${
-                  isDark ? "bg-yellow-900/20 border border-yellow-700/30" : "bg-yellow-50 border border-yellow-200"
-                }`}>
-                  <p className={`text-sm ${isDark ? "text-yellow-300" : "text-yellow-700"}`}>
-                    Students under 16 require a parent or guardian to approve their account before they can log in.
-                  </p>
-                  <div>
-                    <label className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}>
-                      Parent / Guardian Email
-                    </label>
-                    <input
-                      type="email"
-                      value={billingContactEmail}
-                      onChange={(e) => setBillingContactEmail(e.target.value)}
-                      placeholder="parent@example.com"
-                      className={`w-full px-4 py-3 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${inputCls}`}
-                    />
-                  </div>
-                </div>
-              )}
             </>
           )}
 
@@ -446,11 +391,11 @@ function RegisterContent() {
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                {role === "STUDENT" && needsConsent ? "Sending consent email…" : "Creating account…"}
+                Creating account…
               </span>
             ) : (
               <span>
-                {role === "STUDENT" && needsConsent ? "Create Account & Send Consent Email" : "Create Account"}
+                Create Account
                 <span className="block text-xs font-normal opacity-70">Initiate Launch 🚀</span>
               </span>
             )}
