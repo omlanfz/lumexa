@@ -44,6 +44,32 @@ function sessionsToNextRank(sessions: number): number | null {
   return null;
 }
 
+// Prisma `include`/`select` fragment for resolving a student's Operations-
+// assigned teacher's public info via the explicit assignedTeacher relation.
+const ASSIGNED_TEACHER_SELECT = {
+  select: {
+    id: true,
+    subjects: true,
+    user: { select: { fullName: true, avatarUrl: true } },
+  },
+} as const;
+
+function mapAssignedTeacher(
+  teacher: {
+    id: string;
+    subjects: string[];
+    user: { fullName: string; avatarUrl: string | null };
+  } | null,
+) {
+  if (!teacher) return null;
+  return {
+    teacherProfileId: teacher.id,
+    name: teacher.user.fullName,
+    avatarUrl: teacher.user.avatarUrl,
+    subjects: teacher.subjects,
+  };
+}
+
 // ─── Legacy helpers (parent-proxy pattern) ───────────────────────────────────
 
 function getSpaceRank(completedClasses: number) {
@@ -102,7 +128,6 @@ export class StudentsService {
         spaceRank: 'STARCHILD',
         totalSessions: 0,
         streakWeeks: 0,
-        streakFreezes: 1,
         gemBalance: 0,
       },
     });
@@ -153,10 +178,10 @@ export class StudentsService {
         spaceRank: true,
         totalSessions: true,
         streakWeeks: true,
-        streakFreezes: true,
         gemBalance: true,
         accountStatus: true,
         createdAt: true,
+        assignedTeacher: ASSIGNED_TEACHER_SELECT,
       },
     });
 
@@ -165,10 +190,12 @@ export class StudentsService {
     }
 
     const rankInfo = rankMeta(user.spaceRank);
+    const { assignedTeacher, ...rest } = user;
     return {
-      ...user,
+      ...rest,
       rankIcon: rankInfo.icon,
       sessionsToNextRank: sessionsToNextRank(user.totalSessions),
+      assignedTeacher: mapAssignedTeacher(assignedTeacher),
     };
   }
 
@@ -197,7 +224,6 @@ export class StudentsService {
         spaceRank: true,
         totalSessions: true,
         streakWeeks: true,
-        streakFreezes: true,
         gemBalance: true,
         accountStatus: true,
       },
@@ -238,9 +264,9 @@ export class StudentsService {
         spaceRank: true,
         totalSessions: true,
         streakWeeks: true,
-        streakFreezes: true,
         gemBalance: true,
         billingContactEmail: true,
+        assignedTeacher: ASSIGNED_TEACHER_SELECT,
       },
     });
 
@@ -322,10 +348,10 @@ export class StudentsService {
         rankIcon: rankInfo.icon,
         totalSessions: user.totalSessions,
         streakWeeks: user.streakWeeks,
-        streakFreezes: user.streakFreezes,
         gemBalance: user.gemBalance,
         hasBillingContact: !!user.billingContactEmail,
         sessionsToNextRank: sessionsToNextRank(user.totalSessions),
+        assignedTeacher: mapAssignedTeacher(user.assignedTeacher),
       },
       upcomingBooking: nextBooking,
       pendingReview: pendingReview
@@ -427,7 +453,6 @@ export class StudentsService {
         spaceRank: true,
         totalSessions: true,
         streakWeeks: true,
-        streakFreezes: true,
         gemBalance: true,
         subjects: true,
         createdAt: true,
@@ -488,7 +513,6 @@ export class StudentsService {
       totalSessions: user.totalSessions,
       totalHours: Math.round((totalMinutes / 60) * 10) / 10,
       streakWeeks: user.streakWeeks,
-      streakFreezes: user.streakFreezes,
       sessionsToNextRank: toNext,
       subjects: user.subjects,
       subjectBreakdown,
@@ -1017,7 +1041,6 @@ export class StudentsService {
     spaceRank: SpaceRank;
     totalSessions: number;
     streakWeeks: number;
-    streakFreezes: number;
     gemBalance: number;
     accountStatus: AccountStatus;
   }) {
@@ -1033,7 +1056,6 @@ export class StudentsService {
       spaceRank: user.spaceRank,
       totalSessions: user.totalSessions,
       streakWeeks: user.streakWeeks,
-      streakFreezes: user.streakFreezes,
       gemBalance: user.gemBalance,
       accountStatus: user.accountStatus,
     };

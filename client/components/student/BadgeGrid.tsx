@@ -16,13 +16,13 @@ export default function BadgeGrid({ badges }: BadgeGridProps) {
   const locked = badges.filter((b) => !b.earned);
 
   return (
-    <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+    <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wide font-medium mb-0.5">
+          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-0.5">
             Badges
           </p>
-          <h3 className="text-white font-semibold">
+          <h3 className="text-gray-900 dark:text-white font-semibold">
             {earned.length}
             <span className="text-gray-500 font-normal">/{badges.length}</span>{' '}
             Earned
@@ -35,11 +35,11 @@ export default function BadgeGrid({ badges }: BadgeGridProps) {
         {earned.map((badge) => (
           <div
             key={badge.id}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-teal-900/30 border border-teal-700/40"
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-teal-100/60 dark:bg-teal-900/30 border border-teal-300/50 dark:border-teal-700/40"
             title={badge.label}
           >
             <span className="text-2xl">{badge.icon}</span>
-            <p className="text-teal-300 text-xs font-medium text-center leading-tight">
+            <p className="text-teal-700 dark:text-teal-300 text-xs font-medium text-center leading-tight">
               {badge.label}
             </p>
           </div>
@@ -47,11 +47,11 @@ export default function BadgeGrid({ badges }: BadgeGridProps) {
         {locked.map((badge) => (
           <div
             key={badge.id}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-gray-700/20 border border-gray-700/30"
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-gray-100 dark:bg-gray-700/20 border border-gray-200 dark:border-gray-700/30"
             title={`Locked: ${badge.label}`}
           >
             <span className="text-2xl grayscale opacity-30">{badge.icon}</span>
-            <p className="text-gray-600 text-xs font-medium text-center leading-tight">
+            <p className="text-gray-500 dark:text-gray-600 text-xs font-medium text-center leading-tight">
               {badge.label}
             </p>
           </div>

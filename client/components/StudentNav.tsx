@@ -10,7 +10,6 @@ interface StudentNavProps {
   fullName?: string;
   spaceRank?: string;
   rankIcon?: string;
-  gemBalance?: number;
   totalSessions?: number;
   avatarUrl?: string | null;
   // Collapse sync: layout can pass this to stay in sync with content margin
@@ -26,14 +25,14 @@ interface StudentNavProps {
   completedClasses?: number;
 }
 
+// NOTE: this legacy sidebar is only rendered by the parent/teacher
+// "view a specific student" proxy pages (/student-progress/[id], etc).
+// The student's own dashboard uses StudentTopNav (Home | Learning | Profile)
+// instead — see components/StudentTopNav.tsx.
 const NAV_ITEMS = [
-  { href: '/student-dashboard', icon: '🌌', label: LABELS.STUDENT_DASHBOARD.primary, sub: LABELS.STUDENT_DASHBOARD.theme, exact: true },
-  { href: '/student-dashboard/lessons', icon: '📚', label: LABELS.STUDENT_LESSONS.primary, sub: LABELS.STUDENT_LESSONS.theme, exact: false },
-  { href: '/student-dashboard/progress', icon: '📊', label: LABELS.STUDENT_PROGRESS.primary, sub: LABELS.STUDENT_PROGRESS.theme, exact: false },
-  { href: '/student-dashboard/teachers', icon: '👨‍🚀', label: LABELS.STUDENT_TEACHERS.primary, sub: LABELS.STUDENT_TEACHERS.theme, exact: false },
-  { href: '/student-dashboard/recordings', icon: '🎬', label: LABELS.STUDENT_RECORDINGS.primary, sub: LABELS.STUDENT_RECORDINGS.theme, exact: false },
-  { href: '/student-dashboard/rankings', icon: '🏆', label: LABELS.STUDENT_RANKINGS.primary, sub: LABELS.STUDENT_RANKINGS.theme, exact: false },
-  { href: '/student-dashboard/settings', icon: '⚙️', label: LABELS.STUDENT_SETTINGS.primary, sub: LABELS.STUDENT_SETTINGS.theme, exact: false },
+  { href: '/student-dashboard', icon: '🌌', label: 'Home', sub: '', exact: true },
+  { href: '/student-dashboard/learning', icon: '📚', label: 'Learning', sub: '', exact: false },
+  { href: '/student-dashboard/profile', icon: '⚙️', label: 'Profile', sub: '', exact: false },
 ];
 
 const RANK_THRESHOLDS = [
@@ -56,7 +55,6 @@ export default function StudentNav({
   fullName: fullNameProp,
   spaceRank: spaceRankProp,
   rankIcon: rankIconProp,
-  gemBalance: gemBalanceProp,
   avatarUrl,
   totalSessions: totalSessionsProp,
   onCollapseChange,
@@ -68,7 +66,6 @@ export default function StudentNav({
   const fullName = fullNameProp ?? studentName ?? '';
   const spaceRank = spaceRankProp ?? 'STARCHILD';
   const rankIcon = rankIconProp ?? '🌟';
-  const gemBalance = gemBalanceProp ?? 0;
   const totalSessions = totalSessionsProp ?? completedClasses ?? 0;
   const router = useRouter();
   const pathname = usePathname();
@@ -160,12 +157,6 @@ export default function StudentNav({
           )}
         </div>
 
-        {!collapsed && (
-          <div className="mt-3 flex items-center gap-1.5 px-2 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <span className="text-amber-400 text-sm">✦</span>
-            <span className="text-amber-400 text-xs font-semibold">{gemBalance} {LABELS.STUDENT_GEMS.primary}</span>
-          </div>
-        )}
       </div>
 
       {/* Nav items */}

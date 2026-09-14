@@ -97,9 +97,6 @@ export default function RankUpCeremony({ newRank, rankIcon, onDismiss }: RankUpC
             <p className="text-xs text-gray-400">
               Keep completing sessions to climb even higher.
             </p>
-            <p className="text-xs text-gray-400">
-              +15 gems awarded to your wallet 🎁
-            </p>
           </div>
           <button
             onClick={handleDismiss}

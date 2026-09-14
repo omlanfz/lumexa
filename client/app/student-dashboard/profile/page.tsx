@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import { getStoredRole, getStoredToken, parseStoredUser } from '@/lib/storage';
-import { LABELS } from '@/lib/labels';
 import Image from 'next/image';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,8 +44,8 @@ const GRADE_OPTIONS = [
 function SectionHeader({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="mb-5">
-      <h2 className="text-base font-semibold text-white">{title}</h2>
-      {sub && <p className="text-gray-400 text-xs mt-0.5">{sub}</p>}
+      <h2 className="text-base font-semibold text-gray-900 dark:text-white">{title}</h2>
+      {sub && <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">{sub}</p>}
     </div>
   );
 }
@@ -298,7 +297,7 @@ export default function StudentSettingsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-400" />
       </div>
     );
@@ -322,12 +321,12 @@ export default function StudentSettingsPage() {
     <div className="max-w-2xl mx-auto space-y-8 pt-6 pb-16">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">{LABELS.STUDENT_SETTINGS.primary}</h1>
-        <p className="text-gray-400 text-sm mt-1">{LABELS.STUDENT_SETTINGS.theme}</p>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-900 dark:text-white">Profile</h1>
+        <p className="text-gray-500 dark:text-gray-500 dark:text-gray-400 text-sm mt-1">Manage your account details</p>
       </div>
 
       {/* ── Profile section ─────────────────────────────────────────────────── */}
-      <section className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6 space-y-5">
+      <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5">
         <SectionHeader title="Profile" sub="Your identity and learning preferences" />
 
         {/* Avatar */}
@@ -342,7 +341,7 @@ export default function StudentSettingsPage() {
 
         {/* Full name */}
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-1.5" htmlFor="fullName">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-1.5" htmlFor="fullName">
             Full Name
           </label>
           <input
@@ -351,14 +350,14 @@ export default function StudentSettingsPage() {
             value={fullName}
             onChange={(e) => { setFullName(e.target.value); setProfileSaved(false); }}
             maxLength={100}
-            className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:border-teal-500 transition-colors"
+            className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:border-teal-500 transition-colors"
             placeholder="Your name"
           />
         </div>
 
         {/* Email (read-only) */}
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-1.5">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-1.5">
             Email Address
           </label>
           <div className="flex items-center gap-2">
@@ -366,7 +365,7 @@ export default function StudentSettingsPage() {
               type="email"
               value={profile.email}
               readOnly
-              className="flex-1 bg-gray-800 border border-gray-700 text-gray-500 text-sm rounded-lg px-3 py-2.5 cursor-not-allowed"
+              className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-500 text-sm rounded-lg px-3 py-2.5 cursor-not-allowed"
             />
             <span className="text-xs text-gray-600 whitespace-nowrap">Cannot change</span>
           </div>
@@ -374,14 +373,14 @@ export default function StudentSettingsPage() {
 
         {/* Grade */}
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-1.5" htmlFor="grade">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-1.5" htmlFor="grade">
             Grade / Year
           </label>
           <select
             id="grade"
             value={grade}
             onChange={(e) => { setGrade(e.target.value); setProfileSaved(false); }}
-            className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:border-teal-500 transition-colors"
+            className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none focus:border-teal-500 transition-colors"
           >
             <option value="">Select grade</option>
             {GRADE_OPTIONS.map((g) => (
@@ -392,7 +391,7 @@ export default function StudentSettingsPage() {
 
         {/* Subjects */}
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-2">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
             Subjects I Study
             <span className="text-gray-600 font-normal ml-1">({subjects.length} selected)</span>
           </label>
@@ -407,7 +406,7 @@ export default function StudentSettingsPage() {
                   className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
                     selected
                       ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                      : 'bg-gray-700/50 text-gray-400 border-gray-600/50 hover:border-teal-600/40 hover:text-teal-400'
+                      : 'bg-gray-700/50 text-gray-500 dark:text-gray-400 border-gray-600/50 hover:border-teal-600/40 hover:text-teal-400'
                   }`}
                 >
                   {selected ? '✓ ' : ''}{subj}
@@ -418,17 +417,16 @@ export default function StudentSettingsPage() {
         </div>
 
         {/* Read-only stats */}
-        <div className="pt-2 border-t border-gray-700/50">
+        <div className="pt-2 border-t border-gray-200 dark:border-gray-700/50">
           <p className="text-xs text-gray-500 font-medium mb-3">Account Info</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             {[
               { label: 'Space Rank', value: `${profile.rankIcon} ${profile.spaceRank.replace(/_/g, ' ')}` },
               { label: 'Sessions', value: String(profile.totalSessions) },
               { label: 'Streak', value: `${profile.streakWeeks}w` },
-              { label: 'Gems', value: `✦ ${profile.gemBalance}` },
             ].map((s) => (
-              <div key={s.label} className="bg-gray-800/60 rounded-lg px-3 py-2 text-center">
-                <p className="text-white text-sm font-semibold">{s.value}</p>
+              <div key={s.label} className="bg-gray-100 dark:bg-gray-800/60 rounded-lg px-3 py-2 text-center">
+                <p className="text-gray-900 dark:text-white text-sm font-semibold">{s.value}</p>
                 <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
               </div>
             ))}
@@ -449,11 +447,11 @@ export default function StudentSettingsPage() {
       </section>
 
       {/* ── Password section ─────────────────────────────────────────────────── */}
-      <section className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6 space-y-5">
+      <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5">
         <SectionHeader title="Change Password" sub="Update your account password" />
 
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-1.5" htmlFor="currentPw">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-1.5" htmlFor="currentPw">
             Current Password
           </label>
           <div className="relative">
@@ -463,13 +461,13 @@ export default function StudentSettingsPage() {
               value={currentPassword}
               onChange={(e) => { setCurrentPassword(e.target.value); setPwSaved(false); }}
               autoComplete="current-password"
-              className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg px-3 py-2.5 pr-10 focus:outline-none focus:border-teal-500 transition-colors"
+              className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2.5 pr-10 focus:outline-none focus:border-teal-500 transition-colors"
               placeholder="••••••••"
             />
             <button
               type="button"
               onClick={() => setShowCurrentPw((p) => !p)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 text-sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-200 text-sm"
             >
               {showCurrentPw ? '🙈' : '👁️'}
             </button>
@@ -477,7 +475,7 @@ export default function StudentSettingsPage() {
         </div>
 
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-1.5" htmlFor="newPw">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-1.5" htmlFor="newPw">
             New Password
           </label>
           <div className="relative">
@@ -488,13 +486,13 @@ export default function StudentSettingsPage() {
               onChange={(e) => { setNewPassword(e.target.value); setPwSaved(false); }}
               autoComplete="new-password"
               minLength={8}
-              className="w-full bg-gray-700 border border-gray-600 text-white text-sm rounded-lg px-3 py-2.5 pr-10 focus:outline-none focus:border-teal-500 transition-colors"
+              className="w-full bg-gray-200 dark:bg-gray-700 border border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2.5 pr-10 focus:outline-none focus:border-teal-500 transition-colors"
               placeholder="Min. 8 characters"
             />
             <button
               type="button"
               onClick={() => setShowNewPw((p) => !p)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200 text-sm"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 hover:text-gray-200 text-sm"
             >
               {showNewPw ? '🙈' : '👁️'}
             </button>
@@ -507,7 +505,7 @@ export default function StudentSettingsPage() {
         </div>
 
         <div>
-          <label className="block text-xs text-gray-400 font-medium mb-1.5" htmlFor="confirmPw">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-1.5" htmlFor="confirmPw">
             Confirm New Password
           </label>
           <input
@@ -516,7 +514,7 @@ export default function StudentSettingsPage() {
             value={confirmPassword}
             onChange={(e) => { setConfirmPassword(e.target.value); setPwSaved(false); }}
             autoComplete="new-password"
-            className={`w-full bg-gray-700 border text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none transition-colors ${
+            className={`w-full bg-gray-200 dark:bg-gray-700 border text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2.5 focus:outline-none transition-colors ${
               confirmPassword && newPassword !== confirmPassword
                 ? 'border-red-500/50 focus:border-red-500'
                 : 'border-gray-600 focus:border-teal-500'
@@ -549,8 +547,8 @@ export default function StudentSettingsPage() {
         {!showDeactivateConfirm ? (
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <p className="text-white text-sm font-medium">Deactivate Account</p>
-              <p className="text-gray-400 text-xs mt-0.5">
+              <p className="text-gray-900 dark:text-white text-sm font-medium">Deactivate Account</p>
+              <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
                 Your account will be deactivated and you will lose access immediately.
                 Contact support to reactivate.
               </p>
@@ -566,7 +564,7 @@ export default function StudentSettingsPage() {
           <div className="space-y-4">
             <div className="p-4 bg-red-900/20 border border-red-700/40 rounded-xl">
               <p className="text-red-300 text-sm font-semibold mb-1">⚠️ This action cannot be undone</p>
-              <p className="text-gray-400 text-xs">
+              <p className="text-gray-500 dark:text-gray-400 text-xs">
                 Your account will be deactivated. You will be logged out immediately and
                 will not be able to log back in. Contact Lumexa support to reactivate.
               </p>
@@ -597,14 +595,14 @@ export default function StudentSettingsPage() {
                   }
                 }}
                 disabled={deactivating}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {deactivating ? 'Deactivating…' : 'Yes, Deactivate My Account'}
               </button>
               <button
                 onClick={() => { setShowDeactivateConfirm(false); setDeactivateError(''); }}
                 disabled={deactivating}
-                className="px-5 py-2.5 border border-gray-600 text-gray-400 text-sm rounded-lg hover:border-gray-500 transition-colors"
+                className="px-5 py-2.5 border border-gray-600 text-gray-500 dark:text-gray-400 text-sm rounded-lg hover:border-gray-500 transition-colors"
               >
                 Cancel
               </button>

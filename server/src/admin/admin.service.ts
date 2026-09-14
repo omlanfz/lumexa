@@ -125,6 +125,80 @@ export class AdminService {
     });
   }
 
+  // ─── Student teacher assignment (Operations-controlled) ──────────────────
+
+  async getAllStudents(page = 1, limit = 20) {
+    const [students, total] = await Promise.all([
+      this.prisma.user.findMany({
+        where: { role: 'STUDENT' },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          grade: true,
+          subjects: true,
+          accountStatus: true,
+          createdAt: true,
+          assignedTeacherId: true,
+          assignedTeacher: {
+            select: {
+              id: true,
+              subjects: true,
+              user: { select: { fullName: true, avatarUrl: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.user.count({ where: { role: 'STUDENT' } }),
+    ]);
+
+    return {
+      students,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
+  async assignTeacherToStudent(studentUserId: string, teacherProfileId: string | null) {
+    const student = await this.prisma.user.findUnique({
+      where: { id: studentUserId },
+      select: { id: true, role: true },
+    });
+    if (!student || student.role !== 'STUDENT') {
+      throw new NotFoundException('Student not found.');
+    }
+
+    if (teacherProfileId) {
+      const teacher = await this.prisma.teacherProfile.findUnique({
+        where: { id: teacherProfileId },
+        select: { id: true },
+      });
+      if (!teacher) throw new NotFoundException('Teacher not found.');
+    }
+
+    return this.prisma.user.update({
+      where: { id: studentUserId },
+      data: { assignedTeacherId: teacherProfileId },
+      select: {
+        id: true,
+        fullName: true,
+        assignedTeacherId: true,
+        assignedTeacher: {
+          select: {
+            id: true,
+            subjects: true,
+            user: { select: { fullName: true, avatarUrl: true } },
+          },
+        },
+      },
+    });
+  }
+
   async getPlatformStats() {
     const [
       totalBookings,

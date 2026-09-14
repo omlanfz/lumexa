@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import StudentNav from '@/components/StudentNav';
+import StudentTopNav from '@/components/StudentTopNav';
 import LumiChat from '@/components/LumiChat';
 import api from '@/lib/axios';
 import { parseStoredUser, getStoredToken } from '@/lib/storage';
@@ -12,9 +12,9 @@ interface StudentProfile {
   fullName: string;
   spaceRank: string;
   rankIcon: string;
-  gemBalance: number;
   avatarUrl: string | null;
   totalSessions: number;
+  streakWeeks: number;
 }
 
 export default function StudentDashboardLayout({
@@ -26,13 +26,6 @@ export default function StudentDashboardLayout({
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
-  // Read initial collapse state from localStorage so margin is correct on first render
-  const [navCollapsed, setNavCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('lumexa_student_nav_collapsed') === 'true';
-    }
-    return false;
-  });
 
   useEffect(() => {
     const token = getStoredToken();
@@ -65,7 +58,7 @@ export default function StudentDashboardLayout({
 
   if (!checked) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-400" />
       </div>
     );
@@ -76,23 +69,17 @@ export default function StudentDashboardLayout({
     return <>{children}</>;
   }
 
-  // Student-auth layout: StudentNav sidebar + main content + LumiChat
+  // Student-auth layout: top nav + main content + LumiChat
   return (
-    <div className="min-h-screen bg-black">
-      <StudentNav
+    <div className="min-h-screen bg-gradient-to-b from-teal-50/40 via-white to-white dark:from-black dark:via-black dark:to-black">
+      <StudentTopNav
         fullName={profile!.fullName}
         spaceRank={profile!.spaceRank}
         rankIcon={profile!.rankIcon}
-        gemBalance={profile!.gemBalance}
+        streakWeeks={profile!.streakWeeks}
         avatarUrl={profile!.avatarUrl}
-        totalSessions={profile!.totalSessions}
-        onCollapseChange={setNavCollapsed}
       />
-      <main
-        className={`min-h-screen transition-all duration-300 ${
-          navCollapsed ? 'lg:ml-16' : 'lg:ml-64'
-        } px-4 sm:px-6 pt-16 lg:pt-6 pb-12`}
-      >
+      <main className="max-w-[1200px] mx-auto px-4 sm:px-6 pt-6 pb-16">
         {children}
       </main>
       <LumiChat

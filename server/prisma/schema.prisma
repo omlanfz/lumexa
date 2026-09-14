@@ -25,9 +25,13 @@ model User {
   spaceRank               SpaceRank     @default(STARCHILD)
   totalSessions           Int           @default(0)
   streakWeeks             Int           @default(0)
-  streakFreezes           Int           @default(1)
   gemBalance              Int           @default(0)
   accountStatus           AccountStatus @default(ACTIVE)
+
+  // Operations-controlled default teacher assignment (informational — not the
+  // source of truth for any individual booking's teacher).
+  assignedTeacherId       String?
+  assignedTeacher         TeacherProfile? @relation("AssignedTeacher", fields: [assignedTeacherId], references: [id])
 
   // Billing contact — server-side only, never returned in student API responses
   billingContactEmail     String?
@@ -43,6 +47,8 @@ model User {
   badges           StudentBadge[]
   gemTransactions  GemTransaction[]
   rankSnapshots    RankSnapshot[]
+
+  @@index([assignedTeacherId])
 }
 
 model Student {
@@ -85,6 +91,7 @@ model TeacherProfile {
   cancellations   TeacherCancellation[]
   user            User                  @relation(fields: [userId], references: [id])
   verificationDocs  Json?    @default("[]")  // Array of { type, url, name, uploadedAt }
+  assignedStudents User[]               @relation("AssignedTeacher")
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
