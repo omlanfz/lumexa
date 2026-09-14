@@ -415,7 +415,7 @@ function MarketplaceContent() {
                       You need to add a student first.{' '}
                       <button
                         onClick={() => { setSelectedTeacher(null); router.push('/dashboard'); }}
-                        className="underline"
+                        className="underline hover:text-blue-400 transition-colors"
                       >
                         Go to Dashboard
                       </button>

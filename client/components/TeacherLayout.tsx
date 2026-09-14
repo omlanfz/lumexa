@@ -4,6 +4,7 @@
 // Usage: wrap every teacher page's root div with <TeacherLayout>
 
 import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import TeacherNav from "./TeacherNav";
 
 interface TeacherLayoutProps {
@@ -21,9 +22,10 @@ export default function TeacherLayout({
   onAvatarUpdate,
   children,
 }: TeacherLayoutProps) {
+  const pathname = usePathname();
   return (
     // CHANGE: flex row, overflow-x-hidden prevents horizontal scroll
-    <div className="flex h-screen overflow-hidden bg-[var(--t-bg)]">
+    <div className="flex h-screen overflow-hidden bg-[var(--t-bg)] transition-colors duration-300">
       <TeacherNav
         teacherName={teacherName}
         avatarUrl={avatarUrl}
@@ -32,7 +34,10 @@ export default function TeacherLayout({
       />
       {/* CHANGE: min-w-0 is critical — prevents flex child from overflowing past sidebar */}
       <main className="flex-1 min-w-0 h-screen overflow-y-auto">
-        {children}
+        {/* Keyed by route so each page transitions in smoothly on navigation */}
+        <div key={pathname} className="fade-in">
+          {children}
+        </div>
       </main>
     </div>
   );

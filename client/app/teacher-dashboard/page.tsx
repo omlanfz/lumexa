@@ -268,7 +268,7 @@ function TeacherDashboardContent() {
     return false;
   });
 
-  const card = "t-card shadow-sm";
+  const card = "t-card t-card-hover shadow-sm";
 
   return (
     <TeacherLayout
@@ -306,7 +306,7 @@ function TeacherDashboardContent() {
             </div>
             <button
               onClick={() => router.push("/teacher-profile")}
-              className="text-sm px-3 py-1.5 rounded-lg font-medium flex-shrink-0 bg-amber-600 hover:bg-amber-500 text-white transition-colors"
+              className="text-sm px-3 py-1.5 rounded-lg font-medium flex-shrink-0 bg-amber-600 hover:bg-amber-500 text-white transition-all duration-200 active:scale-[0.98]"
             >
               Complete Profile
             </button>
@@ -380,7 +380,7 @@ function TeacherDashboardContent() {
               </div>
               <button
                 onClick={() => router.push("/leaderboard")}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
+                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-all duration-200 active:scale-[0.98]"
               >
                 View Rankings
               </button>
@@ -526,7 +526,7 @@ function TeacherDashboardContent() {
                       onClick={() =>
                         router.push(`/classroom/${nextClass.bookingId}`)
                       }
-                      className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-xl transition-colors"
+                      className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-xl transition-all duration-200 active:scale-[0.98]"
                     >
                       Enter Star Lab →
                     </button>
@@ -546,7 +546,7 @@ function TeacherDashboardContent() {
                 </p>
                 <button
                   onClick={() => router.push("/calendar")}
-                  className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+                  className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
                 >
                   Log Flight Availability
                 </button>
@@ -616,7 +616,7 @@ function TeacherDashboardContent() {
             <button
               key={item.path}
               onClick={() => router.push(item.path)}
-              className={`${card} p-4 text-left hover:border-[var(--t-border-strong)] transition-all`}
+              className={`${card} p-4 text-left hover:border-[var(--t-border-strong)] transition-all duration-200 active:scale-[0.98]`}
             >
               <span className="text-2xl">{item.icon}</span>
               <p className="text-sm font-medium mt-2 text-[var(--t-text)]">
@@ -637,7 +637,7 @@ function TeacherDashboardContent() {
             </p>
             <button
               onClick={() => router.push("/teacher-profile")}
-              className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
+              className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-all duration-200 active:scale-[0.98]"
             >
               Edit
             </button>

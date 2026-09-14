@@ -239,7 +239,7 @@ function TeacherConductContent() {
               color: "red",
             },
           ].map((item) => (
-            <div key={item.label} className={`${card} p-4 text-center`}>
+            <div key={item.label} className={`${card} t-card-hover p-4 text-center`}>
               <p className="text-2xl mb-2">{item.icon}</p>
               <p className="text-sm font-semibold text-[var(--t-text)]">
                 {item.label}
@@ -264,7 +264,7 @@ function TeacherConductContent() {
           {RULES.map((rule) => (
             <div
               key={rule.section}
-              className={`rounded-2xl border p-5 ${COLOR_MAP[rule.color]}`}
+              className={`rounded-2xl border p-5 transition-shadow duration-200 hover:shadow-md ${COLOR_MAP[rule.color]}`}
             >
               <h3 className="font-bold text-base mb-3">{rule.section}</h3>
               <ul className="space-y-2">

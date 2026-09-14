@@ -99,7 +99,7 @@ export default function MarketingNav() {
             {/* Theme toggle */}
             <button
               onClick={toggle}
-              className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 bg-white dark:bg-gray-800/60 hover:bg-purple-50 dark:hover:bg-gray-700/60 transition-all text-sm"
+              className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 bg-white dark:bg-gray-800/60 hover:bg-purple-50 dark:hover:bg-gray-700/60 transition-all text-sm active:scale-90"
               title={isDark ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDark ? "☀️" : "🌙"}
@@ -149,7 +149,7 @@ export default function MarketingNav() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden bg-white dark:bg-[#050D1A] border-t border-[#E2E8F0] dark:border-gray-800 py-4 space-y-1 shadow-lg dark:shadow-black/30">
+          <div className="md:hidden bg-white dark:bg-[#050D1A] border-t border-[#E2E8F0] dark:border-gray-800 py-4 space-y-1 shadow-lg dark:shadow-black/30 fade-in">
             <MobileNavLink href="/courses" onClick={() => setMobileOpen(false)}>Pathways</MobileNavLink>
             <MobileNavLink href="/pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
             <MobileNavLink href="/about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
@@ -157,16 +157,16 @@ export default function MarketingNav() {
               {authed ? (
                 <button
                   onClick={() => { setMobileOpen(false); handleDashboard(); }}
-                  className="w-full py-2.5 text-sm text-center text-purple-700 border border-purple-200 rounded-lg"
+                  className="w-full py-2.5 text-sm text-center text-purple-700 border border-purple-200 rounded-lg transition-all duration-200 hover:bg-purple-50 active:scale-[0.98]"
                 >
                   My Dashboard →
                 </button>
               ) : (
                 <>
-                  <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700 rounded-lg dark:hover:border-gray-600 transition-colors">
+                  <Link href="/login" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm text-center text-[#334155] dark:text-gray-400 border border-[#E2E8F0] dark:border-gray-700 rounded-lg dark:hover:border-gray-600 transition-colors active:scale-[0.98]">
                     Sign In
                   </Link>
-                  <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-bold text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg">
+                  <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-bold text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg transition-transform active:scale-[0.98]">
                     Book Free Trial
                   </Link>
                 </>

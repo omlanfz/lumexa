@@ -448,7 +448,7 @@ function CancelModal({ shift, onClose, onDone }: CancelModalProps) {
               <p className="mt-1">
                 View full policy:{" "}
                 <button
-                  className="underline"
+                  className="underline hover:opacity-80 transition-opacity"
                   onClick={() => window.open("/teacher-conduct", "_blank")}
                 >
                   Pilot Guidelines

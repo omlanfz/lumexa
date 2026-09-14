@@ -190,7 +190,7 @@ function RegisterContent() {
         {isDark ? "☀️" : "🌙"}
       </button>
 
-      <div className={`w-full max-w-md ${card} rounded-2xl p-8 relative z-10`}>
+      <div className={`w-full max-w-md ${card} rounded-2xl p-8 relative z-10 fade-in`}>
         {/* Logo + Title */}
         <div className="text-center mb-6">
           <Link href="/" className="inline-block">
@@ -386,7 +386,7 @@ function RegisterContent() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-blue-600/30 disabled:opacity-60 mt-2"
+            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl transition-all duration-200 active:scale-[0.98] shadow-lg shadow-blue-600/30 disabled:opacity-60 mt-2"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
