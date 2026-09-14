@@ -43,7 +43,7 @@ export default function StudentTopNav({
 
   return (
     <header className="sticky top-0 z-40 bg-white/90 dark:bg-black/90 backdrop-blur border-b border-black/10 dark:border-white/10">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 h-16 flex items-center justify-between gap-4">
         {/* Logo + brand */}
         <button
           onClick={() => router.push('/student-dashboard')}
@@ -117,6 +117,15 @@ export default function StudentTopNav({
                 {initial}
               </div>
             )}
+          </button>
+
+          {/* Desktop logout */}
+          <button
+            onClick={handleLogout}
+            className="hidden md:flex items-center px-3 py-2 rounded-lg text-sm font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
+            aria-label="Logout"
+          >
+            Logout
           </button>
 
           {/* Mobile menu toggle */}

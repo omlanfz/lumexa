@@ -79,7 +79,7 @@ export default function StudentDashboardLayout({
         streakWeeks={profile!.streakWeeks}
         avatarUrl={profile!.avatarUrl}
       />
-      <main className="max-w-[1200px] mx-auto px-4 sm:px-6 pt-6 pb-16">
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 pt-6 pb-16">
         {children}
       </main>
       <LumiChat

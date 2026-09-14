@@ -9,10 +9,10 @@ import Link from "next/link";
 
 // ─── Inline theme logic (no ThemeProvider dependency on auth pages) ───────────
 function useAuthTheme() {
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState(false);
   useEffect(() => {
     const stored = localStorage.getItem("lumexa-theme");
-    const dark = stored !== "light";
+    const dark = stored === "dark";
     setIsDark(dark);
     document.documentElement.classList.toggle("dark", dark);
   }, []);
