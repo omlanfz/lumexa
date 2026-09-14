@@ -56,10 +56,10 @@ function SaveButton({
     <button
       onClick={onClick}
       disabled={saving || disabled}
-      className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all ${
+      className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
         saved
           ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-          : 'bg-teal-500 hover:bg-teal-400 text-black disabled:opacity-60 disabled:cursor-not-allowed'
+          : 'bg-teal-500 hover:bg-teal-400 text-black disabled:opacity-60 disabled:cursor-not-allowed active:scale-[0.98]'
       }`}
     >
       {saving ? (
@@ -149,7 +149,7 @@ function AvatarSection({
         <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
-          className="px-4 py-2 border border-teal-600/50 text-teal-400 text-sm font-medium rounded-lg hover:bg-teal-900/20 transition-colors disabled:opacity-50"
+          className="px-4 py-2 border border-teal-600/50 text-teal-400 text-sm font-medium rounded-lg hover:bg-teal-900/20 transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
         >
           {uploading ? 'Uploading…' : 'Change Photo'}
         </button>
@@ -294,7 +294,7 @@ export default function StudentSettingsPage() {
   if (!profile) return null;
 
   return (
-    <div className="max-w-2xl space-y-8 pt-6 pb-16">
+    <div className="max-w-2xl space-y-8 pt-6 pb-16 fade-in">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-900 dark:text-white">Profile</h1>
@@ -302,7 +302,7 @@ export default function StudentSettingsPage() {
       </div>
 
       {/* ── Profile section ─────────────────────────────────────────────────── */}
-      <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5">
+      <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5 transition-colors">
         <SectionHeader title="Profile" sub="Your identity and learning preferences" />
 
         {/* Avatar */}

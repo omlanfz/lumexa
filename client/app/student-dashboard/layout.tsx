@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import StudentTopNav from '@/components/StudentTopNav';
 import LumiChat from '@/components/LumiChat';
 import api from '@/lib/axios';
@@ -23,6 +23,7 @@ export default function StudentDashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
@@ -58,7 +59,7 @@ export default function StudentDashboardLayout({
 
   if (!checked) {
     return (
-      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center">
+      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center transition-colors duration-300">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-400" />
       </div>
     );
@@ -71,7 +72,7 @@ export default function StudentDashboardLayout({
 
   // Student-auth layout: top nav + main content + LumiChat
   return (
-    <div className="min-h-screen bg-gradient-to-b from-teal-50/40 via-white to-white dark:from-black dark:via-black dark:to-black">
+    <div className="min-h-screen bg-gradient-to-b from-teal-50/40 via-white to-white dark:from-black dark:via-black dark:to-black transition-colors duration-300">
       <StudentTopNav
         fullName={profile!.fullName}
         spaceRank={profile!.spaceRank}
@@ -80,7 +81,10 @@ export default function StudentDashboardLayout({
         avatarUrl={profile!.avatarUrl}
       />
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-10 pt-6 pb-16">
-        {children}
+        {/* Keyed by route so each page transitions in smoothly on navigation */}
+        <div key={pathname} className="fade-in">
+          {children}
+        </div>
       </main>
       <LumiChat
         variant="student"

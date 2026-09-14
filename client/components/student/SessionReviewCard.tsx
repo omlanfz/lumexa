@@ -103,10 +103,10 @@ export default function SessionReviewCard({ review, onSubmitted, isStudentMode =
       <button
         onClick={handleSubmit}
         disabled={rating < 1 || submitting}
-        className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-colors ${
+        className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all duration-200 ${
           rating < 1
             ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-            : 'bg-teal-500 hover:bg-teal-400 text-black'
+            : 'bg-teal-500 hover:bg-teal-400 text-black active:scale-[0.98]'
         }`}
       >
         {submitting ? 'Submitting…' : 'Submit Review'}

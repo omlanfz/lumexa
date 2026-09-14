@@ -242,7 +242,7 @@ export default function StudentDashboardPage() {
   const recentActivity = recentSessions.slice(0, 3);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 fade-in">
       {showCeremony && (
         <RankUpCeremony
           newRank={ceremonyRank}
@@ -252,7 +252,7 @@ export default function StudentDashboardPage() {
       )}
 
       {showBookedBanner && (
-        <div className="flex items-center gap-3 px-5 py-3.5 bg-teal-500/15 border border-teal-500/30 rounded-xl text-teal-700 dark:text-teal-300 text-sm font-medium">
+        <div className="flex items-center gap-3 px-5 py-3.5 bg-teal-500/15 border border-teal-500/30 rounded-xl text-teal-700 dark:text-teal-300 text-sm font-medium fade-in">
           🚀 Mission assigned! Your session is confirmed.
         </div>
       )}
@@ -277,7 +277,7 @@ export default function StudentDashboardPage() {
           </div>
 
           {/* Your teacher */}
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-5 h-full">
+          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-5 h-full card-hover">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
               Your Teacher
             </p>
@@ -330,14 +330,14 @@ export default function StudentDashboardPage() {
       {!isNewStudent && (
         <div className="grid lg:grid-cols-3 gap-4">
           {/* Your Journey — rank progress, one small gamification element */}
-          <div className="lg:col-span-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
+          <div className="lg:col-span-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
             <div className="flex items-center justify-between mb-4">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
                 Your Journey
               </p>
               <button
                 onClick={() => router.push('/student-dashboard/learning?tab=progress')}
-                className="text-teal-600 dark:text-teal-400 text-xs hover:underline"
+                className="text-teal-600 dark:text-teal-400 text-xs hover:underline transition-colors"
               >
                 View details →
               </button>
@@ -350,7 +350,7 @@ export default function StudentDashboardPage() {
           </div>
 
           {/* Small streak indicator */}
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 flex flex-col justify-center items-center text-center">
+          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 flex flex-col justify-center items-center text-center card-hover">
             <span className="text-3xl mb-2">{student.streakWeeks > 0 ? '🔥' : '🌙'}</span>
             <p className="text-2xl font-bold text-orange-500 dark:text-orange-400">
               {student.streakWeeks}
@@ -372,7 +372,7 @@ export default function StudentDashboardPage() {
             {recentActivity.length > 0 && (
               <button
                 onClick={() => router.push('/student-dashboard/learning?tab=lessons')}
-                className="text-teal-600 dark:text-teal-400 text-xs hover:underline"
+                className="text-teal-600 dark:text-teal-400 text-xs hover:underline transition-colors"
               >
                 View all →
               </button>
@@ -387,7 +387,7 @@ export default function StudentDashboardPage() {
               </p>
             </div>
           ) : (
-            <div className="grid sm:grid-cols-3 gap-3">
+            <div className="grid sm:grid-cols-3 gap-3 stagger-children">
               {recentActivity.map((session) => {
                 const date = new Date(session.classStart);
                 const initial = session.teacherName
@@ -396,7 +396,7 @@ export default function StudentDashboardPage() {
                 return (
                   <div
                     key={session.bookingId}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-700/30 border border-gray-200 dark:border-gray-700/50"
+                    className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-700/30 border border-gray-200 dark:border-gray-700/50 fade-in card-hover"
                   >
                     {session.teacherAvatarUrl ? (
                       <img

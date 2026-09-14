@@ -48,7 +48,7 @@ export default function StudentTopNav({
         {/* Logo + brand */}
         <button
           onClick={() => router.push('/student-dashboard')}
-          className="flex items-center gap-2.5 flex-shrink-0"
+          className="flex items-center gap-2.5 flex-shrink-0 transition-opacity hover:opacity-80"
         >
           <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
             <Image
@@ -99,7 +99,7 @@ export default function StudentTopNav({
 
           <button
             onClick={() => router.push('/student-dashboard/profile')}
-            className="flex items-center"
+            className="flex items-center transition-transform hover:scale-105"
             aria-label="Profile"
           >
             {avatarUrl ? (
@@ -127,7 +127,7 @@ export default function StudentTopNav({
           {/* Mobile menu toggle */}
           <button
             onClick={() => setMobileOpen((v) => !v)}
-            className="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 border border-black/10 dark:border-white/10"
+            className="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 border border-black/10 dark:border-white/10 transition-colors hover:text-teal-600 dark:hover:text-teal-300"
             aria-label="Menu"
           >
             {mobileOpen ? '✕' : '☰'}
@@ -137,7 +137,7 @@ export default function StudentTopNav({
 
       {/* Mobile nav dropdown */}
       {mobileOpen && (
-        <nav className="md:hidden border-t border-black/10 dark:border-white/10 px-4 py-2 flex flex-col bg-white dark:bg-black">
+        <nav className="md:hidden border-t border-black/10 dark:border-white/10 px-4 py-2 flex flex-col bg-white dark:bg-black fade-in">
           {NAV_ITEMS.map((item) => (
             <button
               key={item.href}
@@ -145,10 +145,10 @@ export default function StudentTopNav({
                 router.push(item.href);
                 setMobileOpen(false);
               }}
-              className={`text-left px-3 py-2.5 rounded-lg text-sm font-medium ${
+              className={`text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive(item)
                   ? 'text-teal-600 dark:text-teal-400'
-                  : 'text-gray-600 dark:text-gray-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-300'
               }`}
             >
               {item.label}
@@ -156,7 +156,7 @@ export default function StudentTopNav({
           ))}
           <button
             onClick={handleLogout}
-            className="text-left px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 dark:text-red-400"
+            className="text-left px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
           >
             Logout
           </button>

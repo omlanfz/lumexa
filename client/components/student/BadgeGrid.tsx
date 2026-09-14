@@ -31,11 +31,11 @@ export default function BadgeGrid({ badges }: BadgeGridProps) {
         <span className="text-2xl">🏅</span>
       </div>
 
-      <div className="grid grid-cols-4 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-4 sm:grid-cols-4 gap-3 stagger-children">
         {earned.map((badge) => (
           <div
             key={badge.id}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-teal-100/60 dark:bg-teal-900/30 border border-teal-300/50 dark:border-teal-700/40"
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-teal-100/60 dark:bg-teal-900/30 border border-teal-300/50 dark:border-teal-700/40 fade-in transition-transform hover:scale-105"
             title={badge.label}
           >
             <span className="text-2xl">{badge.icon}</span>
@@ -47,7 +47,7 @@ export default function BadgeGrid({ badges }: BadgeGridProps) {
         {locked.map((badge) => (
           <div
             key={badge.id}
-            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-gray-100 dark:bg-gray-700/20 border border-gray-200 dark:border-gray-700/30"
+            className="flex flex-col items-center gap-1.5 p-3 rounded-xl bg-gray-100 dark:bg-gray-700/20 border border-gray-200 dark:border-gray-700/30 fade-in"
             title={`Locked: ${badge.label}`}
           >
             <span className="text-2xl grayscale opacity-30">{badge.icon}</span>

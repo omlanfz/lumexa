@@ -28,7 +28,7 @@ export default function StreakCounter({
   const displayWeeks = Math.max(8, streakWeeks + 1);
 
   return (
-    <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
+    <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
       <div className="flex items-center justify-between mb-5">
         <div>
           <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-0.5">
