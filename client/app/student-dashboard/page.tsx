@@ -36,6 +36,13 @@ interface RecentSession {
   hasReview: boolean;
 }
 
+interface AssignedTeacher {
+  teacherProfileId: string;
+  name: string;
+  avatarUrl: string | null;
+  subjects: string[];
+}
+
 interface StudentInfo {
   id: string;
   fullName: string;
@@ -46,6 +53,7 @@ interface StudentInfo {
   streakWeeks: number;
   hasBillingContact: boolean;
   sessionsToNextRank: number | null;
+  assignedTeacher: AssignedTeacher | null;
 }
 
 interface Stats {
@@ -220,17 +228,11 @@ export default function StudentDashboardPage() {
   const isNewStudent = student.totalSessions === 0;
   const firstName = student.fullName.split(' ')[0];
 
-  // "Your Teacher" — derived from the upcoming booking, or the most recent
-  // completed session, since Lumexa students have a single teacher assigned
-  // by Operations rather than a roster to browse.
-  // NOTE: this is inferred client-side from booking history. The backend
-  // does not yet expose an explicit assignedTeacher relation on the student —
-  // see follow-ups in the PR description.
-  const assignedTeacher = upcomingBooking
-    ? { name: upcomingBooking.teacherName, avatarUrl: upcomingBooking.teacherAvatarUrl }
-    : recentSessions[0]
-      ? { name: recentSessions[0].teacherName, avatarUrl: recentSessions[0].teacherAvatarUrl }
-      : null;
+  // "Your Teacher" — sourced from the explicit Operations-controlled
+  // assignedTeacher relation on the student, not inferred from booking
+  // history (a student's assignment is metadata independent of any one
+  // booking's teacher).
+  const assignedTeacher = student.assignedTeacher;
 
   // Greeting varies by time of day
   const hour = new Date().getHours();

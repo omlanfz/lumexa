@@ -200,34 +200,13 @@ export class NotificationsService {
       `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #0d9488;">Comeback Cadet — Your Streak Reset</h2>
-        <p>Your <strong>${data.streakWeeks}-week streak</strong> has reset because you didn't have a session this week, and no freeze was available.</p>
+        <p>Your <strong>${data.streakWeeks}-week streak</strong> has reset because you didn't have a completed session last week.</p>
         <p>But the galaxy awaits! Every Cadet falls off orbit sometimes — the true pilots are the ones who climb back.</p>
         <a href="${marketplaceUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold; margin: 16px 0;">
           Book a Session →
         </a>
         <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
-          Earn streak freezes by booking regularly — they protect your streak on off weeks.
-        </p>
-      </div>
-      `,
-    );
-  }
-
-  async sendStreakFreezeUsedNotice(
-    studentEmail: string,
-    data: { studentName: string; streakWeeks: number; freezesRemaining: number },
-  ): Promise<void> {
-    await this.send(
-      studentEmail,
-      `❄️ Streak Freeze Used — Streak Saved!`,
-      `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #60a5fa;">❄️ Streak Freeze Activated</h2>
-        <p>You missed a session this week, but don't worry — a streak freeze was automatically used to protect your <strong>${data.streakWeeks}-week streak</strong>.</p>
-        <p>Freezes remaining: <strong>${data.freezesRemaining}</strong></p>
-        <p>Book a session next week to keep your streak going!</p>
-        <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
-          Streak freezes reset on the 1st of each month.
+          Complete at least one lesson each week to keep your streak going.
         </p>
       </div>
       `,

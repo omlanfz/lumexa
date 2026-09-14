@@ -68,4 +68,20 @@ export class AdminController {
   resetStrikes(@Param('teacherId') teacherId: string) {
     return this.adminService.resetTeacherStrikes(teacherId);
   }
+
+  @Get('students')
+  getAllStudents(@Query('page') page = '1', @Query('limit') limit = '20') {
+    return this.adminService.getAllStudents(+page, +limit);
+  }
+
+  @Post('students/:studentUserId/assign-teacher')
+  assignTeacher(
+    @Param('studentUserId') studentUserId: string,
+    @Body('teacherProfileId') teacherProfileId: string | null,
+  ) {
+    return this.adminService.assignTeacherToStudent(
+      studentUserId,
+      teacherProfileId ?? null,
+    );
+  }
 }
