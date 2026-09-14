@@ -68,10 +68,10 @@ function AddNoteModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50"
+      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 fade-in"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-gray-800 border border-purple-700/30 rounded-xl p-6 w-full max-w-md mx-4">
+      <div className="bg-gray-800 border border-purple-700/30 rounded-xl p-6 w-full max-w-md mx-4 fade-in">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-semibold text-white">Add Note — {student.studentName}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
@@ -87,14 +87,14 @@ function AddNoteModal({
         <div className="flex gap-3 mt-4">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-400 text-sm hover:border-gray-500 transition-colors"
+            className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-400 text-sm hover:border-gray-500 transition-all duration-200 active:scale-[0.98]"
           >
             Cancel
           </button>
           <button
             onClick={save}
             disabled={!note.trim() || saving}
-            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors disabled:opacity-40"
+            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-all duration-200 active:scale-[0.98] disabled:opacity-40"
           >
             {saving ? 'Saving…' : 'Save Note'}
           </button>
@@ -211,7 +211,7 @@ function TeacherStudentsContent() {
             {!search && (
               <button
                 onClick={() => router.push('/calendar')}
-                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
               >
                 Add Availability →
               </button>
@@ -282,7 +282,7 @@ function TeacherStudentsContent() {
                     <div className="flex gap-2 flex-shrink-0">
                       <button
                         onClick={() => setNoteTarget(s)}
-                        className="px-2 py-1.5 rounded-lg text-xs font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors whitespace-nowrap"
+                        className="px-2 py-1.5 rounded-lg text-xs font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-all duration-200 active:scale-[0.95] whitespace-nowrap"
                         title="Add note"
                       >
                         📝
@@ -290,14 +290,14 @@ function TeacherStudentsContent() {
                       {s.isUserRef ? (
                         <button
                           onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-colors whitespace-nowrap"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-all duration-200 active:scale-[0.98] whitespace-nowrap"
                         >
                           View Progress →
                         </button>
                       ) : (
                         <button
                           onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-colors whitespace-nowrap"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-all duration-200 active:scale-[0.98] whitespace-nowrap"
                         >
                           View Dashboard →
                         </button>
@@ -311,7 +311,7 @@ function TeacherStudentsContent() {
             {/* Mobile cards */}
             <div className="sm:hidden space-y-3">
               {filtered.map((s) => (
-                <div key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`} className={`${card} p-4`}>
+                <div key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`} className={`${card} t-card-hover p-4`}>
                   <div className="flex items-center gap-3 mb-3">
                     {s.avatarUrl ? (
                       <img src={s.avatarUrl} alt={s.studentName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />

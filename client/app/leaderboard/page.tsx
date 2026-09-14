@@ -120,7 +120,7 @@ function LeaderboardContent() {
             {tiers.map((tier) => (
               <div
                 key={tier.id}
-                className="flex items-start gap-3 p-3 rounded-xl dark:bg-purple-900/10 bg-purple-50"
+                className="flex items-start gap-3 p-3 rounded-xl dark:bg-purple-900/10 bg-purple-50 transition-colors"
               >
                 <span className="text-2xl flex-shrink-0">{tier.icon}</span>
                 <div>

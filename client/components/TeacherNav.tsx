@@ -224,7 +224,7 @@ export default function TeacherNav({
         </button>
 
         {showProfileMenu && (
-          <div className="absolute left-2 right-2 top-full mt-1 rounded-xl border border-[var(--t-border)] bg-[var(--t-surface)] overflow-hidden shadow-xl z-50">
+          <div className="absolute left-2 right-2 top-full mt-1 rounded-xl border border-[var(--t-border)] bg-[var(--t-surface)] overflow-hidden shadow-xl z-50 fade-in">
             <button
               onClick={() => {
                 fileInputRef.current?.click();
@@ -282,7 +282,7 @@ export default function TeacherNav({
                 router.push(item.href);
                 setMobileOpen(false);
               }}
-              className={`w-full flex items-center gap-3 rounded-xl text-left transition-all cursor-pointer ${
+              className={`w-full flex items-center gap-3 rounded-xl text-left transition-all duration-200 cursor-pointer active:scale-[0.98] ${
                 isActive
                   ? "bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] border border-[var(--t-border-strong)]"
                   : "text-[var(--t-text-muted)] hover:bg-[var(--t-nav-hover)] hover:text-[var(--t-text)]"
@@ -327,7 +327,7 @@ export default function TeacherNav({
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
-        className="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--t-nav-bg)] border border-[var(--t-nav-border)] shadow-lg cursor-pointer"
+        className="fixed top-4 left-4 z-50 lg:hidden w-10 h-10 flex items-center justify-center rounded-xl bg-[var(--t-nav-bg)] border border-[var(--t-nav-border)] shadow-lg cursor-pointer transition-transform active:scale-90"
         aria-label="Open navigation menu"
       >
         <span style={{ color: "var(--t-accent)" }}>☰</span>

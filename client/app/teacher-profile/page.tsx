@@ -1131,7 +1131,7 @@ function TeacherProfileContent() {
             <button
               onClick={save}
               disabled={saving}
-              className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all shadow-lg shadow-purple-600/20 disabled:opacity-60 cursor-pointer"
+              className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all duration-200 active:scale-[0.98] shadow-lg shadow-purple-600/20 disabled:opacity-60 cursor-pointer"
             >
               {saving ? "Saving…" : "Save Changes ✦"}
             </button>
@@ -1306,7 +1306,7 @@ function TeacherProfileContent() {
                   <button
                     onClick={connectStripe}
                     disabled={stripeLoading}
-                    className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-amber-900 font-bold rounded-xl transition-all shadow-lg shadow-amber-500/20 disabled:opacity-60 cursor-pointer"
+                    className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-amber-900 font-bold rounded-xl transition-all duration-200 active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-60 cursor-pointer"
                   >
                     {stripeLoading
                       ? "Connecting…"

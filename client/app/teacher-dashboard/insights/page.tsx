@@ -166,7 +166,7 @@ function TeacherInsightsContent() {
     })();
   }, [router]);
 
-  const card = "t-card shadow-sm";
+  const card = "t-card t-card-hover shadow-sm";
 
   if (loading)
     return (
@@ -212,13 +212,13 @@ function TeacherInsightsContent() {
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <button
                 onClick={() => router.push("/calendar")}
-                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
               >
                 Add Availability →
               </button>
               <button
                 onClick={() => router.push("/teacher-students")}
-                className="px-5 py-2.5 bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] text-sm rounded-xl hover:bg-[var(--t-nav-hover)] transition-colors"
+                className="px-5 py-2.5 bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] text-sm rounded-xl hover:bg-[var(--t-nav-hover)] transition-all duration-200 active:scale-[0.98]"
               >
                 View Students →
               </button>
@@ -317,7 +317,7 @@ function TeacherInsightsContent() {
                     {insights.topQuotes.map((q) => (
                       <div
                         key={q.id}
-                        className="p-3 rounded-xl bg-[var(--t-nav-active)] border border-[var(--t-border)]"
+                        className="p-3 rounded-xl bg-[var(--t-nav-active)] border border-[var(--t-border)] transition-colors"
                       >
                         <div className="flex items-center justify-between mb-1.5">
                           <Stars rating={q.rating} />

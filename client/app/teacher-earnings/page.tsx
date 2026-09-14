@@ -132,7 +132,7 @@ function TeacherEarningsContent() {
     })();
   }, [router]);
 
-  const card = "t-card shadow-sm";
+  const card = "t-card t-card-hover shadow-sm";
 
   if (loading)
     return (
@@ -227,7 +227,7 @@ function TeacherEarningsContent() {
               color: "text-[var(--t-text)]",
             },
           ].map((s) => (
-            <div key={s.label} className={`${card} p-4`}>
+            <div key={s.label} className={`${card} t-card-hover p-4`}>
               <span className="text-xl">{s.icon}</span>
               <p className="text-xs uppercase tracking-wide text-[var(--t-text-muted)] mt-2">
                 {s.label}
@@ -357,7 +357,7 @@ function TeacherEarningsContent() {
               </p>
               <button
                 onClick={() => router.push("/calendar")}
-                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
+                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
               >
                 Add Availability →
               </button>

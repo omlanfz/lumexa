@@ -150,7 +150,7 @@ function DashboardContent() {
           <span>{successMessage}</span>
           <button
             onClick={() => setSuccessMessage('')}
-            className="text-gray-500 hover:text-gray-300 ml-4"
+            className="text-gray-500 hover:text-gray-300 ml-4 transition-colors"
           >
             ✕
           </button>
@@ -182,7 +182,7 @@ function DashboardContent() {
                 return (
                   <div
                     key={student.id}
-                    className="p-4 bg-gray-900 border border-gray-800 rounded-lg shadow-lg"
+                    className="p-4 bg-gray-900 border border-gray-800 rounded-lg shadow-lg card-hover"
                   >
                     <div className="flex justify-between items-center mb-3">
                       <div>
