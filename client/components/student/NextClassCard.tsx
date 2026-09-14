@@ -73,7 +73,7 @@ export default function NextClassCard({ booking }: NextClassCardProps) {
   const initial = booking.teacherName ? booking.teacherName.charAt(0).toUpperCase() : 'T';
 
   return (
-    <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/30 rounded-xl p-6 h-full">
+    <div className="bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/30 rounded-xl p-6 h-full card-hover">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           {booking.teacherAvatarUrl ? (
@@ -110,9 +110,9 @@ export default function NextClassCard({ booking }: NextClassCardProps) {
         <button
           onClick={() => router.push(`/classroom/${booking.bookingId}`)}
           disabled={!joinable}
-          className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all ${
+          className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all duration-200 ${
             joinable
-              ? 'bg-teal-500 hover:bg-teal-400 text-black'
+              ? 'bg-teal-500 hover:bg-teal-400 text-black active:scale-[0.98]'
               : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 cursor-not-allowed'
           }`}
         >

@@ -120,7 +120,7 @@ function LessonRow({
   const initial = lesson.teacherName ? lesson.teacherName.charAt(0).toUpperCase() : 'T';
 
   return (
-    <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden">
+    <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden card-hover">
       <div className="flex items-center gap-3 p-4">
         {lesson.teacherAvatarUrl ? (
           <img
@@ -169,7 +169,7 @@ function LessonRow({
       </div>
 
       {isReviewing && !lesson.review && (
-        <div className="border-t border-gray-200 dark:border-gray-700/50 p-4 bg-gray-50 dark:bg-gray-900/30">
+        <div className="border-t border-gray-200 dark:border-gray-700/50 p-4 bg-gray-50 dark:bg-gray-900/30 fade-in">
           <SessionReviewCard
             review={{
               bookingId: lesson.bookingId,
@@ -287,7 +287,7 @@ function LearningHubContent() {
           <button
             key={t.id}
             onClick={() => goTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
               tab === t.id
                 ? 'bg-teal-500 text-black'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
@@ -300,8 +300,8 @@ function LearningHubContent() {
 
       {/* ─── Overview ─────────────────────────────────────────────────── */}
       {tab === 'overview' && progress && (
-        <div className="grid lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
+        <div className="grid lg:grid-cols-3 gap-4 fade-in">
+          <div className="lg:col-span-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">
               Current Progress
             </p>
@@ -326,7 +326,7 @@ function LearningHubContent() {
             )}
           </div>
 
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
+          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
             <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
               At a Glance
             </p>
@@ -350,7 +350,7 @@ function LearningHubContent() {
 
       {/* ─── Lessons ──────────────────────────────────────────────────── */}
       {tab === 'lessons' && (
-        <div className="space-y-4">
+        <div className="space-y-4 fade-in">
           <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700/50 w-fit">
             {(['upcoming', 'completed'] as const).map((t) => (
               <button
@@ -400,9 +400,9 @@ function LearningHubContent() {
 
       {/* ─── Progress & Achievements ──────────────────────────────────── */}
       {tab === 'progress' && progress && (
-        <div className="space-y-6">
+        <div className="space-y-6 fade-in">
           <div className="grid lg:grid-cols-2 gap-4">
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
+            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">
                 Rank Journey
               </p>
@@ -414,7 +414,7 @@ function LearningHubContent() {
           <BadgeGrid badges={progress.badges} />
 
           {progress.subjectBreakdown.length > 0 && (
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
+            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">
                 Sessions by Subject
               </p>
@@ -453,7 +453,7 @@ function LearningHubContent() {
                 {rankings.topCohort.slice(0, 5).map((entry) => (
                   <div
                     key={`${entry.position}-${entry.fullName}`}
-                    className={`flex items-center gap-3 py-2.5 ${entry.isCurrentUser ? 'text-teal-600 dark:text-teal-300' : 'text-gray-700 dark:text-gray-300'}`}
+                    className={`flex items-center gap-3 py-2.5 transition-colors ${entry.isCurrentUser ? 'text-teal-600 dark:text-teal-300' : 'text-gray-700 dark:text-gray-300'}`}
                   >
                     <span className="w-6 text-xs text-gray-500">#{entry.position}</span>
                     <span className="flex-1 text-sm truncate">
@@ -470,7 +470,7 @@ function LearningHubContent() {
 
       {/* ─── Recordings ───────────────────────────────────────────────── */}
       {tab === 'recordings' && (
-        <div>
+        <div className="fade-in">
           {recordingLessons.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center bg-gray-50 dark:bg-gray-800/30 rounded-xl">
               <div className="text-5xl mb-4">🎬</div>
@@ -487,7 +487,7 @@ function LearningHubContent() {
                 return (
                   <div
                     key={lesson.bookingId}
-                    className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl"
+                    className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl card-hover"
                   >
                     {lesson.teacherAvatarUrl ? (
                       <img
