@@ -78,13 +78,10 @@ export const LABELS = {
   },
 
   // ── Student dashboard ────────────────────────────────────────────────────────
+  // Nav labels are plain (Home / Learning / Profile) — no double-labeling.
+  // Space flavor is kept only in greetings, illustrations, onboarding, and
+  // gamification/celebration moments (see STUDENT_NEXT_CLASS, STUDENT_RANK_UP, etc).
   STUDENT_DASHBOARD: { primary: "Dashboard", theme: "Mission Hub" },
-  STUDENT_LESSONS: { primary: "My Lessons", theme: "Mission Log" },
-  STUDENT_PROGRESS: { primary: "Progress", theme: "Flight Stats" },
-  STUDENT_TEACHERS: { primary: "My Teachers", theme: "Crew" },
-  STUDENT_RECORDINGS: { primary: "Recordings", theme: "Mission Footage" },
-  STUDENT_RANKINGS: { primary: "Rankings", theme: "Star Chart" },
-  STUDENT_GEMS: { primary: "Gems", theme: "Stellar Credits" },
   STUDENT_STREAK: { primary: "Streak", theme: "Mission Chain" },
   STUDENT_NEXT_CLASS: { primary: "Next Class", theme: "Next Mission" },
   STUDENT_ENTER_CLASS: { primary: "Enter Star Lab", theme: "Launch Mission" },
