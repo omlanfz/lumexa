@@ -294,7 +294,7 @@ export default function StudentSettingsPage() {
   if (!profile) return null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 pt-6 pb-16">
+    <div className="max-w-2xl space-y-8 pt-6 pb-16">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-900 dark:text-white">Profile</h1>
