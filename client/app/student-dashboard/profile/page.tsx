@@ -24,15 +24,6 @@ interface StudentProfile {
   accountStatus: string;
 }
 
-// ─── Common subject options ────────────────────────────────────────────────────
-
-const SUBJECT_OPTIONS = [
-  'Mathematics', 'Physics', 'Chemistry', 'Biology', 'English',
-  'History', 'Geography', 'Computer Science', 'Economics', 'Art',
-  'Music', 'Spanish', 'French', 'German', 'Literature',
-  'Statistics', 'Coding / Programming', 'Psychology', 'Business',
-];
-
 const GRADE_OPTIONS = [
   'Kindergarten', 'Grade 1', 'Grade 2', 'Grade 3', 'Grade 4', 'Grade 5',
   'Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11',
@@ -117,11 +108,11 @@ function AvatarSection({
     setError('');
     try {
       const form = new FormData();
-      form.append('file', file);
-      const res = await api.post<{ url: string }>('/uploads/avatar', form, {
+      form.append('avatar', file);
+      const res = await api.post<{ avatarUrl: string }>('/uploads/avatar', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      onUploaded(res.data.url);
+      onUploaded(res.data.avatarUrl);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string | string[] } } };
       const msg = e.response?.data?.message;
@@ -187,7 +178,6 @@ export default function StudentSettingsPage() {
   // Profile section state
   const [fullName, setFullName] = useState('');
   const [grade, setGrade] = useState('');
-  const [subjects, setSubjects] = useState<string[]>([]);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
@@ -202,11 +192,6 @@ export default function StudentSettingsPage() {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwSaved, setPwSaved] = useState(false);
   const [pwError, setPwError] = useState('');
-
-  // Danger zone state
-  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false);
-  const [deactivating, setDeactivating] = useState(false);
-  const [deactivateError, setDeactivateError] = useState('');
 
   useEffect(() => {
     const token = getStoredToken();
@@ -225,7 +210,6 @@ export default function StudentSettingsPage() {
       setProfile(p);
       setFullName(p.fullName);
       setGrade(p.grade ?? '');
-      setSubjects(p.subjects ?? []);
       setAvatarUrl(p.avatarUrl);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string | string[] } } };
@@ -245,7 +229,6 @@ export default function StudentSettingsPage() {
       const res = await api.patch<StudentProfile>('/students/me', {
         fullName: fullName.trim(),
         grade: grade || undefined,
-        subjects,
         avatarUrl: avatarUrl ?? undefined,
       });
       setProfile(res.data);
@@ -286,13 +269,6 @@ export default function StudentSettingsPage() {
     } finally {
       setPwSaving(false);
     }
-  };
-
-  const toggleSubject = (subj: string) => {
-    setSubjects((prev) =>
-      prev.includes(subj) ? prev.filter((s) => s !== subj) : [...prev, subj],
-    );
-    setProfileSaved(false);
   };
 
   if (loading) {
@@ -387,33 +363,6 @@ export default function StudentSettingsPage() {
               <option key={g} value={g}>{g}</option>
             ))}
           </select>
-        </div>
-
-        {/* Subjects */}
-        <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 font-medium mb-2">
-            Subjects I Study
-            <span className="text-gray-600 font-normal ml-1">({subjects.length} selected)</span>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {SUBJECT_OPTIONS.map((subj) => {
-              const selected = subjects.includes(subj);
-              return (
-                <button
-                  key={subj}
-                  type="button"
-                  onClick={() => toggleSubject(subj)}
-                  className={`text-xs px-3 py-1.5 rounded-full border font-medium transition-all ${
-                    selected
-                      ? 'bg-teal-500/20 text-teal-300 border-teal-500/40'
-                      : 'bg-gray-700/50 text-gray-500 dark:text-gray-400 border-gray-600/50 hover:border-teal-600/40 hover:text-teal-400'
-                  }`}
-                >
-                  {selected ? '✓ ' : ''}{subj}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* Read-only stats */}
@@ -536,79 +485,6 @@ export default function StudentSettingsPage() {
             disabled={!currentPassword || newPassword.length < 8 || newPassword !== confirmPassword}
           />
         </div>
-      </section>
-
-      {/* ── Danger zone ──────────────────────────────────────────────────────── */}
-      <section className="bg-red-950/20 border border-red-800/30 rounded-xl p-6">
-        <SectionHeader
-          title="Danger Zone"
-          sub="Irreversible actions — proceed with caution"
-        />
-        {!showDeactivateConfirm ? (
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-gray-900 dark:text-white text-sm font-medium">Deactivate Account</p>
-              <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
-                Your account will be deactivated and you will lose access immediately.
-                Contact support to reactivate.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowDeactivateConfirm(true)}
-              className="px-4 py-2 border border-red-700/50 text-red-400 text-sm rounded-lg hover:bg-red-900/30 transition-colors whitespace-nowrap flex-shrink-0"
-            >
-              Deactivate Account
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="p-4 bg-red-900/20 border border-red-700/40 rounded-xl">
-              <p className="text-red-300 text-sm font-semibold mb-1">⚠️ This action cannot be undone</p>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">
-                Your account will be deactivated. You will be logged out immediately and
-                will not be able to log back in. Contact Lumexa support to reactivate.
-              </p>
-            </div>
-            {deactivateError && (
-              <p className="text-red-400 text-sm">{deactivateError}</p>
-            )}
-            <div className="flex items-center gap-3">
-              <button
-                onClick={async () => {
-                  setDeactivating(true);
-                  setDeactivateError('');
-                  try {
-                    await api.post('/students/me/deactivate');
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('user');
-                    router.push('/login');
-                  } catch (err: unknown) {
-                    const e = err as { response?: { data?: { message?: string | string[] } } };
-                    const msg = e.response?.data?.message;
-                    setDeactivateError(
-                      Array.isArray(msg)
-                        ? msg.join(', ')
-                        : (msg ?? 'Failed to deactivate. Please contact support.'),
-                    );
-                  } finally {
-                    setDeactivating(false);
-                  }
-                }}
-                disabled={deactivating}
-                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-gray-900 dark:text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {deactivating ? 'Deactivating…' : 'Yes, Deactivate My Account'}
-              </button>
-              <button
-                onClick={() => { setShowDeactivateConfirm(false); setDeactivateError(''); }}
-                disabled={deactivating}
-                className="px-5 py-2.5 border border-gray-600 text-gray-500 dark:text-gray-400 text-sm rounded-lg hover:border-gray-500 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
       </section>
     </div>
   );
