@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/ThemeProvider';
+import RankBadgeButton from '@/components/student/RankBadgeButton';
 
 interface StudentTopNavProps {
   fullName: string;
@@ -92,12 +93,7 @@ export default function StudentTopNav({
               </span>
             </div>
           )}
-          <div
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20"
-            title={spaceRank.replace(/_/g, ' ')}
-          >
-            <span className="text-sm">{rankIcon}</span>
-          </div>
+          <RankBadgeButton rank={spaceRank} icon={rankIcon} />
 
           <ThemeToggle variant="student" />
 
