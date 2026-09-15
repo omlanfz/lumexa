@@ -13,8 +13,8 @@
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
-import TeacherLayout from "../../components/TeacherLayout";
-import LumiChat from "../../components/LumiChat";
+import LumiChat from "@/components/LumiChat";
+import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 
 const HOUR_PX = 60;
 
@@ -712,18 +712,10 @@ function ScheduleContent() {
 
   const card = "t-card shadow-sm";
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-        <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (loading) return <TeacherPageSkeleton />;
 
   return (
-    <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Teacher"}
-      avatarUrl={profile?.user?.avatarUrl ?? null}
-    >
+    <>
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3 mb-4 sm:mb-6">
@@ -1031,7 +1023,7 @@ function ScheduleContent() {
         variant="teacher"
         context="Teacher schedule page — managing availability slots, bookings, and rescheduling"
       />
-    </TeacherLayout>
+    </>
   );
 }
 
