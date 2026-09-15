@@ -7,6 +7,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { PayoutsService } from '../payouts/payouts.service';
 
 // ─── Badge Tier Definitions ───────────────────────────────────────────────────
 
@@ -70,7 +71,10 @@ export function getBadgeTier(
 
 @Injectable()
 export class TeachersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private payoutsService: PayoutsService,
+  ) {}
 
   // ─── Get My Profile ───────────────────────────────────────────────────────
 
@@ -78,7 +82,7 @@ export class TeachersService {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { userId },
       include: {
-        user: { select: { fullName: true, email: true } },
+        user: { select: { fullName: true, email: true, avatarUrl: true } },
       },
     });
 
@@ -86,6 +90,12 @@ export class TeachersService {
 
     return {
       id: teacher.id,
+      user: {
+        fullName: teacher.user.fullName,
+        email: teacher.user.email,
+        avatarUrl: teacher.user.avatarUrl,
+      },
+      // Flat aliases kept for callers that still read the un-nested shape.
       fullName: teacher.user.fullName,
       email: teacher.user.email,
       bio: teacher.bio,
@@ -95,6 +105,13 @@ export class TeachersService {
       reviewCount: teacher.reviewCount,
       strikes: teacher.strikes,
       isSuspended: teacher.isSuspended,
+      rankTier: teacher.rankTier,
+      points: teacher.points,
+      weeklyPoints: teacher.weeklyPoints,
+      subjects: teacher.subjects,
+      grades: teacher.grades,
+      timezone: teacher.timezone,
+      verificationDocs: teacher.verificationDocs ?? [],
     };
   }
 
@@ -102,7 +119,13 @@ export class TeachersService {
 
   async updateMyProfile(
     userId: string,
-    data: { bio?: string; hourlyRate?: number },
+    data: {
+      bio?: string;
+      hourlyRate?: number;
+      subjects?: string[];
+      grades?: string[];
+      timezone?: string;
+    },
   ) {
     if (data.hourlyRate !== undefined) {
       if (data.hourlyRate < 5 || data.hourlyRate > 500) {
@@ -126,11 +149,17 @@ export class TeachersService {
       data: {
         ...(data.bio !== undefined && { bio: data.bio }),
         ...(data.hourlyRate !== undefined && { hourlyRate: data.hourlyRate }),
+        ...(data.subjects !== undefined && { subjects: data.subjects }),
+        ...(data.grades !== undefined && { grades: data.grades }),
+        ...(data.timezone !== undefined && { timezone: data.timezone }),
       },
       select: {
         id: true,
         bio: true,
         hourlyRate: true,
+        subjects: true,
+        grades: true,
+        timezone: true,
       },
     });
   }
@@ -143,7 +172,7 @@ export class TeachersService {
     });
     if (!teacher) throw new NotFoundException('Teacher profile not found.');
 
-    const [totalShifts, completedBookings, earningsAgg] = await Promise.all([
+    const [totalShifts, completedBookings, ledgerSummary] = await Promise.all([
       this.prisma.shift.count({ where: { teacherId: teacher.id } }),
       this.prisma.booking.count({
         where: {
@@ -151,17 +180,8 @@ export class TeachersService {
           paymentStatus: 'CAPTURED',
         },
       }),
-      this.prisma.booking.aggregate({
-        where: {
-          shift: { teacherId: teacher.id },
-          paymentStatus: 'CAPTURED',
-        },
-        _sum: { amountCents: true },
-      }),
+      this.payoutsService.getSummary(teacher.id),
     ]);
-
-    const grossCents = earningsAgg._sum.amountCents ?? 0;
-    const teacherEarningsCents = Math.round(grossCents * 0.75);
 
     return {
       ratingAvg: teacher.ratingAvg,
@@ -171,7 +191,12 @@ export class TeachersService {
       stripeOnboarded: teacher.stripeOnboarded,
       totalShifts,
       completedClasses: completedBookings,
-      totalEarningsDollars: (teacherEarningsCents / 100).toFixed(2),
+      // Ledger is the source of truth for earnings — see PayoutsService.
+      monthEarningsCents: ledgerSummary.monthEarningsCents,
+      monthEventCount: ledgerSummary.monthEventCount,
+      totalEarningsCents: ledgerSummary.allTimeEarningsCents,
+      teacherEarningsCents: ledgerSummary.allTimeEarningsCents,
+      lastUpdated: ledgerSummary.lastUpdated,
     };
   }
 
@@ -218,85 +243,7 @@ export class TeachersService {
       studentSubject: nextBooking.student?.subject ?? null,
       start: nextBooking.shift.start,
       end: nextBooking.shift.end,
-      msUntilStart: Math.max(
-        0,
-        nextBooking.shift.start.getTime() - Date.now(),
-      ),
-    };
-  }
-
-  // ─── Get My Earnings ──────────────────────────────────────────────────────
-
-  async getMyEarnings(userId: string, page = 1, limit = 20) {
-    const teacher = await this.prisma.teacherProfile.findUnique({
-      where: { userId },
-    });
-    if (!teacher) throw new NotFoundException('Teacher profile not found.');
-
-    const [bookings, total] = await Promise.all([
-      this.prisma.booking.findMany({
-        where: {
-          shift: { teacherId: teacher.id },
-          paymentStatus: 'CAPTURED',
-        },
-        include: {
-          student: { select: { name: true } },
-          studentUser: { select: { fullName: true } },
-          shift: { select: { start: true, end: true } },
-          review: { select: { rating: true, comment: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.booking.count({
-        where: {
-          shift: { teacherId: teacher.id },
-          paymentStatus: 'CAPTURED',
-        },
-      }),
-    ]);
-
-    const items = bookings.map((b) => {
-      const grossCents = b.amountCents ?? 0;
-      const teacherCents = Math.round(grossCents * 0.75);
-      return {
-        bookingId: b.id,
-        classDate: b.shift.start,
-        classEnd: b.shift.end,
-        studentName: b.student?.name ?? b.studentUser?.fullName ?? 'Student',
-        grossDollars: (grossCents / 100).toFixed(2),
-        earningsDollars: (teacherCents / 100).toFixed(2),
-        review: b.review
-          ? { rating: b.review.rating, comment: b.review.comment }
-          : null,
-      };
-    });
-
-    const allBookings = await this.prisma.booking.findMany({
-      where: {
-        shift: { teacherId: teacher.id },
-        paymentStatus: 'CAPTURED',
-      },
-      select: { amountCents: true },
-    });
-    const totalGrossCents = allBookings.reduce(
-      (sum, b) => sum + (b.amountCents ?? 0),
-      0,
-    );
-    const totalEarningsCents = Math.round(totalGrossCents * 0.75);
-
-    return {
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-      summary: {
-        totalCompletedClasses: total,
-        totalGrossDollars: (totalGrossCents / 100).toFixed(2),
-        totalEarningsDollars: (totalEarningsCents / 100).toFixed(2),
-      },
+      msUntilStart: Math.max(0, nextBooking.shift.start.getTime() - Date.now()),
     };
   }
 
@@ -317,8 +264,13 @@ export class TeachersService {
         student: { include: { parent: { select: { email: true } } } },
         studentUser: {
           select: {
-            id: true, fullName: true, avatarUrl: true, age: true,
-            grade: true, spaceRank: true, totalSessions: true,
+            id: true,
+            fullName: true,
+            avatarUrl: true,
+            age: true,
+            grade: true,
+            spaceRank: true,
+            totalSessions: true,
           },
         },
         shift: { select: { start: true, end: true } },
@@ -365,8 +317,12 @@ export class TeachersService {
             avatarUrl: u.avatarUrl ?? null,
             spaceRank: u.spaceRank,
             totalSessions: u.totalSessions,
-            totalClasses: 0, completedClasses: 0, pendingClasses: 0,
-            lastClassDate: null, nextClassDate: null, reviews: [],
+            totalClasses: 0,
+            completedClasses: 0,
+            pendingClasses: 0,
+            lastClassDate: null,
+            nextClassDate: null,
+            reviews: [],
           });
         } else if (!isUserRef && booking.student) {
           const s = booking.student;
@@ -379,8 +335,12 @@ export class TeachersService {
             avatarUrl: (s as any).avatarUrl ?? null,
             spaceRank: null,
             totalSessions: 0,
-            totalClasses: 0, completedClasses: 0, pendingClasses: 0,
-            lastClassDate: null, nextClassDate: null, reviews: [],
+            totalClasses: 0,
+            completedClasses: 0,
+            pendingClasses: 0,
+            lastClassDate: null,
+            nextClassDate: null,
+            reviews: [],
           });
         } else continue;
       }
@@ -419,11 +379,15 @@ export class TeachersService {
         pendingClasses: s.pendingClasses,
         lastClassDate: s.lastClassDate,
         nextClassDate: s.nextClassDate,
-        latestReview: s.reviews.length > 0 ? s.reviews[s.reviews.length - 1] : null,
+        latestReview:
+          s.reviews.length > 0 ? s.reviews[s.reviews.length - 1] : null,
       }))
       .sort((a, b) => {
         if (a.nextClassDate && b.nextClassDate) {
-          return new Date(a.nextClassDate).getTime() - new Date(b.nextClassDate).getTime();
+          return (
+            new Date(a.nextClassDate).getTime() -
+            new Date(b.nextClassDate).getTime()
+          );
         }
         if (a.nextClassDate) return -1;
         if (b.nextClassDate) return 1;
@@ -495,7 +459,10 @@ export class TeachersService {
       }),
       this.prisma.booking.findMany({
         where: { shift: { teacherId: teacher.id } },
-        select: { paymentStatus: true, shift: { select: { start: true, end: true } } },
+        select: {
+          paymentStatus: true,
+          shift: { select: { start: true, end: true } },
+        },
       }),
     ]);
 
@@ -513,16 +480,53 @@ export class TeachersService {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([week, ratings]) => ({
         week,
-        avg: Math.round((ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10) / 10,
+        avg:
+          Math.round(
+            (ratings.reduce((s, r) => s + r, 0) / ratings.length) * 10,
+          ) / 10,
         count: ratings.length,
       }));
 
     // Word frequency from comments
-    const stopWords = new Set(['the', 'a', 'an', 'is', 'was', 'very', 'and', 'or', 'to', 'of', 'in', 'my', 'he', 'she', 'we', 'her', 'his', 'with', 'it', 'that', 'are', 'for', 'this', 'but', 'at', 'be', 'has', 'had', 'by', 'on']);
+    const stopWords = new Set([
+      'the',
+      'a',
+      'an',
+      'is',
+      'was',
+      'very',
+      'and',
+      'or',
+      'to',
+      'of',
+      'in',
+      'my',
+      'he',
+      'she',
+      'we',
+      'her',
+      'his',
+      'with',
+      'it',
+      'that',
+      'are',
+      'for',
+      'this',
+      'but',
+      'at',
+      'be',
+      'has',
+      'had',
+      'by',
+      'on',
+    ]);
     const wordFreq = new Map<string, number>();
     for (const r of allReviews) {
       if (!r.comment) continue;
-      const words = r.comment.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/);
+      const words = r.comment
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, '')
+        .split(/\s+/);
       for (const w of words) {
         if (w.length < 3 || stopWords.has(w)) continue;
         wordFreq.set(w, (wordFreq.get(w) ?? 0) + 1);
@@ -537,11 +541,17 @@ export class TeachersService {
     const topQuotes = allReviews
       .filter((r) => r.rating >= 4 && r.comment && r.comment.length > 20)
       .slice(0, 3)
-      .map((r) => ({ rating: r.rating, comment: r.comment!, date: r.createdAt }));
+      .map((r) => ({
+        rating: r.rating,
+        comment: r.comment!,
+        date: r.createdAt,
+      }));
 
     // Session completion rate
     const total = allBookings.length;
-    const captured = allBookings.filter((b) => b.paymentStatus === 'CAPTURED').length;
+    const captured = allBookings.filter(
+      (b) => b.paymentStatus === 'CAPTURED',
+    ).length;
     const completionRate = total > 0 ? Math.round((captured / total) * 100) : 0;
 
     // Busiest day of week
@@ -551,7 +561,15 @@ export class TeachersService {
         dayCount[new Date(b.shift.start).getDay()]++;
       }
     }
-    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const DAYS = [
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+    ];
     const busiestDayIdx = dayCount.indexOf(Math.max(...dayCount));
 
     return {
@@ -567,68 +585,13 @@ export class TeachersService {
     };
   }
 
-  // ─── Monthly earnings (last 6 months bar chart) ────────────────────────────
-
-  async getMonthlyEarnings(userId: string) {
-    const teacher = await this.prisma.teacherProfile.findUnique({
-      where: { userId },
-    });
-    if (!teacher) throw new NotFoundException('Teacher profile not found.');
-
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
-    sixMonthsAgo.setDate(1);
-    sixMonthsAgo.setHours(0, 0, 0, 0);
-
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        shift: { teacherId: teacher.id },
-        paymentStatus: 'CAPTURED',
-        createdAt: { gte: sixMonthsAgo },
-      },
-      select: { amountCents: true, shift: { select: { start: true } } },
-    });
-
-    const monthMap = new Map<string, { grossCents: number; sessions: number }>();
-
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - i);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthMap.set(key, { grossCents: 0, sessions: 0 });
-    }
-
-    for (const b of bookings) {
-      const d = new Date(b.shift.start);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const entry = monthMap.get(key);
-      if (entry) {
-        entry.grossCents += b.amountCents ?? 0;
-        entry.sessions++;
-      }
-    }
-
-    const months = Array.from(monthMap.entries()).map(([key, val]) => {
-      const [year, month] = key.split('-').map(Number);
-      const label = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short', year: '2-digit' });
-      return {
-        key,
-        label,
-        earningsCents: Math.round(val.grossCents * 0.75),
-        sessions: val.sessions,
-      };
-    });
-
-    const lastTwo = months.slice(-2);
-    const trend =
-      lastTwo.length === 2 && lastTwo[0].earningsCents > 0
-        ? Math.round(((lastTwo[1].earningsCents - lastTwo[0].earningsCents) / lastTwo[0].earningsCents) * 100)
-        : null;
-
-    return { months, trend };
-  }
-
   // ─── Get Teacher Action Queue ──────────────────────────────────────────────
+  //
+  // Reschedule/cancel events are applied immediately (see RescheduleModule —
+  // there is no admin-approval step), so there is nothing "pending" to
+  // action here anymore. This now surfaces recent audit history plus the
+  // monthly emergency-reschedule quota, for a teacher reviewing their own
+  // schedule-change activity.
 
   async getActionQueue(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
@@ -638,71 +601,52 @@ export class TeachersService {
 
     const now = new Date();
 
-    const [rescheduleRequests, cancellation] = await Promise.all([
+    const [recentEvents, cancellation] = await Promise.all([
       this.prisma.rescheduleRequest.findMany({
-        where: { booking: { shift: { teacherId: teacher.id } }, status: 'PENDING' },
+        where: { teacherId: teacher.id },
         include: {
           booking: {
             include: {
               student: { select: { name: true } },
               studentUser: { select: { fullName: true } },
-              shift: { select: { start: true, end: true } },
             },
           },
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
       }),
       this.prisma.teacherCancellation.findFirst({
-        where: { teacherId: teacher.id, month: now.getMonth() + 1, year: now.getFullYear() },
+        where: {
+          teacherId: teacher.id,
+          month: now.getMonth() + 1,
+          year: now.getFullYear(),
+        },
       }),
     ]);
 
     return {
-      rescheduleRequests: rescheduleRequests.map((r) => ({
+      recentEvents: recentEvents.map((r) => ({
         id: r.id,
         bookingId: r.bookingId,
-        studentName: r.booking.studentUser?.fullName ?? r.booking.student?.name ?? 'Student',
-        currentStart: r.booking.shift.start,
-        proposedStart: r.newStart,
-        proposedEnd: r.newEnd,
+        action: r.action,
+        category: r.category,
+        studentName:
+          r.booking.studentUser?.fullName ??
+          r.booking.student?.name ??
+          'Student',
+        oldStart: r.oldStart,
+        newStart: r.newStart,
+        newEnd: r.newEnd,
         reason: r.reason,
+        penaltyStatus: r.penaltyStatus,
         createdAt: r.createdAt,
       })),
-      monthlyCancel: {
+      monthlyEmergencyReschedules: {
         count: cancellation?.count ?? 0,
         month: now.getMonth() + 1,
         year: now.getFullYear(),
       },
     };
-  }
-
-  async acceptReschedule(teacherUserId: string, requestId: string) {
-    const teacher = await this.prisma.teacherProfile.findUnique({
-      where: { userId: teacherUserId },
-    });
-    if (!teacher) throw new NotFoundException('Teacher profile not found.');
-
-    const request = await this.prisma.rescheduleRequest.findUnique({
-      where: { id: requestId },
-      include: { booking: { include: { shift: true } } },
-    });
-    if (!request) throw new NotFoundException('Request not found.');
-    if (request.booking.shift.teacherId !== teacher.id) {
-      throw new ForbiddenException('Not your booking.');
-    }
-
-    await this.prisma.$transaction([
-      this.prisma.shift.update({
-        where: { id: request.booking.shiftId },
-        data: { start: request.newStart, end: request.newEnd },
-      }),
-      this.prisma.rescheduleRequest.update({
-        where: { id: requestId },
-        data: { status: 'ACCEPTED' },
-      }),
-    ]);
-
-    return { success: true };
   }
 
   // ─── Get Public Profile ───────────────────────────────────────────────────

@@ -162,15 +162,13 @@ function TeacherStudentsContent() {
 
   return (
     <TeacherLayout
-      teacherName={profile?.user?.fullName ?? 'Pilot'}
+      teacherName={profile?.user?.fullName ?? 'Teacher'}
       avatarUrl={profile?.user?.avatarUrl ?? null}
-      rankTier={profile?.rankTier ?? 0}
     >
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="flex items-start justify-between flex-wrap gap-3 mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">My Students</h1>
-            <p className="text-sm text-[var(--t-text-muted)]">Cadet Roster ✦</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">Students</h1>
           </div>
           <div className="flex gap-2 flex-wrap">
             <div className={`${card} px-3 py-2 flex items-center gap-2`}>
@@ -203,14 +201,14 @@ function TeacherStudentsContent() {
           <div className={`${card} p-10 sm:p-16 text-center`}>
             <p className="text-4xl mb-3">🛸</p>
             <p className="font-semibold text-[var(--t-text)]">
-              {search ? 'No cadets match your search' : 'No cadets enrolled yet'}
+              {search ? 'No students match your search' : 'No students enrolled yet'}
             </p>
             <p className="text-sm text-[var(--t-text-muted)] mt-1">
               {search ? 'Try a different search term' : 'Students will appear here once they book your classes'}
             </p>
             {!search && (
               <button
-                onClick={() => router.push('/calendar')}
+                onClick={() => router.push('/schedule')}
                 className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
               >
                 Add Availability →
@@ -372,7 +370,7 @@ function TeacherStudentsContent() {
 
       <LumiChat
         variant="teacher"
-        context={`Teacher students roster — ${students.length} total cadets, ${upcoming} with upcoming classes`}
+        context={`Teacher students roster — ${students.length} total students, ${upcoming} with upcoming classes`}
       />
     </TeacherLayout>
   );

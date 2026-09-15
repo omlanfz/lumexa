@@ -29,16 +29,26 @@ describe('AdminService - assignTeacherToStudent', () => {
   });
 
   it('assigns a teacher to a student successfully', async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: 'student-1', role: 'STUDENT' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'student-1',
+      role: 'STUDENT',
+    });
     prisma.teacherProfile.findUnique.mockResolvedValue({ id: 'teacher-1' });
     prisma.user.update.mockResolvedValue({
       id: 'student-1',
       fullName: 'Ada Lovelace',
       assignedTeacherId: 'teacher-1',
-      assignedTeacher: { id: 'teacher-1', subjects: [], user: { fullName: 'Mr T', avatarUrl: null } },
+      assignedTeacher: {
+        id: 'teacher-1',
+        subjects: [],
+        user: { fullName: 'Mr T', avatarUrl: null },
+      },
     });
 
-    const result = await service.assignTeacherToStudent('student-1', 'teacher-1');
+    const result = await service.assignTeacherToStudent(
+      'student-1',
+      'teacher-1',
+    );
 
     expect(prisma.teacherProfile.findUnique).toHaveBeenCalledWith({
       where: { id: 'teacher-1' },
@@ -53,7 +63,10 @@ describe('AdminService - assignTeacherToStudent', () => {
   });
 
   it('clears the assignment when given null', async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: 'student-1', role: 'STUDENT' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'student-1',
+      role: 'STUDENT',
+    });
     prisma.user.update.mockResolvedValue({
       id: 'student-1',
       fullName: 'Ada Lovelace',
@@ -93,7 +106,10 @@ describe('AdminService - assignTeacherToStudent', () => {
   });
 
   it('throws NotFoundException for a non-existent teacher profile id', async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: 'student-1', role: 'STUDENT' });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'student-1',
+      role: 'STUDENT',
+    });
     prisma.teacherProfile.findUnique.mockResolvedValue(null);
 
     await expect(

@@ -505,24 +505,38 @@ const TIMEZONES = Intl.supportedValuesOf
 
 const DOC_REQUIREMENTS = [
   {
-    key: "id",
-    label: "Government ID",
+    key: "nid",
+    label: "National ID (NID)",
     icon: "🪪",
-    desc: "National ID, Passport, or Driver's License. Required for identity verification.",
+    desc: "Required for identity verification.",
     required: true,
+  },
+  {
+    key: "birth_certificate",
+    label: "Birth Certificate",
+    icon: "📄",
+    desc: "Official birth certificate.",
+    required: true,
+  },
+  {
+    key: "bachelor_certificate",
+    label: "Bachelor's Certificate",
+    icon: "🎓",
+    desc: "Undergraduate degree certificate.",
+    required: false,
+  },
+  {
+    key: "master_certificate",
+    label: "Master's Certificate",
+    icon: "🎓",
+    desc: "Postgraduate degree certificate, if applicable.",
+    required: false,
   },
   {
     key: "teaching_cert",
     label: "Teaching Certificate",
-    icon: "🎓",
-    desc: "Any teaching qualification or certification. Upload if you have one.",
-    required: false,
-  },
-  {
-    key: "degree",
-    label: "Academic Degree",
     icon: "📜",
-    desc: "University degree or diploma relevant to your teaching subject.",
+    desc: "Any teaching qualification or certification, if you have one.",
     required: false,
   },
   {
@@ -533,10 +547,10 @@ const DOC_REQUIREMENTS = [
     required: false,
   },
   {
-    key: "subject_cert",
-    label: "Subject Certification",
-    icon: "🔬",
-    desc: "Professional certification specific to your teaching subject (e.g. CPA for accounting, AWS for tech).",
+    key: "other",
+    label: "Other",
+    icon: "📎",
+    desc: "Any other relevant document.",
     required: false,
   },
 ];
@@ -551,9 +565,9 @@ function computeProfileCompletion(
     subjects: !!profile.subjects?.length,
     grades: !!profile.grades?.length,
     rate: profile.hourlyRate > 0,
-    id_doc: docs.some((d) => d.type === "id"),
+    id_doc: docs.some((d) => d.type === "nid" || d.type === "birth_certificate"),
     cert_doc: docs.some((d) =>
-      ["teaching_cert", "degree", "subject_cert"].includes(d.type),
+      ["bachelor_certificate", "master_certificate", "teaching_cert"].includes(d.type),
     ),
   };
   const weights: Record<string, number> = {
@@ -616,6 +630,16 @@ function TeacherProfileContent() {
           { headers: { Authorization: `Bearer ${token}` } },
         );
         setProfile(res.data);
+        const existingDocs = (res.data.verificationDocs ?? []) as any[];
+        setDocs(
+          existingDocs.map((d, i) => ({
+            id: `${d.type}-${i}`,
+            type: d.type,
+            name: d.name,
+            url: d.url,
+            uploadedAt: d.uploadedAt,
+          })),
+        );
       } catch (e: any) {
         const m = e.response?.data?.message;
         setError(
@@ -817,24 +841,15 @@ function TeacherProfileContent() {
 
   return (
     <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Pilot"}
+      teacherName={profile?.user?.fullName ?? "Teacher"}
       avatarUrl={profile?.user?.avatarUrl ?? null}
-      rankTier={profile?.rankTier ?? 0}
-      onAvatarUpdate={(url) =>
-        setProfile((p) =>
-          p ? { ...p, user: { ...p.user, avatarUrl: url } } : p,
-        )
-      }
     >
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
-            Settings
+            Profile
           </h1>
-          <p className="text-sm text-[var(--t-text-muted)]">
-            Pilot Configuration ✦
-          </p>
         </div>
 
         {/* ── Profile completion bar ──────────────────────────────────────── */}
@@ -889,7 +904,7 @@ function TeacherProfileContent() {
           {score < 100 && (
             <p className="text-xs text-[var(--t-text-muted)] mt-3">
               💡 Complete your profile to rank higher in marketplace search
-              results and attract more cadets.
+              results and attract more students.
             </p>
           )}
         </div>
@@ -1031,7 +1046,7 @@ function TeacherProfileContent() {
                 value={bio}
                 onChange={(e) => setBio(e.target.value.slice(0, 500))}
                 rows={5}
-                placeholder="Tell cadets about your teaching experience, approach, and what makes your classes unique…"
+                placeholder="Tell students about your teaching experience, approach, and what makes your classes unique…"
                 className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
               />
             </div>
@@ -1261,7 +1276,9 @@ function TeacherProfileContent() {
                 Payout Setup
               </h3>
               <p className="text-sm text-[var(--t-text-muted)] mb-5">
-                Reward Ledger Configuration
+                Your finalized monthly payout is calculated automatically from
+                your earnings ledger — see the Earnings page for the full
+                breakdown. Operations pays out manually each month.
               </p>
 
               {profile?.stripeOnboarded ? (
@@ -1272,8 +1289,7 @@ function TeacherProfileContent() {
                       Stripe Connected
                     </p>
                     <p className="text-xs dark:text-green-400/70 text-green-600">
-                      You'll receive payouts automatically after completed
-                      classes.
+                      Your payout details are on file with Stripe Connect.
                     </p>
                   </div>
                 </div>
@@ -1286,21 +1302,17 @@ function TeacherProfileContent() {
                         Stripe not connected
                       </p>
                       <p className="text-xs dark:text-amber-400/70 text-amber-600">
-                        Connect Stripe to receive real payouts. Until connected,
-                        earnings accumulate in your ledger.
+                        Connect Stripe so Operations has your payout details on
+                        file.
                       </p>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-sm dark:text-purple-300/80 text-purple-700">
-                    <p>
-                      ✦ You earn <strong>75%</strong> of every class fee
-                    </p>
-                    <p>✦ Lumexa retains 25% platform fee</p>
-                    <p>✦ Payouts are processed after class completion</p>
-                    <p>
-                      ✦ Stripe handles secure transfers to your bank account
-                    </p>
+                    <p>✦ Completed class: +৳200</p>
+                    <p>✦ Parent-teacher meeting: +৳300</p>
+                    <p>✦ Conversion bonus: +৳1,000</p>
+                    <p>✦ Operations pays out your ledger total manually each month</p>
                   </div>
 
                   <button

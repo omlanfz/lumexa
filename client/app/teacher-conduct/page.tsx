@@ -36,7 +36,7 @@ const RULES = [
     items: [
       "Join the classroom within 5 minutes of class start time.",
       "No-show without notice = automatic strike.",
-      "Treat every cadet with respect. Misconduct reports trigger admin review.",
+      "Treat every student with respect. Misconduct reports trigger admin review.",
       "Maintain a professional learning environment at all times.",
     ],
   },
@@ -45,11 +45,10 @@ const RULES = [
     icon: "🔄",
     color: "amber",
     items: [
-      "Student-requested: Cancel/reschedule anytime. No penalty. Verification required.",
-      "Teacher-initiated: Maximum 2 free cancellations per calendar month.",
-      "3rd cancellation and beyond: 1 automatic strike per cancellation.",
-      "You must give 24 hours notice for teacher-initiated cancellations.",
-      "Less than 2 hours notice: No refund to parent AND 1 strike issued.",
+      "Student/Parent requested: reschedule or cancel from Schedule → Manage. No penalty, ever. Proof upload required.",
+      "Teacher emergency: first 3 reschedules per calendar month are free, with no payout impact.",
+      "4th+ teacher emergency reschedule in a month: never blocked, but flagged for Operations review and incurs a ৳50 penalty.",
+      "A genuine emergency is never blocked — the confirmation just records that you've informed the student/parent.",
     ],
   },
   {
@@ -57,11 +56,10 @@ const RULES = [
     icon: "💰",
     color: "green",
     items: [
-      "You earn 75% of the class fee. Lumexa retains 25% platform fee.",
-      "Payment is released after the class ends (LiveKit session closed).",
-      "Strike penalty: $5 deducted from next payout per strike beyond quota.",
-      "Suspension (3 strikes): All pending payouts held during review period.",
-      "Refunded classes: No earnings for cancelled/refunded sessions.",
+      "Completed class: +৳200. Parent-teacher meeting: +৳300. Conversion bonus: +৳1,000.",
+      "Earnings post automatically to your ledger — see the Earnings page for the full history.",
+      "Penalties (minor/moderate/major) are only ever created by Operations or system policy — never a mystery deduction.",
+      "Suspension (3 strikes): all pending payouts held during review period.",
     ],
   },
   {
@@ -132,19 +130,15 @@ function TeacherConductContent() {
 
   return (
     <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Pilot"}
+      teacherName={profile?.user?.fullName ?? "Teacher"}
       avatarUrl={profile?.user?.avatarUrl ?? null}
-      rankTier={profile?.rankTier ?? 0}
     >
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
-            Pilot Guidelines
+            Guidelines
           </h1>
-          <p className="text-sm text-[var(--t-text-muted)]">
-            Pilot Code · Know the Rules, Fly with Integrity
-          </p>
         </div>
 
         {/* Suspension warning */}
@@ -228,8 +222,8 @@ function TeacherConductContent() {
             },
             {
               icon: "⚠️",
-              label: "Your cancellation",
-              desc: "2 free/month",
+              label: "Emergency reschedule",
+              desc: "3 free/month",
               color: "amber",
             },
             {
@@ -309,20 +303,20 @@ function TeacherConductContent() {
                   {
                     violation: "No-show",
                     strike: "1",
-                    earnings: "Class fee forfeited + $5 penalty",
-                  },
-                  {
-                    violation: "Late cancel (<2h notice)",
-                    strike: "1",
                     earnings: "No earnings for that session",
                   },
                   {
-                    violation: "3rd+ cancel this month",
-                    strike: "1 each",
-                    earnings: "$5 deducted per extra cancellation",
+                    violation: "Teacher emergency (1st–3rd this month)",
+                    strike: "None",
+                    earnings: "No impact",
                   },
                   {
-                    violation: "Student-requested reschedule",
+                    violation: "Teacher emergency (4th+ this month)",
+                    strike: "None",
+                    earnings: "-৳50, flagged for Operations review",
+                  },
+                  {
+                    violation: "Student/Parent requested reschedule",
                     strike: "None",
                     earnings: "No impact",
                   },
@@ -361,7 +355,7 @@ function TeacherConductContent() {
             Have a question about these guidelines?
           </p>
           <p className="text-xs text-[var(--t-text-muted)] mt-1 mb-3">
-            Contact Lumexa Mission Support. We're here to help all pilots
+            Contact Lumexa Support. We&apos;re here to help all teachers
             succeed.
           </p>
           <a
@@ -381,7 +375,7 @@ function TeacherConductContent() {
       ─────────────────────────────────────────────────────────────────────── */}
       <LumiChat
         variant="teacher"
-        context={`Pilot guidelines / conduct page — teacher has ${profile?.strikes ?? 0} strike(s), ${profile?.isSuspended ? "account suspended" : "account active"}`}
+        context={`Teacher guidelines page — teacher has ${profile?.strikes ?? 0} strike(s), ${profile?.isSuspended ? "account suspended" : "account active"}`}
       />
       {/* ──────────────────────────────────────────────────────────────────── */}
     </TeacherLayout>

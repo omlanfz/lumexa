@@ -164,7 +164,10 @@ export class AdminService {
     };
   }
 
-  async assignTeacherToStudent(studentUserId: string, teacherProfileId: string | null) {
+  async assignTeacherToStudent(
+    studentUserId: string,
+    teacherProfileId: string | null,
+  ) {
     const student = await this.prisma.user.findUnique({
       where: { id: studentUserId },
       select: { id: true, role: true },
@@ -197,6 +200,27 @@ export class AdminService {
         },
       },
     });
+  }
+
+  // ─── Verification documents (Operations review) ───────────────────────────
+
+  async getTeacherDocuments(teacherId: string) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+      select: {
+        id: true,
+        verificationDocs: true,
+        user: { select: { fullName: true, email: true } },
+      },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    return {
+      teacherId: teacher.id,
+      teacherName: teacher.user.fullName,
+      teacherEmail: teacher.user.email,
+      documents: teacher.verificationDocs ?? [],
+    };
   }
 
   async getPlatformStats() {

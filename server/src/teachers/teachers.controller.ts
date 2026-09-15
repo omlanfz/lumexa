@@ -50,7 +50,8 @@ class UpdateProfileDto {
 
 class AddNoteDto {
   @IsString() @MaxLength(2000) note: string;
-  @IsOptional() @IsBoolean()
+  @IsOptional()
+  @IsBoolean()
   @Transform(({ value }) => value === true || value === 'true')
   isUserRef?: boolean;
 }
@@ -96,17 +97,10 @@ export class TeachersController {
     return this.teachersService.getNextClass(req.user.userId);
   }
 
-  /** GET /teachers/me/earnings?page=1&limit=20 — paginated earnings history */
-  @Get('me/earnings')
-  @UseGuards(RolesGuard)
-  @Roles(Role.TEACHER)
-  getMyEarnings(
-    @Request() req: any,
-    @Query('page') page = '1',
-    @Query('limit') limit = '20',
-  ) {
-    return this.teachersService.getMyEarnings(req.user.userId, +page, +limit);
-  }
+  // Earnings now live under /payouts/me (the ledger) — see PayoutsController.
+  // Removed: GET /teachers/me/earnings, GET /teachers/me/earnings/monthly
+  // (formerly a 75%-of-booking-fee computed estimate; superseded by the
+  // append-only ledger, which is the single source of truth for earnings).
 
   /** GET /teachers/me/students — aggregated student roster */
   @Get('me/students')
@@ -174,31 +168,12 @@ export class TeachersController {
     return this.teachersService.getTeacherInsights(req.user.userId);
   }
 
-  /** GET /teachers/me/earnings/monthly — last 6 months bar chart */
-  @Get('me/earnings/monthly')
-  @UseGuards(RolesGuard)
-  @Roles(Role.TEACHER)
-  getMonthlyEarnings(@Request() req: any) {
-    return this.teachersService.getMonthlyEarnings(req.user.userId);
-  }
-
   /** GET /teachers/me/action-queue */
   @Get('me/action-queue')
   @UseGuards(RolesGuard)
   @Roles(Role.TEACHER)
   getActionQueue(@Request() req: any) {
     return this.teachersService.getActionQueue(req.user.userId);
-  }
-
-  /** POST /teachers/me/action-queue/reschedule/:requestId/accept */
-  @Post('me/action-queue/reschedule/:requestId/accept')
-  @UseGuards(RolesGuard)
-  @Roles(Role.TEACHER)
-  acceptReschedule(
-    @Request() req: any,
-    @Param('requestId') requestId: string,
-  ) {
-    return this.teachersService.acceptReschedule(req.user.userId, requestId);
   }
 
   /** POST /teachers/me/students/:studentId/notes */

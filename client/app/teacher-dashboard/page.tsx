@@ -1,42 +1,37 @@
 // FILE PATH: client/app/teacher-dashboard/page.tsx
 //
-// CHANGES vs previous version:
+// Simplified dashboard hierarchy (top to bottom):
+//   1. Good morning, [Teacher]
+//   2. Next class
+//   3. Upcoming students
+//   4. Availability status
+//   5. Small performance snapshot
+//   6. This month's earnings
+//   7. Gamification (rank/points) — secondary, below the fold
 //
-// FIX Issue 5 — Added LumiChat import + <LumiChat variant="teacher" ... /> at
-//   the bottom of TeacherDashboardContent, consistent with other pages.
-//
-// FIX Issue 6 (Responsiveness) — Updated grid layouts for mobile/tablet:
-//   - Rank + Stats row: grid-cols-5 → grid-cols-1 sm:grid-cols-2 lg:grid-cols-5
-//     with rank card spanning full width on mobile, col-span-2 on desktop only.
-//   - Next Class + Badges row: grid-cols-3 → grid-cols-1 lg:grid-cols-3
-//     with next class col-span-2 only on lg+.
-//   - Quick Actions: grid-cols-4 → grid-cols-2 sm:grid-cols-4
-//   - Profile summary grid: grid-cols-4 → grid-cols-2 sm:grid-cols-4
-//
-// Everything else is unchanged.
+// Quick Actions for Schedule/Students/Earnings/Profile are gone — they're
+// already one click away in the top navbar.
 
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
-import TeacherNav from "../../components/TeacherNav";
 import TeacherLayout from "../../components/TeacherLayout";
-import { useTheme } from "../../components/ThemeProvider";
-// FIX Issue 5 — import LumiChat
 import LumiChat from "../../components/LumiChat";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Stats {
   completedClasses: number;
-  upcomingClasses: number;
-  totalEarningsCents: number;
-  teacherEarningsCents: number;
+  totalShifts: number;
   ratingAvg: number;
   reviewCount: number;
   strikes: number;
   isSuspended: boolean;
+  monthEarningsCents: number;
+  monthEventCount: number;
+  lastUpdated: string | null;
 }
 
 interface NextClass {
@@ -44,152 +39,74 @@ interface NextClass {
   start: string;
   end: string;
   studentName: string;
-  studentAge: number;
   msUntilStart: number;
-}
-
-interface RankInfo {
-  points: number;
-  weeklyPoints: number;
-  rankTier: number;
-  rankName: string;
-  rankIcon: string;
-  pointsToNext: number;
-  progressPercent: number;
 }
 
 interface Profile {
   id: string;
   user: { fullName: string; email: string; avatarUrl?: string | null };
   bio?: string | null;
-  hourlyRate: number;
-  ratingAvg: number;
-  reviewCount: number;
-  strikes: number;
-  isSuspended: boolean;
-  rankTier: number;
+  subjects?: string[];
+  rankTier?: number;
   points?: number;
   weeklyPoints?: number;
-  subjects?: string[];
-  grades?: string[];
+  verificationDocs?: unknown[];
 }
 
-// ─── Daily Mission Briefs (rotate by day-of-week) ─────────────────────────────
+interface StudentEntry {
+  studentId: string;
+  isUserRef: boolean;
+  studentName: string;
+  avatarUrl: string | null;
+  pendingClasses: number;
+  nextClassDate: string | null;
+}
 
-const MISSION_BRIEFS = [
-  "🚀 Ready for launch. Your cadets are counting on you, Pilot.",
-  "🌌 The stars aligned perfectly for today's missions.",
-  "⭐ Excellence leaves trails across the galaxy. Teach brilliantly.",
-  "🛸 Your knowledge is the fuel that powers the next generation.",
-  "🌠 Every lesson you teach is a light in someone's universe.",
-  "🔭 The best pilots never stop learning. Keep exploring.",
-  "🪐 Orbiting success — another great week ahead, Commander.",
-];
+interface Shift {
+  id: string;
+  start: string;
+  isBooked: boolean;
+}
 
-const RANK_NAMES = [
-  "Cadet",
-  "Navigator",
-  "Pilot",
-  "Commander",
-  "Admiral",
-  "Starmaster",
-];
+const RANK_NAMES = ["Cadet", "Navigator", "Pilot", "Commander", "Admiral", "Starmaster"];
 const RANK_ICONS = ["🌱", "🧭", "✈️", "🎖️", "⭐", "🌟"];
-const RANK_THRESHOLDS = [0, 1000, 5000, 15000, 40000, 100000];
-const RANK_COLORS = [
-  "from-gray-500 to-gray-600",
-  "from-blue-500 to-blue-600",
-  "from-purple-500 to-purple-600",
-  "from-amber-500 to-yellow-600",
-  "from-orange-500 to-red-500",
-  "from-pink-500 to-rose-600",
-];
-
-// ─── Achievements ─────────────────────────────────────────────────────────────
-
-const ACHIEVEMENTS = [
-  {
-    id: "first_class",
-    label: "First Launch",
-    desc: "First class completed",
-    icon: "🚀",
-    threshold: 1,
-  },
-  {
-    id: "ten_classes",
-    label: "Orbit Achieved",
-    desc: "10 classes completed",
-    icon: "🌍",
-    threshold: 10,
-  },
-  {
-    id: "fifty_classes",
-    label: "Deep Space",
-    desc: "50 classes completed",
-    icon: "🌌",
-    threshold: 50,
-  },
-  {
-    id: "hundred_classes",
-    label: "Starmaster",
-    desc: "100 classes completed",
-    icon: "🌟",
-    threshold: 100,
-  },
-  {
-    id: "five_star",
-    label: "Perfect Signal",
-    desc: "Received a 5-star review",
-    icon: "⭐",
-    threshold: 1,
-  },
-  {
-    id: "profile_complete",
-    label: "Launch Ready",
-    desc: "Profile fully completed",
-    icon: "✅",
-    threshold: 1,
-  },
-];
-
-// ─── Countdown hook ───────────────────────────────────────────────────────────
 
 function useCountdown(targetMs: number | null) {
   const [remaining, setRemaining] = useState<number>(targetMs ?? 0);
-
   useEffect(() => {
     if (targetMs === null) return;
+    // Reset immediately to the new target (e.g. after a refetch) rather than
+    // waiting for the first tick.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRemaining(targetMs);
-    const id = setInterval(
-      () => setRemaining((p) => Math.max(0, p - 1000)),
-      1000,
-    );
+    const id = setInterval(() => setRemaining((p) => Math.max(0, p - 1000)), 1000);
     return () => clearInterval(id);
   }, [targetMs]);
-
   const hours = Math.floor(remaining / 3600000);
   const minutes = Math.floor((remaining % 3600000) / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
-  return { hours, minutes, seconds, total: remaining };
+  return { hours, minutes, seconds };
 }
 
-// ─── Dashboard Content ────────────────────────────────────────────────────────
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
 
 function TeacherDashboardContent() {
   const router = useRouter();
-  const { isDark } = useTheme();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [nextClass, setNextClass] = useState<NextClass | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [rankInfo, setRankInfo] = useState<RankInfo | null>(null);
+  const [students, setStudents] = useState<StudentEntry[]>([]);
+  const [openSlots, setOpenSlots] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { hours, minutes, seconds } = useCountdown(
-    nextClass?.msUntilStart ?? null,
-  );
-  const dailyBrief = MISSION_BRIEFS[new Date().getDay()];
+  const { hours, minutes, seconds } = useCountdown(nextClass?.msUntilStart ?? null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -200,42 +117,27 @@ function TeacherDashboardContent() {
 
     (async () => {
       try {
-        const [statsRes, nextRes, profileRes] = await Promise.all([
-          api.get('/teachers/me/stats'),
-          api.get('/teachers/me/next-class'),
-          api.get('/teachers/me/profile'),
+        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes] = await Promise.all([
+          api.get("/teachers/me/stats"),
+          api.get("/teachers/me/next-class"),
+          api.get("/teachers/me/profile"),
+          api.get("/teachers/me/students"),
+          api.get("/shifts"),
         ]);
 
         setStats(statsRes.data);
         setNextClass(nextRes.data ?? null);
         setProfile(profileRes.data);
+        setStudents(studentsRes.data ?? []);
 
-        // Compute rank from profile data
-        const tier = profileRes.data.rankTier ?? 0;
-        const pts = profileRes.data.points ?? 0;
-        const next = RANK_THRESHOLDS[tier + 1] ?? RANK_THRESHOLDS[5];
-        const prev = RANK_THRESHOLDS[tier] ?? 0;
-        const pct =
-          tier >= 5
-            ? 100
-            : Math.min(
-                100,
-                Math.max(0, Math.round(((pts - prev) / (next - prev)) * 100)),
-              );
-        setRankInfo({
-          points: pts,
-          weeklyPoints: profileRes.data.weeklyPoints ?? 0,
-          rankTier: tier,
-          rankName: RANK_NAMES[tier],
-          rankIcon: RANK_ICONS[tier],
-          pointsToNext: Math.max(0, next - pts),
-          progressPercent: pct,
-        });
+        const now = new Date();
+        const open = (shiftsRes.data as Shift[]).filter(
+          (s) => !s.isBooked && new Date(s.start) > now,
+        ).length;
+        setOpenSlots(open);
       } catch (e: any) {
         const m = e.response?.data?.message;
-        setError(
-          Array.isArray(m) ? m.join(", ") : (m ?? "Failed to load dashboard"),
-        );
+        setError(Array.isArray(m) ? m.join(", ") : (m ?? "Failed to load dashboard"));
       } finally {
         setLoading(false);
       }
@@ -245,455 +147,263 @@ function TeacherDashboardContent() {
   if (loading)
     return (
       <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-[var(--t-text-muted)] text-sm mt-4">
-            Preparing your flight deck…
-          </p>
-        </div>
+        <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     );
 
-  const completedClasses = stats?.completedClasses ?? 0;
-  const teacherEarnings = (stats?.teacherEarningsCents ?? 0) / 100;
+  const firstName = (profile?.user?.fullName ?? "Teacher").split(" ")[0];
   const isProfileIncomplete = !profile?.bio || !profile?.subjects?.length;
+  const upcomingStudents = students
+    .filter((s) => s.pendingClasses > 0 && s.nextClassDate)
+    .sort((a, b) => new Date(a.nextClassDate!).getTime() - new Date(b.nextClassDate!).getTime())
+    .slice(0, 5);
 
-  const earnedAchievements = ACHIEVEMENTS.filter((a) => {
-    if (a.id === "first_class") return completedClasses >= 1;
-    if (a.id === "ten_classes") return completedClasses >= 10;
-    if (a.id === "fifty_classes") return completedClasses >= 50;
-    if (a.id === "hundred_classes") return completedClasses >= 100;
-    if (a.id === "five_star") return (stats?.ratingAvg ?? 0) >= 4.8;
-    if (a.id === "profile_complete") return !isProfileIncomplete;
-    return false;
-  });
-
+  const rankTier = profile?.rankTier ?? 0;
   const card = "t-card t-card-hover shadow-sm";
 
   return (
     <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Pilot"}
+      teacherName={profile?.user?.fullName ?? "Teacher"}
       avatarUrl={profile?.user?.avatarUrl ?? null}
-      rankTier={profile?.rankTier ?? 0}
     >
-      <div className="p-4 sm:p-6 lg:p-8">
-        {/* ── Suspension warning ─────────────────────────────────────── */}
-        {profile?.isSuspended && (
-          <div className="mb-6 p-4 bg-red-900/30 border border-red-600/40 rounded-xl flex items-start gap-3">
-            <span className="text-2xl">🚫</span>
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+        {/* ── 1. Greeting ─────────────────────────────────────────────── */}
+        <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)] mb-6">
+          {greeting()}, {firstName}
+        </h1>
+
+        {stats?.isSuspended && (
+          <div className="mb-6 p-4 rounded-xl bg-[var(--t-danger-bg)] text-[var(--t-danger)] flex items-start gap-3">
             <div>
-              <p className="text-red-300 font-semibold">Mission Suspended</p>
-              <p className="text-red-400/70 text-sm">
-                Your account has been suspended. Contact mission support for
-                reinstatement.
+              <p className="font-semibold">Account suspended</p>
+              <p className="text-sm opacity-80">
+                Contact support for reinstatement.
               </p>
             </div>
           </div>
         )}
 
-        {/* ── Profile incomplete nudge ───────────────────────────────── */}
         {isProfileIncomplete && (
-          <div className="mb-6 p-4 rounded-xl border dark:bg-amber-900/20 dark:border-amber-700/30 bg-amber-50 border-amber-200 flex items-start gap-3">
-            <span className="text-2xl flex-shrink-0">🛸</span>
-            <div className="flex-1">
-              <p className="font-semibold text-sm text-amber-700 dark:text-amber-300">
-                Complete your pilot profile to attract more cadets
-              </p>
-              <p className="text-xs mt-0.5 text-amber-600 dark:text-amber-400/70">
-                Add your bio, subjects, and availability to appear in more
-                search results.
-              </p>
-            </div>
+          <div className="mb-6 p-4 rounded-xl border border-[var(--t-warning)]/30 bg-[var(--t-warning-bg)] flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm font-medium text-[var(--t-warning)]">
+              Complete your profile to attract more students.
+            </p>
             <button
               onClick={() => router.push("/teacher-profile")}
-              className="text-sm px-3 py-1.5 rounded-lg font-medium flex-shrink-0 bg-amber-600 hover:bg-amber-500 text-white transition-all duration-200 active:scale-[0.98]"
+              className="text-sm px-3 py-1.5 rounded-lg font-medium bg-[var(--t-accent)] hover:bg-[var(--t-accent-hover)] text-white transition-all duration-150 active:scale-[0.98]"
             >
               Complete Profile
             </button>
           </div>
         )}
 
-        {/* ── Daily Mission Brief ────────────────────────────────────── */}
-        <div className="mb-6 px-5 py-4 rounded-2xl border relative overflow-hidden bg-[var(--t-surface)] border-[var(--t-nav-border)]">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-          <p className="text-sm font-medium text-[var(--t-text-muted)]">
-            Daily Mission Brief
+        {/* ── 2. Next class ───────────────────────────────────────────── */}
+        <section className="mb-6">
+          <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+            Next Class
           </p>
-          <p className="text-base sm:text-lg font-bold mt-1 text-[var(--t-text)]">
-            {dailyBrief}
-          </p>
-        </div>
-
-        {/* ── Rank + Stats row ───────────────────────────────────────── */}
-        {/* FIX Issue 6 (mobile): was grid-cols-5 — now stacks on mobile */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          {/* Rank card — full width on mobile, 2 cols on desktop */}
-          <div className={`col-span-1 sm:col-span-2 ${card} p-5`}>
-            <div className="flex items-start gap-4">
-              <div
-                className={`w-14 h-14 rounded-xl bg-gradient-to-br ${RANK_COLORS[rankInfo?.rankTier ?? 0]} flex items-center justify-center text-2xl flex-shrink-0`}
-              >
-                {rankInfo?.rankIcon ?? "🌱"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">
-                  Space Rank
-                </p>
-                <p className="text-xl font-bold leading-tight mt-0.5 text-[var(--t-text)]">
-                  {rankInfo?.rankName ?? "Cadet"}
-                </p>
-                <p className="text-sm text-[var(--t-text-muted)]">
-                  {(rankInfo?.points ?? 0).toLocaleString()} pts
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--t-text-muted)]">
-                  Progress to next rank
-                </span>
-                <span className="text-[var(--t-text-muted)]">
-                  {rankInfo?.progressPercent ?? 0}%
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-[var(--t-surface)]">
-                <div
-                  className={`h-full rounded-full bg-gradient-to-r ${RANK_COLORS[rankInfo?.rankTier ?? 0]} transition-all duration-700`}
-                  style={{ width: `${rankInfo?.progressPercent ?? 0}%` }}
-                />
-              </div>
-              <p className="text-xs mt-1 text-[var(--t-text-muted)]">
-                {(rankInfo?.pointsToNext ?? 0).toLocaleString()} pts to{" "}
-                {RANK_NAMES[(rankInfo?.rankTier ?? 0) + 1] ?? "max"}
-              </p>
-            </div>
-
-            <div className="mt-3 pt-3 border-t border-[var(--t-nav-border)] flex items-center justify-between">
-              <div>
-                <p className="text-xs text-[var(--t-text-muted)]">
-                  This week
-                </p>
-                <p className="text-sm font-bold text-[var(--t-text-muted)]">
-                  +{rankInfo?.weeklyPoints ?? 0} pts
-                </p>
-              </div>
-              <button
-                onClick={() => router.push("/leaderboard")}
-                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-all duration-200 active:scale-[0.98]"
-              >
-                View Rankings
-              </button>
-            </div>
-          </div>
-
-          {/* Classes stat */}
-          <div className={`${card} p-4 flex flex-col justify-between`}>
-            <div>
-              <span className="text-2xl">📚</span>
-              <p className="text-xs uppercase tracking-wide mt-2 text-[var(--t-text-muted)]">
-                Classes Taught
-              </p>
-              <p className="text-3xl font-bold mt-1 text-[var(--t-text)]">
-                {completedClasses}
-              </p>
-            </div>
-            <p className="text-xs text-[var(--t-text-muted)]">
-              {stats?.upcomingClasses ?? 0} upcoming
-            </p>
-          </div>
-
-          {/* Rating stat */}
-          <div className={`${card} p-4 flex flex-col justify-between`}>
-            <div>
-              <span className="text-2xl">⭐</span>
-              <p className="text-xs uppercase tracking-wide mt-2 text-[var(--t-text-muted)]">
-                Rating
-              </p>
-              <p className="text-3xl font-bold mt-1 text-[var(--t-text)]">
-                {stats?.ratingAvg ? stats.ratingAvg.toFixed(1) : "—"}
-              </p>
-            </div>
-            <p className="text-xs text-[var(--t-text-muted)]">
-              {stats?.reviewCount ?? 0} reviews
-              {(stats?.strikes ?? 0) > 0 && (
-                <span className="text-red-400 ml-2">
-                  ⚡ {stats!.strikes} strike{stats!.strikes > 1 ? "s" : ""}
-                </span>
-              )}
-            </p>
-          </div>
-
-          {/* Earnings stat */}
-          <div className={`${card} p-4 flex flex-col justify-between`}>
-            <div>
-              <span className="text-2xl">💰</span>
-              <p className="text-xs uppercase tracking-wide mt-2 text-[var(--t-text-muted)]">
-                Earnings
-              </p>
-              <p className="text-3xl font-bold mt-1 text-green-600 dark:text-green-400">
-                ${teacherEarnings.toFixed(0)}
-              </p>
-            </div>
-            <button
-              onClick={() => router.push("/teacher-earnings")}
-              className="text-xs text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors text-left"
-            >
-              View details →
-            </button>
-          </div>
-        </div>
-
-        {/* ── Next Class + Achievements row ──────────────────────────── */}
-        {/* FIX Issue 6 (mobile): was grid-cols-3 — stacks on mobile/tablet */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          {/* Next class — full width on mobile, 2 cols on desktop */}
-          <div className="col-span-1 lg:col-span-2">
-            {nextClass ? (
-              <div className={`${card} p-5 relative overflow-hidden`}>
-                {/* Live indicator when < 10 min */}
-                {nextClass.msUntilStart < 600000 && (
-                  <div className="absolute top-4 right-4">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500" />
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">
-                      Upcoming Mission
-                    </p>
-                    <p className="text-lg font-bold mt-0.5 text-[var(--t-text)]">
-                      Class with {nextClass.studentName}
-                    </p>
-                    <p className="text-sm text-[var(--t-text-muted)]">
-                      {new Date(nextClass.start).toLocaleDateString("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}{" "}
-                      ·{" "}
-                      {new Date(nextClass.start).toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}{" "}
-                      –{" "}
-                      {new Date(nextClass.end).toLocaleTimeString("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-700 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-                    {nextClass.studentName.charAt(0).toUpperCase()}
-                  </div>
-                </div>
-
-                {/* Countdown */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  <p className="text-xs text-[var(--t-text-muted)] mr-1">
-                    Starts in:
+          {nextClass ? (
+            <div className={`${card} p-5 relative overflow-hidden`}>
+              <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+                <div>
+                  <p className="text-lg font-bold text-[var(--t-text)]">
+                    Class with {nextClass.studentName}
                   </p>
-                  {[
-                    { val: hours, label: "HRS" },
-                    { val: minutes, label: "MIN" },
-                    { val: seconds, label: "SEC" },
-                  ].map(({ val, label }) => (
-                    <div
-                      key={label}
-                      className="text-center px-3 py-2 rounded-xl bg-[var(--t-nav-active)]"
-                    >
-                      <p className="text-2xl font-bold tabular-nums text-[var(--t-text)]">
+                  <p className="text-sm text-[var(--t-text-muted)]">
+                    {new Date(nextClass.start).toLocaleDateString("en-US", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}{" "}
+                    ·{" "}
+                    {new Date(nextClass.start).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                    {" – "}
+                    {new Date(nextClass.end).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center text-white font-bold flex-shrink-0">
+                  {nextClass.studentName.charAt(0).toUpperCase()}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  {[hours, minutes, seconds].map((val, i) => (
+                    <div key={i} className="text-center px-2.5 py-1.5 rounded-lg bg-[var(--t-nav-active)]">
+                      <p className="text-sm font-bold tabular-nums text-[var(--t-text)]">
                         {String(val).padStart(2, "0")}
-                      </p>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        {label}
                       </p>
                     </div>
                   ))}
                 </div>
-
-                {/* Warning + join */}
-                <div className="mt-4 pt-4 border-t border-[var(--t-nav-border)] flex items-center justify-between flex-wrap gap-2">
-                  <p className="text-xs text-amber-600 dark:text-amber-400/70">
-                    ⚠️ Join on time to avoid a strike.
-                  </p>
-                  {nextClass.msUntilStart <= 600000 && (
-                    <button
-                      onClick={() =>
-                        router.push(`/classroom/${nextClass.bookingId}`)
-                      }
-                      className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-xl transition-all duration-200 active:scale-[0.98]"
-                    >
-                      Enter Star Lab →
-                    </button>
-                  )}
-                </div>
+                {nextClass.msUntilStart <= 600000 && (
+                  <button
+                    onClick={() => router.push(`/classroom/${nextClass.bookingId}`)}
+                    className="px-4 py-2 bg-[var(--t-success)] hover:opacity-90 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
+                  >
+                    Join Class →
+                  </button>
+                )}
               </div>
-            ) : (
-              <div
-                className={`${card} p-5 flex flex-col items-center justify-center text-center min-h-[200px]`}
+            </div>
+          ) : (
+            <div className={`${card} p-6 flex flex-col items-center justify-center text-center`}>
+              <p className="font-semibold text-[var(--t-text)]">No upcoming classes</p>
+              <p className="text-sm mt-1 text-[var(--t-text-muted)]">
+                Add availability so students can book you.
+              </p>
+              <button
+                onClick={() => router.push("/schedule")}
+                className="mt-4 px-4 py-2 bg-[var(--t-accent)] hover:bg-[var(--t-accent-hover)] text-white text-sm rounded-xl transition-all duration-150 active:scale-[0.98]"
               >
-                <span className="text-4xl mb-3">🌌</span>
-                <p className="font-semibold text-[var(--t-text)]">
-                  No upcoming missions
-                </p>
-                <p className="text-sm mt-1 text-[var(--t-text-muted)]">
-                  Add availability slots so cadets can book you.
-                </p>
-                <button
-                  onClick={() => router.push("/calendar")}
-                  className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
-                >
-                  Log Flight Availability
-                </button>
+                Open Schedule
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── 3. Upcoming students ────────────────────────────────────── */}
+        <section className="mb-6">
+          <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+            Upcoming Students
+          </p>
+          <div className={`${card} overflow-hidden`}>
+            {upcomingStudents.length === 0 ? (
+              <p className="p-5 text-sm text-[var(--t-text-muted)]">
+                No upcoming students. New bookings will appear here.
+              </p>
+            ) : (
+              <div className="divide-y divide-[var(--t-nav-border)]">
+                {upcomingStudents.map((s) => (
+                  <button
+                    key={s.studentId}
+                    onClick={() => router.push("/teacher-students")}
+                    className="w-full px-4 sm:px-5 py-3 flex items-center gap-3 hover:bg-[var(--t-nav-hover)] transition-colors duration-150 text-left"
+                  >
+                    {s.avatarUrl ? (
+                      <img src={s.avatarUrl} alt={s.studentName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        {s.studentName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[var(--t-text)] truncate">{s.studentName}</p>
+                    </div>
+                    <p className="text-xs text-[var(--t-text-muted)] flex-shrink-0">
+                      {new Date(s.nextClassDate!).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    </p>
+                  </button>
+                ))}
               </div>
             )}
           </div>
+        </section>
 
-          {/* Badges */}
-          <div className={`${card} p-5`}>
-            <p className="text-xs uppercase tracking-wide font-medium mb-3 text-[var(--t-text-muted)]">
-              Mission Badges
+        {/* ── 4. Availability status + 5. Performance snapshot ───────── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          <section>
+            <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+              Availability
             </p>
-            <div className="grid grid-cols-3 gap-2">
-              {ACHIEVEMENTS.map((a) => {
-                const earned = earnedAchievements.some((ea) => ea.id === a.id);
-                return (
-                  <div
-                    key={a.id}
-                    title={`${a.label}: ${a.desc}`}
-                    className={[
-                      "aspect-square rounded-xl flex items-center justify-center text-xl transition-all cursor-help",
-                      earned
-                        ? "bg-[var(--t-nav-active)] border border-[var(--t-border-strong)]"
-                        : "bg-[var(--t-surface)] border border-[var(--t-border)] opacity-30 grayscale",
-                    ].join(" ")}
-                  >
-                    {a.icon}
-                  </div>
-                );
-              })}
+            <div className={`${card} p-4 flex items-center justify-between`}>
+              <div>
+                <p className="text-2xl font-bold text-[var(--t-text)]">{openSlots}</p>
+                <p className="text-xs text-[var(--t-text-muted)]">open slot{openSlots !== 1 ? "s" : ""}</p>
+              </div>
+              <button
+                onClick={() => router.push("/schedule")}
+                className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors duration-150"
+              >
+                Manage →
+              </button>
             </div>
-            <p className="text-xs mt-3 text-[var(--t-text-muted)]">
-              {earnedAchievements.length}/{ACHIEVEMENTS.length} earned
+          </section>
+
+          <section>
+            <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+              Performance
             </p>
-          </div>
+            <div className={`${card} p-4 flex items-center justify-between`}>
+              <div>
+                <p className="text-2xl font-bold text-[var(--t-text)]">
+                  {stats?.ratingAvg ? stats.ratingAvg.toFixed(1) : "—"}
+                  <span className="text-sm text-[var(--t-text-muted)] font-normal"> ★</span>
+                </p>
+                <p className="text-xs text-[var(--t-text-muted)]">
+                  {stats?.completedClasses ?? 0} classes taught
+                </p>
+              </div>
+            </div>
+          </section>
         </div>
 
-        {/* ── Quick Actions ──────────────────────────────────────────── */}
-        {/* FIX Issue 6 (mobile): was grid-cols-4 — 2 cols on mobile */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            {
-              label: "Add Availability",
-              sub: "Log Flight Slot",
-              icon: "📅",
-              path: "/calendar",
-            },
-            {
-              label: "View Students",
-              sub: "Cadet Roster",
-              icon: "👥",
-              path: "/teacher-students",
-            },
-            {
-              label: "View Earnings",
-              sub: "Reward Ledger",
-              icon: "💰",
-              path: "/teacher-earnings",
-            },
-            {
-              label: "Edit Profile",
-              sub: "Pilot Config",
-              icon: "⚙️",
-              path: "/teacher-profile",
-            },
-          ].map((item) => (
-            <button
-              key={item.path}
-              onClick={() => router.push(item.path)}
-              className={`${card} p-4 text-left hover:border-[var(--t-border-strong)] transition-all duration-200 active:scale-[0.98]`}
-            >
-              <span className="text-2xl">{item.icon}</span>
-              <p className="text-sm font-medium mt-2 text-[var(--t-text)]">
-                {item.label}
+        {/* ── 6. This month's earnings ────────────────────────────────── */}
+        <section className="mb-8">
+          <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+            This Month&apos;s Earnings
+          </p>
+          <div className={`${card} p-5 flex items-center justify-between flex-wrap gap-3`}>
+            <div>
+              <p className="text-3xl font-bold t-earn-text">
+                ৳{((stats?.monthEarningsCents ?? 0) / 100).toLocaleString()}
               </p>
-              <p className="text-xs text-[var(--t-text-muted)]">
-                {item.sub}
+              <p className="text-xs text-[var(--t-text-muted)] mt-1">
+                {stats?.monthEventCount ?? 0} earning event{(stats?.monthEventCount ?? 0) !== 1 ? "s" : ""}
+                {stats?.lastUpdated && (
+                  <>
+                    {" · Last updated "}
+                    {new Date(stats.lastUpdated).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                  </>
+                )}
               </p>
-            </button>
-          ))}
-        </div>
-
-        {/* ── Profile summary row ────────────────────────────────────── */}
-        <div className={`${card} p-5`}>
-          <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-[var(--t-text)]">
-              Your Pilot Profile
-            </p>
+            </div>
             <button
-              onClick={() => router.push("/teacher-profile")}
-              className="text-xs px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-all duration-200 active:scale-[0.98]"
+              onClick={() => router.push("/teacher-earnings")}
+              className="text-sm px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors duration-150"
             >
-              Edit
+              View Earnings →
             </button>
           </div>
-          {/* FIX Issue 6 (mobile): was grid-cols-4 — 2 cols on mobile */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <p className="text-xs text-[var(--t-text-muted)]">
-                Rate per hour
-              </p>
-              <p className="text-lg font-bold text-[var(--t-text)]">
-                ${profile?.hourlyRate ?? 25}
-              </p>
+        </section>
+
+        {/* ── 7. Gamification (secondary, below the fold) ────────────── */}
+        <section className="pt-2 border-t border-[var(--t-nav-border)]">
+          <button
+            onClick={() => router.push("/leaderboard")}
+            className={`${card} p-4 w-full flex items-center justify-between text-left`}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{RANK_ICONS[rankTier] ?? "🌱"}</span>
+              <div>
+                <p className="text-sm font-semibold text-[var(--t-text)]">
+                  {RANK_NAMES[rankTier] ?? "Cadet"}
+                </p>
+                <p className="text-xs text-[var(--t-text-muted)]">
+                  {(profile?.points ?? 0).toLocaleString()} pts · View leaderboard
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-[var(--t-text-muted)]">
-                Subjects
-              </p>
-              <p className="text-sm font-medium text-[var(--t-text)]">
-                {profile?.subjects?.length
-                  ? profile.subjects.join(", ")
-                  : "Not set"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-[var(--t-text-muted)]">
-                Grades
-              </p>
-              <p className="text-sm font-medium text-[var(--t-text)]">
-                {profile?.grades?.length
-                  ? profile.grades.join(", ")
-                  : "Not set"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-[var(--t-text-muted)]">
-                Bio
-              </p>
-              <p className="text-sm text-[var(--t-text)] truncate">
-                {profile?.bio ?? "No bio yet"}
-              </p>
-            </div>
-          </div>
-        </div>
+            <span className="text-[var(--t-text-muted)]">→</span>
+          </button>
+        </section>
 
         {error && (
-          <div className="mt-4 p-3 bg-red-900/30 border border-red-700/40 rounded-xl text-red-300 text-sm">
+          <div className="mt-6 p-3 rounded-xl bg-[var(--t-danger-bg)] text-[var(--t-danger)] text-sm">
             {error}
           </div>
         )}
       </div>
 
-      {/* FIX Issue 5 — Lumi chatbot on teacher dashboard */}
       <LumiChat
         variant="teacher"
-        context="Teacher dashboard — viewing stats, upcoming classes, rank, earnings, and achievements"
+        context="Teacher dashboard — next class, upcoming students, availability, and earnings"
       />
     </TeacherLayout>
   );
@@ -704,7 +414,7 @@ export default function TeacherDashboardPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-          <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

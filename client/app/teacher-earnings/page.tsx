@@ -1,4 +1,10 @@
 // FILE PATH: client/app/teacher-earnings/page.tsx
+//
+// Built around the append-only earnings ledger (GET /payouts/me). Monthly
+// totals are a sum of ledger transactions, never a separately-maintained
+// running balance. "Download Report" hits the same query/service the admin
+// export uses (GET /payouts/me/report).
+
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
@@ -7,42 +13,41 @@ import api from "@/lib/axios";
 import TeacherLayout from "../../components/TeacherLayout";
 import LumiChat from "../../components/LumiChat";
 
-interface EarningsItem {
-  bookingId: string;
-  studentName: string;
-  date: string;
-  durationMinutes: number;
-  grossCents: number;
-  teacherCents: number;
-  platformCents: number;
-  penalty?: number;
+interface LedgerItem {
+  id: string;
+  type: "CLASS_COMPLETED" | "PTM" | "CONVERSION" | "PENALTY" | "ADJUSTMENT";
+  amountCents: number;
+  description: string;
+  createdAt: string;
+  referenceId: string | null;
+  bookingId: string | null;
 }
 
-interface EarningsSummary {
-  totalEarningsCents: number;
-  teacherEarningsCents: number;
-  completedClasses: number;
-  avgPerClassCents: number;
-  items: EarningsItem[];
+interface Summary {
+  monthEarningsCents: number;
+  allTimeEarningsCents: number;
+  monthEventCount: number;
+  breakdown: Record<string, number>;
+  lastUpdated: string | null;
 }
 
 interface MonthBucket {
   key: string;
   label: string;
   earningsCents: number;
-  sessions: number;
-}
-
-interface MonthlyEarnings {
-  months: MonthBucket[];
-  trend: number | null;
 }
 
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
-  rankTier: number;
-  strikes: number;
 }
+
+const TYPE_LABELS: Record<string, string> = {
+  CLASS_COMPLETED: "Completed class",
+  PTM: "Parent-teacher meeting",
+  CONVERSION: "Conversion bonus",
+  PENALTY: "Penalty",
+  ADJUSTMENT: "Adjustment",
+};
 
 function BarChart({ months }: { months: MonthBucket[] }) {
   if (months.length === 0) return null;
@@ -52,20 +57,15 @@ function BarChart({ months }: { months: MonthBucket[] }) {
     <div className="flex items-end gap-2 sm:gap-3 h-40 w-full">
       {months.map((m) => {
         const pct = (m.earningsCents / maxCents) * 100;
-        const dollars = (m.earningsCents / 100).toFixed(0);
         return (
-          <div
-            key={m.key}
-            className="flex-1 flex flex-col items-center gap-1 group"
-          >
-            <span className="text-xs text-[var(--t-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity">
-              ${dollars}
+          <div key={m.key} className="flex-1 flex flex-col items-center gap-1 group">
+            <span className="text-xs text-[var(--t-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+              ৳{(m.earningsCents / 100).toFixed(0)}
             </span>
             <div className="w-full relative flex flex-col justify-end" style={{ height: "120px" }}>
               <div
-                className="w-full rounded-t-lg bg-gradient-to-t from-purple-700 to-purple-400 transition-all duration-500"
+                className="w-full rounded-t-lg bg-gradient-to-t from-[var(--t-accent)] to-[var(--t-accent-2)] transition-all duration-500"
                 style={{ height: `${Math.max(pct, 4)}%` }}
-                title={`${m.label}: $${dollars} (${m.sessions} session${m.sessions !== 1 ? "s" : ""})`}
               />
             </div>
             <span className="text-[10px] sm:text-xs text-[var(--t-text-muted)] truncate w-full text-center">
@@ -78,31 +78,16 @@ function BarChart({ months }: { months: MonthBucket[] }) {
   );
 }
 
-function TrendBadge({ trend }: { trend: number | null }) {
-  if (trend === null) return null;
-  const up = trend >= 0;
-  const label = `${up ? "+" : ""}${trend.toFixed(0)}% vs last month`;
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
-        up
-          ? "bg-green-500/15 text-green-400"
-          : "bg-red-500/15 text-red-400"
-      }`}
-    >
-      {up ? "▲" : "▼"} {label}
-    </span>
-  );
-}
-
 function TeacherEarningsContent() {
   const router = useRouter();
 
-  const [summary, setSummary] = useState<EarningsSummary | null>(null);
-  const [monthly, setMonthly] = useState<MonthlyEarnings | null>(null);
+  const [items, setItems] = useState<LedgerItem[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [months, setMonths] = useState<MonthBucket[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -113,309 +98,167 @@ function TeacherEarningsContent() {
 
     (async () => {
       try {
-        const [earningsRes, profileRes, monthlyRes] = await Promise.all([
-          api.get("/teachers/me/earnings"),
+        const [ledgerRes, summaryRes, monthlyRes, profileRes] = await Promise.all([
+          api.get("/payouts/me?limit=100"),
+          api.get("/payouts/me/summary"),
+          api.get("/payouts/me/monthly"),
           api.get("/teachers/me/profile"),
-          api.get("/teachers/me/earnings/monthly"),
         ]);
-        setSummary(earningsRes.data);
+        setItems(ledgerRes.data.items ?? []);
+        setSummary(summaryRes.data);
+        setMonths(monthlyRes.data.months ?? []);
         setProfile(profileRes.data);
-        setMonthly(monthlyRes.data);
       } catch (e: any) {
         const m = e.response?.data?.message;
-        setError(
-          Array.isArray(m) ? m.join(", ") : (m ?? "Failed to load earnings"),
-        );
+        setError(Array.isArray(m) ? m.join(", ") : (m ?? "Failed to load earnings"));
       } finally {
         setLoading(false);
       }
     })();
   }, [router]);
 
+  const downloadReport = async () => {
+    setDownloading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/payouts/me/report`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to generate report");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "payout_report.xlsx";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setError("Failed to download report. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const card = "t-card t-card-hover shadow-sm";
 
   if (loading)
     return (
       <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-        <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     );
 
-  const earned = (summary?.teacherEarningsCents ?? 0) / 100;
-  const avgClass = (summary?.avgPerClassCents ?? 0) / 100;
-  const completed = summary?.completedClasses ?? 0;
-  const items = summary?.items ?? [];
-  const months = monthly?.months ?? [];
-  const trend = monthly?.trend ?? null;
-
-  const weeklyAvg =
-    completed > 0 ? earned / Math.max(1, Math.ceil(completed / 4)) : 0;
-
-  // Next payout: next Monday (Stripe typically pays weekly on Mondays)
-  const nextPayoutDate = (() => {
-    const d = new Date();
-    const day = d.getDay();
-    const daysUntilMonday = day === 1 ? 7 : (8 - day) % 7;
-    d.setDate(d.getDate() + daysUntilMonday);
-    return d.toLocaleDateString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-    });
-  })();
-
   return (
     <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Pilot"}
+      teacherName={profile?.user?.fullName ?? "Teacher"}
       avatarUrl={profile?.user?.avatarUrl ?? null}
-      rankTier={profile?.rankTier ?? 0}
     >
-      <div className="p-6 lg:p-8">
+      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">
-              Earnings
-            </h1>
-            <p className="text-sm text-[var(--t-text-muted)]">
-              Reward Ledger ✦
-            </p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)]">Earnings</h1>
           </div>
           <button
-            onClick={() => router.push("/teacher-conduct")}
-            className="text-xs px-3 py-2 rounded-xl bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors"
+            onClick={downloadReport}
+            disabled={downloading}
+            className="text-sm px-4 py-2 rounded-xl bg-[var(--t-accent)] hover:bg-[var(--t-accent-hover)] text-white transition-all duration-150 active:scale-[0.98] disabled:opacity-50"
           >
-            📋 View Penalty Rules
+            {downloading ? "Preparing…" : "Download Report"}
           </button>
         </div>
 
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-900/20 border border-red-700/30 text-red-400 text-sm">
+          <div className="mb-6 p-4 rounded-xl bg-[var(--t-danger-bg)] text-[var(--t-danger)] text-sm">
             {error}
           </div>
         )}
 
-        {/* ── Summary stats ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          {[
-            {
-              icon: "💰",
-              label: "Total Earned",
-              value: `$${earned.toFixed(2)}`,
-              sub: "your 75% share",
-              color: "text-green-600 dark:text-green-400",
-            },
-            {
-              icon: "📚",
-              label: "Total Classes",
-              value: completed.toString(),
-              sub: "completed sessions",
-              color: "text-[var(--t-text)]",
-            },
-            {
-              icon: "📊",
-              label: "Avg per Class",
-              value: `$${avgClass.toFixed(2)}`,
-              sub: "per completed class",
-              color: "text-blue-600 dark:text-blue-400",
-            },
-            {
-              icon: "📅",
-              label: "Est. Monthly",
-              value: `$${(weeklyAvg * 4).toFixed(0)}`,
-              sub: "based on history",
-              color: "text-[var(--t-text)]",
-            },
-          ].map((s) => (
-            <div key={s.label} className={`${card} t-card-hover p-4`}>
-              <span className="text-xl">{s.icon}</span>
-              <p className="text-xs uppercase tracking-wide text-[var(--t-text-muted)] mt-2">
-                {s.label}
-              </p>
-              <p className={`text-2xl font-bold mt-0.5 ${s.color}`}>
-                {s.value}
-              </p>
-              <p className="text-xs text-[var(--t-text-muted)] mt-0.5">
-                {s.sub}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* ── Monthly bar chart + Next payout ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          {/* Bar chart */}
-          <div className={`${card} p-5 lg:col-span-2`}>
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <div>
-                <p className="font-semibold text-[var(--t-text)]">
-                  Monthly Earnings
-                </p>
-                <p className="text-xs text-[var(--t-text-muted)]">
-                  Last 6 months
-                </p>
-              </div>
-              <TrendBadge trend={trend} />
-            </div>
-            {months.length > 0 ? (
-              <BarChart months={months} />
-            ) : (
-              <div className="h-40 flex items-center justify-center text-[var(--t-text-muted)] text-sm">
-                No data yet — complete your first class to see a chart.
-              </div>
+        {/* ── Teacher balance ── */}
+        <div className={`${card} p-6 mb-6`}>
+          <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">
+            This Month&apos;s Earnings
+          </p>
+          <p className="text-4xl font-bold t-earn-text mt-1">
+            ৳{((summary?.monthEarningsCents ?? 0) / 100).toLocaleString()}
+          </p>
+          <p className="text-xs text-[var(--t-text-muted)] mt-1">
+            {summary?.monthEventCount ?? 0} earning event{(summary?.monthEventCount ?? 0) !== 1 ? "s" : ""}
+            {summary?.lastUpdated && (
+              <>
+                {" · Last updated "}
+                {new Date(summary.lastUpdated).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+              </>
             )}
-          </div>
-
-          {/* Next payout card */}
-          <div className={`${card} p-5 flex flex-col justify-between`}>
-            <div>
-              <p className="font-semibold text-[var(--t-text)] mb-1">
-                Next Payout
-              </p>
-              <p className="text-xs text-[var(--t-text-muted)] mb-4">
-                Via Stripe Connect
-              </p>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-xl flex-shrink-0">
-                  🗓️
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-[var(--t-text)]">
-                    {nextPayoutDate}
-                  </p>
-                  <p className="text-xs text-[var(--t-text-muted)]">
-                    Weekly rolling payout
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center text-xl flex-shrink-0">
-                  💳
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-green-400">
-                    ${(weeklyAvg).toFixed(2)} est.
-                  </p>
-                  <p className="text-xs text-[var(--t-text-muted)]">
-                    Based on last 4 classes
-                  </p>
-                </div>
-              </div>
-            </div>
-            <p className="text-xs text-[var(--t-text-faint)] mt-4 border-t border-[var(--t-nav-border)] pt-3">
-              Exact amount confirmed after class capture. Stripe Connect
-              required for direct payouts.
-            </p>
+          </p>
+          <div className="mt-4 pt-4 border-t border-[var(--t-nav-border)] flex items-center gap-2 flex-wrap">
+            {summary &&
+              Object.entries(summary.breakdown).map(([type, cents]) => (
+                <span
+                  key={type}
+                  className={`text-xs px-2.5 py-1 rounded-full ${cents >= 0 ? "bg-[var(--t-success-bg)] text-[var(--t-success-text)]" : "bg-[var(--t-danger-bg)] text-[var(--t-danger)]"}`}
+                >
+                  {TYPE_LABELS[type] ?? type}: {cents >= 0 ? "+" : ""}৳{(cents / 100).toLocaleString()}
+                </span>
+              ))}
           </div>
         </div>
 
-        {/* ── Strike impact ── */}
-        {(profile?.strikes ?? 0) > 0 && (
-          <div className="mb-6 p-4 rounded-2xl bg-amber-900/20 border border-amber-700/30 flex items-start gap-3">
-            <span className="text-2xl flex-shrink-0">⚡</span>
-            <div>
-              <p className="font-semibold text-amber-300">
-                {profile!.strikes} active strike
-                {profile!.strikes > 1 ? "s" : ""}
-              </p>
-              <p className="text-sm text-amber-400/70 mt-0.5">
-                Strike penalties: ${(profile!.strikes * 5).toFixed(0)} deducted
-                from next payout. Reach 3 strikes and your account is suspended.{" "}
-                <button
-                  onClick={() => router.push("/teacher-conduct")}
-                  className="underline hover:text-amber-300"
-                >
-                  View guidelines →
-                </button>
-              </p>
-            </div>
+        {/* ── Monthly chart ── */}
+        {months.length > 0 && (
+          <div className={`${card} p-5 mb-6`}>
+            <p className="font-semibold text-[var(--t-text)] mb-1">Monthly Earnings</p>
+            <p className="text-xs text-[var(--t-text-muted)] mb-4">Last 6 months</p>
+            <BarChart months={months} />
           </div>
         )}
 
-        {/* ── Class history ── */}
+        {/* ── Transaction list ── */}
         <div className={`${card} overflow-hidden`}>
-          <div className="px-4 sm:px-5 py-4 border-b border-[var(--t-nav-border)] flex items-center justify-between">
-            <div>
-              <p className="font-semibold text-[var(--t-text)]">
-                Class History
-              </p>
-              <p className="text-xs text-[var(--t-text-muted)]">
-                Showing {items.length} completed class
-                {items.length !== 1 ? "es" : ""}
-              </p>
-            </div>
+          <div className="px-4 sm:px-5 py-4 border-b border-[var(--t-nav-border)]">
+            <p className="font-semibold text-[var(--t-text)]">Transaction History</p>
           </div>
 
           {items.length === 0 ? (
             <div className="p-10 sm:p-16 text-center">
-              <p className="text-4xl mb-3">💰</p>
-              <p className="font-semibold text-[var(--t-text)]">
-                No completed classes yet
-              </p>
+              <p className="font-semibold text-[var(--t-text)]">No earnings yet</p>
               <p className="text-sm text-[var(--t-text-muted)] mt-1">
-                Earnings appear here after a class is completed.
+                Earnings appear here automatically after a class is completed.
               </p>
-              <button
-                onClick={() => router.push("/calendar")}
-                className="mt-4 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-all duration-200 active:scale-[0.98]"
-              >
-                Add Availability →
-              </button>
             </div>
           ) : (
-            <>
-              {/* Table header — desktop only */}
-              <div className="hidden sm:grid grid-cols-[1fr_auto_auto_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
-                {["Student & Date", "Duration", "Gross", "Your Share"].map(
-                  (h) => (
-                    <p
-                      key={h}
-                      className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]"
-                    >
-                      {h}
-                    </p>
-                  ),
-                )}
-              </div>
-
-              <div className="divide-y divide-[var(--t-nav-border)]">
-                {items.map((item) => (
-                  <div
-                    key={item.bookingId}
-                    className="px-4 sm:px-5 py-3 sm:py-4 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto_auto] gap-2 sm:gap-4 items-center hover:bg-[var(--t-nav-hover)] transition-colors"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-[var(--t-text)]">
-                        {item.studentName ?? "Student"}
-                      </p>
-                      <p className="text-xs text-[var(--t-text-muted)]">
-                        {new Date(item.date).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                    </div>
-                    <p className="text-sm text-[var(--t-text-muted)]">
-                      {item.durationMinutes ?? 60} min
-                    </p>
-                    <p className="text-sm text-[var(--t-text-muted)]">
-                      ${((item.grossCents ?? 0) / 100).toFixed(2)}
-                    </p>
-                    <p className="text-sm font-bold text-green-600 dark:text-green-400">
-                      ${((item.teacherCents ?? 0) / 100).toFixed(2)}
+            <div className="divide-y divide-[var(--t-nav-border)]">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="px-4 sm:px-5 py-3.5 flex items-center justify-between gap-4 hover:bg-[var(--t-nav-hover)] transition-colors duration-150"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[var(--t-text)]">{item.description}</p>
+                    <p className="text-xs text-[var(--t-text-muted)]">
+                      {new Date(item.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                      {item.referenceId && ` · Ref: ${item.referenceId}`}
                     </p>
                   </div>
-                ))}
-              </div>
-            </>
+                  <p
+                    className={`text-sm font-bold flex-shrink-0 ${item.amountCents >= 0 ? "t-earn-text" : "text-[var(--t-danger)]"}`}
+                  >
+                    {item.amountCents >= 0 ? "+" : ""}৳{(item.amountCents / 100).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
       <LumiChat
         variant="teacher"
-        context={`Teacher earnings page — $${earned.toFixed(2)} total earned across ${completed} completed classes`}
+        context={`Teacher earnings page — ৳${((summary?.monthEarningsCents ?? 0) / 100).toLocaleString()} earned this month`}
       />
     </TeacherLayout>
   );
@@ -426,7 +269,7 @@ export default function TeacherEarningsPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-          <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >

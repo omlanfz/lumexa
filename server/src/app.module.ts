@@ -26,6 +26,8 @@ import { TrialModule } from './trial/trial.module';
 import { GemsModule } from './gems/gems.module';
 import { CoursesModule } from './courses/courses.module';
 import { EngagementModule } from './engagement/engagement.module';
+import { PayoutsModule } from './payouts/payouts.module';
+import { RescheduleModule } from './reschedule/reschedule.module';
 
 @Module({
   imports: [
@@ -68,6 +70,8 @@ import { EngagementModule } from './engagement/engagement.module';
     GemsModule,
     TrialModule,
     EngagementModule,
+    PayoutsModule,
+    RescheduleModule,
   ],
   controllers: [AppController],
   providers: [

@@ -9,44 +9,44 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  email          String          @unique
+  id             String    @id @default(uuid())
+  email          String    @unique
   password       String
   fullName       String
-  createdAt      DateTime        @default(now())
-  role           Role            @default(PARENT)
+  createdAt      DateTime  @default(now())
+  role           Role      @default(PARENT)
   coppaConsentAt DateTime?
   avatarUrl      String?
 
   // STUDENT identity fields (null on TEACHER/ADMIN/PARENT rows)
-  age                     Int?
-  grade                   String?
-  subjects                String[]      @default([])
-  spaceRank               SpaceRank     @default(STARCHILD)
-  totalSessions           Int           @default(0)
-  streakWeeks             Int           @default(0)
-  gemBalance              Int           @default(0)
-  accountStatus           AccountStatus @default(ACTIVE)
+  age           Int?
+  grade         String?
+  subjects      String[]      @default([])
+  spaceRank     SpaceRank     @default(STARCHILD)
+  totalSessions Int           @default(0)
+  streakWeeks   Int           @default(0)
+  gemBalance    Int           @default(0)
+  accountStatus AccountStatus @default(ACTIVE)
 
   // Operations-controlled default teacher assignment (informational — not the
   // source of truth for any individual booking's teacher).
-  assignedTeacherId       String?
-  assignedTeacher         TeacherProfile? @relation("AssignedTeacher", fields: [assignedTeacherId], references: [id])
+  assignedTeacherId String?
+  assignedTeacher   TeacherProfile? @relation("AssignedTeacher", fields: [assignedTeacherId], references: [id])
 
   // Billing contact — server-side only, never returned in student API responses
   billingContactEmail     String?
   billingContactStripeId  String?
-  billingContactConsented Boolean       @default(false)
+  billingContactConsented Boolean   @default(false)
   billingContactConsentAt DateTime?
 
-  students         Student[]
-  teacherProfile   TeacherProfile?
-  gemWallet        GemWallet?
-  consentTokens    ConsentToken[]
-  studentBookings  Booking[]         @relation("StudentBookings")
-  badges           StudentBadge[]
-  gemTransactions  GemTransaction[]
-  rankSnapshots    RankSnapshot[]
+  students        Student[]
+  teacherProfile  TeacherProfile?
+  gemWallet       GemWallet?
+  consentTokens   ConsentToken[]
+  studentBookings Booking[]        @relation("StudentBookings")
+  badges          StudentBadge[]
+  gemTransactions GemTransaction[]
+  rankSnapshots   RankSnapshot[]
 
   @@index([assignedTeacherId])
 }
@@ -69,44 +69,46 @@ model Student {
 }
 
 model TeacherProfile {
-  id              String                @id @default(uuid())
-  userId          String                @unique
-  bio             String?
-  hourlyRate      Int                   @default(25)
-  createdAt       DateTime              @default(now())
-  isSuspended     Boolean               @default(false)
-  strikes         Int                   @default(0)
-  stripeAccountId String?
-  stripeOnboarded Boolean               @default(false)
-  ratingAvg       Float                 @default(0)
-  reviewCount     Int                   @default(0)
-  grades          String[]              @default([])
-  points          Int                   @default(0)
-  rankTier        Int                   @default(0)
-  subjects        String[]              @default([])
-  timezone        String?
-  weeklyPoints    Int                   @default(0)
-  reviews         Review[]
-  shifts          Shift[]
-  cancellations   TeacherCancellation[]
-  user            User                  @relation(fields: [userId], references: [id])
-  verificationDocs  Json?    @default("[]")  // Array of { type, url, name, uploadedAt }
-  assignedStudents User[]               @relation("AssignedTeacher")
+  id                 String                @id @default(uuid())
+  userId             String                @unique
+  bio                String?
+  hourlyRate         Int                   @default(25)
+  createdAt          DateTime              @default(now())
+  isSuspended        Boolean               @default(false)
+  strikes            Int                   @default(0)
+  stripeAccountId    String?
+  stripeOnboarded    Boolean               @default(false)
+  ratingAvg          Float                 @default(0)
+  reviewCount        Int                   @default(0)
+  grades             String[]              @default([])
+  points             Int                   @default(0)
+  rankTier           Int                   @default(0)
+  subjects           String[]              @default([])
+  timezone           String?
+  weeklyPoints       Int                   @default(0)
+  reviews            Review[]
+  shifts             Shift[]
+  cancellations      TeacherCancellation[]
+  rescheduleRequests RescheduleRequest[]
+  payoutEntries      PayoutEntry[]
+  user               User                  @relation(fields: [userId], references: [id])
+  verificationDocs   Json?                 @default("[]") // Array of { type, url, name, uploadedAt }
+  assignedStudents   User[]                @relation("AssignedTeacher")
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
 }
 
 model Shift {
-  id        String         @id @default(uuid())
-  teacherId String
-  start     DateTime
-  end       DateTime
-  isBooked  Boolean        @default(false)
-  createdAt DateTime       @default(now())
-  booking   Booking?
-  teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
-  recurringGroupId  String?
+  id               String         @id @default(uuid())
+  teacherId        String
+  start            DateTime
+  end              DateTime
+  isBooked         Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  booking          Booking?
+  teacher          TeacherProfile @relation(fields: [teacherId], references: [id])
+  recurringGroupId String?
 
   @@index([teacherId, start])
   @@index([start])
@@ -114,39 +116,95 @@ model Shift {
 }
 
 model Booking {
-  id                String             @id @default(uuid())
-  shiftId           String             @unique
-  studentId         String?            // legacy: references Student sub-entity (nullable for student self-auth bookings)
-  studentUserId     String?            // new: references User with STUDENT role (self-auth)
-  createdAt         DateTime           @default(now())
-  amountCents       Int?
-  egressId          String?
-  paymentIntentId   String?
-  paymentStatus     PaymentStatus      @default(PENDING)
-  recordingUrl      String?
-  shift             Shift              @relation(fields: [shiftId], references: [id])
-  student           Student?           @relation(fields: [studentId], references: [id])
-  studentUser       User?              @relation("StudentBookings", fields: [studentUserId], references: [id])
-  rescheduleRequest RescheduleRequest?
-  review            Review?
+  id                 String              @id @default(uuid())
+  shiftId            String              @unique
+  studentId          String? // legacy: references Student sub-entity (nullable for student self-auth bookings)
+  studentUserId      String? // new: references User with STUDENT role (self-auth)
+  createdAt          DateTime            @default(now())
+  amountCents        Int?
+  egressId           String?
+  paymentIntentId    String?
+  paymentStatus      PaymentStatus       @default(PENDING)
+  recordingUrl       String?
+  shift              Shift               @relation(fields: [shiftId], references: [id])
+  student            Student?            @relation(fields: [studentId], references: [id])
+  studentUser        User?               @relation("StudentBookings", fields: [studentUserId], references: [id])
+  rescheduleRequests RescheduleRequest[]
+  payoutEntries      PayoutEntry[]
+  review             Review?
 
   @@index([studentId])
   @@index([studentUserId])
   @@index([paymentStatus])
 }
 
+// ─── Reschedule / cancellation audit trail ───────────────────────────────────
+//
+// One row per reschedule-or-cancel *event* on a booked class (not a mutable
+// pending-request row — the action is applied immediately, this is the
+// permanent audit record of what happened). Captures who initiated it, why,
+// whether proof was supplied, and what policy outcome (penalty review) it
+// triggered, so Operations can answer "how many emergency reschedules did
+// this teacher make this month, and why" without trusting a bare counter.
 model RescheduleRequest {
-  id          String   @id @default(uuid())
-  bookingId   String   @unique
-  requestedBy String
-  newStart    DateTime
-  newEnd      DateTime
-  reason      String?
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-  booking     Booking  @relation(fields: [bookingId], references: [id])
+  id                 String              @id @default(uuid())
+  bookingId          String
+  teacherId          String
+  action             RescheduleAction    @default(RESCHEDULE)
+  category           RescheduleCategory
+  initiatedByRole    RescheduleInitiator
+  oldStart           DateTime
+  oldEnd             DateTime
+  newStart           DateTime
+  newEnd             DateTime
+  reason             String?
+  proofUrl           String?
+  informedStudent    Boolean?
+  status             String              @default("CONFIRMED")
+  penaltyStatus      PenaltyStatus       @default(NONE)
+  penaltyAmountCents Int                 @default(0)
+  emergencySeq       Int?
+  createdAt          DateTime            @default(now())
+  reviewedBy         String?
+  reviewedAt         DateTime?
+
+  booking Booking        @relation(fields: [bookingId], references: [id])
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@index([bookingId])
+  @@index([teacherId, category, createdAt])
 }
 
+enum RescheduleAction {
+  RESCHEDULE
+  CANCEL
+}
+
+enum RescheduleCategory {
+  STUDENT_REQUESTED
+  TEACHER_EMERGENCY
+  NO_SHOW
+  MISUSE
+}
+
+enum RescheduleInitiator {
+  STUDENT
+  PARENT
+  TEACHER
+}
+
+enum PenaltyStatus {
+  NONE
+  PENDING_PENALTY_REVIEW
+  PENALTY_APPLIED
+  WAIVED
+}
+
+// Monthly bucket of teacher-initiated schedule disruptions that count against
+// the free-emergency quota (teacher-emergency reschedules; see
+// RescheduleCategory.TEACHER_EMERGENCY). Student-requested changes never
+// increment this. `@@unique([teacherId, month, year])` makes the increment
+// idempotent-by-bucket via upsert.
 model TeacherCancellation {
   id        String         @id @default(uuid())
   teacherId String
@@ -158,12 +216,52 @@ model TeacherCancellation {
   @@unique([teacherId, month, year])
 }
 
+// ─── Append-only teacher earnings ledger ─────────────────────────────────────
+//
+// Source of truth for teacher compensation. Never update or delete a row —
+// a correction is a new offsetting entry (e.g. +200 original, -50 adjustment).
+// amountCents is minor-unit (poisha) and signed: positive for earnings,
+// negative for deductions. Idempotency for system-triggered entries is
+// enforced by @@unique([referenceType, referenceId, type]) — the same
+// underlying event (a booking completing, a specific reschedule penalty)
+// can never create a duplicate row.
+model PayoutEntry {
+  id            String          @id @default(uuid())
+  teacherId     String
+  type          PayoutEntryType
+  amountCents   Int
+  bookingId     String?
+  description   String
+  month         Int
+  year          Int
+  createdAt     DateTime        @default(now())
+  createdBy     String?
+  referenceType String?
+  referenceId   String?
+  metadata      Json?
+
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id])
+  booking Booking?       @relation(fields: [bookingId], references: [id])
+
+  @@unique([referenceType, referenceId, type])
+  @@index([teacherId, month, year])
+  @@index([teacherId, createdAt])
+}
+
+enum PayoutEntryType {
+  CLASS_COMPLETED
+  PTM
+  CONVERSION
+  PENALTY
+  ADJUSTMENT
+}
+
 model Review {
-  id                  String         @id @default(uuid())
-  bookingId           String         @unique
-  teacherId           String
-  rating              Int
-  comment             String?
+  id                   String         @id @default(uuid())
+  bookingId            String         @unique
+  teacherId            String
+  rating               Int
+  comment              String?
   submittedByParentId  String?
   submittedByStudentId String?
   createdAt            DateTime       @default(now())
@@ -181,8 +279,8 @@ model Course {
   title       String
   description String?
   emoji       String?
-  category    String   // e.g. "Python", "AI", "Web"
-  level       String   // "STARTER" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
+  category    String // e.g. "Python", "AI", "Web"
+  level       String // "STARTER" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
   ageMin      Int      @default(6)
   ageMax      Int      @default(18)
   sessions    Int      @default(12)
@@ -208,28 +306,28 @@ model Lesson {
 }
 
 model GemWallet {
-  id        String         @id @default(uuid())
-  userId    String         @unique
-  balance   Int            @default(0)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  user      User           @relation(fields: [userId], references: [id])
+  id        String        @id @default(uuid())
+  userId    String        @unique
+  balance   Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  user      User          @relation(fields: [userId], references: [id])
   purchases GemPurchase[]
 }
 
 model GemPurchase {
-  id            String        @id @default(uuid())
+  id            String         @id @default(uuid())
   walletId      String
   gems          Int
   amountCents   Int
-  currency      String        @default("USD") // "USD" | "BDT"
-  paymentMethod String        // "STRIPE" | "BKASH" | "BANK_TRANSFER"
+  currency      String         @default("USD") // "USD" | "BDT"
+  paymentMethod String // "STRIPE" | "BKASH" | "BANK_TRANSFER"
   status        PurchaseStatus @default(PENDING)
-  externalRef   String?       // Stripe PI id, bKash trxID, or bank ref
-  proofUrl      String?       // bank transfer proof image URL
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  wallet        GemWallet     @relation(fields: [walletId], references: [id])
+  externalRef   String? // Stripe PI id, bKash trxID, or bank ref
+  proofUrl      String? // bank transfer proof image URL
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  wallet        GemWallet      @relation(fields: [walletId], references: [id])
 
   @@index([walletId])
   @@index([status])
@@ -327,11 +425,11 @@ enum AccountStatus {
 }
 
 enum SpaceRank {
-  STARCHILD        // 0–4 sessions
-  EXPLORER         // 5–14 sessions
-  COSMONAUT        // 15–29 sessions
-  NAVIGATOR        // 30–59 sessions
-  CAPTAIN          // 60–99 sessions
+  STARCHILD // 0–4 sessions
+  EXPLORER // 5–14 sessions
+  COSMONAUT // 15–29 sessions
+  NAVIGATOR // 30–59 sessions
+  CAPTAIN // 60–99 sessions
   GALAXY_COMMANDER // 100+ sessions
 }
 
