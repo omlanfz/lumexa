@@ -198,6 +198,7 @@ function TeacherProfileContent() {
   const [uploading, setUploading] = useState(false);
   const [docUploading, setDocUploading] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
+  const [justUploadedType, setJustUploadedType] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<
@@ -366,6 +367,14 @@ function TeacherProfileContent() {
           },
         ];
       });
+      // Flash an unmistakable "this upload just succeeded" confirmation —
+      // the persisted "Uploaded · <date>" text alone doesn't change when
+      // reuploading the same doc type on the same day, so without this a
+      // teacher has no way to tell a reupload actually went through.
+      setJustUploadedType(docType);
+      setTimeout(() => {
+        setJustUploadedType((cur) => (cur === docType ? null : cur));
+      }, 5000);
     } catch (err: any) {
       const m = err.response?.data?.message;
       setDocError(Array.isArray(m) ? m.join(", ") : (m ?? "Upload failed"));
@@ -540,6 +549,27 @@ function TeacherProfileContent() {
         {/* ── Profile tab ───────────────────────────────────────────────────── */}
         {activeTab === "profile" && (
           <div className="space-y-4">
+            {score >= 100 && !profile?.docsLocked && (
+              <div className="p-5 rounded-2xl border dark:bg-green-900/20 dark:border-green-800/30 bg-green-50 border-green-200 flex items-start gap-3">
+                <span className="text-2xl flex-shrink-0">🎉</span>
+                <div>
+                  <p className="font-semibold dark:text-green-300 text-green-700">
+                    Your profile is 100% complete!
+                  </p>
+                  <p className="text-sm dark:text-green-400/80 text-green-700/90 mt-1">
+                    Nice work. Lumexa will now review and verify your account
+                    before you can start teaching — this usually doesn&apos;t
+                    take long, so thanks for your patience while we get to
+                    it. In the meantime, please take a moment to double-check
+                    that every document you uploaded is genuine, clearly
+                    legible, and actually belongs to you — mismatched or
+                    unclear documents are the most common reason
+                    verification gets delayed.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Account info */}
             <div className={`${card} p-5`}>
               <h3 className="font-semibold text-[var(--t-text)] mb-4">
@@ -720,13 +750,16 @@ function TeacherProfileContent() {
               <div className="space-y-3">
                 {DOC_REQUIREMENTS.map((doc) => {
                   const uploaded = docs.find((d) => d.type === doc.key);
+                  const justUploaded = justUploadedType === doc.key;
                   return (
                     <div
                       key={doc.key}
-                      className={`p-4 rounded-xl border flex items-start justify-between gap-4 ${
-                        uploaded
-                          ? "dark:bg-green-900/20 dark:border-green-800/30 bg-green-50 border-green-200"
-                          : "dark:bg-gray-800/30 dark:border-gray-700/30 bg-gray-50 border-gray-200"
+                      className={`p-4 rounded-xl border flex items-start justify-between gap-4 transition-colors duration-500 ${
+                        justUploaded
+                          ? "dark:bg-green-900/40 dark:border-green-500/60 bg-green-100 border-green-400 ring-2 ring-green-400/50"
+                          : uploaded
+                            ? "dark:bg-green-900/20 dark:border-green-800/30 bg-green-50 border-green-200"
+                            : "dark:bg-gray-800/30 dark:border-gray-700/30 bg-gray-50 border-gray-200"
                       }`}
                     >
                       <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -751,13 +784,24 @@ function TeacherProfileContent() {
                           <p className="text-xs text-[var(--t-text-muted)] mt-0.5">
                             {doc.desc}
                           </p>
-                          {uploaded && (
-                            <p className="text-xs text-green-500 mt-1">
-                              ✅ Uploaded ·{" "}
-                              {new Date(
-                                uploaded.uploadedAt,
-                              ).toLocaleDateString()}
+                          {justUploaded ? (
+                            <p className="text-xs font-semibold text-green-600 dark:text-green-400 mt-1 fade-in">
+                              ✅ Just uploaded successfully!
                             </p>
+                          ) : (
+                            uploaded && (
+                              <p className="text-xs text-green-500 mt-1">
+                                ✅ Uploaded ·{" "}
+                                {new Date(
+                                  uploaded.uploadedAt,
+                                ).toLocaleString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "numeric",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            )
                           )}
                         </div>
                       </div>

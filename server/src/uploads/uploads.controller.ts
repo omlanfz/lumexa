@@ -19,11 +19,18 @@ import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 
 // Avatars: images only, cropped to a square face-centered thumbnail.
+//
+// `format: 'jpg'` forces Cloudinary to transcode whatever it receives (incl.
+// HEIC/HEIF — the default format iPhone cameras save photos in, which every
+// browser and most non-Apple software fails to render) into a normal JPEG.
+// Without this, a teacher uploading a phone-camera photo either gets
+// rejected outright or ends up with an avatar URL nothing can display.
 const avatarStorage = new CloudinaryStorage({
   cloudinary,
   params: {
     folder: 'lumexa/avatars',
-    allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif'],
+    format: 'jpg',
     transformation: [
       { width: 400, height: 400, crop: 'fill', gravity: 'face' },
     ],
@@ -32,13 +39,31 @@ const avatarStorage = new CloudinaryStorage({
 
 // Verification documents (NID, birth certificate, degree certs, etc.):
 // PDFs and photos of physical documents, stored as-is — no cropping.
+//
+// IMPORTANT: resource_type must be 'raw', not 'auto'. Cloudinary auto-detects
+// PDFs as an "image" resource, and accounts created after April 2024 have
+// "Restricted media types" security enabled by default, which blocks public
+// delivery of PDFs served through the image/upload URL scheme (401
+// Unauthorized). 'raw' delivers the file byte-for-byte via /raw/upload/ and
+// is not affected by that restriction, so uploaded verification docs are
+// actually viewable — this matters a lot since Operations can't verify a
+// teacher's identity docs (and the teacher can't start teaching) if the
+// "View" link 401s.
 const documentStorage = new CloudinaryStorage({
   cloudinary,
-  params: {
+  params: (async (_req: any, file: Express.Multer.File) => ({
     folder: 'lumexa/documents',
-    resource_type: 'auto',
-    allowed_formats: ['pdf', 'jpg', 'jpeg', 'png'],
-  } as any,
+    // Only PDFs need the 'raw' workaround above — plain photos of physical
+    // documents are unaffected by the restriction and keep normal 'image'
+    // delivery so they still render inline in a browser tab.
+    resource_type: file.mimetype === 'application/pdf' ? 'raw' : 'image',
+    allowed_formats: ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'heif'],
+    // Same phone-camera HEIC/HEIF problem as avatars applies here — a
+    // teacher photographing their NID/certificate with an iPhone would
+    // otherwise upload a file nobody (including Operations, reviewing for
+    // verification) can open. Never transcode an actual PDF.
+    ...(file.mimetype !== 'application/pdf' && { format: 'jpg' }),
+  })) as any,
 });
 
 const REQUIRED_DOC_TYPES = new Set([
@@ -68,9 +93,23 @@ export class UploadsController {
   @UseInterceptors(
     FileInterceptor('avatar', {
       storage: avatarStorage,
+      // Accept any image/* mimetype (jpg/png/webp/heic/heif/gif/etc. —
+      // phone cameras and browsers report a wide range) and let Cloudinary's
+      // allowed_formats + format conversion above do the real validation.
+      // IMPORTANT: reject with a NestJS HttpException (BadRequestException),
+      // never a plain Error — multer's fileFilter passes the error straight
+      // to Nest's exception handling, and a plain Error isn't recognized as
+      // an HTTP error, so it falls through as an unhandled 500 ("An
+      // unexpected error occurred") instead of a proper 400 with a message
+      // the teacher can actually act on.
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/\/(jpg|jpeg|png|webp)$/)) {
-          return cb(new Error('Only image files are allowed') as any, false);
+        if (!file.mimetype.match(/^image\//)) {
+          return cb(
+            new BadRequestException(
+              'Only image files are allowed.',
+            ) as unknown as Error,
+            false,
+          );
         }
         cb(null, true);
       },
@@ -111,10 +150,17 @@ export class UploadsController {
   @UseInterceptors(
     FileInterceptor('document', {
       storage: documentStorage,
+      // See the comment on the avatar fileFilter above: HEIC/HEIF (the
+      // default iPhone camera format) has to be accepted here too since
+      // teachers commonly photograph physical documents with a phone, and
+      // the rejection has to be a proper HttpException or it surfaces to
+      // the teacher as a useless "unexpected error occurred" 500.
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/\/(pdf|jpg|jpeg|png)$/)) {
+        if (!file.mimetype.match(/\/(pdf|jpg|jpeg|png|heic|heif)$/)) {
           return cb(
-            new Error('Only PDF, JPG, and PNG files are allowed') as any,
+            new BadRequestException(
+              'Only PDF, JPG, and PNG files are allowed.',
+            ) as unknown as Error,
             false,
           );
         }
@@ -178,9 +224,11 @@ export class UploadsController {
     FileInterceptor('proof', {
       storage: documentStorage,
       fileFilter: (_req, file, cb) => {
-        if (!file.mimetype.match(/\/(pdf|jpg|jpeg|png)$/)) {
+        if (!file.mimetype.match(/\/(pdf|jpg|jpeg|png|heic|heif)$/)) {
           return cb(
-            new Error('Only PDF, JPG, and PNG files are allowed') as any,
+            new BadRequestException(
+              'Only PDF, JPG, and PNG files are allowed.',
+            ) as unknown as Error,
             false,
           );
         }

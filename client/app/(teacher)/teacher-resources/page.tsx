@@ -37,7 +37,7 @@ function TeacherResourcesContent() {
 
   return (
     <>
-      <div className="p-6 lg:p-8 max-w-3xl mx-auto">
+      <div className="p-6 lg:p-8">
         <h1 className="text-2xl font-bold text-[var(--t-text)] mb-6">Lumexa Resources</h1>
 
         <div className="t-card p-10 sm:p-16 text-center">
