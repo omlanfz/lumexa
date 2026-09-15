@@ -33,6 +33,11 @@ model User {
   assignedTeacherId String?
   assignedTeacher   TeacherProfile? @relation("AssignedTeacher", fields: [assignedTeacherId], references: [id])
 
+  // Operations-controlled course assignment (informational, same pattern as
+  // assignedTeacherId — not the source of truth for any individual booking).
+  assignedCourseId String?
+  assignedCourse   Course? @relation(fields: [assignedCourseId], references: [id])
+
   // Billing contact — server-side only, never returned in student API responses
   billingContactEmail     String?
   billingContactStripeId  String?
@@ -49,6 +54,7 @@ model User {
   rankSnapshots   RankSnapshot[]
 
   @@index([assignedTeacherId])
+  @@index([assignedCourseId])
 }
 
 model Student {
@@ -69,48 +75,49 @@ model Student {
 }
 
 model TeacherProfile {
-  id                 String                @id @default(uuid())
-  userId             String                @unique
-  bio                String?
-  hourlyRate         Int                   @default(25)
-  createdAt          DateTime              @default(now())
-  isSuspended        Boolean               @default(false)
-  strikes            Int                   @default(0)
-  stripeAccountId    String?
-  stripeOnboarded    Boolean               @default(false)
-  ratingAvg          Float                 @default(0)
-  reviewCount        Int                   @default(0)
-  grades             String[]              @default([])
-  points             Int                   @default(0)
-  rankTier           Int                   @default(0)
-  subjects           String[]              @default([])
-  timezone           String?
-  weeklyPoints       Int                   @default(0)
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  bio             String?
+  hourlyRate      Int      @default(25)
+  createdAt       DateTime @default(now())
+  isSuspended     Boolean  @default(false)
+  strikes         Int      @default(0)
+  stripeAccountId String?
+  stripeOnboarded Boolean  @default(false)
+  ratingAvg       Float    @default(0)
+  reviewCount     Int      @default(0)
+  grades          String[] @default([])
+  points          Int      @default(0)
+  rankTier        Int      @default(0)
+  subjects        String[] @default([])
+  timezone        String?
+  weeklyPoints    Int      @default(0)
 
   // Manual salary payout (all teachers are BD-based; Lumexa pays out
   // manually each month to bank or bKash, no payment processor involved).
-  payoutMethod       String?               // "bank" | "bkash"
-  bankAccountName    String?
-  bankAccountNumber  String?
-  bankName           String?
-  bankBranch         String?
-  bkashNumber        String?
+  payoutMethod          String? // "bank" | "bkash"
+  bankAccountName       String?
+  bankAccountNumber     String?
+  bankName              String?
+  bankBranch            String?
+  bkashNumber           String?
   // Locked by Operations after the first salary payout is sent to the
   // account on file, so a teacher can't silently redirect future payouts —
   // changes after that must go through support.
-  payoutLocked       Boolean               @default(false)
+  payoutLocked          Boolean               @default(false)
   // Locked by Operations once the profile has been verified (100%
   // completeness + manual review), so verification docs can't be swapped
   // out afterwards. Teachers can freely upload/reupload before that.
-  docsLocked         Boolean               @default(false)
-  reviews            Review[]
-  shifts             Shift[]
-  cancellations      TeacherCancellation[]
-  rescheduleRequests RescheduleRequest[]
-  payoutEntries      PayoutEntry[]
-  user               User                  @relation(fields: [userId], references: [id])
-  verificationDocs   Json?                 @default("[]") // Array of { type, url, name, uploadedAt }
-  assignedStudents   User[]                @relation("AssignedTeacher")
+  docsLocked            Boolean               @default(false)
+  reviews               Review[]
+  shifts                Shift[]
+  cancellations         TeacherCancellation[]
+  rescheduleRequests    RescheduleRequest[]
+  payoutEntries         PayoutEntry[]
+  monthlyPayoutStatuses MonthlyPayoutStatus[]
+  user                  User                  @relation(fields: [userId], references: [id])
+  verificationDocs      Json?                 @default("[]") // Array of { type, url, name, uploadedAt }
+  assignedStudents      User[]                @relation("AssignedTeacher")
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -202,12 +209,14 @@ enum RescheduleCategory {
   TEACHER_EMERGENCY
   NO_SHOW
   MISUSE
+  ADMIN_OVERRIDE
 }
 
 enum RescheduleInitiator {
   STUDENT
   PARENT
   TEACHER
+  ADMIN
 }
 
 enum PenaltyStatus {
@@ -273,6 +282,64 @@ enum PayoutEntryType {
   ADJUSTMENT
 }
 
+// ─── Monthly payout workflow (Open → Finalized → Paid) ───────────────────────
+//
+// This never stores or derives the payable amount itself — that always comes
+// live from summing PayoutEntry rows for the teacher/month (see
+// PayoutsService.getSummary). This row is purely workflow state: has
+// Operations locked in the month for payment, and has payment actually gone
+// out. finalizedAmountCents/paidAmountCents are a snapshot of the ledger
+// total at the moment of that action, kept for audit/reconciliation only —
+// never used as the figure Operations pays from once finalized.
+model MonthlyPayoutStatus {
+  id                   String       @id @default(uuid())
+  teacherId            String
+  month                Int
+  year                 Int
+  status               PayoutStatus @default(OPEN)
+  finalizedAmountCents Int?
+  finalizedBy          String?
+  finalizedAt          DateTime?
+  paidAmountCents      Int?
+  paidBy               String?
+  paidAt               DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id])
+
+  @@unique([teacherId, month, year])
+  @@index([month, year])
+}
+
+enum PayoutStatus {
+  OPEN
+  FINALIZED
+  PAID
+}
+
+// ─── Operational/financial audit trail ───────────────────────────────────────
+//
+// One row per admin action worth remembering: who did what to which entity,
+// why, and (optionally) what changed. Never edited or deleted. Surfaced
+// inline on the relevant Classes/Teachers/Students/Payouts screens rather
+// than a dedicated Audit Log page.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actorRole  String?
+  action     String
+  entityType String
+  entityId   String
+  reason     String?
+  beforeData Json?
+  afterData  Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId, createdAt])
+}
+
 model Review {
   id                   String         @id @default(uuid())
   bookingId            String         @unique
@@ -291,20 +358,21 @@ model Review {
 // ─── Lumexa Platform: Courses, Gems & Trial Leads ────────────────────────────
 
 model Course {
-  id          String   @id @default(uuid())
-  slug        String   @unique
-  title       String
-  description String?
-  emoji       String?
-  category    String // e.g. "Python", "AI", "Web"
-  level       String // "STARTER" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
-  ageMin      Int      @default(6)
-  ageMax      Int      @default(18)
-  sessions    Int      @default(12)
-  gemCost     Int      @default(1) // gems per session
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  lessons     Lesson[]
+  id               String   @id @default(uuid())
+  slug             String   @unique
+  title            String
+  description      String?
+  emoji            String?
+  category         String // e.g. "Python", "AI", "Web"
+  level            String // "STARTER" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
+  ageMin           Int      @default(6)
+  ageMax           Int      @default(18)
+  sessions         Int      @default(12)
+  gemCost          Int      @default(1) // gems per session
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  lessons          Lesson[]
+  assignedStudents User[]
 
   @@index([isActive])
   @@index([category])
@@ -439,6 +507,7 @@ enum AccountStatus {
   ACTIVE
   SUSPENDED
   DEACTIVATED
+  PAUSED
 }
 
 enum SpaceRank {

@@ -1,0 +1,286 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import api from "@/lib/axios";
+import {
+  Card,
+  Pagination,
+  StatusBadge,
+  formatBDT,
+  formatDateTime,
+} from "@/components/admin/AdminUI";
+import ClassRowActions, { Booking } from "./ClassRowActions";
+
+interface Teacher {
+  id: string;
+  user: { fullName: string };
+}
+interface Course {
+  id: string;
+  title: string;
+}
+interface StudentOption {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
+const STATUS_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "SCHEDULED", label: "Scheduled" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "CANCELLED", label: "Cancelled" },
+  { value: "REFUNDED", label: "Refunded" },
+  { value: "PENDING", label: "Pending" },
+  { value: "FAILED", label: "Failed" },
+  { value: "NEEDS_REVIEW", label: "Needs Review" },
+];
+
+export default function ClassesPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
+  const [studentFilter, setStudentFilter] = useState<StudentOption | null>(null);
+
+  const [date, setDate] = useState(searchParams.get("date") ?? "");
+  const [status, setStatus] = useState(searchParams.get("status") ?? "");
+  const [teacherId, setTeacherId] = useState("");
+  const [courseId, setCourseId] = useState("");
+
+  useEffect(() => {
+    api.get("/admin/teachers?limit=200").then((res) => setTeachers(res.data.teachers ?? []));
+    api.get("/courses/admin/all").then((res) => setCourses(res.data ?? []));
+  }, []);
+
+  useEffect(() => {
+    if (!studentQuery.trim()) {
+      setStudentOptions([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .get(`/admin/students?limit=8&search=${encodeURIComponent(studentQuery)}`)
+        .then((res) => setStudentOptions(res.data.students ?? []));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [studentQuery]);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", "20");
+    if (date) params.set("date", date);
+    if (status) params.set("status", status);
+    if (teacherId) params.set("teacherId", teacherId);
+    if (courseId) params.set("courseId", courseId);
+    if (studentFilter) params.set("studentUserId", studentFilter.id);
+
+    api
+      .get(`/admin/bookings?${params.toString()}`)
+      .then((res) => {
+        setBookings(res.data.bookings ?? []);
+        setTotal(res.data.total ?? 0);
+        setTotalPages(res.data.totalPages ?? 1);
+      })
+      .finally(() => setLoading(false));
+  }, [page, date, status, teacherId, courseId, studentFilter]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const updateDate = (v: string) => { setDate(v); setPage(1); };
+  const updateStatus = (v: string) => { setStatus(v); setPage(1); };
+  const updateTeacherId = (v: string) => { setTeacherId(v); setPage(1); };
+  const updateCourseId = (v: string) => { setCourseId(v); setPage(1); };
+  const updateStudentFilter = (v: StudentOption | null) => { setStudentFilter(v); setPage(1); };
+
+  const studentName = (b: Booking) =>
+    b.studentUser?.fullName ?? b.student?.name ?? "—";
+  const teacherName = (b: Booking) => b.shift?.teacher?.user?.fullName ?? "—";
+  const courseTitle = (b: Booking) => b.studentUser?.assignedCourse?.title ?? "—";
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--a-text)]">Classes</h1>
+        <p className="text-sm text-[var(--a-text-muted)] mt-1">
+          {total} class{total === 1 ? "" : "es"} matching current filters
+        </p>
+      </div>
+
+      {/* Filters */}
+      <Card className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div>
+          <label className="block text-xs font-semibold text-[var(--a-text-faint)] mb-1">Date</label>
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => updateDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-[var(--a-text-faint)] mb-1">Status</label>
+          <select
+            value={status}
+            onChange={(e) => updateStatus(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-[var(--a-text-faint)] mb-1">Teacher</label>
+          <select
+            value={teacherId}
+            onChange={(e) => updateTeacherId(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+          >
+            <option value="">All teachers</option>
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.user.fullName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-[var(--a-text-faint)] mb-1">Course</label>
+          <select
+            value={courseId}
+            onChange={(e) => updateCourseId(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+          >
+            <option value="">All courses</option>
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="relative">
+          <label className="block text-xs font-semibold text-[var(--a-text-faint)] mb-1">Student</label>
+          {studentFilter ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)]">
+              <span className="truncate flex-1">{studentFilter.fullName}</span>
+              <button
+                onClick={() => {
+                  updateStudentFilter(null);
+                  setStudentQuery("");
+                }}
+                className="text-[var(--a-text-faint)] hover:text-[var(--a-text)]"
+              >
+                ✕
+              </button>
+            </div>
+          ) : (
+            <input
+              value={studentQuery}
+              onChange={(e) => setStudentQuery(e.target.value)}
+              placeholder="Search name/email…"
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+            />
+          )}
+          {studentOptions.length > 0 && !studentFilter && (
+            <div className="absolute z-10 mt-1 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] shadow-lg overflow-hidden">
+              {studentOptions.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    updateStudentFilter(s);
+                    setStudentOptions([]);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-[var(--a-nav-hover)] text-[var(--a-text)]"
+                >
+                  {s.fullName} <span className="text-[var(--a-text-faint)]">({s.email})</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Table */}
+      <Card className="p-0 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+                <th className="px-4 py-3">Date/Time</th>
+                <th className="px-4 py-3">Student</th>
+                <th className="px-4 py-3">Teacher</th>
+                <th className="px-4 py-3">Course</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Amount</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
+                    Loading…
+                  </td>
+                </tr>
+              )}
+              {!loading && bookings.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
+                    No classes match these filters.
+                  </td>
+                </tr>
+              )}
+              {!loading &&
+                bookings.map((b) => (
+                  <tr
+                    key={b.id}
+                    className="border-b border-[var(--a-border)] last:border-0 hover:bg-[var(--a-nav-hover)] transition-colors"
+                  >
+                    <td className="px-4 py-3 whitespace-nowrap text-[var(--a-text)]">
+                      {formatDateTime(b.shift?.start)}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--a-text)]">{studentName(b)}</td>
+                    <td className="px-4 py-3 text-[var(--a-text)]">{teacherName(b)}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{courseTitle(b)}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={b.displayStatus} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={b.paymentStatus} />
+                    </td>
+                    <td className="px-4 py-3 text-[var(--a-text)]">
+                      {b.amountCents != null ? formatBDT(b.amountCents) : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <ClassRowActions booking={b} onChanged={load} onView={() => router.push(`/admin/classes/${b.id}`)} />
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+    </div>
+  );
+}

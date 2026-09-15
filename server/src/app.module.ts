@@ -28,6 +28,7 @@ import { CoursesModule } from './courses/courses.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { RescheduleModule } from './reschedule/reschedule.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { RescheduleModule } from './reschedule/reschedule.module';
 
     // ─── Core ───────────────────────────────────────────────────────────────
     PrismaModule,
+    AuditModule,
     AuthModule,
     UsersModule,
     StudentsModule,

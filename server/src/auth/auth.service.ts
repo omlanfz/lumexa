@@ -78,6 +78,11 @@ export class AuthService {
       if (status === 'DEACTIVATED') {
         throw new ForbiddenException('This account has been deactivated.');
       }
+      if (status === 'PAUSED') {
+        throw new ForbiddenException(
+          'This account has been paused by Operations. Contact support for details.',
+        );
+      }
     }
 
     const payload = {
@@ -102,7 +107,11 @@ export class AuthService {
     return this.usersService.updateCoppaConsent(userId);
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true, password: true },
@@ -113,7 +122,9 @@ export class AuthService {
     if (!valid) throw new BadRequestException('Current password is incorrect.');
 
     if (newPassword.length < 8) {
-      throw new BadRequestException('New password must be at least 8 characters.');
+      throw new BadRequestException(
+        'New password must be at least 8 characters.',
+      );
     }
 
     const hashed = await bcrypt.hash(newPassword, 12);

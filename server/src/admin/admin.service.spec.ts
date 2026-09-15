@@ -3,6 +3,8 @@ import { NotFoundException } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
+import { AuditService } from '../audit/audit.service';
+import { PayoutsService } from '../payouts/payouts.service';
 
 describe('AdminService - assignTeacherToStudent', () => {
   let service: AdminService;
@@ -22,6 +24,11 @@ describe('AdminService - assignTeacherToStudent', () => {
         AdminService,
         { provide: PrismaService, useValue: prisma },
         { provide: StripeService, useValue: {} },
+        {
+          provide: AuditService,
+          useValue: { log: jest.fn(), getHistory: jest.fn() },
+        },
+        { provide: PayoutsService, useValue: {} },
       ],
     }).compile();
 
@@ -48,6 +55,7 @@ describe('AdminService - assignTeacherToStudent', () => {
     const result = await service.assignTeacherToStudent(
       'student-1',
       'teacher-1',
+      'admin-1',
     );
 
     expect(prisma.teacherProfile.findUnique).toHaveBeenCalledWith({
@@ -74,7 +82,11 @@ describe('AdminService - assignTeacherToStudent', () => {
       assignedTeacher: null,
     });
 
-    const result = await service.assignTeacherToStudent('student-1', null);
+    const result = await service.assignTeacherToStudent(
+      'student-1',
+      null,
+      'admin-1',
+    );
 
     expect(prisma.teacherProfile.findUnique).not.toHaveBeenCalled();
     expect(prisma.user.update).toHaveBeenCalledWith({
@@ -89,7 +101,7 @@ describe('AdminService - assignTeacherToStudent', () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
     await expect(
-      service.assignTeacherToStudent('missing-student', 'teacher-1'),
+      service.assignTeacherToStudent('missing-student', 'teacher-1', 'admin-1'),
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -99,7 +111,7 @@ describe('AdminService - assignTeacherToStudent', () => {
     prisma.user.findUnique.mockResolvedValue({ id: 'user-1', role: 'TEACHER' });
 
     await expect(
-      service.assignTeacherToStudent('user-1', 'teacher-1'),
+      service.assignTeacherToStudent('user-1', 'teacher-1', 'admin-1'),
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.user.update).not.toHaveBeenCalled();
@@ -113,7 +125,7 @@ describe('AdminService - assignTeacherToStudent', () => {
     prisma.teacherProfile.findUnique.mockResolvedValue(null);
 
     await expect(
-      service.assignTeacherToStudent('student-1', 'missing-teacher'),
+      service.assignTeacherToStudent('student-1', 'missing-teacher', 'admin-1'),
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.user.update).not.toHaveBeenCalled();
