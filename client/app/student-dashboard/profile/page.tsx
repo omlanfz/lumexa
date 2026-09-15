@@ -294,13 +294,14 @@ export default function StudentSettingsPage() {
   if (!profile) return null;
 
   return (
-    <div className="max-w-2xl space-y-8 pt-6 pb-16 fade-in">
+    <div className="space-y-6 pt-6 pb-16 fade-in">
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-900 dark:text-white">Profile</h1>
         <p className="text-gray-500 dark:text-gray-500 dark:text-gray-400 text-sm mt-1">Manage your account details</p>
       </div>
 
+      <div className="grid lg:grid-cols-2 gap-6 items-start">
       {/* ── Profile section ─────────────────────────────────────────────────── */}
       <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5 transition-colors">
         <SectionHeader title="Profile" sub="Your identity and learning preferences" />
@@ -486,6 +487,7 @@ export default function StudentSettingsPage() {
           />
         </div>
       </section>
+      </div>
     </div>
   );
 }
