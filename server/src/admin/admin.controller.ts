@@ -145,6 +145,38 @@ export class AdminController {
     return this.adminService.getTeacherDocuments(teacherId);
   }
 
+  /**
+   * POST /admin/teachers/:teacherId/documents/lock
+   * Locks the Documents tab once verification is complete — teacher can
+   * still view what they uploaded but can no longer reupload/remove.
+   */
+  @Post('teachers/:teacherId/documents/lock')
+  lockTeacherDocuments(@Param('teacherId') teacherId: string) {
+    return this.adminService.setDocsLocked(teacherId, true);
+  }
+
+  @Post('teachers/:teacherId/documents/unlock')
+  unlockTeacherDocuments(@Param('teacherId') teacherId: string) {
+    return this.adminService.setDocsLocked(teacherId, false);
+  }
+
+  // ── Payout details lock ──────────────────────────────────────────────────
+
+  /**
+   * POST /admin/teachers/:teacherId/payout/lock
+   * Locks bank/bKash payout details after the first salary payout has been
+   * sent, so the teacher can't self-serve changes afterward.
+   */
+  @Post('teachers/:teacherId/payout/lock')
+  lockTeacherPayout(@Param('teacherId') teacherId: string) {
+    return this.adminService.setPayoutLocked(teacherId, true);
+  }
+
+  @Post('teachers/:teacherId/payout/unlock')
+  unlockTeacherPayout(@Param('teacherId') teacherId: string) {
+    return this.adminService.setPayoutLocked(teacherId, false);
+  }
+
   // ── Earnings ledger — the only place these entry types can be created ───
 
   @Post('teachers/:teacherId/ledger/ptm')

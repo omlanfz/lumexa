@@ -112,6 +112,14 @@ export class TeachersService {
       grades: teacher.grades,
       timezone: teacher.timezone,
       verificationDocs: teacher.verificationDocs ?? [],
+      docsLocked: teacher.docsLocked,
+      payoutLocked: teacher.payoutLocked,
+      payoutMethod: teacher.payoutMethod,
+      bankAccountName: teacher.bankAccountName,
+      bankAccountNumber: teacher.bankAccountNumber,
+      bankName: teacher.bankName,
+      bankBranch: teacher.bankBranch,
+      bkashNumber: teacher.bkashNumber,
     };
   }
 
@@ -125,6 +133,12 @@ export class TeachersService {
       subjects?: string[];
       grades?: string[];
       timezone?: string;
+      payoutMethod?: string;
+      bankAccountName?: string;
+      bankAccountNumber?: string;
+      bankName?: string;
+      bankBranch?: string;
+      bkashNumber?: string;
     },
   ) {
     if (data.hourlyRate !== undefined) {
@@ -144,6 +158,19 @@ export class TeachersService {
     });
     if (!teacher) throw new NotFoundException('Teacher profile not found.');
 
+    const wantsPayoutChange =
+      data.payoutMethod !== undefined ||
+      data.bankAccountName !== undefined ||
+      data.bankAccountNumber !== undefined ||
+      data.bankName !== undefined ||
+      data.bankBranch !== undefined ||
+      data.bkashNumber !== undefined;
+    if (wantsPayoutChange && teacher.payoutLocked) {
+      throw new BadRequestException(
+        'Payout details are locked after your first payout. Contact support to make changes.',
+      );
+    }
+
     return this.prisma.teacherProfile.update({
       where: { userId },
       data: {
@@ -152,6 +179,20 @@ export class TeachersService {
         ...(data.subjects !== undefined && { subjects: data.subjects }),
         ...(data.grades !== undefined && { grades: data.grades }),
         ...(data.timezone !== undefined && { timezone: data.timezone }),
+        ...(data.payoutMethod !== undefined && {
+          payoutMethod: data.payoutMethod,
+        }),
+        ...(data.bankAccountName !== undefined && {
+          bankAccountName: data.bankAccountName,
+        }),
+        ...(data.bankAccountNumber !== undefined && {
+          bankAccountNumber: data.bankAccountNumber,
+        }),
+        ...(data.bankName !== undefined && { bankName: data.bankName }),
+        ...(data.bankBranch !== undefined && { bankBranch: data.bankBranch }),
+        ...(data.bkashNumber !== undefined && {
+          bkashNumber: data.bkashNumber,
+        }),
       },
       select: {
         id: true,
@@ -160,6 +201,12 @@ export class TeachersService {
         subjects: true,
         grades: true,
         timezone: true,
+        payoutMethod: true,
+        bankAccountName: true,
+        bankAccountNumber: true,
+        bankName: true,
+        bankBranch: true,
+        bkashNumber: true,
       },
     });
   }

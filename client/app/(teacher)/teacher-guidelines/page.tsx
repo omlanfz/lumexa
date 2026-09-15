@@ -1,4 +1,4 @@
-// FILE PATH: client/app/teacher-conduct/page.tsx
+// FILE PATH: client/app/teacher-guidelines/page.tsx
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
@@ -142,8 +142,16 @@ function TeacherConductContent() {
                 Your account is suspended
               </p>
               <p className="text-red-400/70 text-sm mt-1">
-                You have reached 3 strikes. Contact Lumexa support for
-                reinstatement review. During suspension, you cannot accept new
+                You have reached 3 strikes.{" "}
+                <a
+                  href="https://wa.me/8801774878252"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:opacity-80"
+                >
+                  Contact Lumexa support on WhatsApp
+                </a>{" "}
+                for reinstatement review. During suspension, you cannot accept new
                 bookings and all pending payouts are held.
               </p>
             </div>
@@ -351,10 +359,12 @@ function TeacherConductContent() {
             succeed.
           </p>
           <a
-            href="mailto:support@lumexa.app"
+            href="https://wa.me/8801774878252"
+            target="_blank"
+            rel="noreferrer"
             className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"
           >
-            Contact Support →
+            Contact Support on WhatsApp →
           </a>
         </div>
       </div>
@@ -374,7 +384,7 @@ function TeacherConductContent() {
   );
 }
 
-export default function TeacherConductPage() {
+export default function TeacherGuidelinesPage() {
   return (
     <Suspense
       fallback={

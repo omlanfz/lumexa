@@ -86,6 +86,23 @@ model TeacherProfile {
   subjects           String[]              @default([])
   timezone           String?
   weeklyPoints       Int                   @default(0)
+
+  // Manual salary payout (all teachers are BD-based; Lumexa pays out
+  // manually each month to bank or bKash, no payment processor involved).
+  payoutMethod       String?               // "bank" | "bkash"
+  bankAccountName    String?
+  bankAccountNumber  String?
+  bankName           String?
+  bankBranch         String?
+  bkashNumber        String?
+  // Locked by Operations after the first salary payout is sent to the
+  // account on file, so a teacher can't silently redirect future payouts —
+  // changes after that must go through support.
+  payoutLocked       Boolean               @default(false)
+  // Locked by Operations once the profile has been verified (100%
+  // completeness + manual review), so verification docs can't be swapped
+  // out afterwards. Teachers can freely upload/reupload before that.
+  docsLocked         Boolean               @default(false)
   reviews            Review[]
   shifts             Shift[]
   cancellations      TeacherCancellation[]
