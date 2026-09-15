@@ -24,7 +24,10 @@ describe('AdminService - assignTeacherToStudent', () => {
         AdminService,
         { provide: PrismaService, useValue: prisma },
         { provide: StripeService, useValue: {} },
-        { provide: AuditService, useValue: { log: jest.fn(), getHistory: jest.fn() } },
+        {
+          provide: AuditService,
+          useValue: { log: jest.fn(), getHistory: jest.fn() },
+        },
         { provide: PayoutsService, useValue: {} },
       ],
     }).compile();
@@ -79,7 +82,11 @@ describe('AdminService - assignTeacherToStudent', () => {
       assignedTeacher: null,
     });
 
-    const result = await service.assignTeacherToStudent('student-1', null, 'admin-1');
+    const result = await service.assignTeacherToStudent(
+      'student-1',
+      null,
+      'admin-1',
+    );
 
     expect(prisma.teacherProfile.findUnique).not.toHaveBeenCalled();
     expect(prisma.user.update).toHaveBeenCalledWith({

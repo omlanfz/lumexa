@@ -17,7 +17,9 @@ export class CoursesService {
   /** Admin — every course regardless of active state, with lesson counts. */
   listAll() {
     return this.prisma.course.findMany({
-      include: { _count: { select: { lessons: true, assignedStudents: true } } },
+      include: {
+        _count: { select: { lessons: true, assignedStudents: true } },
+      },
       orderBy: [{ category: 'asc' }, { title: 'asc' }],
     });
   }
@@ -61,13 +63,17 @@ export class CoursesService {
   }
 
   async updateLesson(lessonId: string, dto: Partial<CreateLessonDto>) {
-    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+    });
     if (!lesson) throw new NotFoundException('Lesson not found');
     return this.prisma.lesson.update({ where: { id: lessonId }, data: dto });
   }
 
   async deleteLesson(lessonId: string) {
-    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+    });
     if (!lesson) throw new NotFoundException('Lesson not found');
     await this.prisma.lesson.delete({ where: { id: lessonId } });
     return { success: true };

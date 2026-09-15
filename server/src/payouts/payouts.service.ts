@@ -555,7 +555,9 @@ export class PayoutsService {
       this.prisma.payoutEntry.findMany({
         where: { teacherId, month, year },
         include: {
-          booking: { include: { shift: { select: { start: true, end: true } } } },
+          booking: {
+            include: { shift: { select: { start: true, end: true } } },
+          },
         },
         orderBy: { createdAt: 'asc' },
       }),

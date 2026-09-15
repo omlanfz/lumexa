@@ -343,7 +343,9 @@ export class RescheduleService {
       this.prisma.rescheduleRequest.findMany({
         where,
         include: {
-          teacher: { include: { user: { select: { fullName: true, email: true } } } },
+          teacher: {
+            include: { user: { select: { fullName: true, email: true } } },
+          },
           booking: {
             include: {
               student: { select: { name: true } },
@@ -375,7 +377,9 @@ export class RescheduleService {
     params: { newStart: string; newEnd: string; reason: string },
   ) {
     if (!params.reason?.trim()) {
-      throw new BadRequestException('A reason is required for an admin override.');
+      throw new BadRequestException(
+        'A reason is required for an admin override.',
+      );
     }
 
     const booking = await this.prisma.booking.findUnique({
@@ -433,7 +437,9 @@ export class RescheduleService {
     params: { reason: string },
   ) {
     if (!params.reason?.trim()) {
-      throw new BadRequestException('A reason is required for an admin override.');
+      throw new BadRequestException(
+        'A reason is required for an admin override.',
+      );
     }
 
     const booking = await this.prisma.booking.findUnique({

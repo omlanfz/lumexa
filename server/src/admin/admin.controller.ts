@@ -162,7 +162,10 @@ export class AdminController {
   // ── Reschedule policy review (flagged / "Needs Review") ─────────────────
 
   @Get('reschedule/flagged')
-  getFlaggedReschedules(@Query('page') page = '1', @Query('limit') limit = '20') {
+  getFlaggedReschedules(
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+  ) {
     return this.rescheduleService.getFlaggedReschedules(+page, +limit);
   }
 
@@ -182,8 +185,9 @@ export class AdminController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
     @Query('status') status?: string,
+    @Query('search') search?: string,
   ) {
-    return this.adminService.getAllTeachers(+page, +limit, status);
+    return this.adminService.getAllTeachers(+page, +limit, status, search);
   }
 
   @Get('teachers/:teacherId')
@@ -219,11 +223,13 @@ export class AdminController {
     @Query('status') status?: string,
     @Query('teacherId') teacherId?: string,
     @Query('courseId') courseId?: string,
+    @Query('search') search?: string,
   ) {
     return this.adminService.getAllStudents(+page, +limit, {
       status,
       teacherId,
       courseId,
+      search,
     });
   }
 
@@ -264,11 +270,18 @@ export class AdminController {
     @Body('reason') reason: string,
     @Request() req: any,
   ) {
-    return this.adminService.pauseStudent(studentUserId, reason, req.user.userId);
+    return this.adminService.pauseStudent(
+      studentUserId,
+      reason,
+      req.user.userId,
+    );
   }
 
   @Post('students/:studentUserId/resume')
-  resumeStudent(@Param('studentUserId') studentUserId: string, @Request() req: any) {
+  resumeStudent(
+    @Param('studentUserId') studentUserId: string,
+    @Request() req: any,
+  ) {
     return this.adminService.resumeStudent(studentUserId, req.user.userId);
   }
 
@@ -285,12 +298,18 @@ export class AdminController {
    * still view what they uploaded but can no longer reupload/remove.
    */
   @Post('teachers/:teacherId/documents/lock')
-  lockTeacherDocuments(@Param('teacherId') teacherId: string, @Request() req: any) {
+  lockTeacherDocuments(
+    @Param('teacherId') teacherId: string,
+    @Request() req: any,
+  ) {
     return this.adminService.setDocsLocked(teacherId, true, req.user.userId);
   }
 
   @Post('teachers/:teacherId/documents/unlock')
-  unlockTeacherDocuments(@Param('teacherId') teacherId: string, @Request() req: any) {
+  unlockTeacherDocuments(
+    @Param('teacherId') teacherId: string,
+    @Request() req: any,
+  ) {
     return this.adminService.setDocsLocked(teacherId, false, req.user.userId);
   }
 
@@ -302,12 +321,18 @@ export class AdminController {
    * sent, so the teacher can't self-serve changes afterward.
    */
   @Post('teachers/:teacherId/payout/lock')
-  lockTeacherPayout(@Param('teacherId') teacherId: string, @Request() req: any) {
+  lockTeacherPayout(
+    @Param('teacherId') teacherId: string,
+    @Request() req: any,
+  ) {
     return this.adminService.setPayoutLocked(teacherId, true, req.user.userId);
   }
 
   @Post('teachers/:teacherId/payout/unlock')
-  unlockTeacherPayout(@Param('teacherId') teacherId: string, @Request() req: any) {
+  unlockTeacherPayout(
+    @Param('teacherId') teacherId: string,
+    @Request() req: any,
+  ) {
     return this.adminService.setPayoutLocked(teacherId, false, req.user.userId);
   }
 
@@ -443,6 +468,11 @@ export class AdminController {
     @Body('year') year: number,
     @Request() req: any,
   ) {
-    return this.payoutsService.markPaid(teacherId, month, year, req.user.userId);
+    return this.payoutsService.markPaid(
+      teacherId,
+      month,
+      year,
+      req.user.userId,
+    );
   }
 }

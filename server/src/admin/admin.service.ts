@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
@@ -16,7 +20,9 @@ const TEACHER_LIST_SELECT = {
   docsLocked: true,
   payoutLocked: true,
   createdAt: true,
-  user: { select: { fullName: true, email: true, createdAt: true, avatarUrl: true } },
+  user: {
+    select: { fullName: true, email: true, createdAt: true, avatarUrl: true },
+  },
   _count: { select: { shifts: true, rescheduleRequests: true } },
 } as const;
 
@@ -214,7 +220,9 @@ export class AdminService {
     }
     if (booking.paymentStatus === 'FAILED') return 'FAILED';
     if (booking.paymentStatus === 'PENDING') return 'PENDING';
-    return new Date(booking.shift.end) <= new Date() ? 'COMPLETED' : 'SCHEDULED';
+    return new Date(booking.shift.end) <= new Date()
+      ? 'COMPLETED'
+      : 'SCHEDULED';
   }
 
   async getAllBookings(
@@ -280,7 +288,9 @@ export class AdminService {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
-        student: { include: { parent: { select: { email: true, fullName: true } } } },
+        student: {
+          include: { parent: { select: { email: true, fullName: true } } },
+        },
         studentUser: {
           select: {
             id: true,
@@ -291,7 +301,9 @@ export class AdminService {
         },
         shift: {
           include: {
-            teacher: { include: { user: { select: { email: true, fullName: true } } } },
+            teacher: {
+              include: { user: { select: { email: true, fullName: true } } },
+            },
           },
         },
         rescheduleRequests: { orderBy: { createdAt: 'desc' } },
@@ -348,13 +360,21 @@ export class AdminService {
   // Teachers
   // ═══════════════════════════════════════════════════════════════════════
 
-  async getAllTeachers(page = 1, limit = 20, status?: string) {
-    const where =
+  async getAllTeachers(page = 1, limit = 20, status?: string, search?: string) {
+    const where: any =
       status === 'SUSPENDED'
         ? { isSuspended: true }
         : status === 'ACTIVE'
           ? { isSuspended: false }
           : {};
+    if (search?.trim()) {
+      where.user = {
+        OR: [
+          { fullName: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+        ],
+      };
+    }
 
     const [teachers, total] = await Promise.all([
       this.prisma.teacherProfile.findMany({
@@ -380,7 +400,14 @@ export class AdminService {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { id: teacherId },
       include: {
-        user: { select: { fullName: true, email: true, avatarUrl: true, createdAt: true } },
+        user: {
+          select: {
+            fullName: true,
+            email: true,
+            avatarUrl: true,
+            createdAt: true,
+          },
+        },
       },
     });
     if (!teacher) throw new NotFoundException('Teacher not found.');
@@ -428,7 +455,9 @@ export class AdminService {
 
   async suspendTeacher(teacherId: string, reason: string, adminUserId: string) {
     if (!reason?.trim()) {
-      throw new BadRequestException('A reason is required to suspend a teacher.');
+      throw new BadRequestException(
+        'A reason is required to suspend a teacher.',
+      );
     }
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { id: teacherId },
@@ -524,7 +553,11 @@ export class AdminService {
     return updated;
   }
 
-  async setPayoutLocked(teacherId: string, locked: boolean, adminUserId: string) {
+  async setPayoutLocked(
+    teacherId: string,
+    locked: boolean,
+    adminUserId: string,
+  ) {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { id: teacherId },
     });
@@ -564,12 +597,23 @@ export class AdminService {
   async getAllStudents(
     page = 1,
     limit = 20,
-    filters: { status?: string; teacherId?: string; courseId?: string } = {},
+    filters: {
+      status?: string;
+      teacherId?: string;
+      courseId?: string;
+      search?: string;
+    } = {},
   ) {
     const where: any = { role: 'STUDENT' };
     if (filters.status) where.accountStatus = filters.status;
     if (filters.teacherId) where.assignedTeacherId = filters.teacherId;
     if (filters.courseId) where.assignedCourseId = filters.courseId;
+    if (filters.search?.trim()) {
+      where.OR = [
+        { fullName: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
 
     const [students, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -626,10 +670,15 @@ export class AdminService {
         gemBalance: true,
         assignedTeacherId: true,
         assignedTeacher: {
-          select: { id: true, user: { select: { fullName: true, avatarUrl: true } } },
+          select: {
+            id: true,
+            user: { select: { fullName: true, avatarUrl: true } },
+          },
         },
         assignedCourse: { select: { id: true, title: true, category: true } },
-        gemWallet: { include: { purchases: { orderBy: { createdAt: 'desc' }, take: 20 } } },
+        gemWallet: {
+          include: { purchases: { orderBy: { createdAt: 'desc' }, take: 20 } },
+        },
       },
     });
     if (!student) throw new NotFoundException('Student not found.');
@@ -766,7 +815,11 @@ export class AdminService {
     return updated;
   }
 
-  async pauseStudent(studentUserId: string, reason: string, adminUserId: string) {
+  async pauseStudent(
+    studentUserId: string,
+    reason: string,
+    adminUserId: string,
+  ) {
     if (!reason?.trim()) {
       throw new BadRequestException('A reason is required to pause a student.');
     }
