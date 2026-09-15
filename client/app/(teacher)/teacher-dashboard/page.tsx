@@ -17,8 +17,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
-import TeacherLayout from "../../components/TeacherLayout";
-import LumiChat from "../../components/LumiChat";
+import LumiChat from "@/components/LumiChat";
+import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,12 +144,7 @@ function TeacherDashboardContent() {
     })();
   }, [router]);
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-        <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (loading) return <TeacherPageSkeleton />;
 
   const firstName = (profile?.user?.fullName ?? "Teacher").split(" ")[0];
   const isProfileIncomplete = !profile?.bio || !profile?.subjects?.length;
@@ -162,10 +157,7 @@ function TeacherDashboardContent() {
   const card = "t-card t-card-hover shadow-sm";
 
   return (
-    <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Teacher"}
-      avatarUrl={profile?.user?.avatarUrl ?? null}
-    >
+    <>
       <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
         {/* ── 1. Greeting ─────────────────────────────────────────────── */}
         <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)] mb-6">
@@ -405,7 +397,7 @@ function TeacherDashboardContent() {
         variant="teacher"
         context="Teacher dashboard — next class, upcoming students, availability, and earnings"
       />
-    </TeacherLayout>
+    </>
   );
 }
 

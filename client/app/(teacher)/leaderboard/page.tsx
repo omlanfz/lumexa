@@ -9,8 +9,8 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
-import TeacherLayout from "../../components/TeacherLayout";
-import LumiChat from "../../components/LumiChat";
+import LumiChat from "@/components/LumiChat";
+import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 
 interface RankInfo {
   points: number;
@@ -98,12 +98,7 @@ function LeaderboardContent() {
 
   const card = "t-card t-card-hover shadow-sm";
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-        <div className="w-10 h-10 border-2 border-[var(--t-accent)] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (loading) return <TeacherPageSkeleton />;
 
   const isProfileComplete = !!(profile?.bio && profile.bio.length > 20 && profile.subjects?.length);
   const completedClasses = stats?.completedClasses ?? 0;
@@ -124,10 +119,7 @@ function LeaderboardContent() {
       : teachers.slice(Math.max(0, myIndex - 2), myIndex + 3);
 
   return (
-    <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Teacher"}
-      avatarUrl={profile?.user?.avatarUrl ?? null}
-    >
+    <>
       <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
         <h1 className="text-2xl font-bold text-[var(--t-text)]">Leaderboard</h1>
 
@@ -254,7 +246,7 @@ function LeaderboardContent() {
         variant="teacher"
         context="Teacher leaderboard page — viewing own rank, progress, and achievements"
       />
-    </TeacherLayout>
+    </>
   );
 }
 

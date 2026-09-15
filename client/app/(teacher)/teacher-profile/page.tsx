@@ -31,10 +31,10 @@
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import TeacherLayout from "../../components/TeacherLayout";
-import { useTheme } from "../../components/ThemeProvider";
+import { useTheme } from "@/components/ThemeProvider";
 // FIX Issue 5 — import LumiChat
-import LumiChat from "../../components/LumiChat";
+import LumiChat from "@/components/LumiChat";
+import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 
 interface Profile {
   id: string;
@@ -812,12 +812,7 @@ function TeacherProfileContent() {
 
   const card = "t-card shadow-sm";
 
-  if (loading)
-    return (
-      <div className="flex items-center justify-center h-screen bg-[var(--t-bg)]">
-        <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+  if (loading) return <TeacherPageSkeleton />;
 
   const score = completionScore;
   const breakdown = completionBreakdown;
@@ -840,10 +835,7 @@ function TeacherProfileContent() {
           : "Complete";
 
   return (
-    <TeacherLayout
-      teacherName={profile?.user?.fullName ?? "Teacher"}
-      avatarUrl={profile?.user?.avatarUrl ?? null}
-    >
+    <>
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6">
@@ -1336,7 +1328,7 @@ function TeacherProfileContent() {
         variant="teacher"
         context="Teacher profile/settings page — editing bio, hourly rate, subjects, grades, timezone, documents, and payout setup"
       />
-    </TeacherLayout>
+    </>
   );
 }
 
