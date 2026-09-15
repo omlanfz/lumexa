@@ -24,6 +24,12 @@ import axios from "axios";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
+// Platform-wide kill switch: Lumi is hidden everywhere (landing, student
+// dashboard, teacher dashboard) for now while it's reworked, without
+// deleting any of the component's functionality — flip back to `true` to
+// bring it back everywhere at once.
+const LUMI_ENABLED = false;
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface Message {
@@ -490,6 +496,10 @@ export default function LumiChat({
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
+
+  // Hidden platform-wide for now (see LUMI_ENABLED above) — all state/logic
+  // above still runs so the component's behavior is untouched once re-enabled.
+  if (!LUMI_ENABLED) return null;
 
   return (
     <>

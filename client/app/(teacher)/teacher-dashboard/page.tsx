@@ -158,7 +158,7 @@ function TeacherDashboardContent() {
 
   return (
     <>
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* ── 1. Greeting ─────────────────────────────────────────────── */}
         <h1 className="text-2xl sm:text-3xl font-bold text-[var(--t-text)] mb-6">
           {greeting()}, {firstName}
@@ -169,7 +169,15 @@ function TeacherDashboardContent() {
             <div>
               <p className="font-semibold">Account suspended</p>
               <p className="text-sm opacity-80">
-                Contact support for reinstatement.
+                <a
+                  href="https://wa.me/8801774878252"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline hover:opacity-80"
+                >
+                  Contact support on WhatsApp
+                </a>{" "}
+                for reinstatement.
               </p>
             </div>
           </div>
@@ -178,7 +186,7 @@ function TeacherDashboardContent() {
         {isProfileIncomplete && (
           <div className="mb-6 p-4 rounded-xl border border-[var(--t-warning)]/30 bg-[var(--t-warning-bg)] flex items-center justify-between gap-3 flex-wrap">
             <p className="text-sm font-medium text-[var(--t-warning)]">
-              Complete your profile to attract more students.
+              Complete your profile to get started
             </p>
             <button
               onClick={() => router.push("/teacher-profile")}
@@ -368,7 +376,7 @@ function TeacherDashboardContent() {
         {/* ── 7. Gamification (secondary, below the fold) ────────────── */}
         <section className="pt-2 border-t border-[var(--t-nav-border)]">
           <button
-            onClick={() => router.push("/leaderboard")}
+            onClick={() => router.push("/teacher-leaderboard")}
             className={`${card} p-4 w-full flex items-center justify-between text-left`}
           >
             <div className="flex items-center gap-3">

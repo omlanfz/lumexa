@@ -145,7 +145,7 @@ function TeacherEarningsContent() {
 
   return (
     <>
-      <div className="p-6 lg:p-8 max-w-4xl mx-auto">
+      <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="flex items-start justify-between flex-wrap gap-3 mb-6 sm:mb-8">
           <div>

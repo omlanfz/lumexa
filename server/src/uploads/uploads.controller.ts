@@ -46,6 +46,7 @@ const REQUIRED_DOC_TYPES = new Set([
   'birth_certificate',
   'bachelor_certificate',
   'master_certificate',
+  'ielts_certificate',
   'teaching_cert',
   'degree',
   'background_check',
@@ -137,9 +138,14 @@ export class UploadsController {
 
     const profile = await this.prisma.teacherProfile.findUnique({
       where: { userId: req.user.userId },
-      select: { id: true, verificationDocs: true },
+      select: { id: true, verificationDocs: true, docsLocked: true },
     });
     if (!profile) throw new BadRequestException('Teacher profile not found.');
+    if (profile.docsLocked) {
+      throw new BadRequestException(
+        'Your documents are locked after verification. Contact support to make changes.',
+      );
+    }
 
     const existing = (profile.verificationDocs as any[]) ?? [];
     const updated = existing.filter((d: any) => d.type !== body.docType);

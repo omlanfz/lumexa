@@ -46,6 +46,12 @@ class UpdateProfileDto {
   @IsOptional() @IsString() @MaxLength(100) qualification?: string;
   @IsOptional() @IsString() @MaxLength(100) country?: string;
   @IsOptional() @IsString() @MaxLength(100) city?: string;
+  @IsOptional() @IsString() @MaxLength(20) payoutMethod?: string;
+  @IsOptional() @IsString() @MaxLength(150) bankAccountName?: string;
+  @IsOptional() @IsString() @MaxLength(50) bankAccountNumber?: string;
+  @IsOptional() @IsString() @MaxLength(150) bankName?: string;
+  @IsOptional() @IsString() @MaxLength(150) bankBranch?: string;
+  @IsOptional() @IsString() @MaxLength(20) bkashNumber?: string;
 }
 
 class AddNoteDto {

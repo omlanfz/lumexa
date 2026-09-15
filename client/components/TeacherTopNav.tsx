@@ -28,9 +28,9 @@ const NAV_ITEMS = [
 
 const DROPDOWN_ITEMS = [
   { href: "/teacher-profile", label: "Profile" },
-  { href: "/teacher-conduct", label: "Guidelines" },
+  { href: "/teacher-guidelines", label: "Guidelines" },
   { href: "/teacher-resources", label: "Lumexa Resources" },
-  { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/teacher-leaderboard", label: "Leaderboard" },
 ];
 
 export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavProps) {
@@ -69,8 +69,13 @@ export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavP
           onClick={() => router.push("/teacher-dashboard")}
           className="flex items-center gap-2.5 flex-shrink-0 transition-opacity hover:opacity-80"
         >
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center text-white text-sm font-bold shadow-sm flex-shrink-0">
-            L
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+            <Image
+              src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+              width={32}
+              height={32}
+              alt="Lumexa"
+            />
           </div>
           <span className="font-bold text-[var(--t-accent)] text-sm hidden sm:inline">
             Lumexa
@@ -182,25 +187,6 @@ export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavP
               {item.label}
             </button>
           ))}
-          <div className="border-t border-[var(--t-nav-border)] my-1" />
-          {DROPDOWN_ITEMS.map((item) => (
-            <button
-              key={item.href}
-              onClick={() => {
-                router.push(item.href);
-                setMobileOpen(false);
-              }}
-              className="text-left px-3 py-2.5 rounded-lg text-sm font-medium text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors"
-            >
-              {item.label}
-            </button>
-          ))}
-          <button
-            onClick={logout}
-            className="text-left px-3 py-2.5 rounded-lg text-sm font-medium text-red-500 dark:text-red-400 hover:bg-red-500/10 transition-colors"
-          >
-            Log out
-          </button>
         </nav>
       )}
     </header>

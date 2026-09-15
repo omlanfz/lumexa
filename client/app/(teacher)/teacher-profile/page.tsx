@@ -40,7 +40,6 @@ interface Profile {
   id: string;
   user: { fullName: string; email: string; avatarUrl?: string | null };
   bio?: string | null;
-  hourlyRate: number;
   ratingAvg: number;
   reviewCount: number;
   strikes: number;
@@ -48,8 +47,14 @@ interface Profile {
   rankTier?: number;
   subjects?: string[];
   grades?: string[];
-  timezone?: string | null;
-  stripeOnboarded?: boolean;
+  docsLocked?: boolean;
+  payoutLocked?: boolean;
+  payoutMethod?: "bank" | "bkash" | null;
+  bankAccountName?: string | null;
+  bankAccountNumber?: string | null;
+  bankName?: string | null;
+  bankBranch?: string | null;
+  bkashNumber?: string | null;
 }
 
 interface Doc {
@@ -60,24 +65,6 @@ interface Doc {
   uploadedAt: string;
 }
 
-const SUBJECT_OPTIONS = [
-  "Math",
-  "Science",
-  "English",
-  "History",
-  "Geography",
-  "Physics",
-  "Chemistry",
-  "Biology",
-  "Computer Science",
-  "Art",
-  "Music",
-  "Languages",
-  "Economics",
-  "Psychology",
-  "Philosophy",
-  "Other",
-];
 const GRADE_OPTIONS = [
   "Pre-K",
   "K",
@@ -96,412 +83,6 @@ const GRADE_OPTIONS = [
   "College",
   "Adult",
 ];
-
-const TIMEZONES = Intl.supportedValuesOf
-  ? Intl.supportedValuesOf("timeZone")
-  : [
-      "Africa/Abidjan",
-      "Africa/Accra",
-      "Africa/Addis_Ababa",
-      "Africa/Algiers",
-      "Africa/Asmara",
-      "Africa/Bamako",
-      "Africa/Bangui",
-      "Africa/Banjul",
-      "Africa/Bissau",
-      "Africa/Blantyre",
-      "Africa/Brazzaville",
-      "Africa/Bujumbura",
-      "Africa/Cairo",
-      "Africa/Casablanca",
-      "Africa/Ceuta",
-      "Africa/Conakry",
-      "Africa/Dakar",
-      "Africa/Dar_es_Salaam",
-      "Africa/Djibouti",
-      "Africa/Douala",
-      "Africa/El_Aaiun",
-      "Africa/Freetown",
-      "Africa/Gaborone",
-      "Africa/Harare",
-      "Africa/Johannesburg",
-      "Africa/Juba",
-      "Africa/Kampala",
-      "Africa/Khartoum",
-      "Africa/Kigali",
-      "Africa/Kinshasa",
-      "Africa/Lagos",
-      "Africa/Libreville",
-      "Africa/Lome",
-      "Africa/Luanda",
-      "Africa/Lubumbashi",
-      "Africa/Lusaka",
-      "Africa/Malabo",
-      "Africa/Maputo",
-      "Africa/Maseru",
-      "Africa/Mbabane",
-      "Africa/Mogadishu",
-      "Africa/Monrovia",
-      "Africa/Nairobi",
-      "Africa/Ndjamena",
-      "Africa/Niamey",
-      "Africa/Nouakchott",
-      "Africa/Ouagadougou",
-      "Africa/Porto-Novo",
-      "Africa/Sao_Tome",
-      "Africa/Tripoli",
-      "Africa/Tunis",
-      "Africa/Windhoek",
-      "America/Adak",
-      "America/Anchorage",
-      "America/Anguilla",
-      "America/Antigua",
-      "America/Araguaina",
-      "America/Argentina/Buenos_Aires",
-      "America/Argentina/Catamarca",
-      "America/Argentina/Cordoba",
-      "America/Argentina/Jujuy",
-      "America/Argentina/La_Rioja",
-      "America/Argentina/Mendoza",
-      "America/Argentina/Rio_Gallegos",
-      "America/Argentina/Salta",
-      "America/Argentina/San_Juan",
-      "America/Argentina/San_Luis",
-      "America/Argentina/Tucuman",
-      "America/Argentina/Ushuaia",
-      "America/Aruba",
-      "America/Asuncion",
-      "America/Atikokan",
-      "America/Bahia",
-      "America/Bahia_Banderas",
-      "America/Barbados",
-      "America/Belem",
-      "America/Belize",
-      "America/Blanc-Sablon",
-      "America/Boa_Vista",
-      "America/Bogota",
-      "America/Boise",
-      "America/Cambridge_Bay",
-      "America/Campo_Grande",
-      "America/Cancun",
-      "America/Caracas",
-      "America/Cayenne",
-      "America/Cayman",
-      "America/Chicago",
-      "America/Chihuahua",
-      "America/Costa_Rica",
-      "America/Creston",
-      "America/Cuiaba",
-      "America/Curacao",
-      "America/Danmarkshavn",
-      "America/Dawson",
-      "America/Dawson_Creek",
-      "America/Denver",
-      "America/Detroit",
-      "America/Dominica",
-      "America/Edmonton",
-      "America/Eirunepe",
-      "America/El_Salvador",
-      "America/Fort_Nelson",
-      "America/Fortaleza",
-      "America/Glace_Bay",
-      "America/Goose_Bay",
-      "America/Grand_Turk",
-      "America/Grenada",
-      "America/Guadeloupe",
-      "America/Guatemala",
-      "America/Guayaquil",
-      "America/Guyana",
-      "America/Halifax",
-      "America/Havana",
-      "America/Hermosillo",
-      "America/Indiana/Indianapolis",
-      "America/Indiana/Knox",
-      "America/Indiana/Marengo",
-      "America/Indiana/Petersburg",
-      "America/Indiana/Tell_City",
-      "America/Indiana/Vevay",
-      "America/Indiana/Vincennes",
-      "America/Indiana/Winamac",
-      "America/Inuvik",
-      "America/Iqaluit",
-      "America/Jamaica",
-      "America/Juneau",
-      "America/Kentucky/Louisville",
-      "America/Kentucky/Monticello",
-      "America/Kralendijk",
-      "America/La_Paz",
-      "America/Lima",
-      "America/Los_Angeles",
-      "America/Lower_Princes",
-      "America/Maceio",
-      "America/Managua",
-      "America/Manaus",
-      "America/Marigot",
-      "America/Martinique",
-      "America/Matamoros",
-      "America/Mazatlan",
-      "America/Menominee",
-      "America/Merida",
-      "America/Metlakatla",
-      "America/Mexico_City",
-      "America/Miquelon",
-      "America/Moncton",
-      "America/Monterrey",
-      "America/Montevideo",
-      "America/Montserrat",
-      "America/Nassau",
-      "America/New_York",
-      "America/Nipigon",
-      "America/Nome",
-      "America/Noronha",
-      "America/North_Dakota/Beulah",
-      "America/North_Dakota/Center",
-      "America/North_Dakota/New_Salem",
-      "America/Ojinaga",
-      "America/Panama",
-      "America/Pangnirtung",
-      "America/Paramaribo",
-      "America/Phoenix",
-      "America/Port-au-Prince",
-      "America/Port_of_Spain",
-      "America/Porto_Velho",
-      "America/Puerto_Rico",
-      "America/Punta_Arenas",
-      "America/Rainy_River",
-      "America/Rankin_Inlet",
-      "America/Recife",
-      "America/Regina",
-      "America/Resolute",
-      "America/Rio_Branco",
-      "America/Santarem",
-      "America/Santiago",
-      "America/Santo_Domingo",
-      "America/Sao_Paulo",
-      "America/Scoresbysund",
-      "America/Sitka",
-      "America/St_Barthelemy",
-      "America/St_Johns",
-      "America/St_Kitts",
-      "America/St_Lucia",
-      "America/St_Thomas",
-      "America/St_Vincent",
-      "America/Swift_Current",
-      "America/Tegucigalpa",
-      "America/Thule",
-      "America/Thunder_Bay",
-      "America/Tijuana",
-      "America/Toronto",
-      "America/Tortola",
-      "America/Vancouver",
-      "America/Whitehorse",
-      "America/Winnipeg",
-      "America/Yakutat",
-      "America/Yellowknife",
-      "Asia/Aden",
-      "Asia/Almaty",
-      "Asia/Amman",
-      "Asia/Anadyr",
-      "Asia/Aqtau",
-      "Asia/Aqtobe",
-      "Asia/Ashgabat",
-      "Asia/Atyrau",
-      "Asia/Baghdad",
-      "Asia/Bahrain",
-      "Asia/Baku",
-      "Asia/Bangkok",
-      "Asia/Barnaul",
-      "Asia/Beirut",
-      "Asia/Bishkek",
-      "Asia/Brunei",
-      "Asia/Chita",
-      "Asia/Choibalsan",
-      "Asia/Colombo",
-      "Asia/Damascus",
-      "Asia/Dhaka",
-      "Asia/Dili",
-      "Asia/Dubai",
-      "Asia/Dushanbe",
-      "Asia/Famagusta",
-      "Asia/Gaza",
-      "Asia/Hebron",
-      "Asia/Ho_Chi_Minh",
-      "Asia/Hong_Kong",
-      "Asia/Hovd",
-      "Asia/Irkutsk",
-      "Asia/Jakarta",
-      "Asia/Jayapura",
-      "Asia/Jerusalem",
-      "Asia/Kabul",
-      "Asia/Kamchatka",
-      "Asia/Karachi",
-      "Asia/Kathmandu",
-      "Asia/Khandyga",
-      "Asia/Kolkata",
-      "Asia/Krasnoyarsk",
-      "Asia/Kuala_Lumpur",
-      "Asia/Kuching",
-      "Asia/Kuwait",
-      "Asia/Macau",
-      "Asia/Magadan",
-      "Asia/Makassar",
-      "Asia/Manila",
-      "Asia/Muscat",
-      "Asia/Nicosia",
-      "Asia/Novokuznetsk",
-      "Asia/Novosibirsk",
-      "Asia/Omsk",
-      "Asia/Oral",
-      "Asia/Phnom_Penh",
-      "Asia/Pontianak",
-      "Asia/Pyongyang",
-      "Asia/Qatar",
-      "Asia/Qostanay",
-      "Asia/Qyzylorda",
-      "Asia/Riyadh",
-      "Asia/Sakhalin",
-      "Asia/Samarkand",
-      "Asia/Seoul",
-      "Asia/Shanghai",
-      "Asia/Singapore",
-      "Asia/Srednekolymsk",
-      "Asia/Taipei",
-      "Asia/Tashkent",
-      "Asia/Tbilisi",
-      "Asia/Tehran",
-      "Asia/Thimphu",
-      "Asia/Tokyo",
-      "Asia/Tomsk",
-      "Asia/Ulaanbaatar",
-      "Asia/Urumqi",
-      "Asia/Ust-Nera",
-      "Asia/Vientiane",
-      "Asia/Vladivostok",
-      "Asia/Yakutsk",
-      "Asia/Yangon",
-      "Asia/Yekaterinburg",
-      "Asia/Yerevan",
-      "Atlantic/Azores",
-      "Atlantic/Bermuda",
-      "Atlantic/Canary",
-      "Atlantic/Cape_Verde",
-      "Atlantic/Faroe",
-      "Atlantic/Madeira",
-      "Atlantic/Reykjavik",
-      "Atlantic/South_Georgia",
-      "Atlantic/St_Helena",
-      "Atlantic/Stanley",
-      "Australia/Adelaide",
-      "Australia/Brisbane",
-      "Australia/Broken_Hill",
-      "Australia/Darwin",
-      "Australia/Eucla",
-      "Australia/Hobart",
-      "Australia/Lindeman",
-      "Australia/Lord_Howe",
-      "Australia/Melbourne",
-      "Australia/Perth",
-      "Australia/Sydney",
-      "Europe/Amsterdam",
-      "Europe/Andorra",
-      "Europe/Astrakhan",
-      "Europe/Athens",
-      "Europe/Belgrade",
-      "Europe/Berlin",
-      "Europe/Bratislava",
-      "Europe/Brussels",
-      "Europe/Bucharest",
-      "Europe/Budapest",
-      "Europe/Busingen",
-      "Europe/Chisinau",
-      "Europe/Copenhagen",
-      "Europe/Dublin",
-      "Europe/Gibraltar",
-      "Europe/Guernsey",
-      "Europe/Helsinki",
-      "Europe/Isle_of_Man",
-      "Europe/Istanbul",
-      "Europe/Jersey",
-      "Europe/Kaliningrad",
-      "Europe/Kiev",
-      "Europe/Kirov",
-      "Europe/Lisbon",
-      "Europe/Ljubljana",
-      "Europe/London",
-      "Europe/Luxembourg",
-      "Europe/Madrid",
-      "Europe/Malta",
-      "Europe/Mariehamn",
-      "Europe/Minsk",
-      "Europe/Monaco",
-      "Europe/Moscow",
-      "Europe/Nicosia",
-      "Europe/Oslo",
-      "Europe/Paris",
-      "Europe/Podgorica",
-      "Europe/Prague",
-      "Europe/Riga",
-      "Europe/Rome",
-      "Europe/Samara",
-      "Europe/San_Marino",
-      "Europe/Sarajevo",
-      "Europe/Saratov",
-      "Europe/Simferopol",
-      "Europe/Skopje",
-      "Europe/Sofia",
-      "Europe/Stockholm",
-      "Europe/Tallinn",
-      "Europe/Tirane",
-      "Europe/Ulyanovsk",
-      "Europe/Uzhgorod",
-      "Europe/Vaduz",
-      "Europe/Vatican",
-      "Europe/Vienna",
-      "Europe/Vilnius",
-      "Europe/Volgograd",
-      "Europe/Warsaw",
-      "Europe/Zagreb",
-      "Europe/Zaporozhye",
-      "Europe/Zurich",
-      "Pacific/Apia",
-      "Pacific/Auckland",
-      "Pacific/Bougainville",
-      "Pacific/Chatham",
-      "Pacific/Chuuk",
-      "Pacific/Easter",
-      "Pacific/Efate",
-      "Pacific/Enderbury",
-      "Pacific/Fakaofo",
-      "Pacific/Fiji",
-      "Pacific/Funafuti",
-      "Pacific/Galapagos",
-      "Pacific/Gambier",
-      "Pacific/Guadalcanal",
-      "Pacific/Guam",
-      "Pacific/Honolulu",
-      "Pacific/Kiritimati",
-      "Pacific/Kosrae",
-      "Pacific/Kwajalein",
-      "Pacific/Majuro",
-      "Pacific/Marquesas",
-      "Pacific/Midway",
-      "Pacific/Nauru",
-      "Pacific/Niue",
-      "Pacific/Norfolk",
-      "Pacific/Noumea",
-      "Pacific/Pago_Pago",
-      "Pacific/Palau",
-      "Pacific/Pitcairn",
-      "Pacific/Pohnpei",
-      "Pacific/Port_Moresby",
-      "Pacific/Rarotonga",
-      "Pacific/Saipan",
-      "Pacific/Tahiti",
-      "Pacific/Tarawa",
-      "Pacific/Tongatapu",
-      "Pacific/Wake",
-      "Pacific/Wallis",
-    ];
 
 const DOC_REQUIREMENTS = [
   {
@@ -530,6 +111,13 @@ const DOC_REQUIREMENTS = [
     label: "Master's Certificate",
     icon: "🎓",
     desc: "Postgraduate degree certificate, if applicable.",
+    required: false,
+  },
+  {
+    key: "ielts_certificate",
+    label: "IELTS Certificate",
+    icon: "🗣️",
+    desc: "IELTS score report, if you have one.",
     required: false,
   },
   {
@@ -562,22 +150,18 @@ function computeProfileCompletion(
   const has = {
     avatar: !!profile.user?.avatarUrl,
     bio: !!(profile.bio && profile.bio.length > 20),
-    subjects: !!profile.subjects?.length,
     grades: !!profile.grades?.length,
-    rate: profile.hourlyRate > 0,
     id_doc: docs.some((d) => d.type === "nid" || d.type === "birth_certificate"),
     cert_doc: docs.some((d) =>
       ["bachelor_certificate", "master_certificate", "teaching_cert"].includes(d.type),
     ),
   };
   const weights: Record<string, number> = {
-    avatar: 15,
-    bio: 20,
-    subjects: 15,
-    grades: 10,
-    rate: 10,
-    id_doc: 15,
-    cert_doc: 15,
+    avatar: 20,
+    bio: 25,
+    grades: 15,
+    id_doc: 20,
+    cert_doc: 20,
   };
   const score = Object.entries(has).reduce(
     (acc, [key, val]) => acc + (val ? (weights[key] ?? 0) : 0),
@@ -594,10 +178,15 @@ function TeacherProfileContent() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [bio, setBio] = useState("");
-  const [hourlyRate, setHourlyRate] = useState(25);
-  const [subjects, setSubjects] = useState<string[]>([]);
   const [grades, setGrades] = useState<string[]>([]);
-  const [timezone, setTimezone] = useState("");
+  const [payoutMethod, setPayoutMethod] = useState<"bank" | "bkash" | "">("");
+  const [bankAccountName, setBankAccountName] = useState("");
+  const [bankAccountNumber, setBankAccountNumber] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [bankBranch, setBankBranch] = useState("");
+  const [bkashNumber, setBkashNumber] = useState("");
+  const [payoutSaving, setPayoutSaving] = useState(false);
+  const [payoutSaveSuccess, setPayoutSaveSuccess] = useState(false);
 
   const [completionScore, setCompletionScore] = useState(0);
   const [completionBreakdown, setCompletionBreakdown] = useState<
@@ -611,7 +200,6 @@ function TeacherProfileContent() {
   const [docError, setDocError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [stripeLoading, setStripeLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<
     "profile" | "documents" | "payout"
   >("profile");
@@ -655,10 +243,13 @@ function TeacherProfileContent() {
   useEffect(() => {
     if (!profile) return;
     setBio(profile.bio ?? "");
-    setHourlyRate(profile.hourlyRate ?? 25);
-    setSubjects(profile.subjects ?? []);
     setGrades(profile.grades ?? []);
-    setTimezone(profile.timezone ?? "");
+    setPayoutMethod(profile.payoutMethod ?? "");
+    setBankAccountName(profile.bankAccountName ?? "");
+    setBankAccountNumber(profile.bankAccountNumber ?? "");
+    setBankName(profile.bankName ?? "");
+    setBankBranch(profile.bankBranch ?? "");
+    setBkashNumber(profile.bkashNumber ?? "");
   }, [profile]);
 
   // Recompute completion bar whenever profile or docs change
@@ -680,14 +271,11 @@ function TeacherProfileContent() {
         `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`,
         {
           bio,
-          hourlyRate: +hourlyRate,
-          subjects,
           grades,
-          timezone: timezone || undefined,
         },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      // Re-fetch full profile so subjects/grades/avatarUrl are never stale
+      // Re-fetch full profile so grades/avatarUrl are never stale
       const refreshed = await axios.get(
         `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`,
         { headers: { Authorization: `Bearer ${token}` } },
@@ -733,6 +321,12 @@ function TeacherProfileContent() {
   };
 
   const handleDocUpload = async (docType: string, file: File) => {
+    if (profile?.docsLocked) {
+      setDocError(
+        "Your documents are locked after verification. Contact support to make changes.",
+      );
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       setDocError("Max file size is 10MB");
       return;
@@ -780,31 +374,41 @@ function TeacherProfileContent() {
     }
   };
 
-  // ── Stripe connect ────────────────────────────────────────────────────────
-  const connectStripe = async () => {
-    setStripeLoading(true);
+  // ── Payout details (bank / bKash) ──────────────────────────────────────────
+  const savePayout = async () => {
+    if (profile?.payoutLocked) return;
+    setPayoutSaving(true);
+    setPayoutSaveSuccess(false);
+    setError(null);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(
-        `${process.env.NEXT_PUBLIC_API_URL}/bookings/stripe/onboard`,
-        {},
+      await axios.patch(
+        `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`,
+        {
+          payoutMethod,
+          bankAccountName,
+          bankAccountNumber,
+          bankName,
+          bankBranch,
+          bkashNumber,
+        },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      if (res.data.url) window.location.href = res.data.url;
+      const refreshed = await axios.get(
+        `${process.env.NEXT_PUBLIC_API_URL}/teachers/me/profile`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      setProfile(refreshed.data);
+      setPayoutSaveSuccess(true);
+      setTimeout(() => setPayoutSaveSuccess(false), 3000);
     } catch (e: any) {
       const m = e.response?.data?.message;
-      setError(
-        Array.isArray(m) ? m.join(", ") : (m ?? "Stripe connect failed"),
-      );
+      setError(Array.isArray(m) ? m.join(", ") : (m ?? "Save failed"));
     } finally {
-      setStripeLoading(false);
+      setPayoutSaving(false);
     }
   };
 
-  const toggleSubject = (s: string) =>
-    setSubjects((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
-    );
   const toggleGrade = (g: string) =>
     setGrades((prev) =>
       prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g],
@@ -870,13 +474,11 @@ function TeacherProfileContent() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
-              { key: "avatar", label: "Profile photo", pts: 15 },
-              { key: "bio", label: "Bio (20+ chars)", pts: 20 },
-              { key: "subjects", label: "Subjects", pts: 15 },
-              { key: "grades", label: "Grade levels", pts: 10 },
-              { key: "rate", label: "Hourly rate", pts: 10 },
-              { key: "id_doc", label: "ID document", pts: 15 },
-              { key: "cert_doc", label: "Certificate", pts: 15 },
+              { key: "avatar", label: "Profile photo", pts: 20 },
+              { key: "bio", label: "Bio (20+ chars)", pts: 25 },
+              { key: "grades", label: "Grade levels", pts: 15 },
+              { key: "id_doc", label: "ID document", pts: 20 },
+              { key: "cert_doc", label: "Certificate", pts: 20 },
             ].map((item) => (
               <div
                 key={item.key}
@@ -1043,56 +645,6 @@ function TeacherProfileContent() {
               />
             </div>
 
-            {/* Hourly rate */}
-            <div className={`${card} p-5`}>
-              <h3 className="font-semibold text-[var(--t-text)] mb-3">
-                Hourly Rate (USD)
-              </h3>
-              <div className="flex items-center gap-3">
-                <span className="text-[var(--t-text-muted)] font-bold text-xl">
-                  $
-                </span>
-                <input
-                  type="number"
-                  min={5}
-                  max={500}
-                  value={hourlyRate}
-                  onChange={(e) => setHourlyRate(+e.target.value)}
-                  className="w-36 px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-lg font-bold focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-                />
-                <div>
-                  <p className="text-xs text-[var(--t-text-muted)]">
-                    You earn 75% = ${(hourlyRate * 0.75).toFixed(0)}/hr
-                  </p>
-                  <p className="text-xs dark:text-purple-400/40 text-purple-300">
-                    Range: $5–$500/hr
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Subjects */}
-            <div className={`${card} p-5`}>
-              <h3 className="font-semibold text-[var(--t-text)] mb-3">
-                Subjects You Teach
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {SUBJECT_OPTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => toggleSubject(s)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                      subjects.includes(s)
-                        ? "bg-purple-600 text-white shadow-sm"
-                        : "dark:bg-gray-800/40 bg-gray-100 text-[var(--t-text-muted)] dark:hover:bg-purple-900/30 hover:bg-purple-100"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Grades */}
             <div className={`${card} p-5`}>
               <h3 className="font-semibold text-[var(--t-text)] mb-3">
@@ -1115,25 +667,6 @@ function TeacherProfileContent() {
               </div>
             </div>
 
-            {/* Timezone */}
-            <div className={`${card} p-5`}>
-              <h3 className="font-semibold text-[var(--t-text)] mb-3">
-                Timezone
-              </h3>
-              <select
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
-              >
-                <option value="">Select timezone…</option>
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>
-                    {tz}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             {/* Save */}
             <button
               onClick={save}
@@ -1152,11 +685,31 @@ function TeacherProfileContent() {
               <h3 className="font-semibold text-[var(--t-text)] mb-1">
                 Verification Documents
               </h3>
-              <p className="text-sm text-[var(--t-text-muted)] mb-5">
+              <p className="text-sm text-[var(--t-text-muted)] mb-3">
                 Upload your documents to build trust with parents and increase
                 your search ranking. All documents are reviewed by Lumexa and
                 kept confidential.
               </p>
+
+              {profile?.docsLocked ? (
+                <div className="mb-4 p-3 rounded-xl dark:bg-amber-900/20 bg-amber-50 border dark:border-amber-800/30 border-amber-200">
+                  <p className="text-xs dark:text-amber-300 text-amber-700">
+                    🔒 <strong>Locked:</strong> Your profile has been verified
+                    by Lumexa. You can still view what you uploaded, but
+                    reuploading or removing documents is disabled. Contact
+                    support if you need to change a document.
+                  </p>
+                </div>
+              ) : (
+                <div className="mb-4 p-3 rounded-xl dark:bg-blue-900/20 bg-blue-50 dark:border dark:border-blue-800/30 border-blue-200">
+                  <p className="text-xs dark:text-blue-300 text-blue-700">
+                    ℹ️ You&apos;re free to upload or reupload any document as many
+                    times as you like until your profile is verified. Once
+                    Lumexa verifies your profile, this tab will be locked for
+                    your safety.
+                  </p>
+                </div>
+              )}
 
               {docError && (
                 <div className="mb-4 p-3 rounded-xl bg-red-900/20 border border-red-700/30 text-red-400 text-sm">
@@ -1220,8 +773,29 @@ function TeacherProfileContent() {
                             >
                               View
                             </a>
+                            {!profile?.docsLocked && (
+                              <button
+                                onClick={() => {
+                                  const input = document.createElement("input");
+                                  input.type = "file";
+                                  input.accept = ".pdf,.jpg,.jpeg,.png";
+                                  input.onchange = (e) => {
+                                    const file = (e.target as HTMLInputElement)
+                                      .files?.[0];
+                                    if (file) handleDocUpload(doc.key, file);
+                                  };
+                                  input.click();
+                                }}
+                                disabled={docUploading === doc.key}
+                                className="text-xs px-2.5 py-1.5 rounded-lg dark:bg-purple-600/20 bg-purple-100 dark:text-purple-300 text-purple-700 dark:hover:bg-purple-600/30 hover:bg-purple-200 transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {docUploading === doc.key
+                                  ? "Uploading..."
+                                  : "Reupload"}
+                              </button>
+                            )}
                           </div>
-                        ) : (
+                        ) : !profile?.docsLocked ? (
                           <button
                             onClick={() => {
                               const input = document.createElement("input");
@@ -1241,6 +815,10 @@ function TeacherProfileContent() {
                               ? "Uploading..."
                               : "Upload"}
                           </button>
+                        ) : (
+                          <span className="text-xs px-2.5 py-1.5 rounded-lg dark:bg-gray-700/40 bg-gray-200 dark:text-gray-400 text-gray-500">
+                            Not uploaded
+                          </span>
                         )}
                       </div>
                     </div>
@@ -1268,56 +846,155 @@ function TeacherProfileContent() {
                 Payout Setup
               </h3>
               <p className="text-sm text-[var(--t-text-muted)] mb-5">
-                Your finalized monthly payout is calculated automatically from
+                Your finalized monthly salary is calculated automatically from
                 your earnings ledger — see the Earnings page for the full
-                breakdown. Operations pays out manually each month.
+                breakdown. Lumexa pays out manually every month directly to
+                your bank or bKash account below.
               </p>
 
-              {profile?.stripeOnboarded ? (
-                <div className="p-4 rounded-xl dark:bg-green-900/20 bg-green-50 border dark:border-green-800/30 border-green-200 flex items-center gap-3">
-                  <span className="text-2xl">✅</span>
+              {profile?.payoutLocked ? (
+                <div className="mb-4 p-4 rounded-xl dark:bg-amber-900/20 bg-amber-50 border dark:border-amber-800/30 border-amber-200 flex items-start gap-3">
+                  <span className="text-2xl">🔒</span>
                   <div>
-                    <p className="font-semibold dark:text-green-300 text-green-700">
-                      Stripe Connected
+                    <p className="font-semibold dark:text-amber-300 text-amber-700">
+                      Payout details locked
                     </p>
-                    <p className="text-xs dark:text-green-400/70 text-green-600">
-                      Your payout details are on file with Stripe Connect.
+                    <p className="text-xs dark:text-amber-400/70 text-amber-600 mt-0.5">
+                      Your first salary has been sent to the account below, so
+                      it&apos;s now locked to prevent accidental or risky changes.
+                      Need to update it?{" "}
+                      <a
+                        href="https://wa.me/8801774878252"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline hover:opacity-80"
+                      >
+                        Contact support on WhatsApp
+                      </a>
+                      .
                     </p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl dark:bg-amber-900/20 bg-amber-50 border dark:border-amber-800/30 border-amber-200 flex items-center gap-3">
-                    <span className="text-2xl">⚠️</span>
-                    <div>
-                      <p className="font-semibold dark:text-amber-300 text-amber-700">
-                        Stripe not connected
-                      </p>
-                      <p className="text-xs dark:text-amber-400/70 text-amber-600">
-                        Connect Stripe so Operations has your payout details on
-                        file.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-sm dark:text-purple-300/80 text-purple-700">
-                    <p>✦ Completed class: +৳200</p>
-                    <p>✦ Parent-teacher meeting: +৳300</p>
-                    <p>✦ Conversion bonus: +৳1,000</p>
-                    <p>✦ Operations pays out your ledger total manually each month</p>
-                  </div>
-
-                  <button
-                    onClick={connectStripe}
-                    disabled={stripeLoading}
-                    className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-amber-900 font-bold rounded-xl transition-all duration-200 active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-60 cursor-pointer"
-                  >
-                    {stripeLoading
-                      ? "Connecting…"
-                      : "⚡ Connect Stripe Account"}
-                  </button>
+                <div className="mb-4 p-3 rounded-xl dark:bg-blue-900/20 bg-blue-50 dark:border dark:border-blue-800/30 border-blue-200">
+                  <p className="text-xs dark:text-blue-300 text-blue-700">
+                    ℹ️ Fill in your bank or bKash details below so Operations
+                    can pay your salary. Once your first payout is sent, these
+                    details will be locked for your safety.
+                  </p>
                 </div>
               )}
+
+              <div className="space-y-2 text-sm dark:text-purple-300/80 text-purple-700 mb-5">
+                <p>✦ Completed class: +৳200</p>
+                <p>✦ Parent-teacher meeting: +৳300</p>
+                <p>✦ Conversion bonus: +৳1,000</p>
+                <p>✦ Operations pays out your ledger total manually each month</p>
+              </div>
+
+              <fieldset disabled={!!profile?.payoutLocked} className="space-y-4 disabled:opacity-60">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--t-text)] mb-2">
+                    Payout Method
+                  </p>
+                  <div className="flex gap-2">
+                    {(["bkash", "bank"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setPayoutMethod(m)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                          payoutMethod === m
+                            ? "bg-purple-600 text-white shadow-sm"
+                            : "dark:bg-gray-800/40 bg-gray-100 text-[var(--t-text-muted)] dark:hover:bg-purple-900/30 hover:bg-purple-100"
+                        }`}
+                      >
+                        {m === "bkash" ? "📱 bKash" : "🏦 Bank Account"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {payoutMethod === "bkash" && (
+                  <div>
+                    <label className="text-xs font-medium text-[var(--t-text-muted)] mb-1 block">
+                      bKash Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={bkashNumber}
+                      onChange={(e) => setBkashNumber(e.target.value)}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                    />
+                  </div>
+                )}
+
+                {payoutMethod === "bank" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-[var(--t-text-muted)] mb-1 block">
+                        Account Holder Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bankAccountName}
+                        onChange={(e) => setBankAccountName(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[var(--t-text-muted)] mb-1 block">
+                        Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={bankAccountNumber}
+                        onChange={(e) => setBankAccountNumber(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[var(--t-text-muted)] mb-1 block">
+                        Bank Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bankName}
+                        onChange={(e) => setBankName(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[var(--t-text-muted)] mb-1 block">
+                        Branch Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bankBranch}
+                        onChange={(e) => setBankBranch(e.target.value)}
+                        className="w-full px-4 py-3 rounded-xl border bg-[var(--t-surface)] border-[var(--t-border)] text-[var(--t-text)] text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {payoutMethod && (
+                  <button
+                    onClick={savePayout}
+                    disabled={payoutSaving}
+                    className="w-full py-3.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl transition-all duration-200 active:scale-[0.98] shadow-lg shadow-purple-600/20 disabled:opacity-60 cursor-pointer"
+                  >
+                    {payoutSaving ? "Saving…" : "Save Payout Details ✦"}
+                  </button>
+                )}
+
+                {payoutSaveSuccess && (
+                  <div className="p-3 rounded-xl bg-green-900/20 border border-green-700/30 text-green-400 text-sm">
+                    ✅ Payout details saved successfully!
+                  </div>
+                )}
+              </fieldset>
             </div>
           </div>
         )}
@@ -1326,7 +1003,7 @@ function TeacherProfileContent() {
       {/* FIX Issue 5 — Lumi chatbot on teacher profile/settings page */}
       <LumiChat
         variant="teacher"
-        context="Teacher profile/settings page — editing bio, hourly rate, subjects, grades, timezone, documents, and payout setup"
+        context="Teacher profile/settings page — editing bio, grades, verification documents, and bank/bKash payout setup"
       />
     </>
   );

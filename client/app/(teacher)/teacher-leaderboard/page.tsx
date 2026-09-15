@@ -1,8 +1,9 @@
-// FILE PATH: client/app/leaderboard/page.tsx
+// FILE PATH: client/app/teacher-leaderboard/page.tsx
 //
 // Self-focused: the teacher's own rank, progress to the next tier, and
-// achievements lead the page. Competitive full-rankings are a compact,
-// secondary "nearby" list further down — not the main framing.
+// achievements lead the page. Other teachers' names/identities are never
+// shown here — teachers should not be able to see who else is on the
+// platform, for privacy.
 
 "use client";
 
@@ -113,10 +114,6 @@ function LeaderboardContent() {
   });
 
   const myIndex = teachers.findIndex((t) => t.teacherId === myTeacherId);
-  const nearby =
-    myIndex === -1
-      ? teachers.slice(0, 5)
-      : teachers.slice(Math.max(0, myIndex - 2), myIndex + 3);
 
   return (
     <>
@@ -213,33 +210,6 @@ function LeaderboardContent() {
           </div>
         </div>
 
-        {/* ── Nearby rankings (secondary, compact) ─────────────────── */}
-        {nearby.length > 0 && (
-          <div className={`${card} overflow-hidden`}>
-            <div className="px-5 py-3 border-b border-[var(--t-nav-border)]">
-              <p className="text-sm font-semibold text-[var(--t-text)]">Nearby Rankings</p>
-            </div>
-            <div className="divide-y divide-[var(--t-nav-border)]">
-              {nearby.map((t) => (
-                <div
-                  key={t.teacherId}
-                  className={`flex items-center gap-3 px-5 py-2.5 ${
-                    t.teacherId === myTeacherId ? "bg-[var(--t-nav-active)]" : ""
-                  }`}
-                >
-                  <span className="text-sm w-8 text-[var(--t-text-muted)]">#{t.rank}</span>
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">
-                    {t.name?.charAt(0)?.toUpperCase() ?? "?"}
-                  </div>
-                  <p className="flex-1 text-sm text-[var(--t-text)] truncate">
-                    {t.teacherId === myTeacherId ? "You" : t.name}
-                  </p>
-                  <p className="text-sm font-medium text-[var(--t-text-muted)]">{t.points.toLocaleString()} pts</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <LumiChat
@@ -250,7 +220,7 @@ function LeaderboardContent() {
   );
 }
 
-export default function LeaderboardPage() {
+export default function TeacherLeaderboardPage() {
   return (
     <Suspense
       fallback={

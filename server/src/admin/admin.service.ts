@@ -97,6 +97,30 @@ export class AdminService {
     });
   }
 
+  async setDocsLocked(teacherId: string, locked: boolean) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    return this.prisma.teacherProfile.update({
+      where: { id: teacherId },
+      data: { docsLocked: locked },
+    });
+  }
+
+  async setPayoutLocked(teacherId: string, locked: boolean) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    return this.prisma.teacherProfile.update({
+      where: { id: teacherId },
+      data: { payoutLocked: locked },
+    });
+  }
+
   async getBookingRecordingUrl(
     bookingId: string,
   ): Promise<{ recordingUrl: string | null }> {
