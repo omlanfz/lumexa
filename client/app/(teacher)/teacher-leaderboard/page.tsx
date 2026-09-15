@@ -42,14 +42,6 @@ interface BadgeTier {
   minPts: number;
 }
 
-interface LeaderboardTeacher {
-  rank: number;
-  teacherId: string;
-  name: string;
-  avatarUrl?: string | null;
-  points: number;
-}
-
 const ACHIEVEMENTS = [
   { id: "first_class", label: "First Class", desc: "First class completed", icon: "🚀", threshold: 1 },
   { id: "ten_classes", label: "Ten Classes", desc: "10 classes completed", icon: "🔟", threshold: 10 },
@@ -64,9 +56,7 @@ function LeaderboardContent() {
   const [rankInfo, setRankInfo] = useState<RankInfo | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [teachers, setTeachers] = useState<LeaderboardTeacher[]>([]);
   const [tiers, setTiers] = useState<BadgeTier[]>([]);
-  const [myTeacherId, setMyTeacherId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,18 +67,15 @@ function LeaderboardContent() {
     }
     (async () => {
       try {
-        const [rankRes, statsRes, profileRes, lbRes] = await Promise.all([
+        const [rankRes, statsRes, profileRes] = await Promise.all([
           api.get("/teachers/me/rank"),
           api.get("/teachers/me/stats"),
           api.get("/teachers/me/profile"),
-          api.get("/teachers/leaderboard?filter=all&limit=50"),
         ]);
         setRankInfo(rankRes.data);
         setStats(statsRes.data);
         setProfile(profileRes.data);
-        setTeachers(lbRes.data.teachers ?? []);
-        setTiers(lbRes.data.tiers ?? []);
-        setMyTeacherId(profileRes.data.id);
+        setTiers(rankRes.data.tiers ?? []);
       } catch {
         /* silently fail */
       } finally {
@@ -113,11 +100,9 @@ function LeaderboardContent() {
     return false;
   });
 
-  const myIndex = teachers.findIndex((t) => t.teacherId === myTeacherId);
-
   return (
     <>
-      <div className="p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
+      <div className="p-6 lg:p-8 space-y-6">
         <h1 className="text-2xl font-bold text-[var(--t-text)]">Leaderboard</h1>
 
         {/* ── Your rank ─────────────────────────────────────────────── */}
@@ -137,12 +122,15 @@ function LeaderboardContent() {
                 {(rankInfo?.points ?? 0).toLocaleString()} pts · +{rankInfo?.weeklyPoints ?? 0} this week
               </p>
             </div>
-            {myIndex !== -1 && (
-              <div className="text-right flex-shrink-0">
-                <p className="text-2xl font-bold text-[var(--t-text)]">#{myIndex + 1}</p>
-                <p className="text-xs text-[var(--t-text-muted)]">platform rank</p>
-              </div>
-            )}
+            <div className="text-right flex-shrink-0">
+              <p className="text-2xl font-bold text-[var(--t-text)]">
+                {stats?.ratingAvg ? stats.ratingAvg.toFixed(1) : "—"}
+                <span className="text-sm text-[var(--t-text-muted)] font-normal"> ★</span>
+              </p>
+              <p className="text-xs text-[var(--t-text-muted)]">
+                {stats?.completedClasses ?? 0} classes taught
+              </p>
+            </div>
           </div>
 
           <div className="mt-5">

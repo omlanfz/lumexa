@@ -1036,6 +1036,19 @@ export class TeachersService {
       badge,
       pointsToNext: Math.max(0, nextThreshold - (profile.points ?? 0)),
       progressPercent: Math.min(100, Math.max(0, progressPercent)),
+      // Static tier reference table — not per-teacher data, so it's safe to
+      // include here. Lets the teacher-facing leaderboard page render the
+      // "Rank Tiers" reference without ever calling the roster-returning
+      // /teachers/leaderboard endpoint (which exposes other teachers' names
+      // and avatars — teachers should never see who else is on the platform).
+      tiers: BADGE_TIERS.map((t, i) => ({
+        id: t.id,
+        icon: t.icon,
+        label: t.label,
+        desc: t.desc,
+        minPts: t.minPts,
+        tierIndex: i,
+      })),
     };
   }
 }
