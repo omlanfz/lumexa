@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateCourseDto } from './dto/create-course.dto';
+import { CreateLessonDto } from './dto/create-lesson.dto';
 
 @Injectable()
 export class CoursesService {
@@ -10,6 +11,14 @@ export class CoursesService {
     return this.prisma.course.findMany({
       where: { isActive: true },
       orderBy: [{ category: 'asc' }, { ageMin: 'asc' }],
+    });
+  }
+
+  /** Admin — every course regardless of active state, with lesson counts. */
+  listAll() {
+    return this.prisma.course.findMany({
+      include: { _count: { select: { lessons: true, assignedStudents: true } } },
+      orderBy: [{ category: 'asc' }, { title: 'asc' }],
     });
   }
 
@@ -35,5 +44,32 @@ export class CoursesService {
     const course = await this.prisma.course.findUnique({ where: { id } });
     if (!course) throw new NotFoundException('Course not found');
     return course;
+  }
+
+  // ─── Lessons (simple CRUD, no separate curriculum system) ─────────────────
+
+  async createLesson(courseId: string, dto: CreateLessonDto) {
+    await this.findById(courseId);
+    return this.prisma.lesson.create({
+      data: {
+        courseId,
+        title: dto.title,
+        order: dto.order,
+        duration: dto.duration ?? 60,
+      },
+    });
+  }
+
+  async updateLesson(lessonId: string, dto: Partial<CreateLessonDto>) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    return this.prisma.lesson.update({ where: { id: lessonId }, data: dto });
+  }
+
+  async deleteLesson(lessonId: string) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    await this.prisma.lesson.delete({ where: { id: lessonId } });
+    return { success: true };
   }
 }

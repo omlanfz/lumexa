@@ -155,6 +155,11 @@ export class StudentsService {
     if (user.accountStatus === 'DEACTIVATED') {
       throw new ForbiddenException('This account has been deactivated.');
     }
+    if (user.accountStatus === 'PAUSED') {
+      throw new ForbiddenException(
+        'This account has been paused by Operations. Contact support for details.',
+      );
+    }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     return {

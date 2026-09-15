@@ -78,6 +78,11 @@ export class AuthService {
       if (status === 'DEACTIVATED') {
         throw new ForbiddenException('This account has been deactivated.');
       }
+      if (status === 'PAUSED') {
+        throw new ForbiddenException(
+          'This account has been paused by Operations. Contact support for details.',
+        );
+      }
     }
 
     const payload = {

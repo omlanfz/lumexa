@@ -21,8 +21,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Prisma, PayoutEntryType } from '@prisma/client';
+import { Prisma, PayoutEntryType, PayoutStatus } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { AuditService } from '../audit/audit.service';
 import {
   CLASS_COMPLETED_AMOUNT_CENTS,
   PTM_AMOUNT_CENTS,
@@ -49,7 +50,10 @@ interface CreateLedgerEntryParams {
 export class PayoutsService {
   private readonly logger = new Logger(PayoutsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ─── Core append-only write path ──────────────────────────────────────────
 
@@ -287,6 +291,8 @@ export class PayoutsService {
       adminUserId: string;
       referenceType?: string;
       referenceId?: string;
+      month?: number;
+      year?: number;
     },
   ) {
     await this.requireTeacherById(teacherId);
@@ -299,10 +305,12 @@ export class PayoutsService {
       );
     }
 
+    const now = new Date();
+
     // Adjustments are always intentional, individually-reasoned admin
     // actions — not deduplicated by a reference key the way system triggers
     // are. A plain create (no idempotency lookup) is correct here.
-    return this.prisma.payoutEntry.create({
+    const entry = await this.prisma.payoutEntry.create({
       data: {
         teacherId,
         type: PayoutEntryType.ADJUSTMENT,
@@ -311,10 +319,22 @@ export class PayoutsService {
         createdBy: params.adminUserId,
         referenceType: params.referenceType,
         referenceId: params.referenceId,
-        month: new Date().getMonth() + 1,
-        year: new Date().getFullYear(),
+        month: params.month ?? now.getMonth() + 1,
+        year: params.year ?? now.getFullYear(),
       },
     });
+
+    await this.audit.log({
+      actorId: params.adminUserId,
+      actorRole: 'ADMIN',
+      action: 'PAYOUT_ADJUSTMENT',
+      entityType: 'TeacherProfile',
+      entityId: teacherId,
+      reason: params.reason,
+      afterData: { amountCents: params.amountCents, entryId: entry.id },
+    });
+
+    return entry;
   }
 
   // ─── Reads ─────────────────────────────────────────────────────────────────
@@ -457,6 +477,212 @@ export class PayoutsService {
         : null;
 
     return { months: bucketArr, trend };
+  }
+
+  // ─── Monthly payout workflow: Open → Finalized → Paid ─────────────────────
+  //
+  // The workflow status is bookkeeping only — it never substitutes for the
+  // ledger sum. finalizedAmountCents/paidAmountCents are snapshots taken at
+  // the moment of that action, kept for reconciliation; the amount Operations
+  // sees anywhere in the UI always comes from summing PayoutEntry rows live.
+
+  private async getLedgerTotal(teacherId: string, month: number, year: number) {
+    const agg = await this.prisma.payoutEntry.aggregate({
+      where: { teacherId, month, year },
+      _sum: { amountCents: true },
+      _count: true,
+    });
+    return {
+      totalCents: agg._sum.amountCents ?? 0,
+      entryCount: agg._count,
+    };
+  }
+
+  /** Every teacher with ledger activity or an existing status row for the month. */
+  async getMonthlyOverview(month: number, year: number) {
+    const [teachers, statuses] = await Promise.all([
+      this.prisma.teacherProfile.findMany({
+        where: {
+          OR: [
+            { payoutEntries: { some: { month, year } } },
+            { isSuspended: false },
+          ],
+        },
+        include: { user: { select: { fullName: true, email: true } } },
+        orderBy: { user: { fullName: 'asc' } },
+      }),
+      this.prisma.monthlyPayoutStatus.findMany({ where: { month, year } }),
+    ]);
+
+    const statusByTeacher = new Map(statuses.map((s) => [s.teacherId, s]));
+
+    const rows = await Promise.all(
+      teachers.map(async (teacher) => {
+        const { totalCents, entryCount } = await this.getLedgerTotal(
+          teacher.id,
+          month,
+          year,
+        );
+        const statusRow = statusByTeacher.get(teacher.id);
+        return {
+          teacherId: teacher.id,
+          teacherName: teacher.user.fullName,
+          teacherEmail: teacher.user.email,
+          totalCents,
+          entryCount,
+          status: statusRow?.status ?? PayoutStatus.OPEN,
+          finalizedAt: statusRow?.finalizedAt ?? null,
+          finalizedAmountCents: statusRow?.finalizedAmountCents ?? null,
+          paidAt: statusRow?.paidAt ?? null,
+          paidAmountCents: statusRow?.paidAmountCents ?? null,
+        };
+      }),
+    );
+
+    // Only teachers with actual activity or a status row are worth showing —
+    // a teacher who never taught this month shouldn't clutter the list.
+    return rows.filter(
+      (r) => r.entryCount > 0 || r.status !== PayoutStatus.OPEN,
+    );
+  }
+
+  async getStatement(teacherId: string, month: number, year: number) {
+    const [teacher, entries, statusRow] = await Promise.all([
+      this.prisma.teacherProfile.findUnique({
+        where: { id: teacherId },
+        include: { user: { select: { fullName: true, email: true } } },
+      }),
+      this.prisma.payoutEntry.findMany({
+        where: { teacherId, month, year },
+        include: {
+          booking: { include: { shift: { select: { start: true, end: true } } } },
+        },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.monthlyPayoutStatus.findUnique({
+        where: { teacherId_month_year: { teacherId, month, year } },
+      }),
+    ]);
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    const totalCents = entries.reduce((sum, e) => sum + e.amountCents, 0);
+
+    return {
+      teacherId,
+      teacherName: teacher.user.fullName,
+      teacherEmail: teacher.user.email,
+      month,
+      year,
+      totalCents,
+      status: statusRow?.status ?? PayoutStatus.OPEN,
+      finalizedAt: statusRow?.finalizedAt ?? null,
+      finalizedAmountCents: statusRow?.finalizedAmountCents ?? null,
+      finalizedBy: statusRow?.finalizedBy ?? null,
+      paidAt: statusRow?.paidAt ?? null,
+      paidAmountCents: statusRow?.paidAmountCents ?? null,
+      paidBy: statusRow?.paidBy ?? null,
+      entries: entries.map((e) => ({
+        id: e.id,
+        type: e.type,
+        amountCents: e.amountCents,
+        description: e.description,
+        createdAt: e.createdAt,
+        createdBy: e.createdBy,
+        referenceType: e.referenceType,
+        referenceId: e.referenceId,
+        classStart: e.booking?.shift?.start ?? null,
+        classEnd: e.booking?.shift?.end ?? null,
+      })),
+    };
+  }
+
+  async finalizeMonth(
+    teacherId: string,
+    month: number,
+    year: number,
+    adminUserId: string,
+  ) {
+    await this.requireTeacherById(teacherId);
+    const existing = await this.prisma.monthlyPayoutStatus.findUnique({
+      where: { teacherId_month_year: { teacherId, month, year } },
+    });
+    if (existing && existing.status !== PayoutStatus.OPEN) {
+      throw new BadRequestException(
+        `This month is already ${existing.status.toLowerCase()}.`,
+      );
+    }
+
+    const { totalCents } = await this.getLedgerTotal(teacherId, month, year);
+
+    const statusRow = await this.prisma.monthlyPayoutStatus.upsert({
+      where: { teacherId_month_year: { teacherId, month, year } },
+      update: {
+        status: PayoutStatus.FINALIZED,
+        finalizedAmountCents: totalCents,
+        finalizedBy: adminUserId,
+        finalizedAt: new Date(),
+      },
+      create: {
+        teacherId,
+        month,
+        year,
+        status: PayoutStatus.FINALIZED,
+        finalizedAmountCents: totalCents,
+        finalizedBy: adminUserId,
+        finalizedAt: new Date(),
+      },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'PAYOUT_FINALIZE',
+      entityType: 'TeacherProfile',
+      entityId: teacherId,
+      afterData: { month, year, totalCents },
+    });
+
+    return statusRow;
+  }
+
+  async markPaid(
+    teacherId: string,
+    month: number,
+    year: number,
+    adminUserId: string,
+  ) {
+    await this.requireTeacherById(teacherId);
+    const existing = await this.prisma.monthlyPayoutStatus.findUnique({
+      where: { teacherId_month_year: { teacherId, month, year } },
+    });
+    if (!existing || existing.status !== PayoutStatus.FINALIZED) {
+      throw new BadRequestException(
+        'This month must be finalized before it can be marked as paid.',
+      );
+    }
+
+    const { totalCents } = await this.getLedgerTotal(teacherId, month, year);
+
+    const statusRow = await this.prisma.monthlyPayoutStatus.update({
+      where: { teacherId_month_year: { teacherId, month, year } },
+      data: {
+        status: PayoutStatus.PAID,
+        paidAmountCents: totalCents,
+        paidBy: adminUserId,
+        paidAt: new Date(),
+      },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'PAYOUT_MARK_PAID',
+      entityType: 'TeacherProfile',
+      entityId: teacherId,
+      afterData: { month, year, totalCents },
+    });
+
+    return statusRow;
   }
 
   // ─── Excel export (teacher self-service and admin, same query) ────────────

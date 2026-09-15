@@ -16,6 +16,7 @@ import {
 import { PenaltyStatus } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateRescheduleEventDto } from './dto/create-reschedule-event.dto';
 import {
   FREE_EMERGENCY_RESCHEDULES_PER_MONTH,
@@ -29,6 +30,7 @@ export class RescheduleService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly payoutsService: PayoutsService,
+    private readonly audit: AuditService,
   ) {}
 
   async createEvent(
@@ -299,7 +301,7 @@ export class RescheduleService {
       });
     }
 
-    return this.prisma.rescheduleRequest.update({
+    const updated = await this.prisma.rescheduleRequest.update({
       where: { id: requestId },
       data: {
         penaltyStatus:
@@ -310,5 +312,172 @@ export class RescheduleService {
         reviewedAt: new Date(),
       },
     });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: `RESCHEDULE_PENALTY_${decision}`,
+      entityType: 'RescheduleRequest',
+      entityId: requestId,
+      beforeData: { penaltyStatus: request.penaltyStatus },
+      afterData: { penaltyStatus: updated.penaltyStatus },
+    });
+
+    return updated;
+  }
+
+  // ─── Admin booking history (unrestricted by teacher ownership) ────────────
+
+  async getHistoryForBooking(bookingId: string) {
+    return this.prisma.rescheduleRequest.findMany({
+      where: { bookingId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ─── Flagged (4th+ emergency) reschedules pending Operations review ───────
+
+  async getFlaggedReschedules(page = 1, limit = 20) {
+    const where = { penaltyStatus: PenaltyStatus.PENDING_PENALTY_REVIEW };
+    const [items, total] = await Promise.all([
+      this.prisma.rescheduleRequest.findMany({
+        where,
+        include: {
+          teacher: { include: { user: { select: { fullName: true, email: true } } } },
+          booking: {
+            include: {
+              student: { select: { name: true } },
+              studentUser: { select: { fullName: true } },
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.rescheduleRequest.count({ where }),
+    ]);
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  // ─── Admin overrides ───────────────────────────────────────────────────────
+  //
+  // Operations can reschedule/cancel any booked class directly — never through
+  // the teacher-facing policy engine (no free-quota counting, no penalty, no
+  // proof requirement), but always through this same audit trail. A reason is
+  // mandatory so the RescheduleRequest row (and the AuditLog entry) explains
+  // why Operations intervened.
+
+  async adminReschedule(
+    adminUserId: string,
+    bookingId: string,
+    params: { newStart: string; newEnd: string; reason: string },
+  ) {
+    if (!params.reason?.trim()) {
+      throw new BadRequestException('A reason is required for an admin override.');
+    }
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { shift: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found.');
+
+    const newStart = new Date(params.newStart);
+    const newEnd = new Date(params.newEnd);
+    if (newEnd <= newStart) {
+      throw new BadRequestException('End time must be after start time.');
+    }
+
+    const [audit] = await this.prisma.$transaction([
+      this.prisma.rescheduleRequest.create({
+        data: {
+          bookingId: booking.id,
+          teacherId: booking.shift.teacherId,
+          action: 'RESCHEDULE',
+          category: 'ADMIN_OVERRIDE',
+          initiatedByRole: 'ADMIN',
+          oldStart: booking.shift.start,
+          oldEnd: booking.shift.end,
+          newStart,
+          newEnd,
+          reason: params.reason,
+          status: 'CONFIRMED',
+          penaltyStatus: PenaltyStatus.NONE,
+        },
+      }),
+      this.prisma.shift.update({
+        where: { id: booking.shiftId },
+        data: { start: newStart, end: newEnd },
+      }),
+    ]);
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_RESCHEDULE',
+      entityType: 'Booking',
+      entityId: booking.id,
+      reason: params.reason,
+      beforeData: { start: booking.shift.start, end: booking.shift.end },
+      afterData: { start: newStart, end: newEnd },
+    });
+
+    return audit;
+  }
+
+  async adminCancel(
+    adminUserId: string,
+    bookingId: string,
+    params: { reason: string },
+  ) {
+    if (!params.reason?.trim()) {
+      throw new BadRequestException('A reason is required for an admin override.');
+    }
+
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { shift: true },
+    });
+    if (!booking) throw new NotFoundException('Booking not found.');
+
+    const [audit] = await this.prisma.$transaction([
+      this.prisma.rescheduleRequest.create({
+        data: {
+          bookingId: booking.id,
+          teacherId: booking.shift.teacherId,
+          action: 'CANCEL',
+          category: 'ADMIN_OVERRIDE',
+          initiatedByRole: 'ADMIN',
+          oldStart: booking.shift.start,
+          oldEnd: booking.shift.end,
+          newStart: booking.shift.start,
+          newEnd: booking.shift.end,
+          reason: params.reason,
+          status: 'CANCELLED',
+          penaltyStatus: PenaltyStatus.NONE,
+        },
+      }),
+      this.prisma.booking.update({
+        where: { id: booking.id },
+        data: { paymentStatus: 'REFUNDED' },
+      }),
+      this.prisma.shift.update({
+        where: { id: booking.shiftId },
+        data: { isBooked: false },
+      }),
+    ]);
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_CANCEL',
+      entityType: 'Booking',
+      entityId: booking.id,
+      reason: params.reason,
+    });
+
+    return audit;
   }
 }
