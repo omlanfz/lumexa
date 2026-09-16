@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
-import { Card, Pagination, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { Avatar, Card, Pagination, StatusBadge, formatDate } from "@/components/admin/AdminUI";
 
 interface TeacherRow {
   id: string;
@@ -122,8 +122,13 @@ export default function TeachersPage() {
                     className="border-b border-[var(--a-border)] last:border-0 hover:bg-[var(--a-nav-hover)] cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <p className="text-[var(--a-text)] font-medium">{t.user.fullName}</p>
-                      <p className="text-xs text-[var(--a-text-faint)]">{t.user.email}</p>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={t.user.fullName} src={t.user.avatarUrl} />
+                        <div>
+                          <p className="text-[var(--a-text)] font-medium">{t.user.fullName}</p>
+                          <p className="text-xs text-[var(--a-text-faint)]">{t.user.email}</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{t.subjects.join(", ") || "—"}</td>
                     <td className="px-4 py-3 text-[var(--a-text)]">

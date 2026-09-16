@@ -622,6 +622,7 @@ export class AdminService {
           id: true,
           fullName: true,
           email: true,
+          avatarUrl: true,
           grade: true,
           subjects: true,
           accountStatus: true,

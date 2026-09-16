@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
-import { Card, Pagination, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { Avatar, Card, Pagination, StatusBadge, formatDate } from "@/components/admin/AdminUI";
 
 interface StudentRow {
   id: string;
   fullName: string;
   email: string;
+  avatarUrl: string | null;
   grade: string | null;
   accountStatus: string;
   createdAt: string;
@@ -112,8 +113,13 @@ export default function StudentsPage() {
                     className="border-b border-[var(--a-border)] last:border-0 hover:bg-[var(--a-nav-hover)] cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <p className="text-[var(--a-text)] font-medium">{s.fullName}</p>
-                      <p className="text-xs text-[var(--a-text-faint)]">{s.email}</p>
+                      <div className="flex items-center gap-3">
+                        <Avatar name={s.fullName} src={s.avatarUrl} />
+                        <div>
+                          <p className="text-[var(--a-text)] font-medium">{s.fullName}</p>
+                          <p className="text-xs text-[var(--a-text-faint)]">{s.email}</p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedTeacher?.user.fullName ?? "Unassigned"}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedCourse?.title ?? "—"}</td>
