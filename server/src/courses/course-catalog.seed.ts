@@ -48,21 +48,96 @@ export const COURSE_CATALOG: CourseSeed[] = [
     ageMin: 12,
     ageMax: 18,
     sessions: 72,
-    // The Odyssey overview PDF names each of its 9 stage-courses and their
-    // 8-lesson count, but (unlike the specialized-path PDFs) doesn't give a
-    // lesson-by-lesson breakdown for each one — so each module is one row
-    // representing its 8-lesson block rather than inventing lesson titles
-    // that aren't in the source material.
+    // The Odyssey overview PDF names each of its 9 stage-courses (course
+    // numbers 10, 11, 02, 07, 16, 08, 13, 04, 01) without repeating their
+    // lesson-by-lesson breakdown — each of those 9 courses is the identical
+    // course that appears in one of the 6 specialized-path PDFs (matched by
+    // course number), so its 8 real lessons are pulled from there rather
+    // than invented. "Build Your Digital Identity" is Digital Independence's
+    // course 16 "Build Your Professional Identity" under Odyssey's
+    // younger-audience framing — same course number, same lesson plan.
     lessons: [
-      'Stage 1 · Scratch Adventures (8 lessons)',
-      'Stage 1 · Python for Young Builders (8 lessons)',
-      'Stage 1 · Python Arcade Games (8 lessons)',
-      'Stage 2 · HTML and CSS Mastery (8 lessons)',
-      'Stage 2 · Build Your Digital Identity (8 lessons)',
-      'Stage 2 · JavaScript and Interactivity (8 lessons)',
-      'Stage 3 · Python for Data (8 lessons)',
-      'Stage 3 · Python and AI Foundations (8 lessons)',
-      'Stage 3 · Roblox World Builder (8 lessons)',
+      // Stage 1 · Course 10 — Scratch Adventures (Little Coders Path)
+      'What is coding and why does it matter',
+      'Scratch setup and first sprite',
+      'Motion, looks, and sounds blocks',
+      'Events and broadcasting',
+      'Loops and repetition',
+      'Conditionals and decisions',
+      'Building an interactive story',
+      'Final project: our own game',
+      // Stage 1 · Course 11 — Python for Young Builders (Little Coders Path)
+      'From Scratch blocks to Python text',
+      'Variables and user input',
+      'Printing and string formatting',
+      'If/else decisions',
+      'While loops and for loops',
+      'Lists and simple data',
+      'Building a mini quiz app',
+      'Final project: our own mini game',
+      // Stage 1 · Course 02 — Python Arcade Games (Game Creator Path)
+      'Python basics for game development',
+      'Pygame setup and game loop',
+      'Sprites, images, and movement',
+      'Collision detection',
+      'Enemies, AI behavior, and scoring',
+      'Sound effects and music',
+      'Game states (menu, play, game over)',
+      'Packaging and sharing your game',
+      // Stage 2 · Course 07 — HTML and CSS Mastery (Web Developer Path)
+      'How the web works (browsers, servers, HTML)',
+      'HTML structure and semantic elements',
+      'CSS basics: colors, fonts, spacing',
+      'Flexbox for modern layouts',
+      'CSS Grid for complex designs',
+      'Responsive design and mobile-first',
+      'Animations and hover effects',
+      'Deploying to Vercel and sharing',
+      // Stage 2 · Course 16 — Build Your Digital Identity (Digital Independence Path)
+      'What professional identity means in the digital age',
+      'Define your strengths and direction',
+      'Build your portfolio website',
+      'Tell your story professionally',
+      'Create your personal brand',
+      'Turn projects into proof',
+      'Launch your professional website',
+      'Build social proof',
+      // Stage 2 · Course 08 — JavaScript and Interactivity (Web Developer Path)
+      'JavaScript fundamentals (variables, functions, loops)',
+      'DOM manipulation: selecting and changing elements',
+      'Event listeners: responding to user actions',
+      'Fetch API: pulling live data from the web',
+      'Async/await and working with APIs',
+      'Local Storage for saving user data',
+      'Building a complete interactive app',
+      'Debugging and polishing',
+      // Stage 3 · Course 13 — Python for Data (Data Scientist Path)
+      'Why data science matters (real examples)',
+      'Python refresher and Jupyter setup',
+      'Loading data from CSV and Excel',
+      'Pandas: selecting, filtering, sorting',
+      'Cleaning data: nulls, duplicates, types',
+      'Aggregations: group by, pivot tables',
+      'Statistical summaries and correlation',
+      'Full analysis project with a real dataset',
+      // Stage 3 · Course 04 — Python and AI Foundations (AI Builder Path)
+      'Python setup and first program',
+      'Variables, data types, and logic',
+      'Loops, functions, and modules',
+      'Working with data and lists',
+      'Introduction to machine learning concepts',
+      'Building a first prediction model',
+      'Training, testing, and evaluating models',
+      'Presenting results to non-technical audiences',
+      // Stage 3 · Course 01 — Roblox World Builder (Game Creator Path)
+      'Roblox Studio setup and first build',
+      'Scripting basics in Lua',
+      'Player mechanics and movement',
+      'Game logic and scoring systems',
+      'Multiplayer networking basics',
+      'World design and aesthetics',
+      'Testing, debugging, polishing',
+      'Publishing and sharing with friends',
     ],
   },
   {
@@ -317,6 +392,13 @@ export const COURSE_CATALOG: CourseSeed[] = [
  *  manual admin edits are never overwritten) its lessons. Accepts any
  *  Prisma client — PrismaService in the running app, or a bare PrismaClient
  *  from the standalone seed script. */
+// Matches the placeholder lesson rows an earlier version of this seed wrote
+// for the Odyssey course ("Stage 1 · Scratch Adventures (8 lessons)" etc.)
+// before its real 72-lesson breakdown was filled in. Used below to safely
+// upgrade any environment that already booted with that older seed, without
+// touching a course an admin has since genuinely hand-edited.
+const STALE_ODYSSEY_PLACEHOLDER = /^Stage \d+ · .+ \(8 lessons\)$/;
+
 export async function seedCourseCatalog(
   prisma: PrismaClient | { course: any; lesson: any },
 ) {
@@ -353,9 +435,29 @@ export async function seedCourseCatalog(
       },
     });
 
-    const lessonCount = await prisma.lesson.count({
+    let lessonCount = await prisma.lesson.count({
       where: { courseId: course.id },
     });
+
+    // One-time upgrade: an earlier version of this seed gave Odyssey 9
+    // placeholder rows instead of its real 72 lessons. If that's exactly
+    // what's there, replace it — anything else (0, 72, or a count that
+    // doesn't match the old placeholder shape at all) is left alone so a
+    // genuine admin edit is never overwritten.
+    if (seed.slug === 'lumexa-odyssey' && lessonCount > 0 && lessonCount !== seed.lessons.length) {
+      const existingLessons = await prisma.lesson.findMany({
+        where: { courseId: course.id },
+        select: { id: true, title: true },
+      });
+      const isStalePlaceholder =
+        existingLessons.length === 9 &&
+        existingLessons.every((l: { title: string }) => STALE_ODYSSEY_PLACEHOLDER.test(l.title));
+      if (isStalePlaceholder) {
+        await prisma.lesson.deleteMany({ where: { courseId: course.id } });
+        lessonCount = 0;
+      }
+    }
+
     if (lessonCount === 0 && seed.lessons.length > 0) {
       const duration = Math.round((seed.sessions / seed.lessons.length) * 60);
       await prisma.lesson.createMany({

@@ -341,7 +341,9 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
   const [lessons, setLessons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
-  const [order, setOrder] = useState(1);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -355,9 +357,9 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
 
   const addLesson = async () => {
     if (!title.trim()) return;
-    await api.post(`/courses/${course.id}/lessons`, { title: title.trim(), order });
+    const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1;
+    await api.post(`/courses/${course.id}/lessons`, { title: title.trim(), order: nextOrder });
     setTitle("");
-    setOrder((o) => o + 1);
     load();
     onDone();
   };
@@ -366,6 +368,35 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
     await api.delete(`/courses/lessons/${id}`);
     load();
     onDone();
+  };
+
+  // Drag-to-reorder — reorders the local list immediately for a responsive
+  // feel, then persists every lesson whose position actually changed as a
+  // new `order` value. Same mechanism a custom course's lesson plan uses.
+  const dropAt = async (dropIndex: number) => {
+    const fromIndex = dragIndex;
+    setDragIndex(null);
+    setDragOverIndex(null);
+    if (fromIndex === null || fromIndex === dropIndex) return;
+
+    const reordered = [...lessons];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+
+    const originalOrderById = new Map(lessons.map((l) => [l.id, l.order]));
+    const renumbered = reordered.map((l, i) => ({ ...l, order: i + 1 }));
+    setLessons(renumbered);
+    setReordering(true);
+    try {
+      await Promise.all(
+        renumbered
+          .filter((l) => originalOrderById.get(l.id) !== l.order)
+          .map((l) => api.patch(`/courses/lessons/${l.id}`, { order: l.order })),
+      );
+      onDone();
+    } finally {
+      setReordering(false);
+    }
   };
 
   return (
@@ -378,30 +409,55 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
             placeholder="Lesson title"
             className="flex-1 px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
           />
-          <input
-            type="number"
-            value={order}
-            onChange={(e) => setOrder(Number(e.target.value))}
-            className="w-20 px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
-          />
           <button onClick={addLesson} className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)]">
             Add
           </button>
         </div>
+        {lessons.length > 1 && (
+          <p className="text-xs text-[var(--a-text-faint)]">Drag a lesson to reorder it.</p>
+        )}
         <div className="max-h-72 overflow-y-auto space-y-2">
           {loading && <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>}
           {!loading && lessons.length === 0 && <p className="text-sm text-[var(--a-text-muted)]">No lessons yet.</p>}
           {!loading &&
-            lessons.map((l) => (
-              <div key={l.id} className="flex items-center justify-between p-2.5 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)]">
-                <span className="text-sm text-[var(--a-text)]">
-                  {l.order}. {l.title} <span className="text-[var(--a-text-faint)]">({l.duration}min)</span>
+            lessons.map((l, i) => (
+              <div
+                key={l.id}
+                draggable
+                onDragStart={() => setDragIndex(i)}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragOverIndex !== i) setDragOverIndex(i);
+                }}
+                onDragEnd={() => {
+                  setDragIndex(null);
+                  setDragOverIndex(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  dropAt(i);
+                }}
+                className={`flex items-center justify-between gap-2 p-2.5 rounded-lg border bg-[var(--a-surface-2)] cursor-grab active:cursor-grabbing select-none transition-colors ${
+                  dragIndex === i
+                    ? "opacity-50 border-[var(--a-border)]"
+                    : dragOverIndex === i
+                      ? "border-[var(--a-accent)]"
+                      : "border-[var(--a-border)]"
+                }`}
+              >
+                <span className="flex items-center gap-2 text-sm text-[var(--a-text)] min-w-0">
+                  <span className="text-[var(--a-text-faint)] flex-shrink-0" aria-hidden="true">⠿</span>
+                  <span className="truncate">{l.order}. {l.title}</span>
                 </span>
-                <button onClick={() => removeLesson(l.id)} className="text-xs text-[var(--a-danger)] hover:underline">
+                <button
+                  onClick={() => removeLesson(l.id)}
+                  className="text-xs text-[var(--a-danger)] hover:underline flex-shrink-0"
+                >
                   Remove
                 </button>
               </div>
             ))}
+          {reordering && <p className="text-xs text-[var(--a-text-faint)]">Saving new order…</p>}
         </div>
       </div>
     </Modal>
