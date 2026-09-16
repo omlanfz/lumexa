@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { SchedulingService } from '../scheduling/scheduling.service';
+import { getClassWindow } from '../scheduling/lesson-window.util';
 
 // ─── Badge Tier Definitions ───────────────────────────────────────────────────
 
@@ -74,6 +76,7 @@ export class TeachersService {
   constructor(
     private prisma: PrismaService,
     private payoutsService: PayoutsService,
+    private scheduling: SchedulingService,
   ) {}
 
   // ─── Get My Profile ───────────────────────────────────────────────────────
@@ -255,42 +258,70 @@ export class TeachersService {
     });
     if (!teacher) return null;
 
-    const nextBooking = await this.prisma.booking.findFirst({
-      where: {
-        shift: {
-          teacherId: teacher.id,
-          start: { gte: new Date() },
+    const [nextBooking, nextLesson] = await Promise.all([
+      this.prisma.booking.findFirst({
+        where: {
+          shift: {
+            teacherId: teacher.id,
+            end: { gte: new Date() },
+          },
+          paymentStatus: { in: ['PENDING', 'CAPTURED'] },
         },
-        paymentStatus: { in: ['PENDING', 'CAPTURED'] },
-      },
-      include: {
-        student: {
-          select: { name: true, age: true, grade: true, subject: true },
+        include: {
+          student: {
+            select: { name: true, age: true, grade: true, subject: true },
+          },
+          studentUser: {
+            select: { fullName: true },
+          },
+          shift: { select: { start: true, end: true } },
         },
-        studentUser: {
-          select: { fullName: true },
+        orderBy: {
+          shift: { start: 'asc' },
         },
-        shift: { select: { start: true, end: true } },
-      },
-      orderBy: {
-        shift: { start: 'asc' },
-      },
-    });
+      }),
+      this.scheduling.getTeacherLiveOrNextLesson(teacher.id),
+    ]);
 
-    if (!nextBooking) return null;
+    const bookingNext = nextBooking
+      ? {
+          type: 'booking' as const,
+          id: nextBooking.id,
+          studentName:
+            nextBooking.student?.name ??
+            nextBooking.studentUser?.fullName ??
+            'Student',
+          start: nextBooking.shift.start,
+          end: nextBooking.shift.end,
+        }
+      : null;
+    const lessonNext = nextLesson
+      ? {
+          type: 'lesson' as const,
+          id: nextLesson.id,
+          studentName: nextLesson.student.fullName,
+          studentAvatarUrl: nextLesson.student.avatarUrl,
+          start: nextLesson.start,
+          end: nextLesson.end,
+          courseTitle: nextLesson.course.title,
+          lessonNumber: nextLesson.lessonNumber,
+          lessonTitle: nextLesson.lessonTitle,
+          classType: nextLesson.classType,
+        }
+      : null;
+
+    const chosen =
+      bookingNext && lessonNext
+        ? new Date(bookingNext.start) < new Date(lessonNext.start)
+          ? bookingNext
+          : lessonNext
+        : (bookingNext ?? lessonNext);
+
+    if (!chosen) return null;
 
     return {
-      bookingId: nextBooking.id,
-      studentName:
-        nextBooking.student?.name ??
-        nextBooking.studentUser?.fullName ??
-        'Student',
-      studentAge: nextBooking.student?.age ?? null,
-      studentGrade: nextBooking.student?.grade ?? null,
-      studentSubject: nextBooking.student?.subject ?? null,
-      start: nextBooking.shift.start,
-      end: nextBooking.shift.end,
-      msUntilStart: Math.max(0, nextBooking.shift.start.getTime() - Date.now()),
+      ...chosen,
+      ...getClassWindow(new Date(chosen.start), new Date(chosen.end)),
     };
   }
 

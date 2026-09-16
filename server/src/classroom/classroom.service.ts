@@ -1,6 +1,8 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { StudentsService } from '../students/students.service';
+import { SchedulingService } from '../scheduling/scheduling.service';
+import { getClassWindow } from '../scheduling/lesson-window.util';
 import { SpaceRank } from '@prisma/client';
 import { AccessToken } from 'livekit-server-sdk';
 
@@ -20,6 +22,7 @@ export class ClassroomService {
   constructor(
     private prisma: PrismaService,
     private studentsService: StudentsService,
+    private schedulingService: SchedulingService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -29,7 +32,90 @@ export class ClassroomService {
     return 'STARCHILD';
   }
 
-  async joinLab(userId: string, bookingId: string) {
+  /** Dispatches to the marketplace-booking flow or the curriculum
+   * scheduled-lesson flow depending on which id was given. */
+  async joinLab(
+    userId: string,
+    dto: { bookingId?: string; scheduledLessonId?: string },
+  ) {
+    if (dto.scheduledLessonId) {
+      return this.joinScheduledLesson(userId, dto.scheduledLessonId);
+    }
+    if (dto.bookingId) {
+      return this.joinBooking(userId, dto.bookingId);
+    }
+    throw new BadRequestException(
+      'Either bookingId or scheduledLessonId is required.',
+    );
+  }
+
+  // ─── Curriculum flow: Operations-scheduled recurring lessons ─────────────
+
+  async joinScheduledLesson(userId: string, lessonId: string) {
+    const lesson = await this.schedulingService.getLessonForClassroom(lessonId);
+
+    const window = getClassWindow(lesson.start, lesson.end);
+    if (!window.joinable) {
+      if (window.msUntilStart > 0) {
+        const minutesUntilOpen = Math.ceil(
+          (window.msUntilStart - 10 * 60 * 1000) / (1000 * 60),
+        );
+        throw new BadRequestException(
+          `Classroom opens 10 minutes before class. Please come back in ${Math.max(minutesUntilOpen, 1)} minute(s).`,
+        );
+      }
+      throw new BadRequestException('This class has already ended.');
+    }
+
+    let participantName = '';
+    let role: 'TEACHER' | 'STUDENT';
+
+    if (lesson.teacher.userId === userId) {
+      participantName = `${lesson.teacher.user.fullName} (Teacher)`;
+      role = 'TEACHER';
+    } else if (lesson.student.id === userId) {
+      participantName = `${lesson.student.fullName} (Student)`;
+      role = 'STUDENT';
+    } else {
+      throw new BadRequestException(
+        'Access denied: you are not assigned to this classroom.',
+      );
+    }
+
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    if (!apiKey || !apiSecret) {
+      throw new BadRequestException('Video service is not configured.');
+    }
+
+    const roomName = `lesson-${lessonId}`;
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: userId,
+      name: participantName,
+      ttl: '3h',
+    });
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    await this.schedulingService.recordLessonJoin(lessonId, role).catch((err) => {
+      this.logger.error(`Failed to record join for lesson ${lessonId}: ${err}`);
+    });
+
+    return {
+      token: await at.toJwt(),
+      url: process.env.LIVEKIT_URL,
+      roomName,
+    };
+  }
+
+  // ─── Marketplace flow: booked shift ───────────────────────────────────────
+
+  async joinBooking(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {

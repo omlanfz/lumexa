@@ -1,19 +1,24 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { Suspense, use, useEffect, useState } from 'react';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
 import '@livekit/components-styles';
 import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface PageProps {
   params: Promise<{ bookingId: string }>;
 }
 
-export default function StarLabPage({ params }: PageProps) {
+function StarLabContent({ params }: PageProps) {
   const router = useRouter();
-  const { bookingId } = use(params);
+  const searchParams = useSearchParams();
+  const { bookingId: id } = use(params);
+  // Curriculum classes (Operations-generated ScheduledLesson) and marketplace
+  // bookings both land on this same route — ?type=lesson tells us which id
+  // this is, so we post the right field to /classroom/join.
+  const isLesson = searchParams.get('type') === 'lesson';
 
   const [token, setToken] = useState('');
   const [serverUrl, setServerUrl] = useState('');
@@ -29,7 +34,10 @@ export default function StarLabPage({ params }: PageProps) {
 
     const init = async () => {
       try {
-        const res = await api.post('/classroom/join', { bookingId });
+        const res = await api.post(
+          '/classroom/join',
+          isLesson ? { scheduledLessonId: id } : { bookingId: id },
+        );
         setToken(res.data.token);
         setServerUrl(res.data.url);
       } catch (err: unknown) {
@@ -39,7 +47,7 @@ export default function StarLabPage({ params }: PageProps) {
     };
 
     init();
-  }, [bookingId, router]);
+  }, [id, isLesson, router]);
 
   const handleDisconnect = () => {
     const role = getStoredRole();
@@ -77,5 +85,20 @@ export default function StarLabPage({ params }: PageProps) {
         <VideoConference />
       </LiveKitRoom>
     </div>
+  );
+}
+
+export default function StarLabPage({ params }: PageProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-black flex flex-col items-center justify-center text-blue-400 font-mono">
+          <div className="animate-spin text-4xl mb-4">🛸</div>
+          <p className="tracking-widest animate-pulse">ESTABLISHING QUANTUM LINK...</p>
+        </div>
+      }
+    >
+      <StarLabContent params={params} />
+    </Suspense>
   );
 }

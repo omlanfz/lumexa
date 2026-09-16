@@ -459,6 +459,12 @@ model ScheduledLesson {
   end           DateTime // UTC instant
   classType     ClassType
   status        LessonStatus   @default(UPCOMING)
+  // Attendance timestamps, set when each side's LiveKit token is first
+  // issued for this lesson (see ClassroomService.joinScheduledLesson).
+  // Teacher lateness is always derived from teacherJoinedAt - start, never
+  // a separately-entered value, so it can't drift from the actual schedule.
+  teacherJoinedAt DateTime?
+  studentJoinedAt DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 

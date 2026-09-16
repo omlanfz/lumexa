@@ -44,6 +44,7 @@ interface LessonsData {
 interface ScheduledLessonItem {
   id: string;
   lessonNumber: number;
+  lessonTitle: string | null;
   start: string;
   end: string;
   classType: 'ONE_TO_ONE' | 'BATCH';
@@ -79,24 +80,10 @@ interface ProgressData {
   subjects: string[];
   subjectBreakdown: SubjectCount[];
   badges: Badge[];
+  nextBadge: Badge | null;
+  totalLessonsCompleted: number;
+  lessonsCompletedThisMonth: number;
   memberSince: string;
-}
-
-interface RankEntry {
-  position: number;
-  fullName: string;
-  avatarUrl: string | null;
-  totalSessions: number;
-  spaceRank: string;
-  spaceRankIcon: string;
-  isCurrentUser: boolean;
-}
-
-interface RankingsData {
-  cohortRank: number;
-  totalInCohort: number;
-  cohortMonth: string;
-  topCohort: RankEntry[];
 }
 
 function Skeleton({ className }: { className: string }) {
@@ -225,7 +212,11 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
 
         <div className="flex-1 min-w-0">
           <p className="text-gray-900 dark:text-white font-medium truncate">
-            {lesson.course.title} · Lesson {lesson.lessonNumber}
+            Lesson {lesson.lessonNumber}
+            {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ''}
+          </p>
+          <p className="text-gray-500 dark:text-gray-400 text-xs truncate">
+            {lesson.course.title}
           </p>
           <p className="text-gray-500 dark:text-gray-400 text-xs">
             {start.toLocaleDateString('en-US', {
@@ -274,7 +265,6 @@ function LearningHubContent() {
   const [scheduledUpcoming, setScheduledUpcoming] = useState<ScheduledLessonItem[]>([]);
   const [scheduledCompleted, setScheduledCompleted] = useState<ScheduledLessonItem[]>([]);
   const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [rankings, setRankings] = useState<RankingsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -290,19 +280,17 @@ function LearningHubContent() {
     setLoading(true);
     setError('');
     try {
-      const [upcomingRes, completedRes, progressRes, rankingsRes, scheduledUpRes, scheduledCompRes] =
+      const [upcomingRes, completedRes, progressRes, scheduledUpRes, scheduledCompRes] =
         await Promise.all([
           api.get<LessonsData>('/students/me/lessons', { params: { status: 'upcoming', page: 1, limit: 20 } }),
           api.get<LessonsData>('/students/me/lessons', { params: { status: 'completed', page: 1, limit: 20 } }),
           api.get<ProgressData>('/students/me/progress'),
-          api.get<RankingsData>('/students/me/rankings'),
           api.get<ScheduledLessonItem[]>('/students/me/scheduled-lessons', { params: { status: 'upcoming' } }),
           api.get<ScheduledLessonItem[]>('/students/me/scheduled-lessons', { params: { status: 'completed' } }),
         ]);
       setUpcomingData(upcomingRes.data);
       setCompletedData(completedRes.data);
       setProgress(progressRes.data);
-      setRankings(rankingsRes.data);
       setScheduledUpcoming(scheduledUpRes.data ?? []);
       setScheduledCompleted(scheduledCompRes.data ?? []);
     } catch (err: unknown) {
@@ -542,33 +530,47 @@ function LearningHubContent() {
             </div>
           )}
 
-          {/* Leaderboard — secondary, de-emphasized */}
-          {rankings && rankings.topCohort.length > 0 && (
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
-              <div className="flex items-center justify-between mb-4">
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
-                  {rankings.cohortMonth} Leaderboard
+          {/* Milestones — motivating, personal, no cohort comparison needed */}
+          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/10 border border-teal-200 dark:border-teal-800/30 rounded-xl p-6">
+            <p className="text-xs text-teal-700 dark:text-teal-300 uppercase tracking-wide font-medium mb-4">
+              Milestones
+            </p>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="bg-white/70 dark:bg-black/10 rounded-lg p-4">
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">
+                  {progress.lessonsCompletedThisMonth}
                 </p>
-                <span className="text-gray-500 dark:text-gray-400 text-xs">
-                  You're #{rankings.cohortRank} of {rankings.totalInCohort}
-                </span>
+                <p className="text-gray-600 dark:text-gray-300 text-sm mt-1">
+                  {progress.lessonsCompletedThisMonth > 0
+                    ? `Lesson${progress.lessonsCompletedThisMonth !== 1 ? 's' : ''} completed this month — keep it up! 🚀`
+                    : 'Complete a lesson this month to get the streak going! 🌱'}
+                </p>
               </div>
-              <div className="divide-y divide-gray-200 dark:divide-gray-700/30">
-                {rankings.topCohort.slice(0, 5).map((entry) => (
-                  <div
-                    key={`${entry.position}-${entry.fullName}`}
-                    className={`flex items-center gap-3 py-2.5 transition-colors ${entry.isCurrentUser ? 'text-teal-600 dark:text-teal-300' : 'text-gray-700 dark:text-gray-300'}`}
-                  >
-                    <span className="w-6 text-xs text-gray-500">#{entry.position}</span>
-                    <span className="flex-1 text-sm truncate">
-                      {entry.isCurrentUser ? `${entry.fullName} (You)` : entry.fullName}
-                    </span>
-                    <span className="text-xs text-gray-500">{entry.totalSessions} sessions</span>
-                  </div>
-                ))}
+              <div className="bg-white/70 dark:bg-black/10 rounded-lg p-4">
+                {progress.nextBadge ? (
+                  <>
+                    <p className="text-3xl">{progress.nextBadge.icon}</p>
+                    <p className="text-gray-900 dark:text-white text-sm font-medium mt-1">
+                      Next badge: {progress.nextBadge.label}
+                    </p>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
+                      {progress.totalLessonsCompleted} lesson{progress.totalLessonsCompleted !== 1 ? 's' : ''} completed so far
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl">🏆</p>
+                    <p className="text-gray-900 dark:text-white text-sm font-medium mt-1">
+                      All badges earned!
+                    </p>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
+                      You're a Lumexa legend.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 

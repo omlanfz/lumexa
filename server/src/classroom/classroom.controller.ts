@@ -21,8 +21,11 @@ export class ClassroomController {
 
   @Post('join')
   @UseGuards(AuthGuard('jwt'))
-  joinLab(@Request() req, @Body() body: { bookingId: string }) {
-    return this.classroomService.joinLab(req.user.userId, body.bookingId);
+  joinLab(
+    @Request() req,
+    @Body() body: { bookingId?: string; scheduledLessonId?: string },
+  ) {
+    return this.classroomService.joinLab(req.user.userId, body);
   }
 
   /**

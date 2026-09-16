@@ -35,11 +35,17 @@ interface Stats {
 }
 
 interface NextClass {
-  bookingId: string;
+  type: 'lesson' | 'booking';
+  id: string;
   start: string;
   end: string;
   studentName: string;
-  msUntilStart: number;
+  studentAvatarUrl?: string | null;
+  courseTitle?: string;
+  lessonNumber?: number;
+  lessonTitle?: string | null;
+  isLive: boolean;
+  joinable: boolean;
 }
 
 interface Profile {
@@ -71,21 +77,30 @@ interface Shift {
 const RANK_NAMES = ["Cadet", "Navigator", "Pilot", "Commander", "Admiral", "Starmaster"];
 const RANK_ICONS = ["🌱", "🧭", "✈️", "🎖️", "⭐", "🌟"];
 
-function useCountdown(targetMs: number | null) {
-  const [remaining, setRemaining] = useState<number>(targetMs ?? 0);
+function pad(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function splitDuration(ms: number) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  return {
+    hours: Math.floor(total / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
+  };
+}
+
+/** Ticks once a second while a class is on screen — used for both the
+ * "starts in" countdown and the "elapsed" timer once it goes live, so both
+ * always derive from the class's own start/end instant. */
+function useClock(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (targetMs === null) return;
-    // Reset immediately to the new target (e.g. after a refetch) rather than
-    // waiting for the first tick.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setRemaining(targetMs);
-    const id = setInterval(() => setRemaining((p) => Math.max(0, p - 1000)), 1000);
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
-  }, [targetMs]);
-  const hours = Math.floor(remaining / 3600000);
-  const minutes = Math.floor((remaining % 3600000) / 60000);
-  const seconds = Math.floor((remaining % 60000) / 1000);
-  return { hours, minutes, seconds };
+  }, [active]);
+  return now;
 }
 
 function greeting() {
@@ -106,7 +121,14 @@ function TeacherDashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const { hours, minutes, seconds } = useCountdown(nextClass?.msUntilStart ?? null);
+  const now = useClock(!!nextClass);
+  const { hours, minutes, seconds } = nextClass
+    ? splitDuration(
+        nextClass.isLive
+          ? now - new Date(nextClass.start).getTime()
+          : new Date(nextClass.start).getTime() - now,
+      )
+    : { hours: 0, minutes: 0, seconds: 0 };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -200,15 +222,27 @@ function TeacherDashboardContent() {
         {/* ── 2. Next class ───────────────────────────────────────────── */}
         <section className="mb-6">
           <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
-            Next Class
+            {nextClass?.isLive ? "Live Now" : "Next Class"}
           </p>
           {nextClass ? (
             <div className={`${card} p-5 relative overflow-hidden`}>
               <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
                 <div>
+                  {nextClass.isLive && (
+                    <span className="inline-flex items-center gap-1.5 mb-1.5 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-500 text-xs font-bold uppercase tracking-wide">
+                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Live
+                    </span>
+                  )}
                   <p className="text-lg font-bold text-[var(--t-text)]">
                     Class with {nextClass.studentName}
                   </p>
+                  {nextClass.type === "lesson" && (
+                    <p className="text-sm text-[var(--t-text-muted)]">
+                      {nextClass.courseTitle}
+                      {nextClass.lessonNumber ? ` · Lesson ${nextClass.lessonNumber}` : ""}
+                      {nextClass.lessonTitle ? `: ${nextClass.lessonTitle}` : ""}
+                    </p>
+                  )}
                   <p className="text-sm text-[var(--t-text-muted)]">
                     {new Date(nextClass.start).toLocaleDateString("en-US", {
                       weekday: "short",
@@ -234,6 +268,9 @@ function TeacherDashboardContent() {
 
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2">
+                  <p className="text-xs text-[var(--t-text-muted)] mr-1">
+                    {nextClass.isLive ? "Elapsed" : "Starts in"}
+                  </p>
                   {[hours, minutes, seconds].map((val, i) => (
                     <div key={i} className="text-center px-2.5 py-1.5 rounded-lg bg-[var(--t-nav-active)]">
                       <p className="text-sm font-bold tabular-nums text-[var(--t-text)]">
@@ -242,9 +279,9 @@ function TeacherDashboardContent() {
                     </div>
                   ))}
                 </div>
-                {nextClass.msUntilStart <= 600000 && (
+                {nextClass.joinable && (
                   <button
-                    onClick={() => router.push(`/classroom/${nextClass.bookingId}`)}
+                    onClick={() => router.push(`/classroom/${nextClass.id}?type=${nextClass.type}`)}
                     className="px-4 py-2 bg-[var(--t-success)] hover:opacity-90 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
                   >
                     Join Class →
