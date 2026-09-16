@@ -101,11 +101,19 @@ function DashboardSkeleton() {
 
 // ─── Onboarding checklist for new students (0 sessions) ──────────────────────
 
-function OnboardingChecklist({ studentName }: { studentName: string }) {
+function OnboardingChecklist({
+  studentName,
+  assignedTeacher,
+  upcomingBooking,
+}: {
+  studentName: string;
+  assignedTeacher: AssignedTeacher | null;
+  upcomingBooking: UpcomingBooking | null;
+}) {
   const steps = [
     { icon: '✅', label: 'Account created', done: true },
-    { icon: '👩‍🚀', label: 'Meet your assigned teacher', done: false },
-    { icon: '🗓️', label: 'Your first session gets scheduled', done: false },
+    { icon: '👩‍🚀', label: 'Meet your assigned teacher', done: !!assignedTeacher },
+    { icon: '🗓️', label: 'Your first session gets scheduled', done: !!upcomingBooking },
     { icon: '🚀', label: 'Enter Star Lab and launch your mission', done: false },
   ];
 
@@ -121,7 +129,9 @@ function OnboardingChecklist({ studentName }: { studentName: string }) {
             Welcome aboard, {studentName}! 🌌
           </h3>
           <p className="text-teal-100/80 text-sm mt-1">
-            Operations is matching you with your teacher — here's what happens next.
+            {assignedTeacher
+              ? "Your teacher is assigned — here's what happens next."
+              : "Operations is matching you with your teacher — here's what happens next."}
           </p>
         </div>
       </div>
@@ -137,9 +147,27 @@ function OnboardingChecklist({ studentName }: { studentName: string }) {
             <span className={`text-xl flex-shrink-0 ${step.done ? '' : 'grayscale opacity-50'}`}>
               {step.icon}
             </span>
-            <p className={`text-sm font-medium flex-1 ${step.done ? 'line-through opacity-70' : ''}`}>
-              {step.label}
-            </p>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium ${step.done ? 'line-through opacity-70' : ''}`}>
+                {step.label}
+              </p>
+              {i === 1 && assignedTeacher && (
+                <div className="flex items-center gap-2 mt-1.5">
+                  {assignedTeacher.avatarUrl ? (
+                    <img
+                      src={assignedTeacher.avatarUrl}
+                      alt={assignedTeacher.name}
+                      className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                      {assignedTeacher.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <p className="text-teal-100/90 text-xs font-normal">{assignedTeacher.name}</p>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -234,6 +262,10 @@ export default function StudentDashboardPage() {
   // booking's teacher).
   const assignedTeacher = student.assignedTeacher;
 
+  // isNewStudent stays true (and this checklist keeps showing) until the
+  // student's first completed session — so a teacher assignment made by
+  // Operations mid-onboarding must still reflect here immediately.
+
   // Greeting varies by time of day
   const hour = new Date().getHours();
   const greeting =
@@ -268,7 +300,11 @@ export default function StudentDashboardPage() {
       </div>
 
       {isNewStudent ? (
-        <OnboardingChecklist studentName={firstName} />
+        <OnboardingChecklist
+          studentName={firstName}
+          assignedTeacher={assignedTeacher}
+          upcomingBooking={upcomingBooking}
+        />
       ) : (
         <div className="grid lg:grid-cols-3 gap-4 items-start">
           {/* Next class — the single most important thing */}

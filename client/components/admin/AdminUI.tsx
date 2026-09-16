@@ -95,7 +95,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg a-card p-6 fade-in"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto a-card p-6 fade-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">
