@@ -8,6 +8,7 @@
 "use client";
 
 import { useState, ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 // ─── Status badge ───────────────────────────────────────────────────────────
 
@@ -41,6 +42,54 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`a-card p-5 ${className}`}>{children}</div>;
+}
+
+// ─── Avatar ──────────────────────────────────────────────────────────────────
+//
+// Round profile photo for a teacher/student row — falls back to their name's
+// first initial on a colored circle when they haven't uploaded one (photos
+// are uploaded from the teacher/student's own dashboard via POST
+// /uploads/avatar, which writes to User.avatarUrl).
+
+const AVATAR_COLORS = [
+  "bg-rose-500", "bg-orange-500", "bg-amber-500", "bg-emerald-500",
+  "bg-teal-500", "bg-sky-500", "bg-indigo-500", "bg-violet-500", "bg-fuchsia-500",
+];
+
+function initialColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+export function Avatar({
+  name,
+  src,
+  size = 36,
+}: {
+  name: string;
+  src?: string | null;
+  size?: number;
+}) {
+  const dimension = { width: size, height: size };
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        style={dimension}
+        className="rounded-full object-cover border border-[var(--a-border)] flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <div
+      style={{ ...dimension, fontSize: size * 0.42 }}
+      className={`rounded-full flex items-center justify-center text-white font-semibold flex-shrink-0 ${initialColor(name || "?")}`}
+    >
+      {(name || "?").trim().charAt(0).toUpperCase()}
+    </div>
+  );
 }
 
 // ─── Pagination ──────────────────────────────────────────────────────────────
@@ -89,9 +138,19 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
-  return (
+  // Rendered into a portal at document.body — admin pages wrap their content
+  // in a `.fade-in` div (see admin/layout.tsx) whose entrance animation ends
+  // on `transform: translateY(0)`, and CSS makes any transformed ancestor
+  // the containing block for `position: fixed` descendants. Left in place,
+  // this modal's `fixed inset-0` would be positioned relative to that page
+  // content div instead of the viewport — clipping its top edge behind the
+  // sticky top nav instead of covering the whole screen. A portal escapes
+  // that ancestor entirely.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
       <div
@@ -110,7 +169,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
