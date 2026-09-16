@@ -6,8 +6,10 @@ import api from "@/lib/axios";
 import {
   Card,
   Modal,
+  PaymentBadge,
   ReasonActionModal,
   StatusBadge,
+  formatBDT,
   formatDate,
   formatDateTime,
 } from "@/components/admin/AdminUI";
@@ -15,13 +17,29 @@ import {
 const TABS = ["Overview", "Class History", "Notes", "Payments", "Reschedule History"] as const;
 type Tab = (typeof TABS)[number];
 
+const LEDGER_EVENT_LABELS: Record<string, string> = {
+  PAYMENT_RECEIVED: "Payment received",
+  LESSON_COMPLETED: "Lesson completed",
+  CURRICULUM_CHANGE: "Curriculum change",
+  CREDIT_CARRIED_FORWARD: "Credit carried forward",
+  REFUND: "Refund",
+  ADMIN_ADJUSTMENT: "Admin adjustment",
+};
+
+function formatLessons(n: number | null): string {
+  if (n === null) return "—";
+  return (Math.round(n * 10) / 10).toString();
+}
+
 export default function StudentDetailPage() {
   const { studentUserId } = useParams<{ studentUserId: string }>();
   const router = useRouter();
   const [student, setStudent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("Overview");
-  const [modal, setModal] = useState<null | "pause" | "assignTeacher" | "assignCourse">(null);
+  const [modal, setModal] = useState<
+    null | "pause" | "assignTeacher" | "assignCourse" | "PAYMENT_RECEIVED" | "REFUND" | "ADMIN_ADJUSTMENT"
+  >(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -51,6 +69,7 @@ export default function StudentDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={student.accountStatus} />
+          <PaymentBadge badge={student.ledgerSummary?.paymentBadge} />
           {student.accountStatus === "PAUSED" ? (
             <button onClick={resume} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--a-success)] text-white hover:opacity-90">
               Resume
@@ -168,24 +187,96 @@ export default function StudentDetailPage() {
       )}
 
       {tab === "Payments" && (
-        <Card className="space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">Gem Wallet</p>
-          <p className="text-sm text-[var(--a-text)]">Balance: {student.gemBalance} gems</p>
-          <div className="pt-3 space-y-2">
-            {(student.gemWallet?.purchases ?? []).length === 0 && (
-              <p className="text-sm text-[var(--a-text-muted)]">No purchase history.</p>
+        <div className="space-y-4">
+          <Card className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">Current Balance</p>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <p className="text-2xl font-bold text-[var(--a-text)]">{formatBDT(student.ledgerSummary.balanceCents)}</p>
+              <p className="text-sm text-[var(--a-text-muted)]">
+                remaining
+                {student.ledgerSummary.lessonsRemaining !== null && (
+                  <> · {formatLessons(student.ledgerSummary.lessonsRemaining)} lessons remaining</>
+                )}
+              </p>
+            </div>
+            {student.ledgerSummary.courseName && (
+              <p className="text-xs text-[var(--a-text-faint)]">
+                {student.ledgerSummary.courseName}
+                {student.ledgerSummary.rateCents > 0 && <> · {formatBDT(student.ledgerSummary.rateCents)} / lesson</>}
+              </p>
             )}
-            {(student.gemWallet?.purchases ?? []).map((p: any) => (
-              <div key={p.id} className="flex items-center justify-between p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)]">
-                <div>
-                  <p className="text-sm text-[var(--a-text)]">{p.gems} gems via {p.paymentMethod}</p>
-                  <p className="text-xs text-[var(--a-text-faint)]">{formatDateTime(p.createdAt)}</p>
-                </div>
-                <StatusBadge status={p.status} />
-              </div>
-            ))}
-          </div>
-        </Card>
+            {student.ledgerSummary.paymentBadge && <PaymentBadge badge={student.ledgerSummary.paymentBadge} />}
+            <div className="pt-2 flex flex-wrap gap-2">
+              <button
+                onClick={() => setModal("PAYMENT_RECEIVED")}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)]"
+              >
+                + Record payment
+              </button>
+              <button
+                onClick={() => setModal("REFUND")}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+              >
+                Refund
+              </button>
+              <button
+                onClick={() => setModal("ADMIN_ADJUSTMENT")}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+              >
+                Admin adjustment
+              </button>
+            </div>
+          </Card>
+
+          <Card className="p-0 overflow-hidden">
+            <p className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+              Payment & Credit History
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Event</th>
+                    <th className="px-4 py-3">Curriculum</th>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3 text-right">Balance after</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {student.ledger.length === 0 && (
+                    <tr><td colSpan={5} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No payment history yet.</td></tr>
+                  )}
+                  {student.ledger.map((entry: any) => (
+                    <tr key={entry.id} className="border-b border-[var(--a-border)] last:border-0 align-top">
+                      <td className="px-4 py-3 text-[var(--a-text-muted)] whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-[var(--a-text)] font-medium">{LEDGER_EVENT_LABELS[entry.type] ?? entry.type}</p>
+                        {entry.description && <p className="text-xs text-[var(--a-text-faint)] mt-0.5">{entry.description}</p>}
+                        {entry.createdByAdmin?.fullName && (
+                          <p className="text-xs text-[var(--a-text-faint)]">by {entry.createdByAdmin.fullName}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[var(--a-text-muted)]">{entry.courseName}</td>
+                      <td
+                        className={`px-4 py-3 text-right font-medium whitespace-nowrap ${
+                          entry.amountCents > 0
+                            ? "text-[var(--a-success-text)]"
+                            : entry.amountCents < 0
+                              ? "text-[var(--a-danger-text)]"
+                              : "text-[var(--a-text-faint)]"
+                        }`}
+                      >
+                        {entry.amountCents === 0 ? "—" : `${entry.amountCents > 0 ? "+" : ""}${formatBDT(entry.amountCents)}`}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--a-text)] whitespace-nowrap">{formatBDT(entry.balanceAfterCents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
       )}
 
       {tab === "Reschedule History" && (
@@ -247,6 +338,19 @@ export default function StudentDetailPage() {
           }}
           onClear={async () => {
             await api.post(`/admin/students/${studentUserId}/assign-course`, { courseId: null });
+            load();
+          }}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {(modal === "PAYMENT_RECEIVED" || modal === "REFUND" || modal === "ADMIN_ADJUSTMENT") && (
+        <LedgerEntryModal
+          type={modal}
+          courseName={student.assignedCourse?.title ?? null}
+          onSubmit={async (body) => {
+            const path =
+              modal === "PAYMENT_RECEIVED" ? "payments" : modal === "REFUND" ? "refunds" : "adjustments";
+            await api.post(`/admin/students/${studentUserId}/ledger/${path}`, body);
             load();
           }}
           onClose={() => setModal(null)}
@@ -407,6 +511,131 @@ function AssignCourseModal({
               {c.title} <span className="text-[var(--a-text-faint)]">({c.category})</span>
             </button>
           ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+const LEDGER_MODAL_META = {
+  PAYMENT_RECEIVED: { title: "Record payment", actionLabel: "Record payment" },
+  REFUND: { title: "Issue refund", actionLabel: "Issue refund" },
+  ADMIN_ADJUSTMENT: { title: "Admin adjustment", actionLabel: "Apply adjustment" },
+} as const;
+
+function LedgerEntryModal({
+  type,
+  courseName,
+  onSubmit,
+  onClose,
+}: {
+  type: "PAYMENT_RECEIVED" | "REFUND" | "ADMIN_ADJUSTMENT";
+  courseName: string | null;
+  onSubmit: (body: Record<string, any>) => Promise<void>;
+  onClose: () => void;
+}) {
+  const [amountTaka, setAmountTaka] = useState("");
+  const [lessonsPurchased, setLessonsPurchased] = useState("");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    const amount = Number(amountTaka);
+    if (!amount || (type !== "ADMIN_ADJUSTMENT" && amount <= 0)) {
+      setError("Enter a valid amount.");
+      return;
+    }
+    if (type === "PAYMENT_RECEIVED" && !(Number(lessonsPurchased) > 0)) {
+      setError("Enter how many lessons this payment covers.");
+      return;
+    }
+    if (type === "ADMIN_ADJUSTMENT" && !description.trim()) {
+      setError("A description is required for admin adjustments.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: Record<string, any> =
+        type === "PAYMENT_RECEIVED"
+          ? { amountTaka: amount, lessonsPurchased: Number(lessonsPurchased), description: description.trim() || undefined }
+          : { amountTaka: amount, description: description.trim() || undefined };
+      await onSubmit(body);
+      onClose();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const meta = LEDGER_MODAL_META[type];
+
+  return (
+    <Modal title={meta.title} onClose={onClose}>
+      <div className="space-y-4">
+        {type === "PAYMENT_RECEIVED" && (
+          <p className="text-xs text-[var(--a-text-faint)]">
+            Curriculum: {courseName ?? "Unassigned"}. The effective per-lesson rate is calculated as amount ÷ lessons purchased.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+              Amount (৳){type === "ADMIN_ADJUSTMENT" ? " — negative to debit" : ""}
+            </label>
+            <input
+              type="number"
+              value={amountTaka}
+              onChange={(e) => setAmountTaka(e.target.value)}
+              placeholder={type === "ADMIN_ADJUSTMENT" ? "e.g. -500 or 500" : "e.g. 20250"}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+              autoFocus
+            />
+          </div>
+          {type === "PAYMENT_RECEIVED" && (
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+                Lessons purchased
+              </label>
+              <input
+                type="number"
+                value={lessonsPurchased}
+                onChange={(e) => setLessonsPurchased(e.target.value)}
+                placeholder="e.g. 24"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+              />
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+            Description {type === "ADMIN_ADJUSTMENT" ? "(required)" : "(optional)"}
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+            placeholder="e.g. 10% bundle discount applied — recorded for audit."
+          />
+        </div>
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
+          >
+            {submitting ? "Working…" : meta.actionLabel}
+          </button>
         </div>
       </div>
     </Modal>

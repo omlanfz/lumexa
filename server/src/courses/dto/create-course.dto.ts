@@ -58,6 +58,13 @@ export class CreateCourseDto {
   @Min(1)
   gemCost?: number;
 
+  // Total list price for the course, in poisha (BDT minor unit). Used as the
+  // default per-lesson rate (priceCents / sessions) — see StudentLedgerService.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  priceCents?: number;
+
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

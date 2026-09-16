@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/axios";
-import { Card, Modal, StatusBadge } from "@/components/admin/AdminUI";
+import { Card, Modal, StatusBadge, formatBDT } from "@/components/admin/AdminUI";
 
 interface Course {
   id: string;
@@ -15,6 +15,7 @@ interface Course {
   ageMax: number;
   sessions: number;
   gemCost: number;
+  priceCents: number | null;
   isActive: boolean;
   _count: { lessons: number; assignedStudents: number };
 }
@@ -60,15 +61,16 @@ export default function ManageCoursesPage() {
               <th className="px-4 py-3">Category</th>
               <th className="px-4 py-3">Ages</th>
               <th className="px-4 py-3">Lessons</th>
+              <th className="px-4 py-3">Price</th>
               <th className="px-4 py-3">Students</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>}
+            {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>}
             {!loading && courses.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No courses yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No courses yet.</td></tr>
             )}
             {!loading &&
               courses.map((c) => (
@@ -77,6 +79,16 @@ export default function ManageCoursesPage() {
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.category}</td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.ageMin}–{c.ageMax}</td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.lessons}</td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    {c.priceCents ? (
+                      <>
+                        {formatBDT(c.priceCents)}
+                        <span className="text-xs text-[var(--a-text-faint)]"> ({formatBDT(Math.round(c.priceCents / c.sessions))}/lesson)</span>
+                      </>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.assignedStudents}</td>
                   <td className="px-4 py-3"><StatusBadge status={c.isActive ? "ACTIVE" : "DEACTIVATED"} /></td>
                   <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
@@ -140,6 +152,7 @@ function CourseFormModal({
     category: course?.category ?? "",
     level: course?.level ?? "BEGINNER",
     sessions: course?.sessions ?? 8,
+    priceTaka: course?.priceCents ? course.priceCents / 100 : "",
   });
   const [slugTouched, setSlugTouched] = useState(!!course);
   const [isCustom, setIsCustom] = useState(false);
@@ -183,9 +196,14 @@ function CourseFormModal({
     setSubmitting(true);
     setError(null);
     try {
+      const { priceTaka, ...rest } = form;
       const payload = {
-        ...form,
+        ...rest,
         sessions: Number(form.sessions),
+        priceCents:
+          priceTaka === "" || priceTaka === null
+            ? undefined
+            : Math.round(Number(priceTaka) * 100),
         // Custom one-off courses stay out of the public catalog — they
         // exist only to be assigned directly to the student below.
         ...(isCustom ? { isActive: false } : {}),
@@ -223,10 +241,23 @@ function CourseFormModal({
             }}
           />
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <LabeledInput label="Category" value={form.category} onChange={(v) => set("category", v)} />
           <LabeledInput label="Level" value={form.level} onChange={(v) => set("level", v)} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
           <LabeledInput label="Sessions" type="number" value={form.sessions} onChange={(v) => set("sessions", v)} />
+          <div>
+            <LabeledInput
+              label="Price (BDT)"
+              type="number"
+              value={form.priceTaka}
+              onChange={(v) => set("priceTaka", v === "" ? "" : v)}
+            />
+            <p className="text-xs text-[var(--a-text-faint)] mt-1">
+              Used as the default per-lesson rate for students changing into this curriculum.
+            </p>
+          </div>
         </div>
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">Description</label>

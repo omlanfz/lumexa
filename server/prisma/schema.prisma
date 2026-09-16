@@ -53,6 +53,9 @@ model User {
   gemTransactions GemTransaction[]
   rankSnapshots   RankSnapshot[]
 
+  ledgerEntries        StudentLedgerEntry[] @relation("StudentLedgerEntries")
+  createdLedgerEntries StudentLedgerEntry[] @relation("StudentLedgerCreatedBy")
+
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
 }
@@ -140,22 +143,23 @@ model Shift {
 }
 
 model Booking {
-  id                 String              @id @default(uuid())
-  shiftId            String              @unique
-  studentId          String? // legacy: references Student sub-entity (nullable for student self-auth bookings)
-  studentUserId      String? // new: references User with STUDENT role (self-auth)
-  createdAt          DateTime            @default(now())
-  amountCents        Int?
-  egressId           String?
-  paymentIntentId    String?
-  paymentStatus      PaymentStatus       @default(PENDING)
-  recordingUrl       String?
-  shift              Shift               @relation(fields: [shiftId], references: [id])
-  student            Student?            @relation(fields: [studentId], references: [id])
-  studentUser        User?               @relation("StudentBookings", fields: [studentUserId], references: [id])
-  rescheduleRequests RescheduleRequest[]
-  payoutEntries      PayoutEntry[]
-  review             Review?
+  id                   String               @id @default(uuid())
+  shiftId              String               @unique
+  studentId            String? // legacy: references Student sub-entity (nullable for student self-auth bookings)
+  studentUserId        String? // new: references User with STUDENT role (self-auth)
+  createdAt            DateTime             @default(now())
+  amountCents          Int?
+  egressId             String?
+  paymentIntentId      String?
+  paymentStatus        PaymentStatus        @default(PENDING)
+  recordingUrl         String?
+  shift                Shift                @relation(fields: [shiftId], references: [id])
+  student              Student?             @relation(fields: [studentId], references: [id])
+  studentUser          User?                @relation("StudentBookings", fields: [studentUserId], references: [id])
+  rescheduleRequests   RescheduleRequest[]
+  payoutEntries        PayoutEntry[]
+  review               Review?
+  studentLedgerEntries StudentLedgerEntry[]
 
   @@index([studentId])
   @@index([studentUserId])
@@ -358,21 +362,29 @@ model Review {
 // ─── Lumexa Platform: Courses, Gems & Trial Leads ────────────────────────────
 
 model Course {
-  id               String   @id @default(uuid())
-  slug             String   @unique
+  id               String               @id @default(uuid())
+  slug             String               @unique
   title            String
   description      String?
   emoji            String?
   category         String // e.g. "Python", "AI", "Web"
   level            String // "STARTER" | "BEGINNER" | "INTERMEDIATE" | "ADVANCED"
-  ageMin           Int      @default(6)
-  ageMax           Int      @default(18)
-  sessions         Int      @default(12)
-  gemCost          Int      @default(1) // gems per session
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
+  ageMin           Int                  @default(6)
+  ageMax           Int                  @default(18)
+  sessions         Int                  @default(12)
+  gemCost          Int                  @default(1) // gems per session (student gamification, unrelated to BDT billing)
+  // List price for the full course, in poisha (BDT minor unit — see BDT()
+  // helper in payout.constants.ts). Nullable: older/custom courses may have
+  // no catalog price yet. Used as the default per-lesson rate
+  // (priceCents / sessions) when a student's curriculum changes and no
+  // actual payment has been recorded against the new curriculum yet — see
+  // StudentLedgerService.
+  priceCents       Int?
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
   lessons          Lesson[]
   assignedStudents User[]
+  ledgerEntries    StudentLedgerEntry[]
 
   @@index([isActive])
   @@index([category])
@@ -416,6 +428,56 @@ model GemPurchase {
 
   @@index([walletId])
   @@index([status])
+}
+
+// ─── Student BDT credit ledger ───────────────────────────────────────────────
+//
+// Append-only source of truth for a student's tuition credit balance. Never
+// update or delete a row — a correction is a new offsetting entry (see
+// ADMIN_ADJUSTMENT / REFUND). amountCents is BDT minor-unit (poisha, see
+// BDT() helper in payout.constants.ts) and signed: positive credits the
+// balance (PAYMENT_RECEIVED), negative debits it (LESSON_COMPLETED, REFUND).
+// balanceAfterCents and rateCents are snapshots of the running balance and
+// the effective per-lesson rate immediately after this entry — because
+// entries are immutable and always appended in order, the latest row's
+// balanceAfterCents IS the student's current balance (no separate stored
+// counter to drift out of sync). rateCents carries forward unchanged on
+// entries that don't change pricing (LESSON_COMPLETED, REFUND,
+// ADMIN_ADJUSTMENT) and is recomputed on PAYMENT_RECEIVED (amountCents /
+// lessonsPurchased) and on CURRICULUM_CHANGE (new course's list rate, when
+// known). Idempotency for the automatic per-booking consumption trigger is
+// enforced by @@unique([bookingId, type]) — Postgres treats NULL bookingId
+// values as distinct, so this only constrains LESSON_COMPLETED rows.
+model StudentLedgerEntry {
+  id                String                 @id @default(uuid())
+  studentUserId     String
+  student           User                   @relation("StudentLedgerEntries", fields: [studentUserId], references: [id])
+  type              StudentLedgerEntryType
+  amountCents       Int
+  balanceAfterCents Int
+  rateCents         Int // effective per-lesson rate (poisha) in effect after this entry; 0 if unknown
+  lessonsPurchased  Float? // set on PAYMENT_RECEIVED only, for display/audit
+  courseId          String?
+  course            Course?                @relation(fields: [courseId], references: [id])
+  courseName        String // denormalized curriculum name snapshot at event time
+  description       String?
+  createdByAdminId  String?
+  createdByAdmin    User?                  @relation("StudentLedgerCreatedBy", fields: [createdByAdminId], references: [id])
+  bookingId         String?
+  booking           Booking?               @relation(fields: [bookingId], references: [id])
+  createdAt         DateTime               @default(now())
+
+  @@unique([bookingId, type])
+  @@index([studentUserId, createdAt])
+}
+
+enum StudentLedgerEntryType {
+  PAYMENT_RECEIVED
+  LESSON_COMPLETED
+  CURRICULUM_CHANGE
+  CREDIT_CARRIED_FORWARD
+  REFUND
+  ADMIN_ADJUSTMENT
 }
 
 model ConsentToken {
