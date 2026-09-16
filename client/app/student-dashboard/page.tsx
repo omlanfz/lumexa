@@ -43,6 +43,11 @@ interface AssignedTeacher {
   subjects: string[];
 }
 
+interface AssignedCourse {
+  id: string;
+  title: string;
+}
+
 interface StudentInfo {
   id: string;
   fullName: string;
@@ -54,6 +59,7 @@ interface StudentInfo {
   hasBillingContact: boolean;
   sessionsToNextRank: number | null;
   assignedTeacher: AssignedTeacher | null;
+  assignedCourse: AssignedCourse | null;
 }
 
 interface Stats {
@@ -104,17 +110,20 @@ function DashboardSkeleton() {
 function OnboardingChecklist({
   studentName,
   assignedTeacher,
+  assignedCourse,
   upcomingBooking,
 }: {
   studentName: string;
   assignedTeacher: AssignedTeacher | null;
+  assignedCourse: AssignedCourse | null;
   upcomingBooking: UpcomingBooking | null;
 }) {
   const steps = [
-    { icon: '✅', label: 'Account created', done: true },
-    { icon: '👩‍🚀', label: 'Meet your assigned teacher', done: !!assignedTeacher },
-    { icon: '🗓️', label: 'Your first session gets scheduled', done: !!upcomingBooking },
-    { icon: '🚀', label: 'Enter Star Lab and launch your mission', done: false },
+    { key: 'account', icon: '✅', label: 'Account created', done: true },
+    { key: 'teacher', icon: '👩‍🚀', label: 'Meet your assigned teacher', done: !!assignedTeacher },
+    { key: 'curriculum', icon: '📚', label: 'Your curriculum is set', done: !!assignedCourse },
+    { key: 'session', icon: '🗓️', label: 'Your first session gets scheduled', done: !!upcomingBooking },
+    { key: 'launch', icon: '🚀', label: 'Enter Star Lab and launch your mission', done: false },
   ];
 
   return (
@@ -137,9 +146,9 @@ function OnboardingChecklist({
       </div>
 
       <div className="relative space-y-2.5">
-        {steps.map((step, i) => (
+        {steps.map((step) => (
           <div
-            key={i}
+            key={step.key}
             className={`flex items-center gap-3 p-3 rounded-xl ${
               step.done ? 'bg-white/10' : 'bg-white/5'
             }`}
@@ -151,7 +160,7 @@ function OnboardingChecklist({
               <p className={`text-sm font-medium ${step.done ? 'line-through opacity-70' : ''}`}>
                 {step.label}
               </p>
-              {i === 1 && assignedTeacher && (
+              {step.key === 'teacher' && assignedTeacher && (
                 <div className="flex items-center gap-2 mt-1.5">
                   {assignedTeacher.avatarUrl ? (
                     <img
@@ -166,6 +175,9 @@ function OnboardingChecklist({
                   )}
                   <p className="text-teal-100/90 text-xs font-normal">{assignedTeacher.name}</p>
                 </div>
+              )}
+              {step.key === 'curriculum' && assignedCourse && (
+                <p className="text-teal-100/90 text-xs font-normal mt-1">{assignedCourse.title}</p>
               )}
             </div>
           </div>
@@ -303,6 +315,7 @@ export default function StudentDashboardPage() {
         <OnboardingChecklist
           studentName={firstName}
           assignedTeacher={assignedTeacher}
+          assignedCourse={student.assignedCourse}
           upcomingBooking={upcomingBooking}
         />
       ) : (

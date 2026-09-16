@@ -309,3 +309,61 @@ export function formatDate(value: string | Date | null | undefined): string {
   const d = new Date(value);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+// ─── Asia/Dhaka formatting ───────────────────────────────────────────────────
+//
+// Lumexa's scheduling system (recurring slots, generated lessons) is always
+// defined in Bangladesh time. Unlike formatDate/formatDateTime above (which
+// render in the viewer's browser timezone — fine for "when was this action
+// taken"), a lesson's date/time must always read the same regardless of
+// which timezone the admin/teacher/student's browser is in.
+
+export function formatDhakaDateTime(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  return d.toLocaleString("en-US", {
+    timeZone: "Asia/Dhaka",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function formatDhakaDate(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  return d.toLocaleDateString("en-US", {
+    timeZone: "Asia/Dhaka",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function formatDhakaTime(value: string | Date | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  return d.toLocaleTimeString("en-US", {
+    timeZone: "Asia/Dhaka",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export const WEEKDAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+export const CLASS_TYPE_LABELS: Record<string, string> = {
+  ONE_TO_ONE: "1-to-1 (45 min)",
+  BATCH: "Batch (60 min)",
+};
