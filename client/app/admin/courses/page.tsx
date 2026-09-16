@@ -110,6 +110,20 @@ export default function ManageCoursesPage() {
   );
 }
 
+function slugify(title: string): string {
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+interface StudentOption {
+  id: string;
+  fullName: string;
+  email: string;
+}
+
 function CourseFormModal({
   course,
   onClose,
@@ -125,19 +139,45 @@ function CourseFormModal({
     description: course?.description ?? "",
     category: course?.category ?? "",
     level: course?.level ?? "BEGINNER",
-    ageMin: course?.ageMin ?? 6,
-    ageMax: course?.ageMax ?? 18,
-    sessions: course?.sessions ?? 12,
-    gemCost: course?.gemCost ?? 1,
+    sessions: course?.sessions ?? 8,
   });
+  const [slugTouched, setSlugTouched] = useState(!!course);
+  const [isCustom, setIsCustom] = useState(false);
+  const [studentQuery, setStudentQuery] = useState("");
+  const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
 
+  const onTitleChange = (v: string) => {
+    set("title", v);
+    if (!slugTouched) set("slug", slugify(v));
+  };
+
+  // Student search for the "custom course" flow — same debounce pattern
+  // used elsewhere in admin (see AssignModal on the student detail page).
+  useEffect(() => {
+    if (!isCustom || !studentQuery.trim()) {
+      setStudentOptions([]);
+      return;
+    }
+    const t = setTimeout(() => {
+      api
+        .get(`/admin/students?limit=8&search=${encodeURIComponent(studentQuery)}`)
+        .then((res) => setStudentOptions(res.data?.students ?? []));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [isCustom, studentQuery]);
+
   const submit = async () => {
-    if (!form.slug.trim() || !form.title.trim() || !form.category.trim()) {
-      setError("Slug, title, and category are required.");
+    if (!form.title.trim() || !form.slug.trim() || !form.category.trim()) {
+      setError("Title, slug, and category are required.");
+      return;
+    }
+    if (isCustom && !selectedStudent) {
+      setError("Pick which student this custom course is for.");
       return;
     }
     setSubmitting(true);
@@ -145,15 +185,20 @@ function CourseFormModal({
     try {
       const payload = {
         ...form,
-        ageMin: Number(form.ageMin),
-        ageMax: Number(form.ageMax),
         sessions: Number(form.sessions),
-        gemCost: Number(form.gemCost),
+        // Custom one-off courses stay out of the public catalog — they
+        // exist only to be assigned directly to the student below.
+        ...(isCustom ? { isActive: false } : {}),
       };
+      let courseId = course?.id;
       if (course) {
         await api.patch(`/courses/${course.id}`, payload);
       } else {
-        await api.post("/courses", payload);
+        const res = await api.post("/courses", payload);
+        courseId = res.data.id;
+      }
+      if (isCustom && selectedStudent && courseId) {
+        await api.post(`/admin/students/${selectedStudent.id}/assign-course`, { courseId });
       }
       onDone();
       onClose();
@@ -168,18 +213,20 @@ function CourseFormModal({
     <Modal title={course ? "Edit course" : "New course"} onClose={onClose}>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <LabeledInput label="Title" value={form.title} onChange={(v) => set("title", v)} />
-          <LabeledInput label="Slug" value={form.slug} onChange={(v) => set("slug", v)} />
+          <LabeledInput label="Title" value={form.title} onChange={onTitleChange} />
+          <LabeledInput
+            label="Slug"
+            value={form.slug}
+            onChange={(v) => {
+              setSlugTouched(true);
+              set("slug", v);
+            }}
+          />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <LabeledInput label="Category" value={form.category} onChange={(v) => set("category", v)} />
           <LabeledInput label="Level" value={form.level} onChange={(v) => set("level", v)} />
-        </div>
-        <div className="grid grid-cols-4 gap-3">
-          <LabeledInput label="Min age" type="number" value={form.ageMin} onChange={(v) => set("ageMin", v)} />
-          <LabeledInput label="Max age" type="number" value={form.ageMax} onChange={(v) => set("ageMax", v)} />
           <LabeledInput label="Sessions" type="number" value={form.sessions} onChange={(v) => set("sessions", v)} />
-          <LabeledInput label="Gem cost" type="number" value={form.gemCost} onChange={(v) => set("gemCost", v)} />
         </div>
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">Description</label>
@@ -190,6 +237,64 @@ function CourseFormModal({
             className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
           />
         </div>
+
+        {!course && (
+          <div className="pt-1 border-t border-[var(--a-border)]">
+            <label className="flex items-center gap-2 pt-3 text-sm text-[var(--a-text)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isCustom}
+                onChange={(e) => {
+                  setIsCustom(e.target.checked);
+                  if (e.target.checked && !form.category.trim()) set("category", "Custom");
+                }}
+                className="rounded border-[var(--a-border)]"
+              />
+              Custom course for one student
+            </label>
+            <p className="text-xs text-[var(--a-text-faint)] mt-1">
+              e.g. Odyssey starting from course 3 onward. Won&apos;t be shown in the public catalog — assigned directly to the student below.
+            </p>
+            {isCustom && (
+              <div className="mt-3 space-y-1.5">
+                <input
+                  value={studentQuery}
+                  onChange={(e) => {
+                    setStudentQuery(e.target.value);
+                    setSelectedStudent(null);
+                  }}
+                  placeholder="Search student by name or email…"
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+                />
+                {selectedStudent ? (
+                  <p className="text-sm text-[var(--a-success-text)]">
+                    Assigning to <span className="font-semibold">{selectedStudent.fullName}</span> ({selectedStudent.email})
+                  </p>
+                ) : (
+                  studentOptions.length > 0 && (
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {studentOptions.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedStudent(s);
+                            setStudentQuery(s.fullName);
+                            setStudentOptions([]);
+                          }}
+                          className="w-full text-left px-3 py-1.5 rounded-lg text-sm hover:bg-[var(--a-nav-hover)] text-[var(--a-text)]"
+                        >
+                          {s.fullName} <span className="text-[var(--a-text-faint)]">({s.email})</span>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)]">

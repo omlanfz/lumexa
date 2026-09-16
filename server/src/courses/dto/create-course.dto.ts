@@ -33,15 +33,20 @@ export class CreateCourseDto {
   @IsString()
   level: string;
 
+  // Optional — most courses are created from a known curriculum where the
+  // admin doesn't need to think about age brackets; falls back to the
+  // Course model's schema defaults (6–18) when omitted.
+  @IsOptional()
   @IsInt()
   @Min(4)
   @Max(18)
-  ageMin: number;
+  ageMin?: number;
 
+  @IsOptional()
   @IsInt()
   @Min(4)
   @Max(18)
-  ageMax: number;
+  ageMax?: number;
 
   @IsInt()
   @Min(1)
