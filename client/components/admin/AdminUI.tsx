@@ -38,6 +38,39 @@ export function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ─── Payment status badge ────────────────────────────────────────────────────
+//
+// Operational signal for a student's BDT credit balance — computed by
+// StudentLedgerService from the latest ledger entry (balance ÷ current
+// per-lesson rate). Only two levels exist today: there's no renewal/due-date
+// data in the schema to support a "payment overdue" state, so we don't
+// fabricate one (see the admin Payments tab).
+
+const PAYMENT_BADGE_STYLES: Record<string, string> = {
+  due_soon: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",
+  exhausted: "bg-[var(--a-danger-bg)] text-[var(--a-danger-text)]",
+};
+
+const PAYMENT_BADGE_ICONS: Record<string, string> = {
+  due_soon: "🟠",
+  exhausted: "🔴",
+};
+
+export function PaymentBadge({
+  badge,
+}: {
+  badge: { level: string; label: string } | null | undefined;
+}) {
+  if (!badge) return null;
+  const style = PAYMENT_BADGE_STYLES[badge.level] ?? "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${style}`}>
+      <span aria-hidden>{PAYMENT_BADGE_ICONS[badge.level] ?? "⚪"}</span>
+      {badge.label}
+    </span>
+  );
+}
+
 // ─── Card ────────────────────────────────────────────────────────────────────
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {

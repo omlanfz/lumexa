@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
-import { Avatar, Card, Pagination, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { Avatar, Card, Pagination, PaymentBadge, StatusBadge, formatDate } from "@/components/admin/AdminUI";
 
 interface StudentRow {
   id: string;
@@ -15,6 +15,7 @@ interface StudentRow {
   createdAt: string;
   assignedTeacher: { id: string; user: { fullName: string } } | null;
   assignedCourse: { id: string; title: string } | null;
+  paymentBadge: { level: string; label: string } | null;
 }
 
 export default function StudentsPage() {
@@ -95,15 +96,16 @@ export default function StudentsPage() {
                 <th className="px-4 py-3">Teacher</th>
                 <th className="px-4 py-3">Course</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Payment</th>
                 <th className="px-4 py-3">Joined</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>
               )}
               {!loading && students.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No students found.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No students found.</td></tr>
               )}
               {!loading &&
                 students.map((s) => (
@@ -124,6 +126,9 @@ export default function StudentsPage() {
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedTeacher?.user.fullName ?? "Unassigned"}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedCourse?.title ?? "—"}</td>
                     <td className="px-4 py-3"><StatusBadge status={s.accountStatus} /></td>
+                    <td className="px-4 py-3">
+                      {s.paymentBadge ? <PaymentBadge badge={s.paymentBadge} /> : <span className="text-[var(--a-text-faint)]">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{formatDate(s.createdAt)}</td>
                   </tr>
                 ))}

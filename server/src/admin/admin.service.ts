@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { StudentLedgerService } from '../students/student-ledger.service';
 
 const TEACHER_LIST_SELECT = {
   id: true,
@@ -48,6 +49,7 @@ export class AdminService {
     private stripe: StripeService,
     private audit: AuditService,
     private payouts: PayoutsService,
+    private studentLedger: StudentLedgerService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -644,8 +646,16 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
 
+    const ledgerSummaries = await this.studentLedger.getSummariesFor(
+      students.map((s) => s.id),
+    );
+    const studentsWithPaymentBadge = students.map((s) => ({
+      ...s,
+      paymentBadge: ledgerSummaries.get(s.id)?.paymentBadge ?? null,
+    }));
+
     return {
-      students,
+      students: studentsWithPaymentBadge,
       total,
       page,
       limit,
@@ -668,7 +678,6 @@ export class AdminService {
         createdAt: true,
         spaceRank: true,
         totalSessions: true,
-        gemBalance: true,
         assignedTeacherId: true,
         assignedTeacher: {
           select: {
@@ -677,14 +686,11 @@ export class AdminService {
           },
         },
         assignedCourse: { select: { id: true, title: true, category: true } },
-        gemWallet: {
-          include: { purchases: { orderBy: { createdAt: 'desc' }, take: 20 } },
-        },
       },
     });
     if (!student) throw new NotFoundException('Student not found.');
 
-    const [classHistory, notes, rescheduleHistory, auditHistory] =
+    const [classHistory, notes, rescheduleHistory, auditHistory, ledger] =
       await Promise.all([
         this.prisma.booking.findMany({
           where: { studentUserId },
@@ -709,7 +715,10 @@ export class AdminService {
           take: 50,
         }),
         this.audit.getHistory('User', studentUserId),
+        this.studentLedger.getLedger(studentUserId),
       ]);
+
+    const ledgerSummary = await this.studentLedger.getSummary(studentUserId);
 
     return {
       ...student,
@@ -717,6 +726,8 @@ export class AdminService {
       notes,
       rescheduleHistory,
       auditHistory,
+      ledgerSummary,
+      ledger,
     };
   }
 
@@ -778,18 +789,29 @@ export class AdminService {
   ) {
     const student = await this.prisma.user.findUnique({
       where: { id: studentUserId },
-      select: { id: true, role: true, assignedCourseId: true },
+      select: {
+        id: true,
+        role: true,
+        assignedCourseId: true,
+        assignedCourse: { select: { title: true } },
+      },
     });
     if (!student || student.role !== 'STUDENT') {
       throw new NotFoundException('Student not found.');
     }
 
+    let newCourse: {
+      id: string;
+      title: string;
+      priceCents: number | null;
+      sessions: number;
+    } | null = null;
     if (courseId) {
-      const course = await this.prisma.course.findUnique({
+      newCourse = await this.prisma.course.findUnique({
         where: { id: courseId },
-        select: { id: true },
+        select: { id: true, title: true, priceCents: true, sessions: true },
       });
-      if (!course) throw new NotFoundException('Course not found.');
+      if (!newCourse) throw new NotFoundException('Course not found.');
     }
 
     const updated = await this.prisma.user.update({
@@ -812,6 +834,16 @@ export class AdminService {
       beforeData: { assignedCourseId: student.assignedCourseId },
       afterData: { assignedCourseId: courseId },
     });
+
+    // Carries the student's BDT balance forward under the new curriculum —
+    // see StudentLedgerService.recordCurriculumChange doc comment. No-op if
+    // the student has no billing history yet.
+    await this.studentLedger.recordCurriculumChange(
+      studentUserId,
+      adminUserId,
+      student.assignedCourse,
+      newCourse,
+    );
 
     return updated;
   }

@@ -23,9 +23,11 @@ import {
 import { AdminService } from './admin.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { RescheduleService } from '../reschedule/reschedule.service';
+import { StudentLedgerService } from '../students/student-ledger.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import { IsNumber, IsPositive, MinLength } from 'class-validator';
 
 // ── Ledger trigger DTOs (Operations only — see PayoutsService doc comment) ──
 
@@ -64,6 +66,25 @@ class ReasonDto {
   @IsString() @IsNotEmpty() @MaxLength(1000) reason: string;
 }
 
+// ── Student BDT ledger DTOs ─────────────────────────────────────────────────
+
+class RecordPaymentDto {
+  @IsNumber() @IsPositive() amountTaka: number;
+  @IsNumber() @IsPositive() lessonsPurchased: number;
+  @IsOptional() @IsString() courseId?: string;
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+}
+
+class RecordRefundDto {
+  @IsNumber() @IsPositive() amountTaka: number;
+  @IsOptional() @IsString() @MaxLength(500) description?: string;
+}
+
+class RecordAdjustmentDto {
+  @IsNumber() amountTaka: number;
+  @IsString() @MinLength(1) @MaxLength(500) description: string;
+}
+
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Roles(Role.ADMIN)
@@ -72,6 +93,7 @@ export class AdminController {
     private readonly adminService: AdminService,
     private readonly payoutsService: PayoutsService,
     private readonly rescheduleService: RescheduleService,
+    private readonly studentLedgerService: StudentLedgerService,
   ) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
@@ -283,6 +305,52 @@ export class AdminController {
     @Request() req: any,
   ) {
     return this.adminService.resumeStudent(studentUserId, req.user.userId);
+  }
+
+  // ── Student BDT ledger ──────────────────────────────────────────────────
+
+  @Get('students/:studentUserId/ledger')
+  getStudentLedger(@Param('studentUserId') studentUserId: string) {
+    return this.studentLedgerService.getLedger(studentUserId);
+  }
+
+  @Post('students/:studentUserId/ledger/payments')
+  recordStudentPayment(
+    @Param('studentUserId') studentUserId: string,
+    @Body() dto: RecordPaymentDto,
+    @Request() req: any,
+  ) {
+    return this.studentLedgerService.recordPayment(
+      studentUserId,
+      req.user.userId,
+      dto,
+    );
+  }
+
+  @Post('students/:studentUserId/ledger/refunds')
+  recordStudentRefund(
+    @Param('studentUserId') studentUserId: string,
+    @Body() dto: RecordRefundDto,
+    @Request() req: any,
+  ) {
+    return this.studentLedgerService.recordRefund(
+      studentUserId,
+      req.user.userId,
+      dto,
+    );
+  }
+
+  @Post('students/:studentUserId/ledger/adjustments')
+  recordStudentAdjustment(
+    @Param('studentUserId') studentUserId: string,
+    @Body() dto: RecordAdjustmentDto,
+    @Request() req: any,
+  ) {
+    return this.studentLedgerService.recordAdjustment(
+      studentUserId,
+      req.user.userId,
+      dto,
+    );
   }
 
   // ── Verification documents ─────────────────────────────────────────────

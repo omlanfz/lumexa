@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
+import { StudentLedgerService } from '../students/student-ledger.service';
 
 describe('AdminService - assignTeacherToStudent', () => {
   let service: AdminService;
@@ -29,6 +30,7 @@ describe('AdminService - assignTeacherToStudent', () => {
           useValue: { log: jest.fn(), getHistory: jest.fn() },
         },
         { provide: PayoutsService, useValue: {} },
+        { provide: StudentLedgerService, useValue: {} },
       ],
     }).compile();
 
