@@ -26,6 +26,7 @@ import {
   dhakaToUtc,
   weekdayForDateStr,
 } from './dhaka-time.util';
+import { computeLateMinutes, getClassWindow } from './lesson-window.util';
 
 export const CLASS_DURATION_MINUTES: Record<ClassType, number> = {
   ONE_TO_ONE: 45,
@@ -281,7 +282,7 @@ export class SchedulingService {
     });
     if (!teacher) throw new NotFoundException('Teacher profile not found.');
 
-    return this.prisma.scheduledLesson.findMany({
+    const lessons = await this.prisma.scheduledLesson.findMany({
       where: {
         teacherId: teacher.id,
         status: { in: [LessonStatus.UPCOMING, LessonStatus.COMPLETED] },
@@ -292,9 +293,20 @@ export class SchedulingService {
         course: { select: { id: true, title: true } },
       },
     });
+
+    const withTitles = await this.attachLessonTitles(lessons);
+    return withTitles.map((l) => ({
+      ...l,
+      teacherLateMinutes: l.teacherJoinedAt
+        ? computeLateMinutes(l.start, l.teacherJoinedAt)
+        : null,
+    }));
   }
 
   // ─── Student: own generated lessons for the Learning hub ─────────────────
+  // Upcoming reads front-to-back (Lesson 1 → next); Completed reads
+  // most-recently-finished first (highest lesson number → lowest), so the
+  // student's latest completed work is always at the top of that tab.
 
   async getStudentScheduledLessons(
     studentUserId: string,
@@ -308,7 +320,7 @@ export class SchedulingService {
     else if (status === 'completed') where.status = LessonStatus.COMPLETED;
     else where.status = { in: [LessonStatus.UPCOMING, LessonStatus.COMPLETED] };
 
-    return this.prisma.scheduledLesson.findMany({
+    const lessons = await this.prisma.scheduledLesson.findMany({
       where,
       orderBy: { lessonNumber: status === 'completed' ? 'desc' : 'asc' },
       include: {
@@ -320,6 +332,119 @@ export class SchedulingService {
         },
         course: { select: { id: true, title: true } },
       },
+    });
+
+    return this.attachLessonTitles(lessons);
+  }
+
+  // ─── Resolve each lesson's real curriculum title ─────────────────────────
+  //
+  // ScheduledLesson only stores a lessonNumber; the human-readable name
+  // lives on Lesson.title (keyed by Lesson.order within the course), which
+  // admins can rename/add at any time from the course catalog editor. This
+  // reads Lesson fresh on every call — no caching — so admin edits are
+  // reflected immediately everywhere lessons are listed.
+
+  private async attachLessonTitles<
+    T extends { courseId: string; lessonNumber: number },
+  >(lessons: T[]): Promise<(T & { lessonTitle: string | null })[]> {
+    if (lessons.length === 0) return [];
+
+    const courseIds = Array.from(new Set(lessons.map((l) => l.courseId)));
+    const catalogLessons = await this.prisma.lesson.findMany({
+      where: { courseId: { in: courseIds } },
+      select: { courseId: true, order: true, title: true },
+    });
+
+    const titleMap = new Map<string, string>();
+    for (const cl of catalogLessons) {
+      titleMap.set(`${cl.courseId}:${cl.order}`, cl.title);
+    }
+
+    return lessons.map((l) => ({
+      ...l,
+      lessonTitle: titleMap.get(`${l.courseId}:${l.lessonNumber}`) ?? null,
+    }));
+  }
+
+  // ─── Student/Teacher: the class to show front-and-center right now ───────
+  //
+  // "Live or next" is one query: the earliest still-UPCOMING lesson whose
+  // end hasn't passed. That lesson is either live right now (start <= now
+  // <= end) or the next one coming up — exactly the two states the
+  // Home-page live-class card needs to distinguish, via getClassWindow.
+
+  async getStudentLiveOrNextLesson(studentUserId: string) {
+    const lesson = await this.prisma.scheduledLesson.findFirst({
+      where: {
+        studentUserId,
+        status: LessonStatus.UPCOMING,
+        end: { gte: new Date() },
+      },
+      orderBy: { start: 'asc' },
+      include: {
+        teacher: {
+          select: {
+            id: true,
+            user: { select: { fullName: true, avatarUrl: true } },
+          },
+        },
+        course: { select: { id: true, title: true, emoji: true } },
+      },
+    });
+    if (!lesson) return null;
+    const [withTitle] = await this.attachLessonTitles([lesson]);
+    return withTitle;
+  }
+
+  async getTeacherLiveOrNextLesson(teacherId: string) {
+    const lesson = await this.prisma.scheduledLesson.findFirst({
+      where: {
+        teacherId,
+        status: LessonStatus.UPCOMING,
+        end: { gte: new Date() },
+      },
+      orderBy: { start: 'asc' },
+      include: {
+        student: { select: { id: true, fullName: true, avatarUrl: true } },
+        course: { select: { id: true, title: true, emoji: true } },
+      },
+    });
+    if (!lesson) return null;
+    const [withTitle] = await this.attachLessonTitles([lesson]);
+    return withTitle;
+  }
+
+  // ─── Classroom join support ───────────────────────────────────────────────
+
+  async getLessonForClassroom(lessonId: string) {
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+      include: {
+        teacher: { include: { user: true } },
+        student: true,
+        course: { select: { title: true } },
+      },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+    return lesson;
+  }
+
+  /** Records the first time each side's LiveKit token was issued for this
+   * lesson — teacherJoinedAt is the sole source for lateness (see
+   * lesson-window.util computeLateMinutes), never a manually entered value. */
+  async recordLessonJoin(lessonId: string, role: 'TEACHER' | 'STUDENT') {
+    const field = role === 'TEACHER' ? 'teacherJoinedAt' : 'studentJoinedAt';
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+      select: { teacherJoinedAt: true, studentJoinedAt: true },
+    });
+    if (!lesson) return;
+    if (lesson[field]) return; // already recorded — keep the first join time
+
+    await this.prisma.scheduledLesson.update({
+      where: { id: lessonId },
+      data: { [field]: new Date() },
     });
   }
 

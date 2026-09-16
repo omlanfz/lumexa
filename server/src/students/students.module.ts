@@ -4,10 +4,12 @@ import { StudentsService } from './students.service';
 import { StudentLedgerService } from './student-ledger.service';
 import { StudentsController } from './students.controller';
 import { PrismaModule } from '../prisma.module';
+import { SchedulingModule } from '../scheduling/scheduling.module';
 
 @Module({
   imports: [
     PrismaModule,
+    SchedulingModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '7d' },

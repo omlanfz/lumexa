@@ -9,6 +9,8 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SchedulingService } from '../scheduling/scheduling.service';
+import { getClassWindow } from '../scheduling/lesson-window.util';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { RegisterStudentDto } from './dto/register-student.dto';
 import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
@@ -99,6 +101,7 @@ export class StudentsService {
     private prisma: PrismaService,
     private jwtService: JwtService,
     private notifications: NotificationsService,
+    private scheduling: SchedulingService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -272,7 +275,9 @@ export class StudentsService {
         gemBalance: true,
         billingContactEmail: true,
         assignedTeacher: ASSIGNED_TEACHER_SELECT,
-        assignedCourse: { select: { id: true, title: true } },
+        assignedCourse: {
+          select: { id: true, title: true, emoji: true, sessions: true },
+        },
       },
     });
 
@@ -280,68 +285,79 @@ export class StudentsService {
 
     const now = new Date();
 
-    const [bookings, nextScheduledLesson] = await Promise.all([
-      this.prisma.booking.findMany({
-        where: {
-          studentUserId: userId,
-          paymentStatus: { in: ['PENDING', 'CAPTURED'] },
-        },
-        include: {
-          shift: {
-            include: {
-              teacher: {
-                include: {
-                  user: { select: { fullName: true, avatarUrl: true } },
+    const [bookings, nextScheduledLesson, completedLessonCount] =
+      await Promise.all([
+        this.prisma.booking.findMany({
+          where: {
+            studentUserId: userId,
+            paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+          },
+          include: {
+            shift: {
+              include: {
+                teacher: {
+                  include: {
+                    user: { select: { fullName: true, avatarUrl: true } },
+                  },
                 },
               },
             },
+            review: { select: { id: true, rating: true } },
           },
-          review: { select: { id: true, rating: true } },
-        },
-        orderBy: { shift: { start: 'asc' } },
-      }),
-      this.prisma.scheduledLesson.findFirst({
-        where: { studentUserId: userId, status: 'UPCOMING' },
-        orderBy: { start: 'asc' },
-        include: {
-          teacher: {
-            select: { user: { select: { fullName: true, avatarUrl: true } } },
-          },
-        },
-      }),
-    ]);
+          orderBy: { shift: { start: 'asc' } },
+        }),
+        this.scheduling.getStudentLiveOrNextLesson(userId),
+        user.assignedCourse
+          ? this.prisma.scheduledLesson.count({
+              where: {
+                studentUserId: userId,
+                courseId: user.assignedCourse.id,
+                status: 'COMPLETED',
+              },
+            })
+          : Promise.resolve(0),
+      ]);
 
     const captured = bookings.filter((b) => b.paymentStatus === 'CAPTURED');
     const upcoming = bookings.filter((b) => new Date(b.shift.start) > now);
 
-    // The next class can come from either the marketplace booking flow or
-    // an Operations-generated recurring lesson — whichever is soonest wins.
+    // The class to show can come from either the marketplace booking flow
+    // or an Operations-generated recurring lesson — whichever is soonest
+    // (or already live) wins.
     const bookingNext = upcoming[0]
       ? {
-          bookingId: upcoming[0].id,
-          classStart: upcoming[0].shift.start,
-          classEnd: upcoming[0].shift.end,
+          type: 'booking' as const,
+          id: upcoming[0].id,
+          start: upcoming[0].shift.start,
+          end: upcoming[0].shift.end,
           teacherName: upcoming[0].shift.teacher.user.fullName,
           teacherAvatarUrl: upcoming[0].shift.teacher.user.avatarUrl,
-          source: 'booking' as const,
         }
       : null;
     const lessonNext = nextScheduledLesson
       ? {
-          bookingId: nextScheduledLesson.id,
-          classStart: nextScheduledLesson.start,
-          classEnd: nextScheduledLesson.end,
+          type: 'lesson' as const,
+          id: nextScheduledLesson.id,
+          start: nextScheduledLesson.start,
+          end: nextScheduledLesson.end,
           teacherName: nextScheduledLesson.teacher.user.fullName,
           teacherAvatarUrl: nextScheduledLesson.teacher.user.avatarUrl,
-          source: 'lesson' as const,
+          courseTitle: nextScheduledLesson.course.title,
+          lessonNumber: nextScheduledLesson.lessonNumber,
+          lessonTitle: nextScheduledLesson.lessonTitle,
+          classType: nextScheduledLesson.classType,
         }
       : null;
-    const nextBooking =
+    const chosen =
       bookingNext && lessonNext
-        ? new Date(bookingNext.classStart) < new Date(lessonNext.classStart)
+        ? new Date(bookingNext.start) < new Date(lessonNext.start)
           ? bookingNext
           : lessonNext
         : (bookingNext ?? lessonNext);
+
+    const liveClass = chosen
+      ? { ...chosen, ...getClassWindow(new Date(chosen.start), new Date(chosen.end)) }
+      : null;
 
     const pendingReview =
       captured
@@ -351,28 +367,37 @@ export class StudentsService {
             new Date(b.shift.end).getTime() - new Date(a.shift.end).getTime(),
         )[0] ?? null;
 
-    const recentSessions = captured
-      .filter((b) => new Date(b.shift.end) < now)
-      .sort(
-        (a, b) =>
-          new Date(b.shift.end).getTime() - new Date(a.shift.end).getTime(),
-      )
-      .slice(0, 5)
-      .map((b) => ({
-        bookingId: b.id,
-        classStart: b.shift.start,
-        classEnd: b.shift.end,
-        teacherName: b.shift.teacher.user.fullName,
-        teacherAvatarUrl: b.shift.teacher.user.avatarUrl,
-        durationMinutes: Math.round(
-          (new Date(b.shift.end).getTime() -
-            new Date(b.shift.start).getTime()) /
-            60000,
-        ),
-        hasReview: !!b.review,
-      }));
-
     const rankInfo = rankMeta(user.spaceRank);
+    const capturedBookingsCount = captured.filter(
+      (b) => new Date(b.shift.end) < now,
+    ).length;
+
+    const totalLessons = user.assignedCourse?.sessions ?? null;
+    const currentLessonNumber = totalLessons
+      ? Math.min(completedLessonCount + 1, totalLessons)
+      : null;
+    const continueLearning = user.assignedCourse
+      ? {
+          courseId: user.assignedCourse.id,
+          courseTitle: user.assignedCourse.title,
+          courseEmoji: user.assignedCourse.emoji,
+          totalLessons,
+          completedCount: completedLessonCount,
+          currentLessonNumber,
+          progressPct:
+            totalLessons && totalLessons > 0
+              ? Math.min(100, Math.round((completedLessonCount / totalLessons) * 100))
+              : 0,
+        }
+      : null;
+
+    // Setup is "complete" once Operations has assigned a teacher + curriculum
+    // and the student has either a session on the books or one already
+    // behind them — until then, the onboarding checklist keeps showing.
+    const setupComplete =
+      !!user.assignedTeacher &&
+      !!user.assignedCourse &&
+      (!!liveClass || completedLessonCount > 0 || capturedBookingsCount > 0);
 
     return {
       student: {
@@ -389,7 +414,13 @@ export class StudentsService {
         assignedTeacher: mapAssignedTeacher(user.assignedTeacher),
         assignedCourse: user.assignedCourse,
       },
-      upcomingBooking: nextBooking,
+      setupComplete,
+      liveClass,
+      continueLearning,
+      metrics: {
+        lessonsCompleted: completedLessonCount,
+        classesAttended: completedLessonCount + capturedBookingsCount,
+      },
       pendingReview: pendingReview
         ? {
             bookingId: pendingReview.id,
@@ -398,7 +429,6 @@ export class StudentsService {
             teacherAvatarUrl: pendingReview.shift.teacher.user.avatarUrl,
           }
         : null,
-      recentSessions,
       stats: {
         totalSessions: user.totalSessions,
         upcomingCount: upcoming.length,
@@ -496,6 +526,7 @@ export class StudentsService {
       },
     });
     if (!user) throw new NotFoundException('Student not found.');
+    const now = new Date();
 
     const completedBookings = await this.prisma.booking.findMany({
       where: { studentUserId: userId, paymentStatus: 'CAPTURED' },
@@ -542,6 +573,22 @@ export class StudentsService {
 
     const rankInfo = rankMeta(user.spaceRank);
     const toNext = sessionsToNextRank(user.totalSessions);
+    const badges = await this.getDbBadges(userId);
+    const nextBadge = badges.find((b) => !b.earned) ?? null;
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const [totalLessonsCompleted, lessonsCompletedThisMonth] = await Promise.all([
+      this.prisma.scheduledLesson.count({
+        where: { studentUserId: userId, status: 'COMPLETED' },
+      }),
+      this.prisma.scheduledLesson.count({
+        where: {
+          studentUserId: userId,
+          status: 'COMPLETED',
+          end: { gte: monthStart },
+        },
+      }),
+    ]);
 
     return {
       spaceRank: user.spaceRank,
@@ -553,7 +600,10 @@ export class StudentsService {
       subjects: user.subjects,
       subjectBreakdown,
       rankHistory,
-      badges: await this.getDbBadges(userId),
+      badges,
+      nextBadge,
+      totalLessonsCompleted,
+      lessonsCompletedThisMonth,
       recentGemTransactions: await this.getRecentGemTransactions(userId),
       memberSince: user.createdAt,
       gemBalance: user.gemBalance,

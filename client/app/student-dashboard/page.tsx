@@ -4,36 +4,17 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
-import NextClassCard from '@/components/student/NextClassCard';
-import RankProgressBar from '@/components/student/RankProgressBar';
+import LiveClassCard, { LiveClass } from '@/components/student/LiveClassCard';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface UpcomingBooking {
-  bookingId: string;
-  classStart: string;
-  classEnd: string;
-  teacherName: string;
-  teacherAvatarUrl?: string | null;
-}
 
 interface PendingReview {
   bookingId: string;
   classStart: string;
   teacherName: string;
   teacherAvatarUrl?: string | null;
-}
-
-interface RecentSession {
-  bookingId: string;
-  classStart: string;
-  classEnd: string;
-  teacherName: string;
-  teacherAvatarUrl?: string | null;
-  durationMinutes: number;
-  hasReview: boolean;
 }
 
 interface AssignedTeacher {
@@ -46,6 +27,8 @@ interface AssignedTeacher {
 interface AssignedCourse {
   id: string;
   title: string;
+  emoji?: string | null;
+  sessions?: number;
 }
 
 interface StudentInfo {
@@ -62,19 +45,28 @@ interface StudentInfo {
   assignedCourse: AssignedCourse | null;
 }
 
-interface Stats {
-  totalSessions: number;
-  upcomingCount: number;
-  spaceRank: string;
-  streakWeeks: number;
+interface ContinueLearning {
+  courseId: string;
+  courseTitle: string;
+  courseEmoji: string | null;
+  totalLessons: number | null;
+  completedCount: number;
+  currentLessonNumber: number | null;
+  progressPct: number;
+}
+
+interface Metrics {
+  lessonsCompleted: number;
+  classesAttended: number;
 }
 
 interface DashboardData {
   student: StudentInfo;
-  upcomingBooking: UpcomingBooking | null;
+  setupComplete: boolean;
+  liveClass: LiveClass | null;
+  continueLearning: ContinueLearning | null;
+  metrics: Metrics;
   pendingReview: PendingReview | null;
-  recentSessions: RecentSession[];
-  stats: Stats;
 }
 
 const RANK_ORDER = [
@@ -84,6 +76,13 @@ const RANK_ORDER = [
   'NAVIGATOR',
   'CAPTAIN',
   'GALAXY_COMMANDER',
+];
+
+const MOTIVATIONAL_LINES = [
+  "Let's keep the momentum going!",
+  'Every lesson gets you closer to your next big build.',
+  "Small steps today, big launches tomorrow.",
+  "Ready to level up your skills?",
 ];
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -96,34 +95,34 @@ function DashboardSkeleton() {
   return (
     <div className="space-y-6">
       <Skeleton className="h-8 w-64" />
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Skeleton className="h-40 rounded-xl lg:col-span-2" />
-        <Skeleton className="h-40 rounded-xl" />
+      <Skeleton className="h-52 rounded-2xl" />
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Skeleton className="h-32 rounded-xl" />
+        <Skeleton className="h-32 rounded-xl" />
       </div>
-      <Skeleton className="h-32 w-full rounded-xl" />
+      <Skeleton className="h-24 w-full rounded-xl" />
     </div>
   );
 }
 
-// ─── Onboarding checklist for new students (0 sessions) ──────────────────────
+// ─── Onboarding checklist for students whose setup isn't complete yet ─────────
 
 function OnboardingChecklist({
   studentName,
   assignedTeacher,
   assignedCourse,
-  upcomingBooking,
+  hasFirstSession,
 }: {
   studentName: string;
   assignedTeacher: AssignedTeacher | null;
   assignedCourse: AssignedCourse | null;
-  upcomingBooking: UpcomingBooking | null;
+  hasFirstSession: boolean;
 }) {
   const steps = [
     { key: 'account', icon: '✅', label: 'Account created', done: true },
     { key: 'teacher', icon: '👩‍🚀', label: 'Meet your assigned teacher', done: !!assignedTeacher },
     { key: 'curriculum', icon: '📚', label: 'Your curriculum is set', done: !!assignedCourse },
-    { key: 'session', icon: '🗓️', label: 'Your first session gets scheduled', done: !!upcomingBooking },
-    { key: 'launch', icon: '🚀', label: 'Enter Star Lab and launch your mission', done: false },
+    { key: 'session', icon: '🗓️', label: 'Your first session gets scheduled', done: hasFirstSession },
   ];
 
   return (
@@ -214,10 +213,12 @@ export default function StudentDashboardPage() {
     }
 
     fetchDashboard();
+    // Refresh periodically so a class transitions to "Live" without a manual reload.
+    const id = setInterval(fetchDashboard, 60_000);
+    return () => clearInterval(id);
   }, [router]);
 
   const fetchDashboard = async () => {
-    setLoading(true);
     setError('');
     try {
       const res = await api.get<DashboardData>('/students/me/dashboard');
@@ -264,26 +265,14 @@ export default function StudentDashboardPage() {
 
   if (!data) return null;
 
-  const { student, upcomingBooking, recentSessions } = data;
-  const isNewStudent = student.totalSessions === 0;
+  const { student, liveClass, continueLearning, metrics, setupComplete } = data;
   const firstName = student.fullName.split(' ')[0];
-
-  // "Your Teacher" — sourced from the explicit Operations-controlled
-  // assignedTeacher relation on the student, not inferred from booking
-  // history (a student's assignment is metadata independent of any one
-  // booking's teacher).
   const assignedTeacher = student.assignedTeacher;
 
-  // isNewStudent stays true (and this checklist keeps showing) until the
-  // student's first completed session — so a teacher assignment made by
-  // Operations mid-onboarding must still reflect here immediately.
-
-  // Greeting varies by time of day
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-
-  const recentActivity = recentSessions.slice(0, 3);
+  const motivation = MOTIVATIONAL_LINES[new Date().getDate() % MOTIVATIONAL_LINES.length];
 
   return (
     <div className="space-y-6 fade-in">
@@ -301,177 +290,128 @@ export default function StudentDashboardPage() {
         </div>
       )}
 
-      {/* Greeting */}
+      {/* 1. Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           {greeting}, {firstName}! 👋
         </h1>
-        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-          Here's what's next on your mission.
-        </p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{motivation}</p>
       </div>
 
-      {isNewStudent ? (
+      {!setupComplete ? (
         <OnboardingChecklist
           studentName={firstName}
           assignedTeacher={assignedTeacher}
           assignedCourse={student.assignedCourse}
-          upcomingBooking={upcomingBooking}
+          hasFirstSession={!!liveClass}
         />
       ) : (
-        <div className="grid lg:grid-cols-3 gap-4 items-start">
-          {/* Next class — the single most important thing */}
-          <div className="lg:col-span-2">
-            <NextClassCard booking={upcomingBooking} />
-          </div>
+        <>
+          {/* 2. Live / Next Class — the primary, largest card */}
+          <LiveClassCard liveClass={liveClass} />
 
-          {/* Your teacher */}
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-5 h-full card-hover">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
-              Your Teacher
-            </p>
-            {assignedTeacher ? (
-              <div className="flex items-center gap-3">
-                {assignedTeacher.avatarUrl ? (
-                  <img
-                    src={assignedTeacher.avatarUrl}
-                    alt={assignedTeacher.name}
-                    className="w-12 h-12 rounded-full object-cover border border-gray-300 dark:border-gray-600 flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-teal-100 dark:bg-teal-800/50 flex items-center justify-center text-teal-600 dark:text-teal-300 font-bold flex-shrink-0">
-                    {assignedTeacher.name.charAt(0).toUpperCase()}
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="text-gray-900 dark:text-white font-semibold truncate">
-                    {assignedTeacher.name}
-                  </p>
-                  <p className="text-gray-500 dark:text-gray-400 text-xs">Assigned by Lumexa</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                Operations is assigning your teacher — check back soon.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Pending review — shown prominently before other content */}
-      {pendingReview && (
-        <div>
-          <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
-            Rate your last session
-          </p>
-          <SessionReviewCard
-            review={pendingReview}
-            isStudentMode
-            onSubmitted={() => {
-              setPendingReview(null);
-              fetchDashboard();
-            }}
-          />
-        </div>
-      )}
-
-      {!isNewStudent && (
-        <div className="grid lg:grid-cols-3 gap-4">
-          {/* Your Journey — rank progress, one small gamification element */}
-          <div className="lg:col-span-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
-                Your Journey
-              </p>
-              <button
-                onClick={() => router.push('/student-dashboard/learning?tab=progress')}
-                className="text-teal-600 dark:text-teal-400 text-xs hover:underline transition-colors"
-              >
-                View details →
-              </button>
-            </div>
-            <RankProgressBar
-              currentRank={student.spaceRank}
-              totalSessions={student.totalSessions}
-              variant="dashboard"
+          {pendingReview && (
+            <SessionReviewCard
+              review={pendingReview}
+              isStudentMode
+              onSubmitted={() => {
+                setPendingReview(null);
+                fetchDashboard();
+              }}
             />
-          </div>
+          )}
 
-          {/* Small streak indicator */}
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 flex flex-col justify-center items-center text-center card-hover">
-            <span className="text-3xl mb-2">{student.streakWeeks > 0 ? '🔥' : '🌙'}</span>
-            <p className="text-2xl font-bold text-orange-500 dark:text-orange-400">
-              {student.streakWeeks}
-            </p>
-            <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
-              week streak{student.streakWeeks !== 1 ? 's' : ''}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Recent activity */}
-      {!isNewStudent && (
-        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
-              Recent Activity
-            </p>
-            {recentActivity.length > 0 && (
-              <button
-                onClick={() => router.push('/student-dashboard/learning?tab=lessons')}
-                className="text-teal-600 dark:text-teal-400 text-xs hover:underline transition-colors"
-              >
-                View all →
-              </button>
-            )}
-          </div>
-
-          {recentActivity.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="text-4xl mb-3">📋</div>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                Your completed lessons will appear here after your first class.
+          <div className="grid lg:grid-cols-2 gap-4">
+            {/* 3. Continue Learning */}
+            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
+                Continue Learning
               </p>
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-3 gap-3 stagger-children">
-              {recentActivity.map((session) => {
-                const date = new Date(session.classStart);
-                const initial = session.teacherName
-                  ? session.teacherName.charAt(0).toUpperCase()
-                  : 'T';
-                return (
-                  <div
-                    key={session.bookingId}
-                    className="flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-700/30 border border-gray-200 dark:border-gray-700/50 fade-in card-hover"
-                  >
-                    {session.teacherAvatarUrl ? (
-                      <img
-                        src={session.teacherAvatarUrl}
-                        alt={session.teacherName}
-                        className="w-9 h-9 rounded-full object-cover border border-gray-300 dark:border-gray-600 flex-shrink-0"
-                      />
-                    ) : (
-                      <div className="w-9 h-9 rounded-full bg-teal-100 dark:bg-teal-800/50 flex items-center justify-center text-teal-600 dark:text-teal-300 font-bold text-sm flex-shrink-0">
-                        {initial}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-gray-900 dark:text-white text-sm font-medium truncate">
-                        {session.teacherName}
+              {continueLearning ? (
+                <>
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="text-3xl">{continueLearning.courseEmoji ?? '📚'}</span>
+                    <div className="min-w-0">
+                      <p className="text-gray-900 dark:text-white font-semibold truncate">
+                        {continueLearning.courseTitle}
                       </p>
-                      <p className="text-gray-500 dark:text-gray-400 text-xs">
-                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </p>
+                      {continueLearning.totalLessons && (
+                        <p className="text-gray-500 dark:text-gray-400 text-xs">
+                          Lesson {continueLearning.currentLessonNumber} of {continueLearning.totalLessons}
+                        </p>
+                      )}
                     </div>
                   </div>
-                );
-              })}
+                  {continueLearning.totalLessons && (
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-4">
+                      <div
+                        className="bg-teal-400 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${continueLearning.progressPct}%` }}
+                      />
+                    </div>
+                  )}
+                  <button
+                    onClick={() => router.push('/student-dashboard/learning?tab=lessons')}
+                    className="w-full py-2.5 rounded-lg font-semibold text-sm bg-teal-500 hover:bg-teal-400 text-black active:scale-[0.98] transition-all duration-200"
+                  >
+                    Continue →
+                  </button>
+                </>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  Your curriculum will appear here once it's assigned.
+                </p>
+              )}
             </div>
-          )}
-        </div>
+
+            {/* 4. Your Path */}
+            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
+              <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
+                Your Path
+              </p>
+              {student.assignedCourse ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-gray-900 dark:text-white font-semibold truncate">
+                      {student.assignedCourse.title}
+                    </p>
+                    {assignedTeacher && (
+                      <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
+                        with {assignedTeacher.name}
+                      </p>
+                    )}
+                  </div>
+                  {continueLearning?.totalLessons && (
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400 border border-teal-500/20 font-medium flex-shrink-0">
+                      {continueLearning.completedCount}/{continueLearning.totalLessons} lessons
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400 text-sm">
+                  Operations is assigning your pathway — check back soon.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 5. Your Progress — a couple of useful numbers, nothing more */}
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
+              Your Progress
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-5 text-center card-hover">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{metrics.lessonsCompleted}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">Lessons Completed</p>
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-5 text-center card-hover">
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">{metrics.classesAttended}</p>
+                <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">Classes Attended</p>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

@@ -46,6 +46,7 @@ interface ScheduledLessonItem {
   classType: "ONE_TO_ONE" | "BATCH";
   status: string;
   lessonNumber: number;
+  lessonTitle: string | null;
   student: { id: string; fullName: string; avatarUrl?: string | null };
   course: { id: string; title: string };
 }
@@ -943,6 +944,7 @@ function ScheduleContent() {
                           {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} –{" "}
                           {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ·{" "}
                           {lesson.course.title} · Lesson {lesson.lessonNumber}
+                          {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""}
                         </p>
                       </div>
                       <span
@@ -1041,7 +1043,7 @@ function ScheduleContent() {
                             key={lesson.id}
                             className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity duration-200 ${isPast ? "opacity-40" : "opacity-100"}`}
                             style={{ top: top + 1, height: height - 2 }}
-                            title={`${lesson.course.title} · Lesson ${lesson.lessonNumber} · ${CLASS_TYPE_LABELS[lesson.classType]} · ${lesson.student.fullName}`}
+                            title={`${lesson.course.title} · Lesson ${lesson.lessonNumber}${lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""} · ${CLASS_TYPE_LABELS[lesson.classType]} · ${lesson.student.fullName}`}
                           >
                             <div
                               className={`h-full px-1.5 py-1 text-xs text-white cursor-default ${CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
@@ -1051,7 +1053,8 @@ function ScheduleContent() {
                               </p>
                               {height > 30 && (
                                 <p className="opacity-80 truncate">
-                                  {lesson.course.title} · L{lesson.lessonNumber}
+                                  L{lesson.lessonNumber}
+                                  {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ` · ${lesson.course.title}`}
                                 </p>
                               )}
                             </div>
