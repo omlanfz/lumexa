@@ -15,6 +15,8 @@ interface StudentEntry {
   avatarUrl: string | null;
   spaceRank: string | null;
   totalSessions: number;
+  assignedCourse: { id: string; title: string; sessions: number } | null;
+  classType: 'ONE_TO_ONE' | 'BATCH' | null;
   totalClasses: number;
   completedClasses: number;
   pendingClasses: number;
@@ -22,6 +24,11 @@ interface StudentEntry {
   nextClassDate: string | null;
   latestReview: { rating: number; comment: string | null } | null;
 }
+
+const CLASS_TYPE_LABELS: Record<string, string> = {
+  ONE_TO_ONE: '1-to-1',
+  BATCH: 'Batch',
+};
 
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
@@ -211,8 +218,8 @@ function TeacherStudentsContent() {
           <>
             {/* Desktop table */}
             <div className={`${card} overflow-hidden hidden sm:block`}>
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
-                {['Student', 'Rank & Grade', 'Sessions', 'Last Class', 'Rating', ''].map((h, i) => (
+              <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
+                {['Student', 'Curriculum', 'Rank & Grade', 'Sessions', 'Last Class', 'Rating', ''].map((h, i) => (
                   <p key={i} className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">{h}</p>
                 ))}
               </div>
@@ -221,7 +228,7 @@ function TeacherStudentsContent() {
                 {filtered.map((s) => (
                   <div
                     key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`}
-                    className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-4 items-center dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
+                    className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-4 items-center dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
                   >
                     {/* Name */}
                     <div className="flex items-center gap-3 min-w-0">
@@ -238,6 +245,18 @@ function TeacherStudentsContent() {
                           <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-900/30 text-teal-400">Self-auth</span>
                         )}
                       </div>
+                    </div>
+
+                    {/* Curriculum + class type */}
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[var(--t-text)] truncate">
+                        {s.assignedCourse?.title ?? 'Not assigned'}
+                      </p>
+                      {s.classType && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/30 bg-indigo-100 dark:text-indigo-400 text-indigo-700">
+                          {CLASS_TYPE_LABELS[s.classType] ?? s.classType}
+                        </span>
+                      )}
                     </div>
 
                     {/* Rank + grade */}
@@ -317,6 +336,19 @@ function TeacherStudentsContent() {
                       </p>
                     </div>
                   </div>
+
+                  {(s.assignedCourse || s.classType) && (
+                    <div className="flex items-center gap-2 mb-3 flex-wrap">
+                      <span className="text-xs font-medium text-[var(--t-text)]">
+                        {s.assignedCourse?.title ?? 'Not assigned'}
+                      </span>
+                      {s.classType && (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/30 bg-indigo-100 dark:text-indigo-400 text-indigo-700">
+                          {CLASS_TYPE_LABELS[s.classType] ?? s.classType}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-3 gap-2 text-center mb-3">
                     {[

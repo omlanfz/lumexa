@@ -294,7 +294,14 @@ export class TeachersService {
     };
   }
 
-  // ─── Get My Students (unified: legacy Student + STUDENT-role users) ─────────
+  // ─── Get My Students ──────────────────────────────────────────────────────
+  //
+  // Sourced from the actual Operations-controlled assignment relation
+  // (User.assignedTeacherId), never inferred from booking history — a
+  // student assigned to this teacher must show up here immediately, even
+  // before any lesson has been scheduled or completed. Lesson counts/dates
+  // come from ScheduledLesson (the generated recurring-schedule instances),
+  // not from marketplace Booking rows.
 
   async getMyStudents(userId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
@@ -302,133 +309,120 @@ export class TeachersService {
     });
     if (!teacher) throw new NotFoundException('Teacher profile not found.');
 
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        shift: { teacherId: teacher.id },
-        paymentStatus: { in: ['PENDING', 'CAPTURED'] },
-      },
-      include: {
-        student: { include: { parent: { select: { email: true } } } },
-        studentUser: {
-          select: {
-            id: true,
-            fullName: true,
-            avatarUrl: true,
-            age: true,
-            grade: true,
-            spaceRank: true,
-            totalSessions: true,
-          },
+    const students = await this.prisma.user.findMany({
+      where: { assignedTeacherId: teacher.id, role: 'STUDENT' },
+      select: {
+        id: true,
+        fullName: true,
+        avatarUrl: true,
+        age: true,
+        grade: true,
+        spaceRank: true,
+        totalSessions: true,
+        assignedClassType: true,
+        assignedCourse: {
+          select: { id: true, title: true, sessions: true },
         },
-        shift: { select: { start: true, end: true } },
-        review: { select: { rating: true, comment: true } },
       },
-      orderBy: { shift: { start: 'asc' } },
+      orderBy: { fullName: 'asc' },
     });
 
-    type Entry = {
-      studentId: string;
-      isUserRef: boolean;
-      studentName: string;
-      studentAge: number | null;
-      studentGrade: string | null;
-      avatarUrl: string | null;
-      spaceRank: string | null;
-      totalSessions: number;
+    if (students.length === 0) return [];
+
+    const studentIds = students.map((s) => s.id);
+    const now = new Date();
+
+    const [lessons, reviews] = await Promise.all([
+      this.prisma.scheduledLesson.findMany({
+        where: { teacherId: teacher.id, studentUserId: { in: studentIds } },
+        select: { studentUserId: true, start: true, status: true },
+        orderBy: { start: 'asc' },
+      }),
+      this.prisma.review.findMany({
+        where: {
+          teacherId: teacher.id,
+          booking: { studentUserId: { in: studentIds } },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          rating: true,
+          comment: true,
+          booking: { select: { studentUserId: true } },
+        },
+      }),
+    ]);
+
+    type Stats = {
       totalClasses: number;
       completedClasses: number;
       pendingClasses: number;
       lastClassDate: Date | null;
       nextClassDate: Date | null;
-      reviews: { rating: number; comment: string | null }[];
     };
-
-    const studentMap = new Map<string, Entry>();
-    const now = new Date();
-
-    for (const booking of bookings) {
-      const isUserRef = !!booking.studentUserId;
-      const key = isUserRef
-        ? `user:${booking.studentUserId}`
-        : `student:${booking.studentId}`;
-
-      if (!studentMap.has(key)) {
-        if (isUserRef && booking.studentUser) {
-          const u = booking.studentUser;
-          studentMap.set(key, {
-            studentId: u.id,
-            isUserRef: true,
-            studentName: u.fullName,
-            studentAge: u.age,
-            studentGrade: u.grade,
-            avatarUrl: u.avatarUrl ?? null,
-            spaceRank: u.spaceRank,
-            totalSessions: u.totalSessions,
-            totalClasses: 0,
-            completedClasses: 0,
-            pendingClasses: 0,
-            lastClassDate: null,
-            nextClassDate: null,
-            reviews: [],
-          });
-        } else if (!isUserRef && booking.student) {
-          const s = booking.student;
-          studentMap.set(key, {
-            studentId: s.id,
-            isUserRef: false,
-            studentName: s.name,
-            studentAge: s.age,
-            studentGrade: (s as any).grade ?? null,
-            avatarUrl: (s as any).avatarUrl ?? null,
-            spaceRank: null,
-            totalSessions: 0,
-            totalClasses: 0,
-            completedClasses: 0,
-            pendingClasses: 0,
-            lastClassDate: null,
-            nextClassDate: null,
-            reviews: [],
-          });
-        } else continue;
-      }
-
-      const entry = studentMap.get(key)!;
+    const statsMap = new Map<string, Stats>();
+    for (const l of lessons) {
+      const key = l.studentUserId;
+      const entry = statsMap.get(key) ?? {
+        totalClasses: 0,
+        completedClasses: 0,
+        pendingClasses: 0,
+        lastClassDate: null,
+        nextClassDate: null,
+      };
       entry.totalClasses++;
-      const classStart = new Date(booking.shift.start);
-
-      if (booking.paymentStatus === 'CAPTURED') {
+      if (l.status === 'COMPLETED') {
         entry.completedClasses++;
-        if (!entry.lastClassDate || classStart > entry.lastClassDate) {
-          entry.lastClassDate = classStart;
+        if (!entry.lastClassDate || l.start > entry.lastClassDate) {
+          entry.lastClassDate = l.start;
         }
-      } else if (classStart > now) {
+      } else if (l.status === 'UPCOMING' && l.start > now) {
         entry.pendingClasses++;
-        if (!entry.nextClassDate || classStart < entry.nextClassDate) {
-          entry.nextClassDate = classStart;
+        if (!entry.nextClassDate || l.start < entry.nextClassDate) {
+          entry.nextClassDate = l.start;
         }
       }
-
-      if (booking.review) entry.reviews.push(booking.review);
+      statsMap.set(key, entry);
     }
 
-    return Array.from(studentMap.values())
-      .map((s) => ({
-        studentId: s.studentId,
-        isUserRef: s.isUserRef,
-        studentName: s.studentName,
-        studentAge: s.studentAge,
-        studentGrade: s.studentGrade,
-        avatarUrl: s.avatarUrl,
-        spaceRank: s.spaceRank,
-        totalSessions: s.totalSessions,
-        totalClasses: s.totalClasses,
-        completedClasses: s.completedClasses,
-        pendingClasses: s.pendingClasses,
-        lastClassDate: s.lastClassDate,
-        nextClassDate: s.nextClassDate,
-        latestReview:
-          s.reviews.length > 0 ? s.reviews[s.reviews.length - 1] : null,
-      }))
+    const latestReviewMap = new Map<
+      string,
+      { rating: number; comment: string | null }
+    >();
+    for (const r of reviews) {
+      const sid = r.booking?.studentUserId;
+      if (sid && !latestReviewMap.has(sid)) {
+        latestReviewMap.set(sid, { rating: r.rating, comment: r.comment });
+      }
+    }
+
+    return students
+      .map((s) => {
+        const stats = statsMap.get(s.id) ?? {
+          totalClasses: 0,
+          completedClasses: 0,
+          pendingClasses: 0,
+          lastClassDate: null,
+          nextClassDate: null,
+        };
+        return {
+          studentId: s.id,
+          isUserRef: true,
+          studentName: s.fullName,
+          studentAge: s.age,
+          studentGrade: s.grade,
+          avatarUrl: s.avatarUrl ?? null,
+          spaceRank: s.spaceRank,
+          totalSessions: s.totalSessions,
+          assignedCourse: s.assignedCourse,
+          classType: s.assignedClassType,
+          totalClasses: stats.totalClasses,
+          completedClasses: stats.completedClasses,
+          pendingClasses: stats.pendingClasses,
+          lastClassDate: stats.lastClassDate,
+          nextClassDate: stats.nextClassDate,
+          latestReview: latestReviewMap.get(s.id) ?? null,
+        };
+      })
       .sort((a, b) => {
         if (a.nextClassDate && b.nextClassDate) {
           return (
@@ -438,7 +432,7 @@ export class TeachersService {
         }
         if (a.nextClassDate) return -1;
         if (b.nextClassDate) return 1;
-        return 0;
+        return a.studentName.localeCompare(b.studentName);
       });
   }
 

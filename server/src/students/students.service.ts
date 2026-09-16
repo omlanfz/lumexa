@@ -272,6 +272,7 @@ export class StudentsService {
         gemBalance: true,
         billingContactEmail: true,
         assignedTeacher: ASSIGNED_TEACHER_SELECT,
+        assignedCourse: { select: { id: true, title: true } },
       },
     });
 
@@ -279,39 +280,68 @@ export class StudentsService {
 
     const now = new Date();
 
-    const bookings = await this.prisma.booking.findMany({
-      where: {
-        studentUserId: userId,
-        paymentStatus: { in: ['PENDING', 'CAPTURED'] },
-      },
-      include: {
-        shift: {
-          include: {
-            teacher: {
-              include: {
-                user: { select: { fullName: true, avatarUrl: true } },
+    const [bookings, nextScheduledLesson] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: {
+          studentUserId: userId,
+          paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+        },
+        include: {
+          shift: {
+            include: {
+              teacher: {
+                include: {
+                  user: { select: { fullName: true, avatarUrl: true } },
+                },
               },
             },
           },
+          review: { select: { id: true, rating: true } },
         },
-        review: { select: { id: true, rating: true } },
-      },
-      orderBy: { shift: { start: 'asc' } },
-    });
+        orderBy: { shift: { start: 'asc' } },
+      }),
+      this.prisma.scheduledLesson.findFirst({
+        where: { studentUserId: userId, status: 'UPCOMING' },
+        orderBy: { start: 'asc' },
+        include: {
+          teacher: {
+            select: { user: { select: { fullName: true, avatarUrl: true } } },
+          },
+        },
+      }),
+    ]);
 
     const captured = bookings.filter((b) => b.paymentStatus === 'CAPTURED');
     const upcoming = bookings.filter((b) => new Date(b.shift.start) > now);
 
+    // The next class can come from either the marketplace booking flow or
+    // an Operations-generated recurring lesson — whichever is soonest wins.
+    const bookingNext = upcoming[0]
+      ? {
+          bookingId: upcoming[0].id,
+          classStart: upcoming[0].shift.start,
+          classEnd: upcoming[0].shift.end,
+          teacherName: upcoming[0].shift.teacher.user.fullName,
+          teacherAvatarUrl: upcoming[0].shift.teacher.user.avatarUrl,
+          source: 'booking' as const,
+        }
+      : null;
+    const lessonNext = nextScheduledLesson
+      ? {
+          bookingId: nextScheduledLesson.id,
+          classStart: nextScheduledLesson.start,
+          classEnd: nextScheduledLesson.end,
+          teacherName: nextScheduledLesson.teacher.user.fullName,
+          teacherAvatarUrl: nextScheduledLesson.teacher.user.avatarUrl,
+          source: 'lesson' as const,
+        }
+      : null;
     const nextBooking =
-      upcoming.length > 0
-        ? {
-            bookingId: upcoming[0].id,
-            classStart: upcoming[0].shift.start,
-            classEnd: upcoming[0].shift.end,
-            teacherName: upcoming[0].shift.teacher.user.fullName,
-            teacherAvatarUrl: upcoming[0].shift.teacher.user.avatarUrl,
-          }
-        : null;
+      bookingNext && lessonNext
+        ? new Date(bookingNext.classStart) < new Date(lessonNext.classStart)
+          ? bookingNext
+          : lessonNext
+        : (bookingNext ?? lessonNext);
 
     const pendingReview =
       captured
@@ -357,6 +387,7 @@ export class StudentsService {
         hasBillingContact: !!user.billingContactEmail,
         sessionsToNextRank: sessionsToNextRank(user.totalSessions),
         assignedTeacher: mapAssignedTeacher(user.assignedTeacher),
+        assignedCourse: user.assignedCourse,
       },
       upcomingBooking: nextBooking,
       pendingReview: pendingReview

@@ -38,6 +38,11 @@ model User {
   assignedCourseId String?
   assignedCourse   Course? @relation(fields: [assignedCourseId], references: [id])
 
+  // Class type for the student's current assignment (1-to-1 = 45min lessons,
+  // BATCH = 60min lessons) — set together with the weekly recurring schedule.
+  // See RecurringSlot / ScheduledLesson below.
+  assignedClassType ClassType?
+
   // Billing contact — server-side only, never returned in student API responses
   billingContactEmail     String?
   billingContactStripeId  String?
@@ -55,6 +60,9 @@ model User {
 
   ledgerEntries        StudentLedgerEntry[] @relation("StudentLedgerEntries")
   createdLedgerEntries StudentLedgerEntry[] @relation("StudentLedgerCreatedBy")
+
+  recurringSlots   RecurringSlot[]
+  scheduledLessons ScheduledLesson[]
 
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
@@ -121,6 +129,8 @@ model TeacherProfile {
   user                  User                  @relation(fields: [userId], references: [id])
   verificationDocs      Json?                 @default("[]") // Array of { type, url, name, uploadedAt }
   assignedStudents      User[]                @relation("AssignedTeacher")
+  recurringSlots        RecurringSlot[]
+  scheduledLessons      ScheduledLesson[]
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -385,9 +395,77 @@ model Course {
   lessons          Lesson[]
   assignedStudents User[]
   ledgerEntries    StudentLedgerEntry[]
+  recurringSlots   RecurringSlot[]
+  scheduledLessons ScheduledLesson[]
 
   @@index([isActive])
   @@index([category])
+}
+
+// ─── Recurring weekly schedule + generated lesson instances ─────────────────
+//
+// A student's current assignment (assignedTeacherId + assignedCourseId +
+// assignedClassType on User) is scheduled into a weekly recurring pattern by
+// Operations: one RecurringSlot row per weekday/time the student meets their
+// teacher. ScheduledLesson rows are the individual generated lesson
+// instances (see SchedulingService.generateLessons) — one per occurrence,
+// up to the course's `sessions` count. All times are computed in Asia/Dhaka
+// (fixed UTC+6, no DST) and stored as UTC instants.
+//
+// Regenerating the schedule (SchedulingService.setSchedule) never touches
+// COMPLETED lessons — only UPCOMING ones are replaced — so lesson numbering
+// and curriculum progression stay intact across reschedules.
+
+enum ClassType {
+  ONE_TO_ONE
+  BATCH
+}
+
+enum LessonStatus {
+  UPCOMING
+  COMPLETED
+  CANCELLED
+}
+
+model RecurringSlot {
+  id            String         @id @default(uuid())
+  studentUserId String
+  student       User           @relation(fields: [studentUserId], references: [id])
+  teacherId     String
+  teacher       TeacherProfile @relation(fields: [teacherId], references: [id])
+  courseId      String
+  course        Course         @relation(fields: [courseId], references: [id])
+  weekday       Int // 0 = Sunday .. 6 = Saturday, Asia/Dhaka calendar day
+  hour          Int // 0-23, Asia/Dhaka local hour
+  minute        Int // 0-59, Asia/Dhaka local minute
+  classType     ClassType
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([studentUserId])
+  @@index([teacherId])
+}
+
+model ScheduledLesson {
+  id            String         @id @default(uuid())
+  studentUserId String
+  student       User           @relation(fields: [studentUserId], references: [id])
+  teacherId     String
+  teacher       TeacherProfile @relation(fields: [teacherId], references: [id])
+  courseId      String
+  course        Course         @relation(fields: [courseId], references: [id])
+  lessonNumber  Int
+  start         DateTime // UTC instant
+  end           DateTime // UTC instant
+  classType     ClassType
+  status        LessonStatus   @default(UPCOMING)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([studentUserId, courseId, lessonNumber])
+  @@index([teacherId, start])
+  @@index([studentUserId, start])
+  @@index([start])
 }
 
 model Lesson {

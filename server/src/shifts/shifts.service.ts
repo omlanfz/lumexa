@@ -24,10 +24,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { UpdateShiftDto } from './dto/update-shift.dto';
+import { SchedulingService } from '../scheduling/scheduling.service';
 
 @Injectable()
 export class ShiftsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scheduling: SchedulingService,
+  ) {}
 
   // ─── Create (single or recurring) ─────────────────────────────────────────
 
@@ -95,6 +99,17 @@ export class ShiftsService {
           'This time slot overlaps with one of your existing shifts.',
         );
       }
+      const lessonConflict = await this.scheduling.findTeacherConflict(
+        this.prisma,
+        teacher.id,
+        startTime,
+        endTime,
+      );
+      if (lessonConflict) {
+        throw new BadRequestException(
+          'This time slot overlaps with a class already scheduled for you.',
+        );
+      }
       return this.prisma.shift.create({
         data: { teacherId: teacher.id, start: startTime, end: endTime },
       });
@@ -134,6 +149,23 @@ export class ShiftsService {
         });
         overlapErrors.push(
           `Week ${i + 1} (${dateStr}) overlaps an existing shift`,
+        );
+        continue;
+      }
+      const lessonConflict = await this.scheduling.findTeacherConflict(
+        this.prisma,
+        teacher.id,
+        slot.start,
+        slot.end,
+      );
+      if (lessonConflict) {
+        const dateStr = slot.start.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        });
+        overlapErrors.push(
+          `Week ${i + 1} (${dateStr}) overlaps a class already scheduled for you`,
         );
       }
     }
@@ -213,6 +245,17 @@ export class ShiftsService {
       if (overlap) {
         throw new BadRequestException(
           'The new time slot overlaps with one of your existing shifts.',
+        );
+      }
+      const lessonConflict = await this.scheduling.findTeacherConflict(
+        this.prisma,
+        teacher.id,
+        newStart,
+        newEnd,
+      );
+      if (lessonConflict) {
+        throw new BadRequestException(
+          'The new time slot overlaps with a class already scheduled for you.',
         );
       }
     }

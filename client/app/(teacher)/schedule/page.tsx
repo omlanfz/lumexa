@@ -39,6 +39,27 @@ interface EmergencyStatus {
   limit: number;
 }
 
+interface ScheduledLessonItem {
+  id: string;
+  start: string;
+  end: string;
+  classType: "ONE_TO_ONE" | "BATCH";
+  status: string;
+  lessonNumber: number;
+  student: { id: string; fullName: string; avatarUrl?: string | null };
+  course: { id: string; title: string };
+}
+
+const CLASS_TYPE_COLORS: Record<string, string> = {
+  ONE_TO_ONE: "bg-indigo-500",
+  BATCH: "bg-amber-500",
+};
+
+const CLASS_TYPE_LABELS: Record<string, string> = {
+  ONE_TO_ONE: "1-to-1",
+  BATCH: "Batch",
+};
+
 // ─── Add Slot Modal ───────────────────────────────────────────────────────────
 
 interface AddSlotModalProps {
@@ -630,6 +651,7 @@ function ScheduleContent() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [lessons, setLessons] = useState<ScheduledLessonItem[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [emergencyStatus, setEmergencyStatus] = useState<EmergencyStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -672,12 +694,14 @@ function ScheduleContent() {
     }
     (async () => {
       try {
-        const [shiftsRes, profileRes] = await Promise.all([
+        const [shiftsRes, profileRes, lessonsRes] = await Promise.all([
           api.get("/shifts"),
           api.get("/teachers/me/profile"),
+          api.get("/teachers/me/scheduled-lessons"),
         ]);
         setShifts(shiftsRes.data ?? []);
         setProfile(profileRes.data);
+        setLessons(lessonsRes.data ?? []);
         refreshEmergencyStatus();
       } catch (e: any) {
         const m = e.response?.data?.message;
@@ -700,15 +724,22 @@ function ScheduleContent() {
       return sd.toDateString() === day.toDateString();
     });
 
-  const shiftStyle = (shift: Shift) => {
-    const start = new Date(shift.start);
-    const end = new Date(shift.end);
+  const getLessonsForDay = (day: Date) =>
+    lessons.filter((l) => {
+      const ld = new Date(l.start);
+      return ld.toDateString() === day.toDateString();
+    });
+
+  const rangeStyle = (start: Date, end: Date) => {
     const topMin = start.getHours() * 60 + start.getMinutes();
     const durMin = (end.getTime() - start.getTime()) / 60000;
     const top = (topMin / 60) * HOUR_PX;
     const height = (durMin / 60) * HOUR_PX;
     return { top, height: Math.max(height, 24) };
   };
+
+  const shiftStyle = (shift: Shift) =>
+    rangeStyle(new Date(shift.start), new Date(shift.end));
 
   const card = "t-card shadow-sm";
 
@@ -755,6 +786,20 @@ function ScheduleContent() {
             </button>
           </div>
         </div>
+
+        {lessons.length > 0 && (
+          <div className="mb-4 sm:mb-6 flex items-center gap-4 text-xs text-[var(--t-text-muted)]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" /> 1-to-1 class
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Batch class
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[var(--t-accent)] inline-block" /> Open availability
+            </span>
+          </div>
+        )}
 
         {emergencyStatus && (
           <div className="mb-4 sm:mb-6 flex items-center gap-2 text-xs text-[var(--t-text-muted)]">
@@ -868,7 +913,54 @@ function ScheduleContent() {
               </div>
             )}
           </div>
-        ) : (
+        ) : null}
+
+        {view === "list" && lessons.length > 0 && (
+          <div className={`${card} overflow-hidden mt-4`}>
+            <p className="px-4 sm:px-5 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--t-text-muted)]">
+              Scheduled Lessons
+            </p>
+            <div className="divide-y divide-[var(--t-nav-border)]">
+              {[...lessons]
+                .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+                .map((lesson) => {
+                  const start = new Date(lesson.start);
+                  const end = new Date(lesson.end);
+                  const isPast = end < new Date();
+                  return (
+                    <div
+                      key={lesson.id}
+                      className="px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-4"
+                    >
+                      <div
+                        className={`w-2 h-10 rounded-full flex-shrink-0 ${isPast ? "bg-[var(--t-border)]" : CLASS_TYPE_COLORS[lesson.classType]}`}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[var(--t-text)]">
+                          {start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                        </p>
+                        <p className="text-xs text-[var(--t-text-muted)]">
+                          {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} –{" "}
+                          {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ·{" "}
+                          {lesson.course.title} · Lesson {lesson.lessonNumber}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 text-white ${CLASS_TYPE_COLORS[lesson.classType]}`}
+                      >
+                        {CLASS_TYPE_LABELS[lesson.classType]}
+                      </span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--t-success-bg)] text-[var(--t-success-text)] flex-shrink-0">
+                        {lesson.student.fullName}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {view === "week" && (
           <div className={`${card} overflow-hidden`}>
             <div className="grid grid-cols-[48px_repeat(7,1fr)] border-b border-[var(--t-nav-border)]">
               <div />
@@ -937,6 +1029,35 @@ function ScheduleContent() {
                           </div>
                         </div>
                       )}
+
+                      {getLessonsForDay(day).map((lesson) => {
+                        const { top, height } = rangeStyle(
+                          new Date(lesson.start),
+                          new Date(lesson.end),
+                        );
+                        const isPast = new Date(lesson.end) < new Date();
+                        return (
+                          <div
+                            key={lesson.id}
+                            className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity duration-200 ${isPast ? "opacity-40" : "opacity-100"}`}
+                            style={{ top: top + 1, height: height - 2 }}
+                            title={`${lesson.course.title} · Lesson ${lesson.lessonNumber} · ${CLASS_TYPE_LABELS[lesson.classType]} · ${lesson.student.fullName}`}
+                          >
+                            <div
+                              className={`h-full px-1.5 py-1 text-xs text-white cursor-default ${CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
+                            >
+                              <p className="font-semibold truncate leading-tight">
+                                {lesson.student.fullName}
+                              </p>
+                              {height > 30 && (
+                                <p className="opacity-80 truncate">
+                                  {lesson.course.title} · L{lesson.lessonNumber}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
 
                       {dayShifts.map((shift) => {
                         const { top, height } = shiftStyle(shift);

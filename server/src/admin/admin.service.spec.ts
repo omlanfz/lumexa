@@ -6,6 +6,7 @@ import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
+import { SchedulingService } from '../scheduling/scheduling.service';
 
 describe('AdminService - assignTeacherToStudent', () => {
   let service: AdminService;
@@ -31,6 +32,10 @@ describe('AdminService - assignTeacherToStudent', () => {
         },
         { provide: PayoutsService, useValue: {} },
         { provide: StudentLedgerService, useValue: {} },
+        {
+          provide: SchedulingService,
+          useValue: { clearStudentSchedule: jest.fn() },
+        },
       ],
     }).compile();
 

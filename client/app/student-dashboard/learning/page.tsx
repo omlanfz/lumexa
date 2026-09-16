@@ -41,6 +41,22 @@ interface LessonsData {
   totalPages: number;
 }
 
+interface ScheduledLessonItem {
+  id: string;
+  lessonNumber: number;
+  start: string;
+  end: string;
+  classType: 'ONE_TO_ONE' | 'BATCH';
+  status: string;
+  teacher: { id: string; user: { fullName: string; avatarUrl?: string | null } };
+  course: { id: string; title: string };
+}
+
+const CLASS_TYPE_LABELS: Record<string, string> = {
+  ONE_TO_ONE: '1-to-1',
+  BATCH: 'Batch',
+};
+
 interface SubjectCount {
   subject: string;
   count: number;
@@ -186,6 +202,66 @@ function LessonRow({
   );
 }
 
+function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
+  const start = new Date(lesson.start);
+  const end = new Date(lesson.end);
+  const initial = lesson.teacher.user.fullName ? lesson.teacher.user.fullName.charAt(0).toUpperCase() : 'T';
+  const isUpcoming = lesson.status === 'UPCOMING';
+
+  return (
+    <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden card-hover">
+      <div className="flex items-center gap-3 p-4">
+        {lesson.teacher.user.avatarUrl ? (
+          <img
+            src={lesson.teacher.user.avatarUrl}
+            alt={lesson.teacher.user.fullName}
+            className="w-11 h-11 rounded-full object-cover border border-gray-300 dark:border-gray-600 flex-shrink-0"
+          />
+        ) : (
+          <div className="w-11 h-11 rounded-full bg-teal-100 dark:bg-teal-800/50 flex items-center justify-center text-teal-600 dark:text-teal-300 font-bold flex-shrink-0">
+            {initial}
+          </div>
+        )}
+
+        <div className="flex-1 min-w-0">
+          <p className="text-gray-900 dark:text-white font-medium truncate">
+            {lesson.course.title} · Lesson {lesson.lessonNumber}
+          </p>
+          <p className="text-gray-500 dark:text-gray-400 text-xs">
+            {start.toLocaleDateString('en-US', {
+              timeZone: 'Asia/Dhaka',
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            })}
+            {' · '}
+            {start.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', minute: '2-digit' })}
+            {'–'}
+            {end.toLocaleTimeString('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', minute: '2-digit' })}
+            {' · with '}
+            {lesson.teacher.user.fullName}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium">
+            {CLASS_TYPE_LABELS[lesson.classType] ?? lesson.classType}
+          </span>
+          <span
+            className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
+              isUpcoming
+                ? 'bg-teal-500/20 text-teal-600 dark:text-teal-400 border-teal-500/20'
+                : 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/20'
+            }`}
+          >
+            {isUpcoming ? 'Upcoming' : 'Completed'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LearningHubContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -195,6 +271,8 @@ function LearningHubContent() {
   const [lessonsTabFilter, setLessonsTabFilter] = useState<'upcoming' | 'completed'>('upcoming');
   const [upcomingData, setUpcomingData] = useState<LessonsData | null>(null);
   const [completedData, setCompletedData] = useState<LessonsData | null>(null);
+  const [scheduledUpcoming, setScheduledUpcoming] = useState<ScheduledLessonItem[]>([]);
+  const [scheduledCompleted, setScheduledCompleted] = useState<ScheduledLessonItem[]>([]);
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [rankings, setRankings] = useState<RankingsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -212,16 +290,21 @@ function LearningHubContent() {
     setLoading(true);
     setError('');
     try {
-      const [upcomingRes, completedRes, progressRes, rankingsRes] = await Promise.all([
-        api.get<LessonsData>('/students/me/lessons', { params: { status: 'upcoming', page: 1, limit: 20 } }),
-        api.get<LessonsData>('/students/me/lessons', { params: { status: 'completed', page: 1, limit: 20 } }),
-        api.get<ProgressData>('/students/me/progress'),
-        api.get<RankingsData>('/students/me/rankings'),
-      ]);
+      const [upcomingRes, completedRes, progressRes, rankingsRes, scheduledUpRes, scheduledCompRes] =
+        await Promise.all([
+          api.get<LessonsData>('/students/me/lessons', { params: { status: 'upcoming', page: 1, limit: 20 } }),
+          api.get<LessonsData>('/students/me/lessons', { params: { status: 'completed', page: 1, limit: 20 } }),
+          api.get<ProgressData>('/students/me/progress'),
+          api.get<RankingsData>('/students/me/rankings'),
+          api.get<ScheduledLessonItem[]>('/students/me/scheduled-lessons', { params: { status: 'upcoming' } }),
+          api.get<ScheduledLessonItem[]>('/students/me/scheduled-lessons', { params: { status: 'completed' } }),
+        ]);
       setUpcomingData(upcomingRes.data);
       setCompletedData(completedRes.data);
       setProgress(progressRes.data);
       setRankings(rankingsRes.data);
+      setScheduledUpcoming(scheduledUpRes.data ?? []);
+      setScheduledCompleted(scheduledCompRes.data ?? []);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string | string[] } } };
       const msg = e.response?.data?.message;
@@ -269,7 +352,18 @@ function LearningHubContent() {
     );
   }
 
-  const nextLesson = upcomingData?.bookings[0] ?? null;
+  const nextBookingLesson = upcomingData?.bookings[0] ?? null;
+  const nextScheduledLesson = scheduledUpcoming[0] ?? null;
+  const nextLesson =
+    nextBookingLesson && nextScheduledLesson
+      ? new Date(nextBookingLesson.classStart) < new Date(nextScheduledLesson.start)
+        ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart }
+        : { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
+      : nextBookingLesson
+        ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart }
+        : nextScheduledLesson
+          ? { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
+          : null;
   const recordingLessons = (completedData?.bookings ?? []).filter((l) => l.recordingUrl);
 
   return (
@@ -367,34 +461,44 @@ function LearningHubContent() {
             ))}
           </div>
 
-          {!lessonsData || lessonsData.bookings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center bg-gray-50 dark:bg-gray-800/30 rounded-xl">
-              <div className="text-5xl mb-4">{lessonsTabFilter === 'upcoming' ? '🗓️' : '📋'}</div>
-              <h3 className="text-gray-900 dark:text-white font-semibold text-lg mb-2">
-                {lessonsTabFilter === 'upcoming' ? 'No upcoming lessons' : 'No completed lessons yet'}
-              </h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                {lessonsTabFilter === 'upcoming'
-                  ? 'Your teacher will schedule your next session soon.'
-                  : 'Completed lessons will appear here after your first class.'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 gap-3">
-              {lessonsData.bookings.map((lesson) => (
-                <LessonRow
-                  key={lesson.bookingId}
-                  lesson={lesson}
-                  isReviewing={reviewingId === lesson.bookingId}
-                  onRate={() => setReviewingId(reviewingId === lesson.bookingId ? null : lesson.bookingId)}
-                  onRateSubmitted={() => {
-                    setReviewingId(null);
-                    fetchAll();
-                  }}
-                />
-              ))}
-            </div>
-          )}
+          {(() => {
+            const scheduledList = lessonsTabFilter === 'upcoming' ? scheduledUpcoming : scheduledCompleted;
+            const bookingList = lessonsData?.bookings ?? [];
+            if (scheduledList.length === 0 && bookingList.length === 0) {
+              return (
+                <div className="flex flex-col items-center justify-center py-16 text-center bg-gray-50 dark:bg-gray-800/30 rounded-xl">
+                  <div className="text-5xl mb-4">{lessonsTabFilter === 'upcoming' ? '🗓️' : '📋'}</div>
+                  <h3 className="text-gray-900 dark:text-white font-semibold text-lg mb-2">
+                    {lessonsTabFilter === 'upcoming' ? 'No upcoming lessons' : 'No completed lessons yet'}
+                  </h3>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    {lessonsTabFilter === 'upcoming'
+                      ? 'Your teacher will schedule your next session soon.'
+                      : 'Completed lessons will appear here after your first class.'}
+                  </p>
+                </div>
+              );
+            }
+            return (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {scheduledList.map((lesson) => (
+                  <ScheduledLessonRow key={lesson.id} lesson={lesson} />
+                ))}
+                {bookingList.map((lesson) => (
+                  <LessonRow
+                    key={lesson.bookingId}
+                    lesson={lesson}
+                    isReviewing={reviewingId === lesson.bookingId}
+                    onRate={() => setReviewingId(reviewingId === lesson.bookingId ? null : lesson.bookingId)}
+                    onRateSubmitted={() => {
+                      setReviewingId(null);
+                      fetchAll();
+                    }}
+                  />
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 

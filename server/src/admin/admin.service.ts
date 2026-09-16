@@ -8,6 +8,7 @@ import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
+import { SchedulingService } from '../scheduling/scheduling.service';
 
 const TEACHER_LIST_SELECT = {
   id: true,
@@ -50,6 +51,7 @@ export class AdminService {
     private audit: AuditService,
     private payouts: PayoutsService,
     private studentLedger: StudentLedgerService,
+    private scheduling: SchedulingService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -686,6 +688,7 @@ export class AdminService {
           },
         },
         assignedCourse: { select: { id: true, title: true, category: true } },
+        assignedClassType: true,
       },
     });
     if (!student) throw new NotFoundException('Student not found.');
@@ -779,6 +782,13 @@ export class AdminService {
       afterData: { assignedTeacherId: teacherProfileId },
     });
 
+    // Changing the teacher invalidates any existing recurring schedule —
+    // future lessons were built around the old teacher's availability.
+    // Completed lessons are never touched (see SchedulingService).
+    if (teacherProfileId !== student.assignedTeacherId) {
+      await this.scheduling.clearStudentSchedule(studentUserId);
+    }
+
     return updated;
   }
 
@@ -844,6 +854,13 @@ export class AdminService {
       student.assignedCourse,
       newCourse,
     );
+
+    // Changing the curriculum invalidates any existing recurring schedule —
+    // lesson numbering and progression are tracked per course. Completed
+    // lessons are historical and are never touched.
+    if (courseId !== student.assignedCourseId) {
+      await this.scheduling.clearStudentSchedule(studentUserId);
+    }
 
     return updated;
   }

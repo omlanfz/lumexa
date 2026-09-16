@@ -29,6 +29,7 @@ import { EngagementModule } from './engagement/engagement.module';
 import { PayoutsModule } from './payouts/payouts.module';
 import { RescheduleModule } from './reschedule/reschedule.module';
 import { AuditModule } from './audit/audit.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { AuditModule } from './audit/audit.module';
     EngagementModule,
     PayoutsModule,
     RescheduleModule,
+    SchedulingModule,
   ],
   controllers: [AppController],
   providers: [

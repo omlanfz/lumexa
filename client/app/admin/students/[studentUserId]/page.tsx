@@ -12,9 +12,13 @@ import {
   formatBDT,
   formatDate,
   formatDateTime,
+  formatDhakaDate,
+  formatDhakaTime,
+  WEEKDAY_NAMES,
+  CLASS_TYPE_LABELS,
 } from "@/components/admin/AdminUI";
 
-const TABS = ["Overview", "Class History", "Notes", "Payments", "Reschedule History"] as const;
+const TABS = ["Overview", "Schedule", "Class History", "Notes", "Payments", "Reschedule History"] as const;
 type Tab = (typeof TABS)[number];
 
 const LEDGER_EVENT_LABELS: Record<string, string> = {
@@ -127,6 +131,7 @@ export default function StudentDetailPage() {
               Change
             </button>
           </Card>
+          <Card><Field label="Class Type" value={student.assignedClassType ? CLASS_TYPE_LABELS[student.assignedClassType] : "Not set"} /></Card>
           <Card><Field label="Grade" value={student.grade ?? "—"} /></Card>
           <Card><Field label="Joined" value={formatDate(student.createdAt)} /></Card>
           <Card><Field label="Space Rank" value={student.spaceRank} /></Card>
@@ -144,6 +149,14 @@ export default function StudentDetailPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {tab === "Schedule" && (
+        <ScheduleTab
+          studentUserId={studentUserId}
+          hasTeacher={!!student.assignedTeacher}
+          hasCourse={!!student.assignedCourse}
+        />
       )}
 
       {tab === "Class History" && (
@@ -365,6 +378,263 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1">{label}</p>
       <p className="text-sm text-[var(--a-text)]">{value}</p>
+    </div>
+  );
+}
+
+// ─── Schedule tab: recurring weekly slots + generated lessons ───────────────
+
+interface ScheduleSlotDraft {
+  weekday: number;
+  time: string; // "HH:mm", Asia/Dhaka
+}
+
+function ScheduleTab({
+  studentUserId,
+  hasTeacher,
+  hasCourse,
+}: {
+  studentUserId: string;
+  hasTeacher: boolean;
+  hasCourse: boolean;
+}) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [classType, setClassType] = useState<"ONE_TO_ONE" | "BATCH">("ONE_TO_ONE");
+  const [firstClassDate, setFirstClassDate] = useState("");
+  const [slots, setSlots] = useState<ScheduleSlotDraft[]>([{ weekday: 1, time: "17:00" }]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api
+      .get(`/admin/students/${studentUserId}/schedule`)
+      .then((res) => {
+        setData(res.data);
+        if (res.data.classType) setClassType(res.data.classType);
+        if (res.data.slots?.length) {
+          setSlots(
+            res.data.slots.map((s: any) => ({
+              weekday: s.weekday,
+              time: `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`,
+            })),
+          );
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [studentUserId]);
+
+  useEffect(() => {
+    if (hasTeacher && hasCourse) load();
+    else setLoading(false);
+  }, [load, hasTeacher, hasCourse]);
+
+  if (!hasTeacher || !hasCourse) {
+    return (
+      <Card>
+        <p className="text-sm text-[var(--a-text-muted)]">
+          Assign a teacher and a curriculum to this student before setting up a class schedule.
+        </p>
+      </Card>
+    );
+  }
+  if (loading) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
+
+  const addSlot = () => setSlots((s) => [...s, { weekday: 1, time: "17:00" }]);
+  const removeSlot = (i: number) => setSlots((s) => s.filter((_, idx) => idx !== i));
+  const updateSlot = (i: number, patch: Partial<ScheduleSlotDraft>) =>
+    setSlots((s) => s.map((sl, idx) => (idx === i ? { ...sl, ...patch } : sl)));
+
+  const firstDateWeekday = firstClassDate
+    ? new Date(`${firstClassDate}T00:00:00Z`).getUTCDay()
+    : null;
+  const weekdayMismatch =
+    !!firstClassDate && slots.length > 0 && !slots.some((s) => s.weekday === firstDateWeekday);
+
+  const save = async () => {
+    setError(null);
+    setSuccess(null);
+    if (!firstClassDate) {
+      setError("Select the first class date.");
+      return;
+    }
+    if (slots.length === 0) {
+      setError("Add at least one weekly time slot.");
+      return;
+    }
+    if (weekdayMismatch) {
+      setError(
+        `The first class date must fall on one of the selected weekdays. ${firstClassDate} is a ${WEEKDAY_NAMES[firstDateWeekday!]}.`,
+      );
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.post(`/admin/students/${studentUserId}/schedule`, {
+        classType,
+        firstClassDate,
+        slots,
+      });
+      setData(res.data);
+      setSuccess(`Saved — ${res.data.lessons.upcomingCount} upcoming lesson(s) scheduled.`);
+    } catch (e: any) {
+      const m = e.response?.data?.message;
+      setError(Array.isArray(m) ? m.join(", ") : (m ?? "Failed to save schedule."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-2">
+            Class Type
+          </p>
+          <div className="grid grid-cols-2 gap-2 max-w-sm">
+            {(["ONE_TO_ONE", "BATCH"] as const).map((ct) => (
+              <button
+                key={ct}
+                onClick={() => setClassType(ct)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  classType === ct
+                    ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white"
+                    : "border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+                }`}
+              >
+                {CLASS_TYPE_LABELS[ct]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-2">
+            First Class Date <span className="normal-case font-normal">(Asia/Dhaka)</span>
+          </p>
+          <input
+            type="date"
+            value={firstClassDate}
+            onChange={(e) => setFirstClassDate(e.target.value)}
+            className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+          />
+          {weekdayMismatch && (
+            <p className="text-xs text-[var(--a-danger)] mt-1.5">
+              This date is a {WEEKDAY_NAMES[firstDateWeekday!]} — pick a date on one of the
+              weekdays below, or add that weekday to the schedule.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+              Weekly Time Slots <span className="normal-case font-normal">(Asia/Dhaka)</span>
+            </p>
+            <button
+              onClick={addSlot}
+              className="text-xs px-2.5 py-1.5 rounded-lg border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+            >
+              + Add slot
+            </button>
+          </div>
+          <div className="space-y-2">
+            {slots.map((slot, i) => (
+              <div key={i} className="flex items-center gap-2 flex-wrap">
+                <select
+                  value={slot.weekday}
+                  onChange={(e) => updateSlot(i, { weekday: Number(e.target.value) })}
+                  className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+                >
+                  {WEEKDAY_NAMES.map((d, idx) => (
+                    <option key={idx} value={idx}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="time"
+                  value={slot.time}
+                  onChange={(e) => updateSlot(i, { time: e.target.value })}
+                  className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+                />
+                <button
+                  onClick={() => removeSlot(i)}
+                  className="px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--a-danger)] hover:bg-[var(--a-nav-hover)]"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            {slots.length === 0 && (
+              <p className="text-sm text-[var(--a-text-muted)]">No slots yet — add at least one.</p>
+            )}
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        {success && <p className="text-sm text-[var(--a-success-text)]">{success}</p>}
+
+        <div className="flex justify-end">
+          <button
+            onClick={save}
+            disabled={saving}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Save Schedule"}
+          </button>
+        </div>
+      </Card>
+
+      {data?.lessons?.totalSessions != null && (
+        <Card>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-2">
+            Progress
+          </p>
+          <p className="text-sm text-[var(--a-text)]">
+            {data.lessons.completedCount} completed · {data.lessons.upcomingCount} upcoming ·{" "}
+            {data.lessons.totalSessions} total lessons
+            {data.assignedCourse?.title ? ` (${data.assignedCourse.title})` : ""}
+          </p>
+        </Card>
+      )}
+
+      {data?.lessons?.upcoming?.length > 0 && (
+        <Card className="p-0 overflow-hidden">
+          <p className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+            Upcoming Lessons
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+                  <th className="px-4 py-3">#</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Time (Dhaka)</th>
+                  <th className="px-4 py-3">Class Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.lessons.upcoming.map((l: any) => (
+                  <tr key={l.id} className="border-b border-[var(--a-border)] last:border-0">
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{l.lessonNumber}</td>
+                    <td className="px-4 py-3 text-[var(--a-text)]">{formatDhakaDate(l.start)}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      {formatDhakaTime(l.start)} – {formatDhakaTime(l.end)}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      {CLASS_TYPE_LABELS[l.classType] ?? l.classType}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
