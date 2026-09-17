@@ -181,6 +181,12 @@ export class UploadsController {
     }
 
     const docUrl = (file as any).path ?? (file as any).secure_url;
+    // multer-storage-cloudinary sets `filename` to the Cloudinary
+    // `public_id` it uploaded under (see CloudinaryStorage._handleFile) —
+    // stored so document delivery can always be signed correctly (see
+    // signedDocumentUrl in lib/cloudinary.ts), regardless of URL shape.
+    const publicId = (file as any).filename as string | undefined;
+    const resourceType = file.mimetype === 'application/pdf' ? 'raw' : 'image';
 
     const profile = await this.prisma.teacherProfile.findUnique({
       where: { userId: req.user.userId },
@@ -200,6 +206,8 @@ export class UploadsController {
       url: docUrl,
       name: file.originalname,
       uploadedAt: new Date().toISOString(),
+      publicId,
+      resourceType,
     });
 
     await this.prisma.teacherProfile.update({

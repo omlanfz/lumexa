@@ -173,6 +173,8 @@ export class StudentLedgerService {
       lessonsPurchased: number;
       courseId?: string | null;
       description?: string;
+      paymentMethod?: string;
+      paymentDetail?: string;
     },
   ) {
     if (!(params.amountTaka > 0)) {
@@ -215,6 +217,8 @@ export class StudentLedgerService {
           courseId: course.id,
           courseName: course.title,
           description: params.description?.trim() || null,
+          paymentMethod: params.paymentMethod ?? null,
+          paymentDetail: params.paymentDetail?.trim() || null,
           createdByAdminId: adminId,
         },
       });
@@ -224,7 +228,12 @@ export class StudentLedgerService {
   async recordRefund(
     studentUserId: string,
     adminId: string,
-    params: { amountTaka: number; description?: string },
+    params: {
+      amountTaka: number;
+      description?: string;
+      paymentMethod?: string;
+      paymentDetail?: string;
+    },
   ) {
     if (!(params.amountTaka > 0)) {
       throw new BadRequestException('Amount must be greater than zero.');
@@ -250,6 +259,8 @@ export class StudentLedgerService {
           courseId: prev.courseId,
           courseName: prev.courseName,
           description: params.description?.trim() || null,
+          paymentMethod: params.paymentMethod ?? null,
+          paymentDetail: params.paymentDetail?.trim() || null,
           createdByAdminId: adminId,
         },
       });

@@ -15,7 +15,7 @@ interface TeacherRow {
   subjects: string[];
   docsLocked: boolean;
   payoutLocked: boolean;
-  user: { fullName: string; email: string; createdAt: string; avatarUrl: string | null };
+  user: { fullName: string; email: string; createdAt: string; avatarUrl: string | null; whatsappNumber: string | null };
   _count: { shifts: number; rescheduleRequests: number };
 }
 
@@ -92,6 +92,7 @@ export default function TeachersPage() {
             <thead>
               <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
                 <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Contact</th>
                 <th className="px-4 py-3">Subjects</th>
                 <th className="px-4 py-3">Rating</th>
                 <th className="px-4 py-3">Strikes</th>
@@ -102,14 +103,14 @@ export default function TeachersPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
+                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && teachers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
+                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
                     No teachers found.
                   </td>
                 </tr>
@@ -124,11 +125,12 @@ export default function TeachersPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <Avatar name={t.user.fullName} src={t.user.avatarUrl} />
-                        <div>
-                          <p className="text-[var(--a-text)] font-medium">{t.user.fullName}</p>
-                          <p className="text-xs text-[var(--a-text-faint)]">{t.user.email}</p>
-                        </div>
+                        <p className="text-[var(--a-text)] font-medium">{t.user.fullName}</p>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      <p>{t.user.email}</p>
+                      <p className="text-xs text-[var(--a-text-faint)]">{t.user.whatsappNumber || "No WhatsApp on file"}</p>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{t.subjects.join(", ") || "—"}</td>
                     <td className="px-4 py-3 text-[var(--a-text)]">

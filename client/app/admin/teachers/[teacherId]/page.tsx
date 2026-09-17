@@ -7,10 +7,15 @@ import {
   Card,
   Modal,
   ReasonActionModal,
+  ContactModal,
+  SetPasswordModal,
   StatusBadge,
   formatBDT,
   formatDate,
   formatDateTime,
+  formatDhakaDate,
+  formatDhakaTime,
+  CLASS_TYPE_LABELS,
 } from "@/components/admin/AdminUI";
 
 const TABS = ["Overview", "Assigned Students", "Schedule", "Earnings / Ledger", "Verification"] as const;
@@ -22,7 +27,9 @@ export default function TeacherDetailPage() {
   const [teacher, setTeacher] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("Overview");
-  const [modal, setModal] = useState<null | "suspend" | "adjustment" | "assign">(null);
+  const [modal, setModal] = useState<
+    null | "suspend" | "adjustment" | "assign" | "strike" | "contact" | "password"
+  >(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -75,6 +82,12 @@ export default function TeacherDetailPage() {
             </button>
           )}
           <button
+            onClick={() => setModal("strike")}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-warning-text)] hover:bg-[var(--a-nav-hover)]"
+          >
+            Add Strike
+          </button>
+          <button
             onClick={resetStrikes}
             className="px-3 py-1.5 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
           >
@@ -109,6 +122,26 @@ export default function TeacherDetailPage() {
           <Card className="sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-2">Subjects</p>
             <p className="text-sm text-[var(--a-text)]">{teacher.subjects?.join(", ") || "—"}</p>
+          </Card>
+          <Card className="sm:col-span-2 lg:col-span-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
+              <Field label="Email" value={teacher.user.email} />
+              <Field label="WhatsApp" value={teacher.user.whatsappNumber || "Not on file"} />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setModal("contact")}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+              >
+                Edit contact
+              </button>
+              <button
+                onClick={() => setModal("password")}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+              >
+                Change password
+              </button>
+            </div>
           </Card>
           <Card className="sm:col-span-2 lg:col-span-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-3">
@@ -178,28 +211,37 @@ export default function TeacherDetailPage() {
 
       {tab === "Schedule" && (
         <Card className="p-0 overflow-hidden">
+          <p className="px-4 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+            Upcoming classes (Asia/Dhaka)
+          </p>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
-                <th className="px-4 py-3">Start</th>
-                <th className="px-4 py-3">End</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Time</th>
                 <th className="px-4 py-3">Student</th>
-                <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Course</th>
+                <th className="px-4 py-3">Class Type</th>
               </tr>
             </thead>
             <tbody>
-              {teacher.upcomingShifts.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No upcoming shifts.</td></tr>
+              {(!teacher.upcomingLessons || teacher.upcomingLessons.length === 0) && (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No upcoming classes scheduled.</td></tr>
               )}
-              {teacher.upcomingShifts.map((sh: any) => (
-                <tr key={sh.id} className="border-b border-[var(--a-border)] last:border-0">
-                  <td className="px-4 py-3 text-[var(--a-text)]">{formatDateTime(sh.start)}</td>
-                  <td className="px-4 py-3 text-[var(--a-text)]">{formatDateTime(sh.end)}</td>
+              {teacher.upcomingLessons?.map((l: any) => (
+                <tr key={l.id} className="border-b border-[var(--a-border)] last:border-0">
+                  <td className="px-4 py-3 text-[var(--a-text)]">{formatDhakaDate(l.start)}</td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">
-                    {sh.booking?.studentUser?.fullName ?? sh.booking?.student?.name ?? "Open slot"}
+                    {formatDhakaTime(l.start)} – {formatDhakaTime(l.end)}
                   </td>
-                  <td className="px-4 py-3">
-                    {sh.booking ? <StatusBadge status={sh.booking.paymentStatus} /> : "—"}
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    {l.student?.fullName ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    {l.lessonTitle ?? l.course?.title ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    {CLASS_TYPE_LABELS[l.classType] ?? l.classType}
                   </td>
                 </tr>
               ))}
@@ -232,6 +274,36 @@ export default function TeacherDetailPage() {
       {modal === "assign" && (
         <AssignStudentModal teacherId={teacherId} onClose={() => setModal(null)} onDone={load} />
       )}
+      {modal === "strike" && (
+        <ReasonActionModal
+          title="Add a manual strike"
+          actionLabel="Add strike"
+          danger
+          onClose={() => setModal(null)}
+          onSubmit={async (reason) => {
+            await api.post(`/admin/teachers/${teacherId}/strike`, { reason });
+            load();
+          }}
+        />
+      )}
+      {modal === "contact" && (
+        <ContactModal
+          initialValue={teacher.user.whatsappNumber ?? ""}
+          onClose={() => setModal(null)}
+          onSubmit={async (whatsappNumber) => {
+            await api.post(`/admin/teachers/${teacherId}/contact`, { whatsappNumber });
+            load();
+          }}
+        />
+      )}
+      {modal === "password" && (
+        <SetPasswordModal
+          onClose={() => setModal(null)}
+          onSubmit={async (newPassword) => {
+            await api.post(`/admin/teachers/${teacherId}/password`, { newPassword });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -241,6 +313,15 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
     <div>
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1">{label}</p>
       <p className="text-xl font-bold text-[var(--a-text)]">{value}</p>
+    </div>
+  );
+}
+
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1">{label}</p>
+      <p className="text-sm text-[var(--a-text)]">{value}</p>
     </div>
   );
 }
@@ -493,8 +574,16 @@ function VerificationTab({ teacherId }: { teacherId: string }) {
       <div className="space-y-2">
         {(docs.documents ?? []).map((d: any, i: number) => (
           <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)]">
-            <span className="text-sm text-[var(--a-text)]">{d.name ?? d.type}</span>
-            <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-sm text-[var(--a-accent)] hover:underline">
+            <div>
+              <p className="text-sm font-medium text-[var(--a-text)]">{d.label ?? d.type}</p>
+              <p className="text-xs text-[var(--a-text-faint)]">{d.name ?? "—"}</p>
+            </div>
+            <a
+              href={d.viewUrl ?? d.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-[var(--a-accent)] hover:underline shrink-0 ml-3"
+            >
               View
             </a>
           </div>

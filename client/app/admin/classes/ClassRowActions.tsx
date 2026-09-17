@@ -1,80 +1,97 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import api from "@/lib/axios";
-import { Modal, ReasonActionModal } from "@/components/admin/AdminUI";
+import { DropdownMenu, DropdownItem, Modal, ReasonActionModal, StatusBadge, formatDateTime, CLASS_TYPE_LABELS } from "@/components/admin/AdminUI";
 
-export interface Booking {
+export interface ClassRow {
   id: string;
-  paymentStatus: string;
-  displayStatus: string;
+  kind: "BOOKING" | "LESSON";
+  start: string;
+  end: string;
+  studentName: string;
+  studentEmail: string | null;
+  studentUserId: string | null;
+  teacherName: string;
+  teacherId: string | null;
+  courseTitle: string;
+  courseId: string | null;
+  classType: string | null;
+  lessonNumber: number | null;
+  paymentStatus: string | null;
   amountCents: number | null;
   recordingUrl: string | null;
-  studentUser?: { id: string; fullName: string; email: string; assignedCourse?: { id: string; title: string } | null } | null;
-  student?: { name: string } | null;
-  shift?: {
-    start: string;
-    end: string;
-    teacher?: { id: string; user: { fullName: string } };
-  };
+  displayStatus: string;
 }
 
+// Kept as an alias so nothing outside this file needs to know the type was
+// renamed from the old Booking-only shape.
+export type Booking = ClassRow;
+
 export default function ClassRowActions({
-  booking,
+  row,
   onChanged,
-  onView,
 }: {
-  booking: Booking;
+  row: ClassRow;
   onChanged: () => void;
-  onView: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<
-    null | "reschedule" | "cancel" | "refund" | "recording" | "history"
+    null | "reschedule" | "cancel" | "refund" | "recording" | "history" | "details" | "delete"
   >(null);
-  const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, []);
-
-  const canModify = !["CANCELLED", "REFUNDED"].includes(booking.displayStatus);
+  const canModify = !["CANCELLED", "REFUNDED"].includes(row.displayStatus);
 
   return (
-    <div className="relative inline-block text-left" ref={ref}>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors"
+    <div className="flex items-center justify-end gap-1.5">
+      <DropdownMenu
+        align="right"
+        trigger={({ toggle }) => (
+          <button
+            onClick={toggle}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors"
+          >
+            Actions ▾
+          </button>
+        )}
       >
-        Actions ▾
-      </button>
-      {open && (
-        <div className="absolute right-0 mt-1 w-52 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] shadow-xl z-20 overflow-hidden fade-in">
-          <MenuItem onClick={() => { onView(); setOpen(false); }}>View details</MenuItem>
-          {canModify && (
-            <MenuItem onClick={() => { setModal("reschedule"); setOpen(false); }}>Reschedule</MenuItem>
-          )}
-          {canModify && (
-            <MenuItem onClick={() => { setModal("cancel"); setOpen(false); }} danger>
-              Cancel
-            </MenuItem>
-          )}
-          {booking.paymentStatus === "CAPTURED" && (
-            <MenuItem onClick={() => { setModal("refund"); setOpen(false); }} danger>
-              Refund
-            </MenuItem>
-          )}
-          <MenuItem onClick={() => { setModal("recording"); setOpen(false); }}>View recording</MenuItem>
-          <MenuItem onClick={() => { setModal("history"); setOpen(false); }}>Reschedule history</MenuItem>
-        </div>
-      )}
+        {(close) => (
+          <>
+            <DropdownItem onClick={() => { setModal("details"); close(); }}>View details</DropdownItem>
+            {canModify && (
+              <DropdownItem onClick={() => { setModal("reschedule"); close(); }}>Reschedule</DropdownItem>
+            )}
+            {canModify && (
+              <DropdownItem onClick={() => { setModal("cancel"); close(); }} danger>
+                Cancel
+              </DropdownItem>
+            )}
+            {row.kind === "BOOKING" && row.paymentStatus === "CAPTURED" && (
+              <DropdownItem onClick={() => { setModal("refund"); close(); }} danger>
+                Refund
+              </DropdownItem>
+            )}
+            {row.kind === "BOOKING" && (
+              <DropdownItem onClick={() => { setModal("recording"); close(); }}>View recording</DropdownItem>
+            )}
+            {row.kind === "BOOKING" && (
+              <DropdownItem onClick={() => { setModal("history"); close(); }}>Reschedule history</DropdownItem>
+            )}
+          </>
+        )}
+      </DropdownMenu>
 
+      <button
+        onClick={() => setModal("delete")}
+        title="Delete this class log"
+        aria-label="Delete this class log"
+        className="p-1.5 rounded-lg border border-[var(--a-border)] text-[var(--a-danger)] hover:bg-[var(--a-danger-bg)] transition-colors"
+      >
+        <TrashIcon />
+      </button>
+
+      {modal === "details" && <DetailsModal row={row} onClose={() => setModal(null)} />}
       {modal === "reschedule" && (
-        <RescheduleModal booking={booking} onClose={() => setModal(null)} onDone={onChanged} />
+        <RescheduleModal row={row} onClose={() => setModal(null)} onDone={onChanged} />
       )}
       {modal === "cancel" && (
         <ReasonActionModal
@@ -83,74 +100,165 @@ export default function ClassRowActions({
           danger
           onClose={() => setModal(null)}
           onSubmit={async (reason) => {
-            await api.post(`/admin/bookings/${booking.id}/cancel`, { reason });
+            const path = row.kind === "BOOKING" ? `/admin/bookings/${row.id}/cancel` : `/admin/lessons/${row.id}/cancel`;
+            await api.post(path, { reason });
             onChanged();
           }}
         />
       )}
       {modal === "refund" && (
-        <RefundModal booking={booking} onClose={() => setModal(null)} onDone={onChanged} />
+        <RefundModal row={row} onClose={() => setModal(null)} onDone={onChanged} />
       )}
       {modal === "recording" && (
-        <RecordingModal booking={booking} onClose={() => setModal(null)} />
+        <RecordingModal row={row} onClose={() => setModal(null)} />
       )}
       {modal === "history" && (
-        <HistoryModal booking={booking} onClose={() => setModal(null)} />
+        <HistoryModal row={row} onClose={() => setModal(null)} />
+      )}
+      {modal === "delete" && (
+        <ConfirmDeleteModal row={row} onClose={() => setModal(null)} onDone={onChanged} />
       )}
     </div>
   );
 }
 
-function MenuItem({
-  children,
-  onClick,
-  danger,
+function ConfirmDeleteModal({
+  row,
+  onClose,
+  onDone,
 }: {
-  children: React.ReactNode;
-  onClick: () => void;
-  danger?: boolean;
+  row: ClassRow;
+  onClose: () => void;
+  onDone: () => void;
 }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const path = row.kind === "BOOKING" ? `/admin/bookings/${row.id}` : `/admin/lessons/${row.id}`;
+      await api.delete(path);
+      onDone();
+      onClose();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-[var(--a-nav-hover)] ${
-        danger ? "text-[var(--a-danger)]" : "text-[var(--a-text)]"
-      }`}
-    >
-      {children}
-    </button>
+    <Modal title="Delete this class log" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--a-text)]">
+          Permanently delete the {formatDateTime(row.start)} class ({row.studentName} · {row.teacherName})?
+          This removes it from the class log entirely and can&rsquo;t be undone.
+        </p>
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-danger)] hover:opacity-90 transition-colors disabled:opacity-60"
+          >
+            {submitting ? "Deleting…" : "Delete permanently"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m5 0V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+function DetailsModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
+  return (
+    <Modal title="Class details" onClose={onClose}>
+      <div className="space-y-3 text-sm">
+        <Row label="Student" value={`${row.studentName}${row.studentEmail ? ` (${row.studentEmail})` : ""}`} />
+        <Row label="Teacher" value={row.teacherName} />
+        <Row label="Course" value={row.courseTitle} />
+        <Row label="Scheduled" value={`${formatDateTime(row.start)} → ${formatDateTime(row.end)}`} />
+        <Row label="Status" value={<StatusBadge status={row.displayStatus} />} />
+        {row.kind === "BOOKING" && row.paymentStatus && (
+          <Row label="Payment status" value={<StatusBadge status={row.paymentStatus} />} />
+        )}
+        {row.kind === "LESSON" && (
+          <>
+            <Row label="Lesson #" value={row.lessonNumber ?? "—"} />
+            <Row label="Class type" value={row.classType ? (CLASS_TYPE_LABELS[row.classType] ?? row.classType) : "—"} />
+            <p className="text-xs text-[var(--a-text-faint)] pt-1">
+              Billed against the student&rsquo;s BDT ledger balance, not per-class — see the student&rsquo;s Payments tab.
+            </p>
+          </>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[var(--a-border)] last:border-0 pb-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">{label}</span>
+      <span className="text-[var(--a-text)] text-right">{value}</span>
+    </div>
   );
 }
 
 function RescheduleModal({
-  booking,
+  row,
   onClose,
   onDone,
 }: {
-  booking: Booking;
+  row: ClassRow;
   onClose: () => void;
   onDone: () => void;
 }) {
   const toLocalInput = (iso?: string) => (iso ? new Date(iso).toISOString().slice(0, 16) : "");
-  const [start, setStart] = useState(toLocalInput(booking.shift?.start));
-  const [end, setEnd] = useState(toLocalInput(booking.shift?.end));
+  const [start, setStart] = useState(toLocalInput(row.start));
+  const [end, setEnd] = useState(toLocalInput(row.end));
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async () => {
-    if (!reason.trim()) {
+    if (row.kind === "BOOKING" && !reason.trim()) {
       setError("A reason is required.");
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      await api.post(`/admin/bookings/${booking.id}/reschedule`, {
-        newStart: new Date(start).toISOString(),
-        newEnd: new Date(end).toISOString(),
-        reason: reason.trim(),
-      });
+      if (row.kind === "BOOKING") {
+        await api.post(`/admin/bookings/${row.id}/reschedule`, {
+          newStart: new Date(start).toISOString(),
+          newEnd: new Date(end).toISOString(),
+          reason: reason.trim(),
+        });
+      } else {
+        await api.post(`/admin/lessons/${row.id}/reschedule`, {
+          newStart: new Date(start).toISOString(),
+          newEnd: new Date(end).toISOString(),
+        });
+      }
       onDone();
       onClose();
     } catch (err: any) {
@@ -187,18 +295,20 @@ function RescheduleModal({
             />
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
-            Reason
-          </label>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            rows={3}
-            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
-            placeholder="Explain why Operations is rescheduling this class."
-          />
-        </div>
+        {row.kind === "BOOKING" && (
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+              Reason
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+              placeholder="Explain why Operations is rescheduling this class."
+            />
+          </div>
+        )}
         {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button
@@ -221,15 +331,15 @@ function RescheduleModal({
 }
 
 function RefundModal({
-  booking,
+  row,
   onClose,
   onDone,
 }: {
-  booking: Booking;
+  row: ClassRow;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const maxCents = booking.amountCents ?? 0;
+  const maxCents = row.amountCents ?? 0;
   const [amount, setAmount] = useState(String((maxCents / 100).toFixed(2)));
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -248,7 +358,7 @@ function RefundModal({
     setSubmitting(true);
     setError(null);
     try {
-      await api.post(`/admin/bookings/${booking.id}/refund`, {
+      await api.post(`/admin/bookings/${row.id}/refund`, {
         refundCents: cents,
         reason: reason.trim(),
       });
@@ -308,16 +418,16 @@ function RefundModal({
   );
 }
 
-function RecordingModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
-  const [url, setUrl] = useState<string | null | undefined>(booking.recordingUrl);
+function RecordingModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
+  const [url, setUrl] = useState<string | null | undefined>(row.recordingUrl);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api
-      .get(`/admin/bookings/${booking.id}/recording`)
+      .get(`/admin/bookings/${row.id}/recording`)
       .then((res) => setUrl(res.data.recordingUrl))
       .finally(() => setLoading(false));
-  }, [booking.id]);
+  }, [row.id]);
 
   return (
     <Modal title="Class recording" onClose={onClose}>
@@ -339,16 +449,16 @@ function RecordingModal({ booking, onClose }: { booking: Booking; onClose: () =>
   );
 }
 
-function HistoryModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
+function HistoryModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     api
-      .get(`/admin/bookings/${booking.id}/reschedule-history`)
+      .get(`/admin/bookings/${row.id}/reschedule-history`)
       .then((res) => setItems(res.data ?? []))
       .finally(() => setLoading(false));
-  }, [booking.id]);
+  }, [row.id]);
 
   return (
     <Modal title="Reschedule history" onClose={onClose}>
