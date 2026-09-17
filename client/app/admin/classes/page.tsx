@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
 import {
   Card,
@@ -9,8 +9,9 @@ import {
   StatusBadge,
   formatBDT,
   formatDateTime,
+  CLASS_TYPE_LABELS,
 } from "@/components/admin/AdminUI";
-import ClassRowActions, { Booking } from "./ClassRowActions";
+import ClassRowActions, { ClassRow } from "./ClassRowActions";
 
 interface Teacher {
   id: string;
@@ -38,10 +39,9 @@ const STATUS_OPTIONS = [
 ];
 
 export default function ClassesPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [rows, setRows] = useState<ClassRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -90,7 +90,7 @@ export default function ClassesPage() {
     api
       .get(`/admin/bookings?${params.toString()}`)
       .then((res) => {
-        setBookings(res.data.bookings ?? []);
+        setRows(res.data.classes ?? []);
         setTotal(res.data.total ?? 0);
         setTotalPages(res.data.totalPages ?? 1);
       })
@@ -106,11 +106,6 @@ export default function ClassesPage() {
   const updateTeacherId = (v: string) => { setTeacherId(v); setPage(1); };
   const updateCourseId = (v: string) => { setCourseId(v); setPage(1); };
   const updateStudentFilter = (v: StudentOption | null) => { setStudentFilter(v); setPage(1); };
-
-  const studentName = (b: Booking) =>
-    b.studentUser?.fullName ?? b.student?.name ?? "—";
-  const teacherName = (b: Booking) => b.shift?.teacher?.user?.fullName ?? "—";
-  const courseTitle = (b: Booking) => b.studentUser?.assignedCourse?.title ?? "—";
 
   return (
     <div className="space-y-6">
@@ -242,7 +237,7 @@ export default function ClassesPage() {
                   </td>
                 </tr>
               )}
-              {!loading && bookings.length === 0 && (
+              {!loading && rows.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
                     No classes match these filters.
@@ -250,28 +245,35 @@ export default function ClassesPage() {
                 </tr>
               )}
               {!loading &&
-                bookings.map((b) => (
+                rows.map((r) => (
                   <tr
-                    key={b.id}
+                    key={`${r.kind}:${r.id}`}
                     className="border-b border-[var(--a-border)] last:border-0 hover:bg-[var(--a-nav-hover)] transition-colors"
                   >
                     <td className="px-4 py-3 whitespace-nowrap text-[var(--a-text)]">
-                      {formatDateTime(b.shift?.start)}
+                      {formatDateTime(r.start)}
                     </td>
-                    <td className="px-4 py-3 text-[var(--a-text)]">{studentName(b)}</td>
-                    <td className="px-4 py-3 text-[var(--a-text)]">{teacherName(b)}</td>
-                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{courseTitle(b)}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={b.displayStatus} />
+                    <td className="px-4 py-3 text-[var(--a-text)]">{r.studentName}</td>
+                    <td className="px-4 py-3 text-[var(--a-text)]">{r.teacherName}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      {r.courseTitle}
+                      {r.classType && (
+                        <span className="block text-xs text-[var(--a-text-faint)]">
+                          {CLASS_TYPE_LABELS[r.classType] ?? r.classType}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={b.paymentStatus} />
+                      <StatusBadge status={r.displayStatus} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {r.paymentStatus ? <StatusBadge status={r.paymentStatus} /> : <span className="text-[var(--a-text-faint)]">—</span>}
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text)]">
-                      {b.amountCents != null ? formatBDT(b.amountCents) : "—"}
+                      {r.amountCents != null ? formatBDT(r.amountCents) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <ClassRowActions booking={b} onChanged={load} onView={() => router.push(`/admin/classes/${b.id}`)} />
+                      <ClassRowActions row={r} onChanged={load} />
                     </td>
                   </tr>
                 ))}

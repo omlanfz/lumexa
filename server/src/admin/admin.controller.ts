@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Param,
   Body,
   Query,
@@ -24,6 +25,7 @@ import { AdminService } from './admin.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { RescheduleService } from '../reschedule/reschedule.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
+import { SchedulingService } from '../scheduling/scheduling.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
@@ -73,16 +75,33 @@ class RecordPaymentDto {
   @IsNumber() @IsPositive() lessonsPurchased: number;
   @IsOptional() @IsString() courseId?: string;
   @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @IsOptional() @IsIn(['BKASH', 'BANK', 'CASH', 'OTHER']) paymentMethod?: string;
+  @IsOptional() @IsString() @MaxLength(200) paymentDetail?: string;
 }
 
 class RecordRefundDto {
   @IsNumber() @IsPositive() amountTaka: number;
   @IsOptional() @IsString() @MaxLength(500) description?: string;
+  @IsOptional() @IsIn(['BKASH', 'BANK', 'CASH', 'OTHER']) paymentMethod?: string;
+  @IsOptional() @IsString() @MaxLength(200) paymentDetail?: string;
 }
 
 class RecordAdjustmentDto {
   @IsNumber() amountTaka: number;
   @IsString() @MinLength(1) @MaxLength(500) description: string;
+}
+
+class ContactDto {
+  @IsOptional() @IsString() @MaxLength(30) whatsappNumber?: string | null;
+}
+
+class SetPasswordDto {
+  @IsString() @MinLength(8) @MaxLength(72) newPassword: string;
+}
+
+class LessonRescheduleDto {
+  @IsISO8601() newStart: string;
+  @IsISO8601() newEnd: string;
 }
 
 @Controller('admin')
@@ -94,6 +113,7 @@ export class AdminController {
     private readonly payoutsService: PayoutsService,
     private readonly rescheduleService: RescheduleService,
     private readonly studentLedgerService: StudentLedgerService,
+    private readonly schedulingService: SchedulingService,
   ) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
@@ -181,6 +201,57 @@ export class AdminController {
     return this.rescheduleService.adminCancel(req.user.userId, bookingId, dto);
   }
 
+  @Delete('bookings/:bookingId')
+  deleteBooking(
+    @Param('bookingId') bookingId: string,
+    @Body('reason') reason: string | undefined,
+    @Request() req: any,
+  ) {
+    return this.adminService.deleteBooking(bookingId, req.user.userId, reason);
+  }
+
+  // ── Classes: single-lesson overrides (ScheduledLesson-based classes) ────
+
+  @Post('lessons/:lessonId/reschedule')
+  adminRescheduleLesson(
+    @Param('lessonId') lessonId: string,
+    @Body() dto: LessonRescheduleDto,
+    @Request() req: any,
+  ) {
+    return this.schedulingService.adminRescheduleLesson(
+      lessonId,
+      new Date(dto.newStart),
+      new Date(dto.newEnd),
+      req.user.userId,
+    );
+  }
+
+  @Post('lessons/:lessonId/cancel')
+  adminCancelLesson(
+    @Param('lessonId') lessonId: string,
+    @Body() dto: ReasonDto,
+    @Request() req: any,
+  ) {
+    return this.schedulingService.adminCancelLesson(
+      lessonId,
+      dto.reason,
+      req.user.userId,
+    );
+  }
+
+  @Delete('lessons/:lessonId')
+  deleteLesson(
+    @Param('lessonId') lessonId: string,
+    @Body('reason') reason: string | undefined,
+    @Request() req: any,
+  ) {
+    return this.schedulingService.adminDeleteLesson(
+      lessonId,
+      req.user.userId,
+      reason,
+    );
+  }
+
   // ── Reschedule policy review (flagged / "Needs Review") ─────────────────
 
   @Get('reschedule/flagged')
@@ -234,6 +305,45 @@ export class AdminController {
   @Post('teachers/:teacherId/reset-strikes')
   resetStrikes(@Param('teacherId') teacherId: string, @Request() req: any) {
     return this.adminService.resetTeacherStrikes(teacherId, req.user.userId);
+  }
+
+  @Post('teachers/:teacherId/strike')
+  addStrike(
+    @Param('teacherId') teacherId: string,
+    @Body() dto: ReasonDto,
+    @Request() req: any,
+  ) {
+    return this.adminService.addTeacherStrike(
+      teacherId,
+      dto.reason,
+      req.user.userId,
+    );
+  }
+
+  @Post('teachers/:teacherId/contact')
+  updateTeacherContact(
+    @Param('teacherId') teacherId: string,
+    @Body() dto: ContactDto,
+    @Request() req: any,
+  ) {
+    return this.adminService.updateTeacherContact(
+      teacherId,
+      dto.whatsappNumber ?? null,
+      req.user.userId,
+    );
+  }
+
+  @Post('teachers/:teacherId/password')
+  resetTeacherPassword(
+    @Param('teacherId') teacherId: string,
+    @Body() dto: SetPasswordDto,
+    @Request() req: any,
+  ) {
+    return this.adminService.resetTeacherPassword(
+      teacherId,
+      dto.newPassword,
+      req.user.userId,
+    );
   }
 
   // ── Students ──────────────────────────────────────────────────────────────
@@ -305,6 +415,33 @@ export class AdminController {
     @Request() req: any,
   ) {
     return this.adminService.resumeStudent(studentUserId, req.user.userId);
+  }
+
+  @Post('students/:studentUserId/contact')
+  updateStudentContact(
+    @Param('studentUserId') studentUserId: string,
+    @Body() dto: ContactDto,
+    @Request() req: any,
+  ) {
+    return this.adminService.updateStudentContact(
+      studentUserId,
+      dto.whatsappNumber ?? null,
+      req.user.userId,
+    );
+  }
+
+  @Post('students/:studentUserId/password')
+  resetStudentPassword(
+    @Param('studentUserId') studentUserId: string,
+    @Body() dto: SetPasswordDto,
+    @Request() req: any,
+  ) {
+    return this.adminService.resetUserPassword(
+      studentUserId,
+      dto.newPassword,
+      req.user.userId,
+      'STUDENT',
+    );
   }
 
   // ── Student BDT ledger ──────────────────────────────────────────────────

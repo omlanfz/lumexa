@@ -8,17 +8,21 @@ import {
   Modal,
   PaymentBadge,
   ReasonActionModal,
+  ContactModal,
+  SetPasswordModal,
   StatusBadge,
   formatBDT,
   formatDate,
   formatDateTime,
   formatDhakaDate,
   formatDhakaTime,
+  todayDhakaDateStr,
   WEEKDAY_NAMES,
   CLASS_TYPE_LABELS,
+  PAYMENT_METHOD_LABELS,
 } from "@/components/admin/AdminUI";
 
-const TABS = ["Overview", "Schedule", "Class History", "Notes", "Payments", "Reschedule History"] as const;
+const TABS = ["Overview", "Schedule", "Class History", "Contact", "Payments", "Reschedule History"] as const;
 type Tab = (typeof TABS)[number];
 
 const LEDGER_EVENT_LABELS: Record<string, string> = {
@@ -42,7 +46,15 @@ export default function StudentDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("Overview");
   const [modal, setModal] = useState<
-    null | "pause" | "assignTeacher" | "assignCourse" | "PAYMENT_RECEIVED" | "REFUND" | "ADMIN_ADJUSTMENT"
+    | null
+    | "pause"
+    | "assignTeacher"
+    | "assignCourse"
+    | "PAYMENT_RECEIVED"
+    | "REFUND"
+    | "ADMIN_ADJUSTMENT"
+    | "contact"
+    | "password"
   >(null);
 
   const load = useCallback(() => {
@@ -166,20 +178,22 @@ export default function StudentDetailPage() {
               <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
                 <th className="px-4 py-3">Date</th>
                 <th className="px-4 py-3">Teacher</th>
-                <th className="px-4 py-3">Payment</th>
+                <th className="px-4 py-3">Course</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Review</th>
               </tr>
             </thead>
             <tbody>
               {student.classHistory.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No classes yet.</td></tr>
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No classes yet.</td></tr>
               )}
-              {student.classHistory.map((b: any) => (
-                <tr key={b.id} className="border-b border-[var(--a-border)] last:border-0">
-                  <td className="px-4 py-3 text-[var(--a-text)]">{formatDateTime(b.shift?.start)}</td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{b.shift?.teacher?.user?.fullName ?? "—"}</td>
-                  <td className="px-4 py-3"><StatusBadge status={b.paymentStatus} /></td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{b.review ? `${b.review.rating}★` : "—"}</td>
+              {student.classHistory.map((c: any) => (
+                <tr key={`${c.kind}:${c.id}`} className="border-b border-[var(--a-border)] last:border-0">
+                  <td className="px-4 py-3 text-[var(--a-text)]">{formatDateTime(c.start)}</td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.teacherName ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.courseTitle ?? "—"}</td>
+                  <td className="px-4 py-3"><StatusBadge status={c.paymentStatus ?? c.displayStatus} /></td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.review ? `${c.review.rating}★` : "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -187,16 +201,27 @@ export default function StudentDetailPage() {
         </Card>
       )}
 
-      {tab === "Notes" && (
-        <Card className="space-y-3">
-          {student.notes.length === 0 && <p className="text-sm text-[var(--a-text-muted)]">No notes recorded.</p>}
-          {student.notes.map((n: any) => (
-            <div key={n.id} className="p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)]">
-              <p className="text-sm text-[var(--a-text)]">{n.note}</p>
-              <p className="text-xs text-[var(--a-text-faint)] mt-1">{formatDateTime(n.createdAt)}</p>
-            </div>
-          ))}
-        </Card>
+      {tab === "Contact" && (
+        <div className="space-y-4">
+          <Card className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Email" value={student.email} />
+            <Field label="WhatsApp" value={student.whatsappNumber || "Not on file"} />
+          </Card>
+          <Card className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setModal("contact")}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+            >
+              Edit contact
+            </button>
+            <button
+              onClick={() => setModal("password")}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+            >
+              Change password
+            </button>
+          </Card>
+        </div>
       )}
 
       {tab === "Payments" && (
@@ -266,6 +291,12 @@ export default function StudentDetailPage() {
                       <td className="px-4 py-3">
                         <p className="text-[var(--a-text)] font-medium">{LEDGER_EVENT_LABELS[entry.type] ?? entry.type}</p>
                         {entry.description && <p className="text-xs text-[var(--a-text-faint)] mt-0.5">{entry.description}</p>}
+                        {entry.paymentMethod && (
+                          <p className="text-xs text-[var(--a-text-faint)] mt-0.5">
+                            Via {PAYMENT_METHOD_LABELS[entry.paymentMethod] ?? entry.paymentMethod}
+                            {entry.paymentDetail ? ` — ${entry.paymentDetail}` : ""}
+                          </p>
+                        )}
                         {entry.createdByAdmin?.fullName && (
                           <p className="text-xs text-[var(--a-text-faint)]">by {entry.createdByAdmin.fullName}</p>
                         )}
@@ -369,6 +400,24 @@ export default function StudentDetailPage() {
           onClose={() => setModal(null)}
         />
       )}
+      {modal === "contact" && (
+        <ContactModal
+          initialValue={student.whatsappNumber ?? ""}
+          onClose={() => setModal(null)}
+          onSubmit={async (whatsappNumber) => {
+            await api.post(`/admin/students/${studentUserId}/contact`, { whatsappNumber });
+            load();
+          }}
+        />
+      )}
+      {modal === "password" && (
+        <SetPasswordModal
+          onClose={() => setModal(null)}
+          onSubmit={async (newPassword) => {
+            await api.post(`/admin/students/${studentUserId}/password`, { newPassword });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -460,6 +509,10 @@ function ScheduleTab({
       setError("Select the first class date.");
       return;
     }
+    if (firstClassDate < todayDhakaDateStr()) {
+      setError("The first class date can't be in the past.");
+      return;
+    }
     if (slots.length === 0) {
       setError("Add at least one weekly time slot.");
       return;
@@ -518,9 +571,15 @@ function ScheduleTab({
           <input
             type="date"
             value={firstClassDate}
+            min={todayDhakaDateStr()}
             onChange={(e) => setFirstClassDate(e.target.value)}
             className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
           />
+          {firstClassDate && firstClassDate < todayDhakaDateStr() && (
+            <p className="text-xs text-[var(--a-danger)] mt-1.5">
+              The first class date can&rsquo;t be in the past.
+            </p>
+          )}
           {weekdayMismatch && (
             <p className="text-xs text-[var(--a-danger)] mt-1.5">
               This date is a {WEEKDAY_NAMES[firstDateWeekday!]} — pick a date on one of the
@@ -807,8 +866,12 @@ function LedgerEntryModal({
   const [amountTaka, setAmountTaka] = useState("");
   const [lessonsPurchased, setLessonsPurchased] = useState("");
   const [description, setDescription] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
+  const [paymentDetail, setPaymentDetail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const takesPaymentMethod = type === "PAYMENT_RECEIVED" || type === "REFUND";
 
   const submit = async () => {
     const amount = Number(amountTaka);
@@ -831,6 +894,10 @@ function LedgerEntryModal({
         type === "PAYMENT_RECEIVED"
           ? { amountTaka: amount, lessonsPurchased: Number(lessonsPurchased), description: description.trim() || undefined }
           : { amountTaka: amount, description: description.trim() || undefined };
+      if (takesPaymentMethod && paymentMethod) {
+        body.paymentMethod = paymentMethod;
+        body.paymentDetail = paymentDetail.trim() || undefined;
+      }
       await onSubmit(body);
       onClose();
     } catch (err: any) {
@@ -879,6 +946,38 @@ function LedgerEntryModal({
             </div>
           )}
         </div>
+        {takesPaymentMethod && (
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+                Payment method (optional)
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+              >
+                <option value="">Not specified</option>
+                <option value="BKASH">bKash</option>
+                <option value="BANK">Bank transfer</option>
+                <option value="CASH">Cash</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+                bKash/bank details
+              </label>
+              <input
+                value={paymentDetail}
+                onChange={(e) => setPaymentDetail(e.target.value)}
+                placeholder="e.g. bKash 017XXXXXXXX, or Bank + a/c"
+                disabled={!paymentMethod}
+                className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus disabled:opacity-50"
+              />
+            </div>
+          </div>
+        )}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
             Description {type === "ADMIN_ADJUSTMENT" ? "(required)" : "(optional)"}

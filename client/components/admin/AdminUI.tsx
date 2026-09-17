@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, ReactNode } from "react";
+import { useEffect, useRef, useState, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 // ─── Status badge ───────────────────────────────────────────────────────────
@@ -160,6 +160,105 @@ export function Pagination({
   );
 }
 
+// ─── Dropdown menu (portal-based) ───────────────────────────────────────────
+//
+// A plain `absolute right-0` dropdown gets clipped whenever an ancestor
+// (e.g. a table's `overflow-x-auto` wrapper) establishes a scroll/clip
+// context — per spec, setting only `overflow-x` implicitly sets
+// `overflow-y: auto` too, so the menu is cut off instead of floating over
+// the table. Rendering it into a portal, positioned from the trigger
+// button's live bounding rect, escapes that entirely — same fix as Modal
+// above, just anchored to a button instead of centered on the viewport.
+
+const DROPDOWN_WIDTH = 208; // matches w-52
+
+export function DropdownMenu({
+  trigger,
+  children,
+  align = "right",
+}: {
+  trigger: (state: { open: boolean; toggle: () => void }) => ReactNode;
+  children: (close: () => void) => ReactNode;
+  align?: "left" | "right";
+}) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const left =
+        align === "right"
+          ? Math.max(8, rect.right - DROPDOWN_WIDTH)
+          : rect.left;
+      setCoords({ top: rect.bottom + 4, left });
+    };
+    updatePosition();
+
+    const close = () => setOpen(false);
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    document.addEventListener("mousedown", handleOutside);
+    document.addEventListener("keydown", handleEscape);
+
+    function handleOutside(e: MouseEvent) {
+      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) close();
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+      document.removeEventListener("mousedown", handleOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [open, align]);
+
+  return (
+    <div ref={anchorRef} className="inline-block">
+      {trigger({ open, toggle: () => setOpen((v) => !v) })}
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            style={{ position: "fixed", top: coords.top, left: coords.left, width: DROPDOWN_WIDTH }}
+            className="rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] shadow-xl z-[110] overflow-hidden fade-in"
+          >
+            {children(() => setOpen(false))}
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
+export function DropdownItem({
+  children,
+  onClick,
+  danger,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left px-4 py-2.5 text-sm transition-colors hover:bg-[var(--a-nav-hover)] ${
+        danger ? "text-[var(--a-danger)]" : "text-[var(--a-text)]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ─── Modal ───────────────────────────────────────────────────────────────────
 
 export function Modal({
@@ -284,6 +383,176 @@ export function ReasonActionModal({
   );
 }
 
+// ─── Contact (WhatsApp) edit modal — shared by Students and Teachers ────────
+
+export function ContactModal({
+  initialValue,
+  onClose,
+  onSubmit,
+}: {
+  initialValue: string;
+  onClose: () => void;
+  onSubmit: (whatsappNumber: string) => Promise<void>;
+}) {
+  const [value, setValue] = useState(initialValue);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(value.trim());
+      onClose();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title="Edit contact details" onClose={onClose}>
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+            WhatsApp number
+          </label>
+          <input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="e.g. +880 1XXX-XXXXXX"
+            className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+            autoFocus
+          />
+        </div>
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] transition-colors disabled:opacity-60"
+          >
+            {submitting ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Admin-set password modal — shared by Students and Teachers ────────────
+//
+// Passwords are bcrypt-hashed server-side and can never be displayed — see
+// AdminService.resetUserPassword. This sets a brand-new one (a reset, not a
+// reveal) that Operations then shares with the person directly.
+
+export function SetPasswordModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (newPassword: string) => Promise<void>;
+}) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords don't match.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(password);
+      setDone(true);
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? "Something went wrong.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title="Set a new password" onClose={onClose}>
+      {done ? (
+        <div className="space-y-4">
+          <p className="text-sm text-[var(--a-success-text)]">
+            Password updated. Share the new password with them securely — it won&rsquo;t be shown again here.
+          </p>
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)]"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-xs text-[var(--a-text-faint)]">
+            Passwords are encrypted and can&rsquo;t be viewed — this sets a brand-new one. They can change it again anytime from their own dashboard.
+          </p>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+              New password
+            </label>
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+              Confirm password
+            </label>
+            <input
+              type="text"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+            />
+          </div>
+          {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submit}
+              disabled={submitting}
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] transition-colors disabled:opacity-60"
+            >
+              {submitting ? "Saving…" : "Set password"}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ─── Money formatting (amountCents, BDT) ────────────────────────────────────
 
 export function formatBDT(cents: number): string {
@@ -366,4 +635,20 @@ export const WEEKDAY_NAMES = [
 export const CLASS_TYPE_LABELS: Record<string, string> = {
   ONE_TO_ONE: "1-to-1 (45 min)",
   BATCH: "Batch (60 min)",
+};
+
+/** Today's calendar date in Asia/Dhaka as 'YYYY-MM-DD' — mirrors
+ * todayDhakaDateStr() in server/src/scheduling/dhaka-time.util.ts, used
+ * client-side to stop an admin from even picking a past first-class date. */
+export function todayDhakaDateStr(): string {
+  const now = new Date();
+  const shifted = new Date(now.getTime() + 6 * 60 * 60_000);
+  return shifted.toISOString().slice(0, 10);
+}
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  BKASH: "bKash",
+  BANK: "Bank transfer",
+  CASH: "Cash",
+  OTHER: "Other",
 };

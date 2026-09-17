@@ -18,6 +18,11 @@ model User {
   coppaConsentAt DateTime?
   avatarUrl      String?
 
+  // Admin-recorded WhatsApp contact number (any role) — Lumexa Operations
+  // corresponds with students/teachers over WhatsApp, so this is entered/
+  // edited by Operations from the admin dashboard, not self-served today.
+  whatsappNumber String?
+
   // STUDENT identity fields (null on TEACHER/ADMIN/PARENT rows)
   age           Int?
   grade         String?
@@ -447,26 +452,26 @@ model RecurringSlot {
 }
 
 model ScheduledLesson {
-  id            String         @id @default(uuid())
-  studentUserId String
-  student       User           @relation(fields: [studentUserId], references: [id])
-  teacherId     String
-  teacher       TeacherProfile @relation(fields: [teacherId], references: [id])
-  courseId      String
-  course        Course         @relation(fields: [courseId], references: [id])
-  lessonNumber  Int
-  start         DateTime // UTC instant
-  end           DateTime // UTC instant
-  classType     ClassType
-  status        LessonStatus   @default(UPCOMING)
+  id              String         @id @default(uuid())
+  studentUserId   String
+  student         User           @relation(fields: [studentUserId], references: [id])
+  teacherId       String
+  teacher         TeacherProfile @relation(fields: [teacherId], references: [id])
+  courseId        String
+  course          Course         @relation(fields: [courseId], references: [id])
+  lessonNumber    Int
+  start           DateTime // UTC instant
+  end             DateTime // UTC instant
+  classType       ClassType
+  status          LessonStatus   @default(UPCOMING)
   // Attendance timestamps, set when each side's LiveKit token is first
   // issued for this lesson (see ClassroomService.joinScheduledLesson).
   // Teacher lateness is always derived from teacherJoinedAt - start, never
   // a separately-entered value, so it can't drift from the actual schedule.
   teacherJoinedAt DateTime?
   studentJoinedAt DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   @@unique([studentUserId, courseId, lessonNumber])
   @@index([teacherId, start])
@@ -541,6 +546,11 @@ model StudentLedgerEntry {
   balanceAfterCents Int
   rateCents         Int // effective per-lesson rate (poisha) in effect after this entry; 0 if unknown
   lessonsPurchased  Float? // set on PAYMENT_RECEIVED only, for display/audit
+  // How the student actually paid — set on PAYMENT_RECEIVED/REFUND only.
+  // paymentDetail carries the specific bKash number / bank name+account the
+  // payment came in on, for Operations to reconcile against.
+  paymentMethod     String? // "BKASH" | "BANK" | "CASH" | "OTHER"
+  paymentDetail     String?
   courseId          String?
   course            Course?                @relation(fields: [courseId], references: [id])
   courseName        String // denormalized curriculum name snapshot at event time

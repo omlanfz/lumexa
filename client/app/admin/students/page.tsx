@@ -9,6 +9,7 @@ interface StudentRow {
   id: string;
   fullName: string;
   email: string;
+  whatsappNumber: string | null;
   avatarUrl: string | null;
   grade: string | null;
   accountStatus: string;
@@ -93,6 +94,7 @@ export default function StudentsPage() {
             <thead>
               <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
                 <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Contact</th>
                 <th className="px-4 py-3">Teacher</th>
                 <th className="px-4 py-3">Course</th>
                 <th className="px-4 py-3">Status</th>
@@ -102,10 +104,10 @@ export default function StudentsPage() {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>
               )}
               {!loading && students.length === 0 && (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No students found.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No students found.</td></tr>
               )}
               {!loading &&
                 students.map((s) => (
@@ -117,11 +119,12 @@ export default function StudentsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <Avatar name={s.fullName} src={s.avatarUrl} />
-                        <div>
-                          <p className="text-[var(--a-text)] font-medium">{s.fullName}</p>
-                          <p className="text-xs text-[var(--a-text-faint)]">{s.email}</p>
-                        </div>
+                        <p className="text-[var(--a-text)] font-medium">{s.fullName}</p>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      <p>{s.email}</p>
+                      <p className="text-xs text-[var(--a-text-faint)]">{s.whatsappNumber || "No WhatsApp on file"}</p>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedTeacher?.user.fullName ?? "Unassigned"}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedCourse?.title ?? "—"}</td>

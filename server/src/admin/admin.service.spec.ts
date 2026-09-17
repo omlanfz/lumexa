@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 describe('AdminService - assignTeacherToStudent', () => {
   let service: AdminService;
@@ -36,6 +37,7 @@ describe('AdminService - assignTeacherToStudent', () => {
           provide: SchedulingService,
           useValue: { clearStudentSchedule: jest.fn() },
         },
+        { provide: NotificationsService, useValue: {} },
       ],
     }).compile();
 

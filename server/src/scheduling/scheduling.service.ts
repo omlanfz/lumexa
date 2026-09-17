@@ -24,6 +24,7 @@ import { SetScheduleDto } from './dto/set-schedule.dto';
 import {
   addDaysToDateStr,
   dhakaToUtc,
+  todayDhakaDateStr,
   weekdayForDateStr,
 } from './dhaka-time.util';
 import { computeLateMinutes, getClassWindow } from './lesson-window.util';
@@ -149,6 +150,15 @@ export class SchedulingService {
       );
     }
 
+    // A schedule can't start in the past — the first class date (Asia/Dhaka
+    // calendar day) must be today or later. Checked as a plain string
+    // comparison since both sides are 'YYYY-MM-DD'.
+    if (dto.firstClassDate < todayDhakaDateStr()) {
+      throw new BadRequestException(
+        'The first class date cannot be in the past.',
+      );
+    }
+
     // How many lessons remain to be scheduled — completed lessons keep
     // their numbers and are never touched.
     const completedCount = await this.prisma.scheduledLesson.count({
@@ -182,12 +192,29 @@ export class SchedulingService {
       };
     });
 
+    // Belt-and-braces on top of the calendar-date check above: catches the
+    // same-day case where the date is technically "today" but the specific
+    // time slot has already gone by (e.g. scheduling a 6am slot at 8pm).
+    if (newLessons[0] && newLessons[0].start <= new Date()) {
+      throw new BadRequestException(
+        'The first class time has already passed. Choose a date/time in the future.',
+      );
+    }
+
     await this.prisma.$transaction(async (tx) => {
       // Replace any not-yet-happened lessons for this student+course — they
       // were never attended, so regenerating them is not "modifying
-      // completed/past lessons" and never creates duplicates.
+      // completed/past lessons" and never creates duplicates. Includes
+      // CANCELLED (e.g. an admin override cancellation from the Classes
+      // page) as well as UPCOMING: leaving a cancelled row behind would
+      // occupy its lessonNumber and collide with the freshly generated
+      // sequence below (@@unique([studentUserId, courseId, lessonNumber])).
       await tx.scheduledLesson.deleteMany({
-        where: { studentUserId, courseId, status: LessonStatus.UPCOMING },
+        where: {
+          studentUserId,
+          courseId,
+          status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
+        },
       });
       await tx.recurringSlot.deleteMany({ where: { studentUserId } });
 
@@ -262,12 +289,148 @@ export class SchedulingService {
     return this.getStudentSchedule(studentUserId);
   }
 
+  // ─── Admin: single-lesson overrides from the Classes page ───────────────
+  //
+  // Unlike setStudentSchedule (regenerates the whole remaining schedule),
+  // these act on one already-generated ScheduledLesson row — the admin
+  // equivalent of RescheduleService.adminReschedule/adminCancel for the
+  // legacy Booking model.
+
+  async adminRescheduleLesson(
+    lessonId: string,
+    newStart: Date,
+    newEnd: Date,
+    adminUserId: string,
+  ) {
+    if (newEnd <= newStart) {
+      throw new BadRequestException('End time must be after start time.');
+    }
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+    if (lesson.status !== LessonStatus.UPCOMING) {
+      throw new BadRequestException(
+        'Only upcoming classes can be rescheduled.',
+      );
+    }
+
+    const conflict = await this.findTeacherConflict(
+      this.prisma,
+      lesson.teacherId,
+      newStart,
+      newEnd,
+      lessonId,
+    );
+    if (conflict) {
+      throw new BadRequestException(
+        'Teacher is already booked in that window. Choose a different time.',
+      );
+    }
+
+    const updated = await this.prisma.scheduledLesson.update({
+      where: { id: lessonId },
+      data: { start: newStart, end: newEnd },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_LESSON_RESCHEDULE',
+      entityType: 'ScheduledLesson',
+      entityId: lessonId,
+      beforeData: { start: lesson.start, end: lesson.end },
+      afterData: { start: newStart, end: newEnd },
+    });
+
+    return updated;
+  }
+
+  async adminCancelLesson(lessonId: string, reason: string, adminUserId: string) {
+    if (!reason?.trim()) {
+      throw new BadRequestException('A reason is required to cancel a class.');
+    }
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+    if (lesson.status !== LessonStatus.UPCOMING) {
+      throw new BadRequestException('Only upcoming classes can be cancelled.');
+    }
+
+    const updated = await this.prisma.scheduledLesson.update({
+      where: { id: lessonId },
+      data: { status: LessonStatus.CANCELLED },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_LESSON_CANCELLED',
+      entityType: 'ScheduledLesson',
+      entityId: lessonId,
+      reason,
+      beforeData: { status: lesson.status },
+      afterData: { status: 'CANCELLED' },
+    });
+
+    return updated;
+  }
+
+  async adminDeleteLesson(lessonId: string, adminUserId: string, reason?: string) {
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+
+    await this.prisma.scheduledLesson.delete({ where: { id: lessonId } });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_LESSON_DELETED',
+      entityType: 'ScheduledLesson',
+      entityId: lessonId,
+      reason,
+      beforeData: lesson,
+    });
+
+    return { success: true };
+  }
+
+  // ─── Admin: a teacher's upcoming lessons for the Teacher detail Schedule tab ──
+  //
+  // Distinct from getTeacherScheduledLessons (teacher's own /schedule view,
+  // upcoming+completed) — this is Operations-facing, upcoming-only, and
+  // includes the student's contact info the way the old Shift-based query
+  // used to.
+
+  async getTeacherUpcomingLessonsForAdmin(teacherId: string) {
+    const lessons = await this.prisma.scheduledLesson.findMany({
+      where: { teacherId, status: LessonStatus.UPCOMING },
+      orderBy: { start: 'asc' },
+      take: 50,
+      include: {
+        student: { select: { id: true, fullName: true, email: true } },
+        course: { select: { id: true, title: true } },
+      },
+    });
+    return this.attachLessonTitles(lessons);
+  }
+
   // ─── Admin: wipe a student's schedule (called on teacher/course reassignment) ──
 
   async clearStudentSchedule(studentUserId: string) {
     await this.prisma.$transaction([
+      // See the matching comment in setStudentSchedule — a leftover
+      // CANCELLED row (from an admin override on the Classes page) would
+      // otherwise collide with lesson numbering the next time a schedule is
+      // generated for this student+course.
       this.prisma.scheduledLesson.deleteMany({
-        where: { studentUserId, status: LessonStatus.UPCOMING },
+        where: {
+          studentUserId,
+          status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
+        },
       }),
       this.prisma.recurringSlot.deleteMany({ where: { studentUserId } }),
     ]);

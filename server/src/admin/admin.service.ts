@@ -3,12 +3,32 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { signedDocumentUrl } from '../lib/cloudinary';
+
+// Friendly labels for verification document types — keep in sync with
+// DOC_REQUIREMENTS in client/app/(teacher)/teacher-profile/page.tsx, which
+// is what a teacher actually sees while uploading these.
+const DOC_TYPE_LABELS: Record<string, string> = {
+  nid: 'National ID (NID)',
+  birth_certificate: 'Birth Certificate',
+  bachelor_certificate: "Bachelor's Certificate",
+  master_certificate: "Master's Certificate",
+  ielts_certificate: 'IELTS Certificate',
+  teaching_cert: 'Teaching Certificate',
+  degree: 'Degree Certificate',
+  background_check: 'Background Check',
+  subject_cert: 'Subject Certification',
+  other: 'Other Document',
+};
 
 const TEACHER_LIST_SELECT = {
   id: true,
@@ -23,10 +43,22 @@ const TEACHER_LIST_SELECT = {
   payoutLocked: true,
   createdAt: true,
   user: {
-    select: { fullName: true, email: true, createdAt: true, avatarUrl: true },
+    select: {
+      fullName: true,
+      email: true,
+      createdAt: true,
+      avatarUrl: true,
+      whatsappNumber: true,
+    },
   },
   _count: { select: { shifts: true, rescheduleRequests: true } },
 } as const;
+
+const CLASS_LESSON_INCLUDE = {
+  student: { select: { id: true, fullName: true, email: true } },
+  teacher: { select: { id: true, user: { select: { fullName: true } } } },
+  course: { select: { id: true, title: true } },
+} satisfies Prisma.ScheduledLessonInclude;
 
 function dayRange(dateStr?: string) {
   const base = dateStr ? new Date(dateStr) : new Date();
@@ -52,6 +84,7 @@ export class AdminService {
     private payouts: PayoutsService,
     private studentLedger: StudentLedgerService,
     private scheduling: SchedulingService,
+    private notifications: NotificationsService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -229,6 +262,65 @@ export class AdminService {
       : 'SCHEDULED';
   }
 
+  // Lumexa runs two parallel booking systems: the legacy per-shift `Booking`
+  // model (old Parent-marketplace flow — still holds real historical rows)
+  // and the current curriculum `ScheduledLesson` model that Operations
+  // generates from the Students → Schedule tab (see SchedulingService). The
+  // Classes page has to show both, normalized into one list — a lesson has
+  // no per-class payment/refund concept (billing lives on the student's BDT
+  // ledger instead), so PENDING/FAILED/REFUNDED/NEEDS_REVIEW are Booking-only
+  // states and this returns `null` for a lesson-only filter to skip the
+  // lesson query entirely.
+  private buildLessonWhere(filters: {
+    date?: string;
+    status?: string;
+    teacherId?: string;
+    studentUserId?: string;
+    courseId?: string;
+  }): any | null {
+    switch (filters.status) {
+      case 'PENDING':
+      case 'FAILED':
+      case 'REFUNDED':
+      case 'NEEDS_REVIEW':
+        return null;
+      default:
+        break;
+    }
+
+    const where: any = {};
+    if (filters.date) {
+      const { start, end } = dayRange(filters.date);
+      where.start = { gte: start, lte: end };
+    }
+    if (filters.teacherId) where.teacherId = filters.teacherId;
+    if (filters.studentUserId) where.studentUserId = filters.studentUserId;
+    if (filters.courseId) where.courseId = filters.courseId;
+
+    switch (filters.status) {
+      case 'SCHEDULED':
+        where.status = 'UPCOMING';
+        break;
+      case 'COMPLETED':
+        where.status = 'COMPLETED';
+        break;
+      case 'CANCELLED':
+        where.status = 'CANCELLED';
+        break;
+      default:
+        break; // no status filter — every lesson status included
+    }
+
+    return where;
+  }
+
+  // Bounded per source rather than DB-paginated — this is an internal
+  // Operations tool at a scale (hundreds, not millions, of classes) where
+  // fetching-then-merging in memory is simple and fast enough, and it's what
+  // makes a clean merge of two different models into one paginated list
+  // possible without a raw SQL UNION.
+  private readonly CLASS_MERGE_CAP = 1000;
+
   async getAllBookings(
     page = 1,
     limit = 20,
@@ -240,11 +332,12 @@ export class AdminService {
       courseId?: string;
     } = {},
   ) {
-    const where = this.buildBookingWhere(filters);
+    const bookingWhere = this.buildBookingWhere(filters);
+    const lessonWhere = this.buildLessonWhere(filters);
 
-    const [bookings, total] = await Promise.all([
+    const [bookings, lessons] = await Promise.all([
       this.prisma.booking.findMany({
-        where,
+        where: bookingWhere,
         include: {
           student: {
             include: { parent: { select: { email: true, fullName: true } } },
@@ -270,22 +363,108 @@ export class AdminService {
           review: { select: { rating: true } },
         },
         orderBy: { shift: { start: 'desc' } },
-        skip: (page - 1) * limit,
-        take: limit,
+        take: this.CLASS_MERGE_CAP,
       }),
-      this.prisma.booking.count({ where }),
+      lessonWhere
+        ? this.prisma.scheduledLesson.findMany({
+            where: lessonWhere,
+            include: CLASS_LESSON_INCLUDE,
+            orderBy: { start: 'desc' },
+            take: this.CLASS_MERGE_CAP,
+          })
+        : Promise.resolve(
+            [] as Prisma.ScheduledLessonGetPayload<{
+              include: typeof CLASS_LESSON_INCLUDE;
+            }>[],
+          ),
     ]);
 
+    const bookingRows = bookings.map((b) => ({
+      id: b.id,
+      kind: 'BOOKING' as const,
+      start: b.shift.start,
+      end: b.shift.end,
+      studentName: b.studentUser?.fullName ?? b.student?.name ?? '—',
+      studentEmail: b.studentUser?.email ?? b.student?.parent?.email ?? null,
+      studentUserId: b.studentUserId,
+      teacherName: b.shift.teacher?.user?.fullName ?? '—',
+      teacherId: b.shift.teacherId,
+      courseTitle: b.studentUser?.assignedCourse?.title ?? '—',
+      courseId: b.studentUser?.assignedCourse?.id ?? null,
+      classType: null as string | null,
+      lessonNumber: null as number | null,
+      paymentStatus: b.paymentStatus as string | null,
+      amountCents: b.amountCents,
+      recordingUrl: b.recordingUrl,
+      displayStatus: this.computeDisplayStatus(b as any),
+      raw: b,
+    }));
+
+    const lessonRows = lessons.map((l) => ({
+      id: l.id,
+      kind: 'LESSON' as const,
+      start: l.start,
+      end: l.end,
+      studentName: l.student?.fullName ?? '—',
+      studentEmail: l.student?.email ?? null,
+      studentUserId: l.studentUserId,
+      teacherName: l.teacher?.user?.fullName ?? '—',
+      teacherId: l.teacherId,
+      courseTitle: l.course?.title ?? '—',
+      courseId: l.courseId,
+      classType: l.classType as string | null,
+      lessonNumber: l.lessonNumber as number | null,
+      paymentStatus: null as string | null,
+      amountCents: null as number | null,
+      recordingUrl: null as string | null,
+      displayStatus: l.status === 'UPCOMING' ? 'SCHEDULED' : l.status,
+      raw: l,
+    }));
+
+    const merged = [...bookingRows, ...lessonRows].sort(
+      (a, b) => new Date(b.start).getTime() - new Date(a.start).getTime(),
+    );
+    const total = merged.length;
+    const paged = merged.slice((page - 1) * limit, (page - 1) * limit + limit);
+
     return {
-      bookings: bookings.map((b) => ({
-        ...b,
-        displayStatus: this.computeDisplayStatus(b as any),
-      })),
+      classes: paged,
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages: Math.max(1, Math.ceil(total / limit)),
     };
+  }
+
+  async deleteBooking(bookingId: string, adminUserId: string, reason?: string) {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking) throw new NotFoundException('Class not found.');
+
+    await this.prisma.$transaction([
+      this.prisma.rescheduleRequest.deleteMany({ where: { bookingId } }),
+      this.prisma.payoutEntry.deleteMany({ where: { bookingId } }),
+      this.prisma.studentLedgerEntry.deleteMany({ where: { bookingId } }),
+      this.prisma.review.deleteMany({ where: { bookingId } }),
+      this.prisma.booking.delete({ where: { id: bookingId } }),
+      this.prisma.shift.update({
+        where: { id: booking.shiftId },
+        data: { isBooked: false },
+      }),
+    ]);
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_BOOKING_DELETED',
+      entityType: 'Booking',
+      entityId: bookingId,
+      reason,
+      beforeData: booking,
+    });
+
+    return { success: true };
   }
 
   async getBookingDetail(bookingId: string) {
@@ -410,13 +589,14 @@ export class AdminService {
             email: true,
             avatarUrl: true,
             createdAt: true,
+            whatsappNumber: true,
           },
         },
       },
     });
     if (!teacher) throw new NotFoundException('Teacher not found.');
 
-    const [assignedStudents, upcomingShifts, ledgerSummary, auditHistory] =
+    const [assignedStudents, upcomingLessons, ledgerSummary, auditHistory] =
       await Promise.all([
         this.prisma.user.findMany({
           where: { assignedTeacherId: teacherId },
@@ -429,21 +609,12 @@ export class AdminService {
             assignedCourse: { select: { id: true, title: true } },
           },
         }),
-        this.prisma.shift.findMany({
-          where: { teacherId, start: { gte: new Date() } },
-          orderBy: { start: 'asc' },
-          take: 50,
-          include: {
-            booking: {
-              select: {
-                id: true,
-                paymentStatus: true,
-                studentUser: { select: { fullName: true } },
-                student: { select: { name: true } },
-              },
-            },
-          },
-        }),
+        // The teacher's real class schedule lives in ScheduledLesson (see
+        // SchedulingService), not the legacy Shift model — a teacher whose
+        // classes were all set up through Students → Schedule (the current
+        // flow) has zero Shift rows, so querying Shift here always showed
+        // "No upcoming shifts" even for a fully-booked teacher.
+        this.scheduling.getTeacherUpcomingLessonsForAdmin(teacherId),
         this.payouts.getSummary(teacherId),
         this.audit.getHistory('TeacherProfile', teacherId),
       ]);
@@ -451,10 +622,52 @@ export class AdminService {
     return {
       ...teacher,
       assignedStudents,
-      upcomingShifts,
+      upcomingLessons,
       earningsSummary: ledgerSummary,
       auditHistory,
     };
+  }
+
+  async addTeacherStrike(teacherId: string, reason: string, adminUserId: string) {
+    if (!reason?.trim()) {
+      throw new BadRequestException(
+        'A reason is required to add a strike.',
+      );
+    }
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+      include: { user: { select: { email: true, fullName: true } } },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    const updated = await this.prisma.teacherProfile.update({
+      where: { id: teacherId },
+      data: { strikes: { increment: 1 } },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'TEACHER_STRIKE_ADDED',
+      entityType: 'TeacherProfile',
+      entityId: teacherId,
+      reason,
+      beforeData: { strikes: teacher.strikes },
+      afterData: { strikes: updated.strikes },
+    });
+
+    try {
+      await this.notifications.sendTeacherStrikeWarning(
+        teacher.user.email,
+        updated.strikes,
+        teacher.user.fullName,
+      );
+    } catch {
+      // Non-fatal — the strike itself is already recorded; a failed email
+      // shouldn't roll back an Operations action.
+    }
+
+    return updated;
   }
 
   async suspendTeacher(teacherId: string, reason: string, adminUserId: string) {
@@ -626,6 +839,7 @@ export class AdminService {
           id: true,
           fullName: true,
           email: true,
+          whatsappNumber: true,
           avatarUrl: true,
           grade: true,
           subjects: true,
@@ -672,6 +886,7 @@ export class AdminService {
         id: true,
         fullName: true,
         email: true,
+        whatsappNumber: true,
         avatarUrl: true,
         age: true,
         grade: true,
@@ -693,25 +908,9 @@ export class AdminService {
     });
     if (!student) throw new NotFoundException('Student not found.');
 
-    const [classHistory, notes, rescheduleHistory, auditHistory, ledger] =
+    const [classHistory, rescheduleHistory, auditHistory, ledger] =
       await Promise.all([
-        this.prisma.booking.findMany({
-          where: { studentUserId },
-          include: {
-            shift: {
-              include: {
-                teacher: { include: { user: { select: { fullName: true } } } },
-              },
-            },
-            review: { select: { rating: true, comment: true } },
-          },
-          orderBy: { shift: { start: 'desc' } },
-          take: 100,
-        }),
-        this.prisma.teacherStudentNote.findMany({
-          where: { studentId: studentUserId, isUserRef: true },
-          orderBy: { createdAt: 'desc' },
-        }),
+        this.getStudentClassHistory(studentUserId),
         this.prisma.rescheduleRequest.findMany({
           where: { booking: { studentUserId } },
           orderBy: { createdAt: 'desc' },
@@ -726,12 +925,197 @@ export class AdminService {
     return {
       ...student,
       classHistory,
-      notes,
       rescheduleHistory,
       auditHistory,
       ledgerSummary,
       ledger,
     };
+  }
+
+  // Same Booking/ScheduledLesson duality as the Classes page (see
+  // getAllBookings) — a student's Class History has to include both, or a
+  // student scheduled entirely through the current curriculum-scheduling
+  // flow (ScheduledLesson) shows "No classes yet" despite having attended
+  // dozens of lessons.
+  private async getStudentClassHistory(studentUserId: string) {
+    const [bookings, lessons] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: { studentUserId },
+        include: {
+          shift: {
+            include: {
+              teacher: { include: { user: { select: { fullName: true } } } },
+            },
+          },
+          review: { select: { rating: true, comment: true } },
+        },
+        orderBy: { shift: { start: 'desc' } },
+        take: 100,
+      }),
+      this.prisma.scheduledLesson.findMany({
+        where: { studentUserId },
+        include: {
+          teacher: { select: { user: { select: { fullName: true } } } },
+          course: { select: { title: true } },
+        },
+        orderBy: { start: 'desc' },
+        take: 100,
+      }),
+    ]);
+
+    const bookingRows = bookings.map((b) => ({
+      id: b.id,
+      kind: 'BOOKING' as const,
+      start: b.shift.start,
+      end: b.shift.end,
+      teacherName: b.shift.teacher?.user?.fullName ?? '—',
+      courseTitle: null as string | null,
+      paymentStatus: b.paymentStatus as string | null,
+      displayStatus: this.computeDisplayStatus(b as any),
+      review: b.review,
+    }));
+    const lessonRows = lessons.map((l) => ({
+      id: l.id,
+      kind: 'LESSON' as const,
+      start: l.start,
+      end: l.end,
+      teacherName: l.teacher?.user?.fullName ?? '—',
+      courseTitle: l.course?.title ?? null,
+      paymentStatus: null as string | null,
+      displayStatus: l.status === 'UPCOMING' ? 'SCHEDULED' : l.status,
+      review: null as { rating: number; comment: string | null } | null,
+    }));
+
+    return [...bookingRows, ...lessonRows]
+      .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime())
+      .slice(0, 100);
+  }
+
+  async updateStudentContact(
+    studentUserId: string,
+    whatsappNumber: string | null,
+    adminUserId: string,
+  ) {
+    const student = await this.prisma.user.findUnique({
+      where: { id: studentUserId },
+      select: { id: true, role: true, whatsappNumber: true },
+    });
+    if (!student || student.role !== 'STUDENT') {
+      throw new NotFoundException('Student not found.');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: studentUserId },
+      data: { whatsappNumber: whatsappNumber?.trim() || null },
+      select: { id: true, whatsappNumber: true },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'STUDENT_CONTACT_UPDATED',
+      entityType: 'User',
+      entityId: studentUserId,
+      beforeData: { whatsappNumber: student.whatsappNumber },
+      afterData: { whatsappNumber: updated.whatsappNumber },
+    });
+
+    return updated;
+  }
+
+  async updateTeacherContact(
+    teacherId: string,
+    whatsappNumber: string | null,
+    adminUserId: string,
+  ) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+      select: { userId: true, user: { select: { whatsappNumber: true } } },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    const updated = await this.prisma.user.update({
+      where: { id: teacher.userId },
+      data: { whatsappNumber: whatsappNumber?.trim() || null },
+      select: { id: true, whatsappNumber: true },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'TEACHER_CONTACT_UPDATED',
+      entityType: 'TeacherProfile',
+      entityId: teacherId,
+      beforeData: { whatsappNumber: teacher.user.whatsappNumber },
+      afterData: { whatsappNumber: updated.whatsappNumber },
+    });
+
+    return updated;
+  }
+
+  // ─── Admin-set password reset (students & teachers) ─────────────────────
+  //
+  // Passwords are bcrypt-hashed (see AuthService) — irreversible by design,
+  // so there is no "show the current password" for Operations. What
+  // Operations actually needs (help a student/teacher who's locked out) is
+  // covered by resetting it to a new one, which is what this does; the
+  // person should change it themselves afterward from their own dashboard.
+  async resetUserPassword(
+    userId: string,
+    newPassword: string,
+    adminUserId: string,
+    expectedRole: 'STUDENT' | 'TEACHER',
+  ) {
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException(
+        'New password must be at least 8 characters.',
+      );
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true },
+    });
+    if (!user || user.role !== expectedRole) {
+      throw new NotFoundException(
+        `${expectedRole === 'STUDENT' ? 'Student' : 'Teacher'} not found.`,
+      );
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashed },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'PASSWORD_RESET_BY_ADMIN',
+      entityType: 'User',
+      entityId: userId,
+    });
+
+    return { success: true };
+  }
+
+  /** Same as resetUserPassword, but takes a TeacherProfile id (what the
+   * Teachers admin UI has) instead of the underlying User id. */
+  async resetTeacherPassword(
+    teacherId: string,
+    newPassword: string,
+    adminUserId: string,
+  ) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+      select: { userId: true },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+    return this.resetUserPassword(
+      teacher.userId,
+      newPassword,
+      adminUserId,
+      'TEACHER',
+    );
   }
 
   async assignTeacherToStudent(
@@ -943,12 +1327,24 @@ export class AdminService {
     });
     if (!teacher) throw new NotFoundException('Teacher not found.');
 
+    const documents = ((teacher.verificationDocs as any[]) ?? []).map(
+      (d: any) => ({
+        ...d,
+        label: DOC_TYPE_LABELS[d.type] ?? d.type ?? 'Document',
+        // Signed so Cloudinary's "restricted media types" delivery rule
+        // (blocks unsigned PDF/ZIP access — the 401 on "View") never
+        // applies. See signedDocumentUrl for why this is needed even for
+        // docs uploaded as resource_type 'raw'.
+        viewUrl: signedDocumentUrl(d),
+      }),
+    );
+
     return {
       teacherId: teacher.id,
       teacherName: teacher.user.fullName,
       teacherEmail: teacher.user.email,
       docsLocked: teacher.docsLocked,
-      documents: teacher.verificationDocs ?? [],
+      documents,
     };
   }
 }
