@@ -22,6 +22,7 @@ interface StudentEntry {
   pendingClasses: number;
   lastClassDate: string | null;
   nextClassDate: string | null;
+  nextClassScheduledLessonId: string | null;
   latestReview: { rating: number; comment: string | null } | null;
 }
 
@@ -40,77 +41,6 @@ const RANK_ICONS: Record<string, string> = {
   NAVIGATOR: '🧭', CAPTAIN: '🎖️', GALAXY_COMMANDER: '🌌',
 };
 
-function AddNoteModal({
-  student,
-  onClose,
-  onSaved,
-}: {
-  student: StudentEntry;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  const save = async () => {
-    if (!note.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      await api.post(`/teachers/me/students/${student.studentId}/notes`, {
-        note: note.trim(),
-        isUserRef: student.isUserRef,
-      });
-      onSaved();
-      onClose();
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string | string[] } } };
-      const msg = e.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to save note.'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 fade-in"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="bg-gray-800 border border-purple-700/30 rounded-xl p-6 w-full max-w-md mx-4 fade-in">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-white">Add Note — {student.studentName}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
-        </div>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Private note about this student…"
-          rows={4}
-          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none"
-        />
-        {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
-        <div className="flex gap-3 mt-4">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2 rounded-lg border border-gray-600 text-gray-400 text-sm hover:border-gray-500 transition-all duration-200 active:scale-[0.98]"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={!note.trim() || saving}
-            className="flex-1 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-all duration-200 active:scale-[0.98] disabled:opacity-40"
-          >
-            {saving ? 'Saving…' : 'Save Note'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function TeacherStudentsContent() {
   const router = useRouter();
 
@@ -120,7 +50,6 @@ function TeacherStudentsContent() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [noteTarget, setNoteTarget] = useState<StudentEntry | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -216,105 +145,128 @@ function TeacherStudentsContent() {
           </div>
         ) : (
           <>
-            {/* Desktop table */}
-            <div className={`${card} overflow-hidden hidden sm:block`}>
-              <div className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-3 border-b border-[var(--t-nav-border)]">
-                {['Student', 'Curriculum', 'Rank & Grade', 'Sessions', 'Last Class', 'Rating', ''].map((h, i) => (
-                  <p key={i} className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)]">{h}</p>
-                ))}
-              </div>
-
-              <div className="divide-y dark:divide-purple-900/20 divide-purple-100">
-                {filtered.map((s) => (
-                  <div
-                    key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`}
-                    className="grid grid-cols-[2fr_1.2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-5 py-4 items-center dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors"
-                  >
-                    {/* Name */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      {s.avatarUrl ? (
-                        <img src={s.avatarUrl} alt={s.studentName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                          {s.studentName?.charAt(0)?.toUpperCase() ?? '?'}
-                        </div>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-[var(--t-text)] truncate">{s.studentName}</p>
-                        {s.isUserRef && (
-                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-900/30 text-teal-400">Self-auth</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Curriculum + class type */}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[var(--t-text)] truncate">
-                        {s.assignedCourse?.title ?? 'Not assigned'}
-                      </p>
-                      {s.classType && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/30 bg-indigo-100 dark:text-indigo-400 text-indigo-700">
-                          {CLASS_TYPE_LABELS[s.classType] ?? s.classType}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Rank + grade */}
-                    <div>
-                      {s.spaceRank && (
-                        <p className="text-xs font-medium text-[var(--t-text)]">
-                          {RANK_ICONS[s.spaceRank] ?? '🌟'} {s.spaceRank.replace(/_/g, ' ')}
-                        </p>
-                      )}
-                      <p className="text-xs text-[var(--t-text-muted)]">{s.studentGrade ?? 'No grade'}</p>
-                    </div>
-
-                    {/* Sessions */}
-                    <div>
-                      <p className="text-sm font-semibold text-[var(--t-text)]">{s.totalClasses}</p>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full ${s.completedClasses > 0 ? 'dark:bg-green-900/30 bg-green-100 dark:text-green-400 text-green-700' : 'dark:bg-gray-800/40 bg-gray-100 dark:text-gray-500 text-gray-500'}`}>
-                        {s.completedClasses} done
-                      </span>
-                    </div>
-
-                    {/* Last class */}
-                    <p className="text-xs text-[var(--t-text-muted)]">
-                      {s.lastClassDate ? new Date(s.lastClassDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'None yet'}
-                    </p>
-
-                    {/* Rating */}
-                    <p className="text-xs dark:text-yellow-400 text-yellow-600">
-                      {s.latestReview ? `⭐ ${s.latestReview.rating.toFixed(1)}` : 'No rating'}
-                    </p>
-
-                    {/* Actions */}
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => setNoteTarget(s)}
-                        className="px-2 py-1.5 rounded-lg text-xs font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-all duration-200 active:scale-[0.95] whitespace-nowrap"
-                        title="Add note"
+            {/* Desktop table — a real <table> so header cells and body cells
+                are guaranteed to line up column-for-column regardless of
+                content width, instead of two independently-sized CSS grids. */}
+            <div className={`${card} overflow-hidden hidden sm:block overflow-x-auto`}>
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--t-nav-border)]">
+                    {['Student', 'Curriculum', 'Rank & Grade', 'Sessions', 'Last Class', 'Rating', 'Actions'].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left px-4 py-3 text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] whitespace-nowrap"
                       >
-                        📝
-                      </button>
-                      {s.isUserRef ? (
-                        <button
-                          onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-all duration-200 active:scale-[0.98] whitespace-nowrap"
-                        >
-                          View Progress →
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-all duration-200 active:scale-[0.98] whitespace-nowrap"
-                        >
-                          View Dashboard →
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y dark:divide-purple-900/20 divide-purple-100">
+                  {filtered.map((s) => (
+                    <tr
+                      key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`}
+                      className="dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors align-middle"
+                    >
+                      {/* Name */}
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          {s.avatarUrl ? (
+                            <img src={s.avatarUrl} alt={s.studentName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                              {s.studentName?.charAt(0)?.toUpperCase() ?? '?'}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[var(--t-text)] truncate">{s.studentName}</p>
+                            {s.isUserRef && (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-teal-900/30 text-teal-400">Self-auth</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Curriculum + class type */}
+                      <td className="px-4 py-4">
+                        <p className="text-xs font-medium text-[var(--t-text)] truncate max-w-[10rem]">
+                          {s.assignedCourse?.title ?? 'Not assigned'}
+                        </p>
+                        {s.classType && (
+                          <span className="inline-block mt-1 text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/30 bg-indigo-100 dark:text-indigo-400 text-indigo-700">
+                            {CLASS_TYPE_LABELS[s.classType] ?? s.classType}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Rank + grade */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        {s.spaceRank && (
+                          <p className="text-xs font-medium text-[var(--t-text)]">
+                            {RANK_ICONS[s.spaceRank] ?? '🌟'} {s.spaceRank.replace(/_/g, ' ')}
+                          </p>
+                        )}
+                        <p className="text-xs text-[var(--t-text-muted)]">{s.studentGrade ?? 'No grade'}</p>
+                      </td>
+
+                      {/* Sessions */}
+                      <td className="px-4 py-4 whitespace-nowrap">
+                        <p className="text-sm font-semibold text-[var(--t-text)]">{s.totalClasses}</p>
+                        <span className={`inline-block text-xs px-1.5 py-0.5 rounded-full ${s.completedClasses > 0 ? 'dark:bg-green-900/30 bg-green-100 dark:text-green-400 text-green-700' : 'dark:bg-gray-800/40 bg-gray-100 dark:text-gray-500 text-gray-500'}`}>
+                          {s.completedClasses} done
+                        </span>
+                      </td>
+
+                      {/* Last class */}
+                      <td className="px-4 py-4 text-xs text-[var(--t-text-muted)] whitespace-nowrap">
+                        {s.lastClassDate ? new Date(s.lastClassDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'None yet'}
+                      </td>
+
+                      {/* Rating */}
+                      <td className="px-4 py-4 text-xs dark:text-yellow-400 text-yellow-600 whitespace-nowrap">
+                        {s.latestReview ? `⭐ ${s.latestReview.rating.toFixed(1)}` : 'No rating'}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="px-4 py-4">
+                        <div className="flex gap-2 flex-shrink-0">
+                          {s.nextClassScheduledLessonId ? (
+                            <button
+                              onClick={() => router.push(`/lesson/${s.nextClassScheduledLessonId}`)}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-all duration-200 active:scale-[0.95] whitespace-nowrap"
+                              title="Open materials for this student's next scheduled class"
+                            >
+                              Prepare Next Class
+                            </button>
+                          ) : (
+                            <span
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-medium border dark:border-purple-900/20 border-purple-100 text-[var(--t-text-faint)] opacity-60 whitespace-nowrap"
+                              title="No upcoming class scheduled"
+                            >
+                              No Upcoming Class
+                            </span>
+                          )}
+                          {s.assignedCourse ? (
+                            <button
+                              onClick={() => router.push(`/teacher-curriculum/${s.assignedCourse!.id}`)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-all duration-200 active:scale-[0.98] whitespace-nowrap"
+                            >
+                              View Curriculum →
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 dark:border dark:border-purple-700/30 border border-purple-200 transition-all duration-200 active:scale-[0.98] whitespace-nowrap"
+                            >
+                              View Dashboard →
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
 
             {/* Mobile cards */}
@@ -364,17 +316,25 @@ function TeacherStudentsContent() {
                   </div>
 
                   <div className="flex gap-2">
+                    {s.nextClassScheduledLessonId ? (
+                      <button
+                        onClick={() => router.push(`/lesson/${s.nextClassScheduledLessonId}`)}
+                        className="flex-1 py-2 rounded-xl text-sm font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors"
+                      >
+                        Prepare Next Class
+                      </button>
+                    ) : (
+                      <span className="flex-1 py-2 rounded-xl text-sm font-medium border dark:border-purple-900/20 border-purple-100 text-[var(--t-text-faint)] text-center opacity-60">
+                        No Upcoming Class
+                      </span>
+                    )}
                     <button
-                      onClick={() => setNoteTarget(s)}
-                      className="flex-1 py-2 rounded-xl text-sm font-medium border dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)] transition-colors"
-                    >
-                      📝 Note
-                    </button>
-                    <button
-                      onClick={() => router.push(`/student-dashboard/${s.studentId}`)}
+                      onClick={() =>
+                        router.push(s.assignedCourse ? `/teacher-curriculum/${s.assignedCourse.id}` : `/student-dashboard/${s.studentId}`)
+                      }
                       className="flex-1 py-2 rounded-xl text-sm font-medium dark:bg-purple-900/30 bg-purple-100 text-[var(--t-nav-active-text)] dark:hover:bg-purple-800/50 hover:bg-purple-200 transition-colors"
                     >
-                      View →
+                      {s.assignedCourse ? 'View Curriculum' : 'View Dashboard'}
                     </button>
                   </div>
                 </div>
@@ -383,14 +343,6 @@ function TeacherStudentsContent() {
           </>
         )}
       </div>
-
-      {noteTarget && (
-        <AddNoteModal
-          student={noteTarget}
-          onClose={() => setNoteTarget(null)}
-          onSaved={() => {}}
-        />
-      )}
 
       <LumiChat
         variant="teacher"

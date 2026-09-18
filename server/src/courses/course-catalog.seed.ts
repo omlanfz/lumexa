@@ -139,6 +139,7 @@ export const COURSE_CATALOG: CourseSeed[] = [
 export async function seedCourseCatalog(
   prisma: PrismaClient,
   logger: { log: (msg: string) => void; warn: (msg: string) => void } = console,
+  reconcile?: (courseId: string, actorId: string) => Promise<unknown>,
 ) {
   const results: { slug: string; title: string; created: boolean }[] = [];
 
@@ -177,7 +178,7 @@ export async function seedCourseCatalog(
     results.push({ slug: seed.slug, title: seed.title, created: !existing });
   }
 
-  await seedCurriculumContent(prisma, logger);
+  await seedCurriculumContent(prisma, logger, reconcile);
 
   return results;
 }

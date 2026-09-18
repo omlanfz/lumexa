@@ -19,7 +19,9 @@ export class CoursesService implements OnModuleInit {
    *  touches lessons an admin has already edited (see seedCourseCatalog). */
   async onModuleInit() {
     try {
-      const results = await seedCourseCatalog(this.prisma, this.logger);
+      const results = await seedCourseCatalog(this.prisma, this.logger, (courseId, actorId) =>
+        this.scheduling.reconcileCourseSchedules(courseId, actorId),
+      );
       const created = results.filter((r) => r.created).length;
       if (created > 0) {
         this.logger.log(`Seeded ${created} default course(s) into the catalog.`);

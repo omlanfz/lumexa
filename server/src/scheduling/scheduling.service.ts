@@ -165,11 +165,19 @@ export class SchedulingService {
       );
     }
 
-    // How many lessons remain to be scheduled — completed lessons keep
-    // their numbers and are never touched.
-    const completedCount = await this.prisma.scheduledLesson.count({
+    // The next lesson to schedule starts right after the highest
+    // lessonNumber this student has already completed — MAX, not a plain
+    // count, because lessonNumber always equals the catalog Lesson's
+    // absolute `order` (learning AND test sessions share one sequence) and
+    // can have historical gaps (e.g. a course migrated from an older
+    // test-less structure — see curriculum-catalog.seed.ts). Using a count
+    // here would double-book positions already covered by a gap-preceding
+    // completed lesson.
+    const completedAgg = await this.prisma.scheduledLesson.aggregate({
       where: { studentUserId, courseId, status: LessonStatus.COMPLETED },
+      _max: { lessonNumber: true },
     });
+    const completedCount = completedAgg._max.lessonNumber ?? 0;
     const remaining = course.sessions - completedCount;
     if (remaining <= 0) {
       throw new BadRequestException(
@@ -766,9 +774,12 @@ export class SchedulingService {
     const classType = student.assignedClassType;
     const durationMinutes = CLASS_DURATION_MINUTES[classType];
 
-    const completedCount = await this.prisma.scheduledLesson.count({
+    // MAX, not count — see the matching comment in setStudentSchedule.
+    const completedAgg = await this.prisma.scheduledLesson.aggregate({
       where: { studentUserId, courseId, status: LessonStatus.COMPLETED },
+      _max: { lessonNumber: true },
     });
+    const completedCount = completedAgg._max.lessonNumber ?? 0;
     const remaining = newTotal - completedCount;
 
     if (remaining <= 0) {
@@ -794,39 +805,48 @@ export class SchedulingService {
       return { lessonNumber, lessonId: lessonIdByOrder.get(lessonNumber) ?? null, start, end };
     });
 
-    // Same safety rule as setStudentSchedule: a conflict anywhere in the
-    // regenerated run means we do NOT touch this student's existing
-    // schedule — reconciliation across many students must never silently
-    // double-book a teacher. The mismatch is logged for admin follow-up.
-    for (const lesson of newLessons) {
-      const conflict = await this.findTeacherConflict(this.prisma, teacherId, lesson.start, lesson.end);
-      if (conflict) {
-        this.logger.warn(
-          `Skipped schedule reconciliation for student ${studentUserId} / course ${courseId}: ` +
-            `teacher conflict at ${lesson.start.toISOString()}. Needs manual admin reschedule.`,
-        );
-        return false;
-      }
+    // Delete this student's own stale UPCOMING/CANCELLED rows for this
+    // course FIRST, then conflict-check — otherwise every regenerated
+    // occurrence collides with itself: it reuses the same weekly cadence
+    // as the rows it's about to replace, so checking for conflicts before
+    // deleting them made ordinary reconciliation (e.g. "admin adds one
+    // lesson") report a false "teacher conflict" against the student's own
+    // soon-to-be-superseded schedule on essentially every call. A conflict
+    // against a DIFFERENT booking (another student, a Shift) still throws,
+    // which rolls back the whole transaction — this student's prior
+    // schedule is restored to what it was, never left half-deleted.
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.scheduledLesson.deleteMany({
+          where: { studentUserId, courseId, status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] } },
+        });
+        for (const lesson of newLessons) {
+          const conflict = await this.findTeacherConflict(tx, teacherId, lesson.start, lesson.end);
+          if (conflict) {
+            throw new Error(`teacher conflict at ${lesson.start.toISOString()}`);
+          }
+        }
+        await tx.scheduledLesson.createMany({
+          data: newLessons.map((l) => ({
+            studentUserId,
+            teacherId,
+            courseId,
+            lessonNumber: l.lessonNumber,
+            lessonId: l.lessonId ?? undefined,
+            start: l.start,
+            end: l.end,
+            classType,
+            status: LessonStatus.UPCOMING,
+          })),
+        });
+      }, { timeout: 20_000, maxWait: 10_000 });
+    } catch (err) {
+      this.logger.warn(
+        `Skipped schedule reconciliation for student ${studentUserId} / course ${courseId}: ${(err as Error).message}. ` +
+          `Needs manual admin reschedule.`,
+      );
+      return false;
     }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.scheduledLesson.deleteMany({
-        where: { studentUserId, courseId, status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] } },
-      });
-      await tx.scheduledLesson.createMany({
-        data: newLessons.map((l) => ({
-          studentUserId,
-          teacherId,
-          courseId,
-          lessonNumber: l.lessonNumber,
-          lessonId: l.lessonId ?? undefined,
-          start: l.start,
-          end: l.end,
-          classType,
-          status: LessonStatus.UPCOMING,
-        })),
-      });
-    }, { timeout: 20_000, maxWait: 10_000 });
 
     await this.audit.log({
       actorId,
