@@ -92,6 +92,9 @@ export default function ManageCoursesPage() {
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.assignedStudents}</td>
                   <td className="px-4 py-3"><StatusBadge status={c.isActive ? "ACTIVE" : "DEACTIVATED"} /></td>
                   <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                    <a href={`/admin/courses/${c.id}/curriculum`} className="text-sm text-[var(--a-accent)] hover:underline">
+                      Curriculum
+                    </a>
                     <button onClick={() => setLessonsFor(c)} className="text-sm text-[var(--a-accent)] hover:underline">
                       Lessons
                     </button>
