@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
@@ -38,6 +39,7 @@ describe('AdminService - assignTeacherToStudent', () => {
           useValue: { clearStudentSchedule: jest.fn() },
         },
         { provide: NotificationsService, useValue: {} },
+        { provide: JwtService, useValue: { sign: jest.fn() } },
       ],
     }).compile();
 

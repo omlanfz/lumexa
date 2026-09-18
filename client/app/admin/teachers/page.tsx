@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
-import { Avatar, Card, Pagination, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { Avatar, Card, Pagination, PasswordReveal, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { hardNavigate, startImpersonation } from "@/lib/storage";
 
 interface TeacherRow {
   id: string;
@@ -15,7 +16,14 @@ interface TeacherRow {
   subjects: string[];
   docsLocked: boolean;
   payoutLocked: boolean;
-  user: { fullName: string; email: string; createdAt: string; avatarUrl: string | null; whatsappNumber: string | null };
+  user: {
+    fullName: string;
+    email: string;
+    createdAt: string;
+    avatarUrl: string | null;
+    whatsappNumber: string | null;
+    adminSetPassword: string | null;
+  };
   _count: { shifts: number; rescheduleRequests: number };
 }
 
@@ -29,6 +37,20 @@ export default function TeachersPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [search, setSearch] = useState("");
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
+  const viewDashboard = async (e: React.MouseEvent, teacherId: string) => {
+    e.stopPropagation();
+    setViewingId(teacherId);
+    try {
+      const res = await api.post(`/admin/teachers/${teacherId}/impersonate`);
+      startImpersonation(res.data.access_token, res.data.user, "/admin/teachers");
+      hardNavigate("/teacher-dashboard");
+    } catch {
+      alert("Couldn't open this teacher's dashboard. Please try again.");
+      setViewingId(null);
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -98,19 +120,20 @@ export default function TeachersPage() {
                 <th className="px-4 py-3">Strikes</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Joined</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
                     Loading…
                   </td>
                 </tr>
               )}
               {!loading && teachers.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">
                     No teachers found.
                   </td>
                 </tr>
@@ -128,8 +151,9 @@ export default function TeachersPage() {
                         <p className="text-[var(--a-text)] font-medium">{t.user.fullName}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    <td className="px-4 py-3 text-[var(--a-text-muted)] space-y-0.5">
                       <p>{t.user.email}</p>
+                      <p className="text-xs"><PasswordReveal value={t.user.adminSetPassword} /></p>
                       <p className="text-xs text-[var(--a-text-faint)]">{t.user.whatsappNumber || "No WhatsApp on file"}</p>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{t.subjects.join(", ") || "—"}</td>
@@ -141,6 +165,15 @@ export default function TeachersPage() {
                       <StatusBadge status={t.isSuspended ? "SUSPENDED" : "ACTIVE"} />
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{formatDate(t.user.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={(e) => viewDashboard(e, t.id)}
+                        disabled={viewingId === t.id}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)] transition-colors disabled:opacity-60 whitespace-nowrap"
+                      >
+                        {viewingId === t.id ? "Opening…" : "View Teacher Dashboard"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
             </tbody>
