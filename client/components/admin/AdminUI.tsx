@@ -125,6 +125,37 @@ export function Avatar({
   );
 }
 
+// ─── Admin-set password reveal ──────────────────────────────────────────────
+//
+// Shows the plaintext password Operations most recently set for this account
+// (User.adminSetPassword — see AdminService.resetUserPassword). Masked by
+// default since it's a live credential; toggling stops row-click navigation
+// so it can be used inside a clickable table row.
+
+export function PasswordReveal({ value }: { value: string | null | undefined }) {
+  const [show, setShow] = useState(false);
+  if (!value) {
+    return <span className="text-[var(--a-text-faint)]">Not set by admin</span>;
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 font-mono">
+      <span>{show ? value : "•".repeat(Math.min(value.length, 10))}</span>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShow((s) => !s);
+        }}
+        className="text-[var(--a-text-faint)] hover:text-[var(--a-text)] transition-colors"
+        aria-label={show ? "Hide password" : "Show password"}
+        title={show ? "Hide password" : "Show password"}
+      >
+        {show ? "🙈" : "👁️"}
+      </button>
+    </span>
+  );
+}
+
 // ─── Pagination ──────────────────────────────────────────────────────────────
 
 export function Pagination({
@@ -449,9 +480,11 @@ export function ContactModal({
 
 // ─── Admin-set password modal — shared by Students and Teachers ────────────
 //
-// Passwords are bcrypt-hashed server-side and can never be displayed — see
-// AdminService.resetUserPassword. This sets a brand-new one (a reset, not a
-// reveal) that Operations then shares with the person directly.
+// Passwords are bcrypt-hashed server-side, so this always sets a brand-new
+// one rather than revealing the existing one. The plaintext Operations
+// enters here is also what then shows up in the Password column (see
+// PasswordReveal) — it's cleared automatically if the person changes their
+// password themselves from their own dashboard afterward.
 
 export function SetPasswordModal({
   onClose,
@@ -492,7 +525,7 @@ export function SetPasswordModal({
       {done ? (
         <div className="space-y-4">
           <p className="text-sm text-[var(--a-success-text)]">
-            Password updated. Share the new password with them securely — it won&rsquo;t be shown again here.
+            Password updated. It&rsquo;s now shown in the Password column until they change it themselves — share it with them securely.
           </p>
           <div className="flex justify-end">
             <button

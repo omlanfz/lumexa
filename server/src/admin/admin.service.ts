@@ -4,6 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
@@ -49,6 +50,7 @@ const TEACHER_LIST_SELECT = {
       createdAt: true,
       avatarUrl: true,
       whatsappNumber: true,
+      adminSetPassword: true,
     },
   },
   _count: { select: { shifts: true, rescheduleRequests: true } },
@@ -85,6 +87,7 @@ export class AdminService {
     private studentLedger: StudentLedgerService,
     private scheduling: SchedulingService,
     private notifications: NotificationsService,
+    private jwt: JwtService,
   ) {}
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -590,6 +593,7 @@ export class AdminService {
             avatarUrl: true,
             createdAt: true,
             whatsappNumber: true,
+            adminSetPassword: true,
           },
         },
       },
@@ -840,6 +844,7 @@ export class AdminService {
           fullName: true,
           email: true,
           whatsappNumber: true,
+          adminSetPassword: true,
           avatarUrl: true,
           grade: true,
           subjects: true,
@@ -887,6 +892,7 @@ export class AdminService {
         fullName: true,
         email: true,
         whatsappNumber: true,
+        adminSetPassword: true,
         avatarUrl: true,
         age: true,
         grade: true,
@@ -1084,7 +1090,12 @@ export class AdminService {
     const hashed = await bcrypt.hash(newPassword, 12);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashed },
+      // adminSetPassword keeps the plaintext Operations just chose so it can
+      // be shown back to them on the Teachers/Students pages — it is NOT a
+      // record of the account's actual current password if the account
+      // holder later changes it themselves (see AuthService.changePassword,
+      // which clears this field at that point).
+      data: { password: hashed, adminSetPassword: newPassword },
     });
 
     await this.audit.log({
@@ -1116,6 +1127,66 @@ export class AdminService {
       adminUserId,
       'TEACHER',
     );
+  }
+
+  // ─── Admin impersonation ("view dashboard as") ───────────────────────────
+  //
+  // Issues a normal login JWT for a teacher/student account so Operations
+  // can open that person's dashboard with full read/write access, without
+  // ever needing (or being able to see) their real password. Every call is
+  // audit-logged against the admin who triggered it.
+  private async impersonateUser(
+    userId: string,
+    adminUserId: string,
+    expectedRole: 'STUDENT' | 'TEACHER',
+  ) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, fullName: true, role: true },
+    });
+    if (!user || user.role !== expectedRole) {
+      throw new NotFoundException(
+        `${expectedRole === 'STUDENT' ? 'Student' : 'Teacher'} not found.`,
+      );
+    }
+
+    const access_token = this.jwt.sign({
+      email: user.email,
+      sub: user.id,
+      role: user.role,
+      impersonatedBy: adminUserId,
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_IMPERSONATION_STARTED',
+      entityType: 'User',
+      entityId: userId,
+    });
+
+    return {
+      access_token,
+      user: {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role,
+      },
+    };
+  }
+
+  async impersonateTeacher(teacherId: string, adminUserId: string) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+      select: { userId: true },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+    return this.impersonateUser(teacher.userId, adminUserId, 'TEACHER');
+  }
+
+  async impersonateStudent(studentUserId: string, adminUserId: string) {
+    return this.impersonateUser(studentUserId, adminUserId, 'STUDENT');
   }
 
   async assignTeacherToStudent(

@@ -23,6 +23,16 @@ model User {
   // edited by Operations from the admin dashboard, not self-served today.
   whatsappNumber String?
 
+  // Plaintext copy of the password Operations most recently SET for this
+  // account via the admin dashboard (see AdminService.resetUserPassword) —
+  // shown back to Operations so they can hand it to the teacher/student.
+  // `password` above is the bcrypt hash used for auth and is never
+  // reversible; this field only ever reflects a password Operations chose
+  // and is cleared the moment the account holder changes it themselves
+  // (see AuthService.changePassword), since Operations no longer knows it
+  // at that point. Never exposed outside admin-guarded endpoints.
+  adminSetPassword String?
+
   // STUDENT identity fields (null on TEACHER/ADMIN/PARENT rows)
   age           Int?
   grade         String?

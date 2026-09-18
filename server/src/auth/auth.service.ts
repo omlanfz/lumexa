@@ -130,7 +130,10 @@ export class AuthService {
     const hashed = await bcrypt.hash(newPassword, 12);
     await this.prisma.user.update({
       where: { id: userId },
-      data: { password: hashed },
+      // Clear any password Operations previously set/displayed for this
+      // account — it no longer matches once the account holder picks their
+      // own, so it must not keep showing on the admin dashboard.
+      data: { password: hashed, adminSetPassword: null },
     });
 
     return { success: true };

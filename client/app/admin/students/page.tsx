@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
-import { Avatar, Card, Pagination, PaymentBadge, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { Avatar, Card, Pagination, PasswordReveal, PaymentBadge, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { hardNavigate, startImpersonation } from "@/lib/storage";
 
 interface StudentRow {
   id: string;
   fullName: string;
   email: string;
   whatsappNumber: string | null;
+  adminSetPassword: string | null;
   avatarUrl: string | null;
   grade: string | null;
   accountStatus: string;
@@ -29,6 +31,20 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
   const [search, setSearch] = useState("");
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
+  const viewDashboard = async (e: React.MouseEvent, studentUserId: string) => {
+    e.stopPropagation();
+    setViewingId(studentUserId);
+    try {
+      const res = await api.post(`/admin/students/${studentUserId}/impersonate`);
+      startImpersonation(res.data.access_token, res.data.user, "/admin/students");
+      hardNavigate("/student-dashboard");
+    } catch {
+      alert("Couldn't open this student's dashboard. Please try again.");
+      setViewingId(null);
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -100,14 +116,15 @@ export default function StudentsPage() {
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3">Payment</th>
                 <th className="px-4 py-3">Joined</th>
+                <th className="px-4 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>
               )}
               {!loading && students.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No students found.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No students found.</td></tr>
               )}
               {!loading &&
                 students.map((s) => (
@@ -122,8 +139,9 @@ export default function StudentsPage() {
                         <p className="text-[var(--a-text)] font-medium">{s.fullName}</p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    <td className="px-4 py-3 text-[var(--a-text-muted)] space-y-0.5">
                       <p>{s.email}</p>
+                      <p className="text-xs"><PasswordReveal value={s.adminSetPassword} /></p>
                       <p className="text-xs text-[var(--a-text-faint)]">{s.whatsappNumber || "No WhatsApp on file"}</p>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedTeacher?.user.fullName ?? "Unassigned"}</td>
@@ -133,6 +151,15 @@ export default function StudentsPage() {
                       {s.paymentBadge ? <PaymentBadge badge={s.paymentBadge} /> : <span className="text-[var(--a-text-faint)]">—</span>}
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{formatDate(s.createdAt)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={(e) => viewDashboard(e, s.id)}
+                        disabled={viewingId === s.id}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)] transition-colors disabled:opacity-60 whitespace-nowrap"
+                      >
+                        {viewingId === s.id ? "Opening…" : "View Student Dashboard"}
+                      </button>
+                    </td>
                   </tr>
                 ))}
             </tbody>

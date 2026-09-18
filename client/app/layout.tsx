@@ -19,6 +19,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "../components/ThemeProvider";
+import ImpersonationBanner from "../components/ImpersonationBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -45,7 +46,10 @@ export default function RootLayout({
           student-dashboard — has access to useTheme() and the <html> element
           receives the correct dark/light class on every route.
         */}
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <ImpersonationBanner />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

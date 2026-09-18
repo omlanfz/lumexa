@@ -346,6 +346,14 @@ export class AdminController {
     );
   }
 
+  @Post('teachers/:teacherId/impersonate')
+  impersonateTeacher(
+    @Param('teacherId') teacherId: string,
+    @Request() req: any,
+  ) {
+    return this.adminService.impersonateTeacher(teacherId, req.user.userId);
+  }
+
   // ── Students ──────────────────────────────────────────────────────────────
 
   @Get('students')
@@ -441,6 +449,17 @@ export class AdminController {
       dto.newPassword,
       req.user.userId,
       'STUDENT',
+    );
+  }
+
+  @Post('students/:studentUserId/impersonate')
+  impersonateStudent(
+    @Param('studentUserId') studentUserId: string,
+    @Request() req: any,
+  ) {
+    return this.adminService.impersonateStudent(
+      studentUserId,
+      req.user.userId,
     );
   }
 
