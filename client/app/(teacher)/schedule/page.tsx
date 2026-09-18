@@ -61,6 +61,58 @@ const CLASS_TYPE_LABELS: Record<string, string> = {
   BATCH: "Batch",
 };
 
+// ─── Lesson Info Modal ──────────────────────────────────────────────────────
+//
+// Clicking a booked curriculum class (week view or list view) opens this
+// instead of the "Add Availability" flow — a quick preview plus a
+// [View Lesson] button through to the full Lesson Details page. Teachers
+// always have access to materials for any session of a curriculum they
+// teach, completed or upcoming, so they can prepare ahead of class.
+
+function LessonInfoModal({ lesson, onClose }: { lesson: ScheduledLessonItem; onClose: () => void }) {
+  const router = useRouter();
+  const start = new Date(lesson.start);
+  const end = new Date(lesson.end);
+  const isPast = end < new Date();
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <span
+            className={`text-xs px-2.5 py-1 rounded-full font-medium text-white ${isPast ? "bg-[var(--t-success)]" : CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
+          >
+            {isPast ? "Completed" : "Upcoming"}
+          </span>
+          <button onClick={onClose} className="text-[var(--t-text-faint)] hover:text-[var(--t-text)]" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <p className="text-xs uppercase tracking-wide text-[var(--t-text-faint)]">{lesson.course.title}</p>
+        <h3 className="text-lg font-bold text-[var(--t-text)] mt-0.5">
+          Lesson {lesson.lessonNumber}
+          {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""}
+        </h3>
+        <p className="text-sm text-[var(--t-text-muted)] mt-1">
+          {start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ·{" "}
+          {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–
+          {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </p>
+        <p className="text-sm text-[var(--t-text-muted)]">
+          {CLASS_TYPE_LABELS[lesson.classType]} with {lesson.student.fullName}
+        </p>
+        <button
+          onClick={() => router.push(`/lesson/${lesson.id}`)}
+          className="mt-4 w-full py-2.5 rounded-lg bg-[var(--t-accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+        >
+          View Lesson
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Add Slot Modal ───────────────────────────────────────────────────────────
 
 interface AddSlotModalProps {
@@ -662,6 +714,7 @@ function ScheduleContent() {
   const [addDefaultDate, setAddDefaultDate] = useState(new Date());
   const [manageShift, setManageShift] = useState<Shift | null>(null);
   const [removeShift, setRemoveShift] = useState<Shift | null>(null);
+  const [selectedLesson, setSelectedLesson] = useState<ScheduledLessonItem | null>(null);
   const [view, setView] = useState<"week" | "list">("week");
 
   const getWeekStart = (offset: number) => {
@@ -1050,9 +1103,13 @@ function ScheduleContent() {
                             className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity duration-200 ${isPast ? "opacity-40" : "opacity-100"}`}
                             style={{ top: top + 1, height: height - 2 }}
                             title={`${lesson.course.title} · Lesson ${lesson.lessonNumber}${lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""} · ${CLASS_TYPE_LABELS[lesson.classType]} · ${lesson.student.fullName}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedLesson(lesson);
+                            }}
                           >
                             <div
-                              className={`h-full px-1.5 py-1 text-xs text-white cursor-default ${CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
+                              className={`h-full px-1.5 py-1 text-xs text-white cursor-pointer hover:opacity-90 transition-opacity ${CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
                             >
                               <p className="font-semibold truncate leading-tight">
                                 {lesson.student.fullName}
@@ -1148,6 +1205,7 @@ function ScheduleContent() {
           }}
         />
       )}
+      {selectedLesson && <LessonInfoModal lesson={selectedLesson} onClose={() => setSelectedLesson(null)} />}
 
       <LumiChat
         variant="teacher"

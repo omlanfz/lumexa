@@ -1,25 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import api from '@/lib/axios';
-import { getStoredRole } from '@/lib/storage';
 import LessonDetailsView, { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
-export default function LessonDetailsPage() {
-  const params = useParams<{ scheduledLessonId: string }>();
-  const router = useRouter();
+// Teacher/admin curriculum browsing — a catalog Lesson viewed on its own,
+// not tied to a specific scheduled class (so it's always unlocked). Used
+// from /admin/courses/[id]/curriculum and from a teacher's per-student
+// "View Curriculum" page so they can prepare for lessons that haven't been
+// scheduled for a particular student yet.
+export default function CatalogLessonDetailsPage() {
+  const params = useParams<{ lessonId: string }>();
   const [data, setData] = useState<LessonDetailsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const role = typeof window !== 'undefined' ? getStoredRole() : null;
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${params.scheduledLessonId}/details`);
+        const res = await api.get<LessonDetailsResponse>(`/curriculum/lessons/${params.lessonId}/details`);
         if (!cancelled) setData(res.data);
       } catch (err: unknown) {
         const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
@@ -31,9 +32,7 @@ export default function LessonDetailsPage() {
     return () => {
       cancelled = true;
     };
-  }, [params.scheduledLessonId]);
-
-  const backHref = role === 'TEACHER' ? '/schedule' : '/student-dashboard/learning?tab=lessons';
+  }, [params.lessonId]);
 
   if (loading) {
     return (
@@ -48,9 +47,6 @@ export default function LessonDetailsPage() {
     return (
       <div className="max-w-3xl mx-auto p-6">
         <p className="text-red-500">{error}</p>
-        <Link href={backHref} className="text-teal-600 hover:underline text-sm">
-          ← Back
-        </Link>
       </div>
     );
   }
@@ -59,10 +55,10 @@ export default function LessonDetailsPage() {
 
   return (
     <div className="max-w-3xl mx-auto p-4 sm:p-6">
-      <Link href={backHref} className="text-sm text-teal-600 dark:text-teal-400 hover:underline">
+      <button onClick={() => history.back()} className="text-sm text-teal-600 dark:text-teal-400 hover:underline">
         ← Back
-      </Link>
-      <LessonDetailsView data={data} onTestAction={() => router.push(`/assessment/${params.scheduledLessonId}`)} />
+      </button>
+      <LessonDetailsView data={data} />
     </div>
   );
 }

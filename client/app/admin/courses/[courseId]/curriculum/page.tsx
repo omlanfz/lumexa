@@ -151,6 +151,9 @@ function LessonRowView({ lesson, onEdit }: { lesson: LessonRow; onEdit: () => vo
         {lesson.checkpoint && <p className="text-xs text-[var(--a-text-faint)] truncate">{lesson.checkpoint}</p>}
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
+        <a href={`/curriculum-lesson/${lesson.id}`} target="_blank" rel="noreferrer" className="text-xs text-[var(--a-accent)] hover:underline">
+          View Lesson
+        </a>
         <button onClick={onEdit} className="text-xs text-[var(--a-accent)] hover:underline">
           Edit Content
         </button>
