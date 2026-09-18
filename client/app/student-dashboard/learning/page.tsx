@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
+import Link from 'next/link';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankProgressBar from '@/components/student/RankProgressBar';
 import StreakCounter from '@/components/student/StreakCounter';
@@ -248,6 +249,14 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
             {isUpcoming ? 'Upcoming' : 'Completed'}
           </span>
         </div>
+      </div>
+      <div className="px-4 pb-3 -mt-1">
+        <Link
+          href={`/lesson/${lesson.id}`}
+          className="inline-block text-xs px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-medium transition-colors"
+        >
+          {isUpcoming ? 'Lesson Details' : 'View Lesson'}
+        </Link>
       </div>
     </div>
   );

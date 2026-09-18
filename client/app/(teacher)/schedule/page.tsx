@@ -955,6 +955,12 @@ function ScheduleContent() {
                       <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--t-success-bg)] text-[var(--t-success-text)] flex-shrink-0">
                         {lesson.student.fullName}
                       </span>
+                      <a
+                        href={`/lesson/${lesson.id}`}
+                        className="text-xs px-2.5 py-1 rounded-full bg-[var(--t-accent)] text-white flex-shrink-0 hover:opacity-90 transition-opacity"
+                      >
+                        Lesson Details
+                      </a>
                     </div>
                   );
                 })}

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -57,30 +58,32 @@ export class CoursesController {
     return this.coursesService.update(id, dto);
   }
 
-  /** Admin — add a lesson to a course */
+  /** Admin — add a lesson to a course. Renumbers/adds future schedule slots
+   * for every enrolled student automatically (see CoursesService). */
   @Post(':id/lessons')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
-  createLesson(@Param('id') id: string, @Body() dto: CreateLessonDto) {
-    return this.coursesService.createLesson(id, dto);
+  createLesson(@Param('id') id: string, @Body() dto: CreateLessonDto, @Req() req: any) {
+    return this.coursesService.createLesson(id, dto, req.user.userId);
   }
 
-  /** Admin — update a lesson */
+  /** Admin — update a lesson (reordering reconciles enrolled students' future schedule) */
   @Patch('lessons/:lessonId')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
   updateLesson(
     @Param('lessonId') lessonId: string,
     @Body() dto: Partial<CreateLessonDto>,
+    @Req() req: any,
   ) {
-    return this.coursesService.updateLesson(lessonId, dto);
+    return this.coursesService.updateLesson(lessonId, dto, req.user.userId);
   }
 
-  /** Admin — remove a lesson */
+  /** Admin — remove a lesson (reconciles enrolled students' future schedule) */
   @Delete('lessons/:lessonId')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
-  deleteLesson(@Param('lessonId') lessonId: string) {
-    return this.coursesService.deleteLesson(lessonId);
+  deleteLesson(@Param('lessonId') lessonId: string, @Req() req: any) {
+    return this.coursesService.deleteLesson(lessonId, req.user.userId);
   }
 }
