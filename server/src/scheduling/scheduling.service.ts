@@ -135,6 +135,12 @@ export class SchedulingService {
     });
     if (!course) throw new NotFoundException('Assigned course not found.');
 
+    const catalogLessons = await this.prisma.lesson.findMany({
+      where: { courseId: student.assignedCourseId },
+      select: { id: true, order: true },
+    });
+    const lessonIdByOrder = new Map(catalogLessons.map((l) => [l.order, l.id]));
+
     const teacherId = student.assignedTeacherId;
     const courseId = student.assignedCourseId;
     const classType = dto.classType as ClassType;
@@ -185,8 +191,10 @@ export class SchedulingService {
     const newLessons = occurrences.map((occ, i) => {
       const start = dhakaToUtc(occ.dateStr, occ.hour, occ.minute);
       const end = new Date(start.getTime() + durationMinutes * 60_000);
+      const lessonNumber = completedCount + i + 1;
       return {
-        lessonNumber: completedCount + i + 1,
+        lessonNumber,
+        lessonId: lessonIdByOrder.get(lessonNumber) ?? null,
         start,
         end,
       };
@@ -254,6 +262,7 @@ export class SchedulingService {
           teacherId,
           courseId,
           lessonNumber: l.lessonNumber,
+          lessonId: l.lessonId ?? undefined,
           start: l.start,
           end: l.end,
           classType,
@@ -681,6 +690,178 @@ export class SchedulingService {
     }
 
     return results;
+  }
+
+  // ─── Curriculum-change reconciliation ────────────────────────────────────
+  //
+  // Called by CoursesService whenever an admin structurally changes a
+  // course's Lesson sequence (add/remove a lesson, or reorder one — a plain
+  // title/content edit does NOT change numbering and never calls this).
+  // For every student currently scheduled into this course, regenerates
+  // their UPCOMING lessons (never COMPLETED ones) against the fresh
+  // catalog: same weekly cadence (their existing RecurringSlot), same
+  // teacher, just renumbered/reshaped to match the new Lesson.order
+  // sequence starting right after their last completed lesson. No
+  // duplicates: existing UPCOMING/CANCELLED rows for this student+course are
+  // replaced, never appended to.
+
+  async reconcileCourseSchedules(courseId: string, actorId: string) {
+    const lessons = await this.prisma.lesson.findMany({
+      where: { courseId },
+      orderBy: { order: 'asc' },
+      select: { id: true, order: true },
+    });
+    const lessonIdByOrder = new Map(lessons.map((l) => [l.order, l.id]));
+    const newTotal = lessons.length;
+
+    const trackedStudents = await this.prisma.recurringSlot.findMany({
+      where: { courseId },
+      select: { studentUserId: true },
+      distinct: ['studentUserId'],
+    });
+
+    let reconciled = 0;
+    let skipped = 0;
+    for (const { studentUserId } of trackedStudents) {
+      const ok = await this.reconcileStudentCourseSchedule(
+        studentUserId,
+        courseId,
+        lessonIdByOrder,
+        newTotal,
+        actorId,
+      );
+      if (ok) reconciled++;
+      else skipped++;
+    }
+
+    if (reconciled > 0 || skipped > 0) {
+      this.logger.log(
+        `Reconciled ${reconciled} student schedule(s) for course ${courseId} after a curriculum change` +
+          (skipped > 0 ? ` (${skipped} skipped due to a scheduling conflict — left untouched).` : '.'),
+      );
+    }
+    return { reconciled, skipped, newTotal };
+  }
+
+  /** Returns true if this student's schedule was reconciled, false if it was
+   * left untouched (no active RecurringSlot, no teacher/class-type
+   * assignment yet, nothing left to schedule, or a conflict was hit). */
+  private async reconcileStudentCourseSchedule(
+    studentUserId: string,
+    courseId: string,
+    lessonIdByOrder: Map<number, string>,
+    newTotal: number,
+    actorId: string,
+  ): Promise<boolean> {
+    const slots = await this.prisma.recurringSlot.findMany({ where: { studentUserId, courseId } });
+    if (slots.length === 0) return false;
+
+    const student = await this.prisma.user.findUnique({
+      where: { id: studentUserId },
+      select: { assignedTeacherId: true, assignedClassType: true },
+    });
+    if (!student?.assignedTeacherId || !student.assignedClassType) return false;
+
+    const teacherId = student.assignedTeacherId;
+    const classType = student.assignedClassType;
+    const durationMinutes = CLASS_DURATION_MINUTES[classType];
+
+    const completedCount = await this.prisma.scheduledLesson.count({
+      where: { studentUserId, courseId, status: LessonStatus.COMPLETED },
+    });
+    const remaining = newTotal - completedCount;
+
+    if (remaining <= 0) {
+      // The course got shorter than what this student already completed —
+      // nothing left to schedule. Clear any now-stale upcoming rows only.
+      await this.prisma.scheduledLesson.deleteMany({
+        where: { studentUserId, courseId, status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] } },
+      });
+      return true;
+    }
+
+    const occurrences = this.generateOccurrences(
+      todayDhakaDateStr(),
+      slots.map((s) => ({ weekday: s.weekday, time: `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}` })),
+      remaining,
+    );
+    if (occurrences.length < remaining) return false;
+
+    const newLessons = occurrences.map((occ, i) => {
+      const start = dhakaToUtc(occ.dateStr, occ.hour, occ.minute);
+      const end = new Date(start.getTime() + durationMinutes * 60_000);
+      const lessonNumber = completedCount + i + 1;
+      return { lessonNumber, lessonId: lessonIdByOrder.get(lessonNumber) ?? null, start, end };
+    });
+
+    // Same safety rule as setStudentSchedule: a conflict anywhere in the
+    // regenerated run means we do NOT touch this student's existing
+    // schedule — reconciliation across many students must never silently
+    // double-book a teacher. The mismatch is logged for admin follow-up.
+    for (const lesson of newLessons) {
+      const conflict = await this.findTeacherConflict(this.prisma, teacherId, lesson.start, lesson.end);
+      if (conflict) {
+        this.logger.warn(
+          `Skipped schedule reconciliation for student ${studentUserId} / course ${courseId}: ` +
+            `teacher conflict at ${lesson.start.toISOString()}. Needs manual admin reschedule.`,
+        );
+        return false;
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.scheduledLesson.deleteMany({
+        where: { studentUserId, courseId, status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] } },
+      });
+      await tx.scheduledLesson.createMany({
+        data: newLessons.map((l) => ({
+          studentUserId,
+          teacherId,
+          courseId,
+          lessonNumber: l.lessonNumber,
+          lessonId: l.lessonId ?? undefined,
+          start: l.start,
+          end: l.end,
+          classType,
+          status: LessonStatus.UPCOMING,
+        })),
+      });
+    }, { timeout: 20_000, maxWait: 10_000 });
+
+    await this.audit.log({
+      actorId,
+      actorRole: 'ADMIN',
+      action: 'COURSE_SCHEDULE_RECONCILED',
+      entityType: 'User',
+      entityId: studentUserId,
+      afterData: { courseId, remaining, newTotal },
+    });
+    return true;
+  }
+
+  // ─── Backfill: link existing ScheduledLesson rows to their catalog Lesson ─
+  // (rows created before Lesson.order-based test insertion existed). Safe to
+  // call repeatedly — only fills rows where lessonId is still null.
+
+  async backfillLessonLinks() {
+    const courses = await this.prisma.course.findMany({ select: { id: true } });
+    let updated = 0;
+    for (const { id: courseId } of courses) {
+      const lessons = await this.prisma.lesson.findMany({ where: { courseId }, select: { id: true, order: true } });
+      const byOrder = new Map(lessons.map((l) => [l.order, l.id]));
+      const rows = await this.prisma.scheduledLesson.findMany({
+        where: { courseId, lessonId: null },
+        select: { id: true, lessonNumber: true },
+      });
+      for (const row of rows) {
+        const lessonId = byOrder.get(row.lessonNumber);
+        if (lessonId) {
+          await this.prisma.scheduledLesson.update({ where: { id: row.id }, data: { lessonId } });
+          updated++;
+        }
+      }
+    }
+    return { updated };
   }
 
   // ─── Auto-complete lessons whose end time has passed ─────────────────────

@@ -66,8 +66,9 @@ model User {
   ledgerEntries        StudentLedgerEntry[] @relation("StudentLedgerEntries")
   createdLedgerEntries StudentLedgerEntry[] @relation("StudentLedgerCreatedBy")
 
-  recurringSlots   RecurringSlot[]
-  scheduledLessons ScheduledLesson[]
+  recurringSlots     RecurringSlot[]
+  scheduledLessons   ScheduledLesson[]
+  assessmentAttempts AssessmentAttempt[] @relation("StudentAssessmentAttempts")
 
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
@@ -136,6 +137,7 @@ model TeacherProfile {
   assignedStudents      User[]                @relation("AssignedTeacher")
   recurringSlots        RecurringSlot[]
   scheduledLessons      ScheduledLesson[]
+  vivaRecords           VivaRecord[]
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -398,6 +400,7 @@ model Course {
   isActive         Boolean              @default(true)
   createdAt        DateTime             @default(now())
   lessons          Lesson[]
+  modules          CourseModule[]
   assignedStudents User[]
   ledgerEntries    StudentLedgerEntry[]
   recurringSlots   RecurringSlot[]
@@ -460,6 +463,14 @@ model ScheduledLesson {
   courseId        String
   course          Course         @relation(fields: [courseId], references: [id])
   lessonNumber    Int
+  // Direct link to the catalog Lesson this occurrence teaches — resolved at
+  // generation/reconciliation time by matching Lesson.order == lessonNumber
+  // within the course. Nullable only so older rows created before this field
+  // existed remain valid; a backfill sets it for every existing row. Once
+  // set, this is what Lesson Details / the assessment interface read from,
+  // never the (courseId, lessonNumber) pair directly.
+  lessonId        String?
+  lesson          Lesson?        @relation(fields: [lessonId], references: [id])
   start           DateTime // UTC instant
   end             DateTime // UTC instant
   classType       ClassType
@@ -473,10 +484,78 @@ model ScheduledLesson {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
+  assessmentAttempt AssessmentAttempt?
+
   @@unique([studentUserId, courseId, lessonNumber])
   @@index([teacherId, start])
   @@index([studentUserId, start])
   @@index([start])
+  @@index([lessonId])
+}
+
+// ─── Curriculum content: modules, lesson materials, projects, assessments ───
+//
+// A Course row (above) is a whole *pathway* (e.g. "AI Builder Path", 24
+// sessions; "Lumexa Odyssey", 85 sessions) — that naming predates this
+// feature and pricing/enrollment logic depends on it, so it is kept as-is.
+// CourseModule is the layer this feature adds: one row per real 8-lesson
+// sub-course (e.g. "Python and AI Foundations"), matching the source
+// curriculum's own structure and the lumexa-all-lessons/lumexa-all-projects
+// repo layout 1:1 (CourseModule.slug == that repo's course folder name).
+//
+// Lesson (pre-existing) is extended in place to become the canonical
+// session row — both plain teaching sessions and test/assessment sessions
+// (see SessionType) — rather than introducing a parallel "Session" model,
+// so the existing admin drag/reorder editor and ScheduledLesson numbering
+// keep working unchanged. `type` distinguishes a learning session from a
+// COURSE_TEST/STAGE_TEST/FINAL_TEST session, which carries an Assessment.
+
+enum SessionType {
+  LEARNING
+  COURSE_TEST
+  STAGE_TEST
+  FINAL_TEST
+}
+
+model CourseModule {
+  id          String   @id @default(uuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  slug        String // matches the source repo's course folder, e.g. "python-ai-foundations"
+  title       String
+  description String?
+  order       Int // position among this course/pathway's modules
+  stageNumber Int? // Odyssey only: which of the 3 stages (1/2/3) this module belongs to
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lessons  Lesson[]
+  projects Project[]
+
+  @@unique([courseId, slug])
+  @@index([courseId])
+}
+
+// One project can span several lessons (Part 1 / Part 2 / Finish) — each
+// Lesson.projectId points here, and Lesson.checkpoint carries what's due by
+// that specific session. sourceRepoPath is kept purely for traceability
+// back to lumexa-all-projects, never read at runtime.
+model Project {
+  id             String       @id @default(uuid())
+  moduleId       String
+  module         CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  slug           String
+  title          String
+  description    String?
+  sourceRepoPath String?
+  order          Int // 1, 2, 3 within the module
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  lessons Lesson[]
+
+  @@unique([moduleId, slug])
+  @@index([moduleId])
 }
 
 model Lesson {
@@ -488,7 +567,28 @@ model Lesson {
   createdAt DateTime @default(now())
   course    Course   @relation(fields: [courseId], references: [id])
 
+  moduleId String?
+  module   CourseModule? @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  type     SessionType   @default(LEARNING)
+
+  // ─── Lesson Details content (student-visible only once the matching
+  // ScheduledLesson is COMPLETED; always visible to the assigned teacher) ──
+  objectives      String[] @default([]) // learning objectives for this session
+  contentMarkdown String? // the "Learn" material — concept explanation, screenshare-able
+  reviewNotes     String? // 5-minute review/recap bullets (previous class + homework check)
+  projectId       String?
+  project         Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  checkpoint      String? // exact project checkpoint due THIS session, e.g. "Finish sections 1-2"
+  codeSnippets    Json? // [{ label, language, code, part }] — cumulative code for this checkpoint
+  homework        String?
+  sourceRefs      Json? // traceability: source repo file paths this content was imported from
+
+  scheduledLessons ScheduledLesson[]
+  assessment       Assessment?
+
   @@index([courseId])
+  @@index([moduleId])
+  @@index([projectId])
 }
 
 model GemWallet {
@@ -687,4 +787,182 @@ enum PurchaseStatus {
   COMPLETED
   FAILED
   REFUNDED
+}
+
+// ─── Native assessment system (MCQ + practical coding + AI-assisted grading) ─
+//
+// One Assessment per test-type Lesson (COURSE_TEST / STAGE_TEST /
+// FINAL_TEST — see SessionType), 1:1 via Lesson.assessment. Its
+// MCQQuestion/PracticalQuestion rows ARE its question bank: admin manages
+// them scoped to that one assessment, which is itself already organized by
+// curriculum → module → course/test via the Lesson it belongs to, so a
+// separate cross-cutting "question bank" model would just be indirection
+// without a real use case here (no requirement to share one question pool
+// across multiple tests). Final tests additionally carry a VivaRecord
+// (Part C) per attempt.
+
+enum AttemptStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+model Assessment {
+  id                 String      @id @default(uuid())
+  lessonId           String      @unique
+  lesson             Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  type               SessionType // COURSE_TEST | STAGE_TEST | FINAL_TEST
+  title              String
+  instructions       String?
+  mcqCount           Int         @default(0) // how many MCQs are drawn per attempt from the bank below
+  randomizeQuestions Boolean     @default(true)
+  randomizeOptions   Boolean     @default(true)
+  passScorePct       Int         @default(60)
+  vivaMaxScore       Float       @default(20) // Part C, FINAL_TEST only
+  isPublished        Boolean     @default(false)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  mcqQuestions       MCQQuestion[]
+  practicalQuestions PracticalQuestion[]
+  attempts           AssessmentAttempt[]
+
+  @@index([type])
+}
+
+model MCQQuestion {
+  id           String     @id @default(uuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionText String
+  options      Json // string[]
+  correctIndex Int
+  explanation  String?
+  difficulty   String? // "EASY" | "MEDIUM" | "HARD"
+  tags         String[]   @default([])
+  order        Int        @default(0)
+  isPublished  Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  answers MCQAnswer[]
+
+  @@index([assessmentId])
+}
+
+model PracticalQuestion {
+  id           String     @id @default(uuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  title        String
+  instructions String
+  language     String     @default("javascript")
+  starterCode  String?
+  testCases    Json? // [{ name, input, expectedOutput, description }]
+  rubric       Json? // [{ criterion, maxPoints }]
+  maxScore     Int        @default(100)
+  order        Int        @default(0)
+  isPublished  Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  submissions PracticalSubmission[]
+
+  @@index([assessmentId])
+}
+
+// One per (assessment, student) — created lazily the first time a student
+// opens the assessment interface for their test-type ScheduledLesson.
+model AssessmentAttempt {
+  id                String           @id @default(uuid())
+  assessmentId      String
+  assessment        Assessment       @relation(fields: [assessmentId], references: [id])
+  studentUserId     String
+  student           User             @relation("StudentAssessmentAttempts", fields: [studentUserId], references: [id])
+  scheduledLessonId String?          @unique
+  scheduledLesson   ScheduledLesson? @relation(fields: [scheduledLessonId], references: [id])
+  status            AttemptStatus    @default(NOT_STARTED)
+  // The randomized subset/order of MCQQuestion ids actually presented to
+  // this student, frozen at attempt start so re-loading the page (or a
+  // teacher/admin reviewing later) sees exactly what the student saw.
+  mcqQuestionIds    String[]         @default([])
+  mcqScore          Float?
+  mcqMaxScore       Float?
+  practicalScore    Float?
+  practicalMaxScore Float?
+  vivaScore         Float?
+  vivaMaxScore      Float?
+  totalScore        Float?
+  totalMaxScore     Float?
+  passed            Boolean?
+  startedAt         DateTime?
+  submittedAt       DateTime?
+  gradedAt          DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  mcqAnswers           MCQAnswer[]
+  practicalSubmissions PracticalSubmission[]
+  vivaRecord           VivaRecord?
+
+  @@index([studentUserId])
+  @@index([assessmentId])
+}
+
+model MCQAnswer {
+  id            String            @id @default(uuid())
+  attemptId     String
+  attempt       AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId    String
+  question      MCQQuestion       @relation(fields: [questionId], references: [id])
+  selectedIndex Int?
+  isCorrect     Boolean           @default(false)
+  // The randomized display order of that question's options for this
+  // student (indices into MCQQuestion.options), so selectedIndex can be
+  // mapped back correctly on review even though display order was shuffled.
+  optionOrder   Int[]             @default([])
+  answeredAt    DateTime          @default(now())
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+// AI evaluation is advisory context alongside deterministic test-case
+// results, never a silent override — see AiGradingService. `score` is the
+// final persisted score PracticalGradingService computes (deterministic
+// test-case pass rate as the primary signal; the AI evaluation's own score
+// is kept inside aiEvaluation for teacher/admin review, not written here
+// directly).
+model PracticalSubmission {
+  id                  String            @id @default(uuid())
+  attemptId           String
+  attempt             AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId          String
+  question            PracticalQuestion @relation(fields: [questionId], references: [id])
+  code                String
+  deterministicResult Json? // { passed, total, cases: [{ name, passed, message }] }
+  aiEvaluation        Json? // { score, strengths: [], issues: [], feedback, provider, model } | { error }
+  aiEvaluatedAt       DateTime?
+  score               Float?
+  submittedAt         DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+// Final Test Part C — teacher-recorded viva/demo.
+model VivaRecord {
+  id                  String            @id @default(uuid())
+  attemptId           String            @unique
+  attempt             AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  recordedByTeacherId String
+  recordedByTeacher   TeacherProfile    @relation(fields: [recordedByTeacherId], references: [id])
+  questions           Json // [{ question, response, notes }]
+  score               Float?
+  maxScore            Float             @default(20)
+  remarks             String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
 }
