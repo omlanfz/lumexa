@@ -26,6 +26,13 @@ export class CurriculumController {
     return this.curriculum.getScheduledLessonDetails(id, req.user);
   }
 
+  // Teacher/admin curriculum browsing — a catalog Lesson, not tied to one
+  // specific scheduled class. Always unlocked for the assigned teacher.
+  @Get('lessons/:id/details')
+  getCatalogLessonDetails(@Param('id') id: string, @Req() req: any) {
+    return this.curriculum.getCatalogLessonDetails(id, req.user);
+  }
+
   // ── Admin/teacher: full course structure ──────────────────────────────────
 
   @Get('courses/:courseId/structure')

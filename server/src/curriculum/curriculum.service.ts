@@ -42,6 +42,64 @@ export class CurriculumService {
 
   // ── Lesson Details (student/teacher read path) ───────────────────────────
 
+  // Catalog-based lesson details — for a teacher/admin browsing the
+  // curriculum itself rather than one specific scheduled occurrence (e.g.
+  // preparing ahead for a lesson that hasn't been scheduled for a given
+  // student yet). Always unlocked for an assigned teacher/admin; students
+  // never call this — their access always goes through a real
+  // ScheduledLesson via getScheduledLessonDetails above.
+  async getCatalogLessonDetails(lessonId: string, requester: Requester) {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: {
+        module: true,
+        project: true,
+        assessment: { select: { id: true, type: true, title: true, isPublished: true } },
+        course: { select: { id: true, title: true } },
+      },
+    });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+
+    if (requester.role === Role.TEACHER) {
+      const teaches = await this.prisma.scheduledLesson.findFirst({
+        where: { courseId: lesson.courseId, teacher: { userId: requester.userId } },
+        select: { id: true },
+      });
+      if (!teaches) throw new ForbiddenException('You are not assigned to teach this curriculum.');
+    } else if (requester.role !== Role.ADMIN) {
+      throw new ForbiddenException('You do not have access to this lesson.');
+    }
+
+    const isTest = lesson.type !== SessionType.LEARNING;
+    return {
+      available: true,
+      isTest,
+      session: {
+        scheduledLessonId: null,
+        lessonNumber: lesson.order,
+        start: null,
+        end: null,
+        status: null,
+        courseId: lesson.course.id,
+        courseTitle: lesson.course.title,
+      },
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        type: lesson.type,
+        objectives: lesson.objectives,
+        contentMarkdown: lesson.contentMarkdown,
+        reviewNotes: lesson.reviewNotes,
+        homework: lesson.homework,
+        checkpoint: lesson.checkpoint,
+        codeSnippets: lesson.codeSnippets,
+        module: lesson.module ? { id: lesson.module.id, title: lesson.module.title, stageNumber: lesson.module.stageNumber } : null,
+        project: lesson.project ? { id: lesson.project.id, title: lesson.project.title, description: lesson.project.description } : null,
+      },
+      assessment: lesson.assessment ?? null,
+    };
+  }
+
   async getScheduledLessonDetails(scheduledLessonId: string, requester: Requester) {
     const sl = await this.prisma.scheduledLesson.findUnique({
       where: { id: scheduledLessonId },
@@ -154,6 +212,9 @@ export class CurriculumService {
       throw new ForbiddenException('You do not have access to the full curriculum structure.');
     }
 
+    const course = await this.prisma.course.findUnique({ where: { id: courseId }, select: { id: true, title: true } });
+    if (!course) throw new NotFoundException('Course not found');
+
     const modules = await this.prisma.courseModule.findMany({
       where: { courseId },
       orderBy: { order: 'asc' },
@@ -172,7 +233,7 @@ export class CurriculumService {
       include: { assessment: { select: { id: true, type: true, title: true, isPublished: true } } },
     });
 
-    return { modules, looseLessons };
+    return { course, modules, looseLessons };
   }
 
   // ── Admin CRUD: modules ───────────────────────────────────────────────────

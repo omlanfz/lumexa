@@ -366,7 +366,7 @@ export class TeachersService {
     const [lessons, reviews] = await Promise.all([
       this.prisma.scheduledLesson.findMany({
         where: { teacherId: teacher.id, studentUserId: { in: studentIds } },
-        select: { studentUserId: true, start: true, status: true },
+        select: { id: true, studentUserId: true, start: true, status: true },
         orderBy: { start: 'asc' },
       }),
       this.prisma.review.findMany({
@@ -389,6 +389,7 @@ export class TeachersService {
       pendingClasses: number;
       lastClassDate: Date | null;
       nextClassDate: Date | null;
+      nextClassScheduledLessonId: string | null;
     };
     const statsMap = new Map<string, Stats>();
     for (const l of lessons) {
@@ -399,6 +400,7 @@ export class TeachersService {
         pendingClasses: 0,
         lastClassDate: null,
         nextClassDate: null,
+        nextClassScheduledLessonId: null,
       };
       entry.totalClasses++;
       if (l.status === 'COMPLETED') {
@@ -410,6 +412,7 @@ export class TeachersService {
         entry.pendingClasses++;
         if (!entry.nextClassDate || l.start < entry.nextClassDate) {
           entry.nextClassDate = l.start;
+          entry.nextClassScheduledLessonId = l.id;
         }
       }
       statsMap.set(key, entry);
@@ -434,6 +437,7 @@ export class TeachersService {
           pendingClasses: 0,
           lastClassDate: null,
           nextClassDate: null,
+          nextClassScheduledLessonId: null,
         };
         return {
           studentId: s.id,
@@ -451,6 +455,7 @@ export class TeachersService {
           pendingClasses: stats.pendingClasses,
           lastClassDate: stats.lastClassDate,
           nextClassDate: stats.nextClassDate,
+          nextClassScheduledLessonId: stats.nextClassScheduledLessonId,
           latestReview: latestReviewMap.get(s.id) ?? null,
         };
       })
