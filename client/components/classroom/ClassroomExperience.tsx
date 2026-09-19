@@ -20,6 +20,9 @@ import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetail
 interface ClassroomExperienceProps {
   id: string;
   isLesson: boolean;
+  /** Temporary QA-only mode — joins the shared demo room instead of a real
+   * booking/lesson. See client/lib/demoClassroom.ts. */
+  demo?: boolean;
 }
 
 interface JoinResponse {
@@ -34,7 +37,7 @@ function dashboardPathFor(role: string | null): string {
   return '/dashboard';
 }
 
-export default function ClassroomExperience({ id, isLesson }: ClassroomExperienceProps) {
+export default function ClassroomExperience({ id, isLesson, demo }: ClassroomExperienceProps) {
   const router = useRouter();
   const [join, setJoin] = useState<JoinResponse | null>(null);
   const [lessonData, setLessonData] = useState<LessonDetailsResponse | null>(null);
@@ -51,8 +54,8 @@ export default function ClassroomExperience({ id, isLesson }: ClassroomExperienc
     (async () => {
       try {
         const res = await api.post<JoinResponse>(
-          '/classroom/join',
-          isLesson ? { scheduledLessonId: id } : { bookingId: id },
+          demo ? '/classroom/join-demo' : '/classroom/join',
+          demo ? {} : isLesson ? { scheduledLessonId: id } : { bookingId: id },
         );
         setJoin(res.data);
       } catch (err: unknown) {
@@ -61,13 +64,13 @@ export default function ClassroomExperience({ id, isLesson }: ClassroomExperienc
       }
     })();
 
-    if (isLesson) {
+    if (isLesson && !demo) {
       api
         .get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${id}/details`)
         .then((res) => setLessonData(res.data))
         .catch(() => setLessonData(null));
     }
-  }, [id, isLesson, router]);
+  }, [id, isLesson, demo, router]);
 
   const handleDisconnect = () => {
     router.push(dashboardPathFor(getStoredRole()));
@@ -101,11 +104,13 @@ export default function ClassroomExperience({ id, isLesson }: ClassroomExperienc
 
   const role = getStoredRole();
   const roleLabel = role === 'TEACHER' ? 'Teacher' : 'Student';
-  const sessionTitle = lessonData?.lesson?.title
-    ? lessonData.lesson.title
-    : lessonData
-      ? `${lessonData.session.courseTitle} · Session ${lessonData.session.lessonNumber}`
-      : 'Lumexa 1:1 Session';
+  const sessionTitle = demo
+    ? 'Lumexa Demo Classroom (QA)'
+    : lessonData?.lesson?.title
+      ? lessonData.lesson.title
+      : lessonData
+        ? `${lessonData.session.courseTitle} · Session ${lessonData.session.lessonNumber}`
+        : 'Lumexa 1:1 Session';
   const sessionSubtitle = lessonData
     ? `${lessonData.session.courseTitle}${lessonData.lesson?.title ? ` · Session ${lessonData.session.lessonNumber}` : ''}`
     : undefined;

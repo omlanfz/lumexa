@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
-import { getStoredRole, getStoredToken } from '@/lib/storage';
+import { getStoredRole, getStoredToken, parseStoredUser } from '@/lib/storage';
+import { isDemoStudentEmail } from '@/lib/demoClassroom';
 import LiveClassCard, { LiveClass } from '@/components/student/LiveClassCard';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
@@ -273,6 +274,7 @@ export default function StudentDashboardPage() {
   const greeting =
     hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const motivation = MOTIVATIONAL_LINES[new Date().getDate() % MOTIVATIONAL_LINES.length];
+  const isDemoStudent = isDemoStudentEmail(parseStoredUser()?.email);
 
   return (
     <div className="space-y-6 fade-in">
@@ -297,6 +299,20 @@ export default function StudentDashboardPage() {
         </h1>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{motivation}</p>
       </div>
+
+      {isDemoStudent && (
+        <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3.5 bg-teal-500/10 border border-dashed border-teal-500/40 rounded-xl">
+          <p className="text-sm font-medium text-gray-900 dark:text-white">
+            🧪 QA build: test the Lumexa classroom
+          </p>
+          <button
+            onClick={() => router.push('/classroom-demo')}
+            className="text-sm px-3 py-1.5 rounded-lg font-medium bg-teal-600 hover:bg-teal-500 text-white transition-all duration-150 active:scale-[0.98]"
+          >
+            Join Demo Classroom
+          </button>
+        </div>
+      )}
 
       {!setupComplete ? (
         <OnboardingChecklist

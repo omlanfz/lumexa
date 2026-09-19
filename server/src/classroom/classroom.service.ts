@@ -25,6 +25,18 @@ import {
 
 type EndClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED';
 
+// ─── Temporary QA demo classroom ────────────────────────────────────────────
+//
+// Lets exactly two seeded accounts (Teacher Demo / Demo Student) jump into a
+// shared classroom instantly, with no real booking or scheduled lesson
+// involved, purely to test/QA the classroom experience. Deliberately kept
+// isolated from Booking/ScheduledLesson/payouts/cron so it can never affect
+// real revenue, payout, or admin reporting — remove this block (and the
+// join-demo controller route + frontend buttons) once QA is done.
+const DEMO_TEACHER_EMAIL = 'dmtc@gmail.com';
+const DEMO_STUDENT_EMAIL = 'dmst@gmail.com';
+const DEMO_ROOM_NAME = 'lumexa-demo-classroom';
+
 const RANK_THRESHOLDS: { rank: SpaceRank; min: number }[] = [
   { rank: 'STARCHILD', min: 0 },
   { rank: 'EXPLORER', min: 5 },
@@ -37,6 +49,14 @@ const RANK_THRESHOLDS: { rank: SpaceRank; min: number }[] = [
 @Injectable()
 export class ClassroomService {
   private readonly logger = new Logger(ClassroomService.name);
+
+  // In-memory recording state for the demo classroom only — there is no
+  // Booking/ScheduledLesson row backing DEMO_ROOM_NAME, so this can't live in
+  // the database. Fine for QA use by two accounts; resets on server restart.
+  private demoRecordingState: {
+    egressId: string | null;
+    recordingStatus: RecordingStatus;
+  } = { egressId: null, recordingStatus: RecordingStatus.NONE };
 
   constructor(
     private prisma: PrismaService,
@@ -52,6 +72,52 @@ export class ClassroomService {
       if (sessions >= RANK_THRESHOLDS[i].min) return RANK_THRESHOLDS[i].rank;
     }
     return 'STARCHILD';
+  }
+
+  /** QA-only: joins DEMO_ROOM_NAME directly, no booking/lesson required.
+   * Restricted to the two seeded demo accounts — see the block comment
+   * above DEMO_ROOM_NAME for why this is kept separate from the real
+   * booking/lesson flows. */
+  async joinDemoClassroom(userId: string, email: string | undefined) {
+    const normalizedEmail = email?.toLowerCase();
+    const isTeacher = normalizedEmail === DEMO_TEACHER_EMAIL;
+    const isStudent = normalizedEmail === DEMO_STUDENT_EMAIL;
+    if (!isTeacher && !isStudent) {
+      throw new ForbiddenException(
+        'The demo classroom is only available to the Lumexa QA test accounts.',
+      );
+    }
+
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    if (!apiKey || !apiSecret) {
+      throw new BadRequestException('Video service is not configured.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { fullName: true },
+    });
+    const participantName = `${user?.fullName ?? (isTeacher ? 'Teacher Demo' : 'Demo Student')} (${isTeacher ? 'Teacher' : 'Student'})`;
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: userId,
+      name: participantName,
+      ttl: '3h',
+    });
+    at.addGrant({
+      roomJoin: true,
+      room: DEMO_ROOM_NAME,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+    });
+
+    return {
+      token: await at.toJwt(),
+      url: process.env.LIVEKIT_URL,
+      roomName: DEMO_ROOM_NAME,
+    };
   }
 
   /** Dispatches to the marketplace-booking flow or the curriculum
@@ -300,6 +366,7 @@ export class ClassroomService {
     egressId: string | null;
     recordingStatus: RecordingStatus;
   } | null> {
+    if (room === DEMO_ROOM_NAME) return this.demoRecordingState;
     if (this.isLessonRoom(room)) {
       return this.prisma.scheduledLesson.findUnique({
         where: { id: this.lessonIdFromRoom(room) },
@@ -321,6 +388,17 @@ export class ClassroomService {
       recordingStartedAt?: Date | null;
     },
   ): Promise<void> {
+    if (room === DEMO_ROOM_NAME) {
+      this.demoRecordingState = {
+        egressId:
+          data.egressId !== undefined
+            ? data.egressId
+            : this.demoRecordingState.egressId,
+        recordingStatus:
+          data.recordingStatus ?? this.demoRecordingState.recordingStatus,
+      };
+      return;
+    }
     if (this.isLessonRoom(room)) {
       await this.prisma.scheduledLesson.update({
         where: { id: this.lessonIdFromRoom(room) },
@@ -601,6 +679,14 @@ export class ClassroomService {
   /** Room names are either `lesson-<scheduledLessonId>` (curriculum flow) or
    * a raw bookingId (marketplace flow) — mirrors the naming in joinLab. */
   private async getRoomTeacherUserId(roomName: string): Promise<string> {
+    if (roomName === DEMO_ROOM_NAME) {
+      const teacher = await this.prisma.user.findUnique({
+        where: { email: DEMO_TEACHER_EMAIL },
+        select: { id: true },
+      });
+      if (!teacher) throw new BadRequestException('Classroom not found.');
+      return teacher.id;
+    }
     if (roomName.startsWith('lesson-')) {
       const lessonId = roomName.slice('lesson-'.length);
       const lesson =

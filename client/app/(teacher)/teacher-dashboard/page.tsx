@@ -19,6 +19,8 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import LumiChat from "@/components/LumiChat";
 import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
+import { isTeacherProfileComplete } from "@/lib/teacherProfileCompletion";
+import { isDemoTeacherEmail } from "@/lib/demoClassroom";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,10 +55,11 @@ interface Profile {
   user: { fullName: string; email: string; avatarUrl?: string | null };
   bio?: string | null;
   subjects?: string[];
+  grades?: string[];
   rankTier?: number;
   points?: number;
   weeklyPoints?: number;
-  verificationDocs?: unknown[];
+  verificationDocs?: { type: string }[];
 }
 
 interface StudentEntry {
@@ -181,7 +184,8 @@ function TeacherDashboardContent() {
   if (loading) return <TeacherPageSkeleton />;
 
   const firstName = (profile?.user?.fullName ?? "Teacher").split(" ")[0];
-  const isProfileIncomplete = !profile?.bio || !profile?.subjects?.length;
+  const isProfileIncomplete = !profile || !isTeacherProfileComplete(profile);
+  const isDemoTeacher = isDemoTeacherEmail(profile?.user?.email);
   const upcomingStudents = students
     .filter((s) => s.pendingClasses > 0 && s.nextClassDate)
     .sort((a, b) => new Date(a.nextClassDate!).getTime() - new Date(b.nextClassDate!).getTime())
@@ -256,6 +260,20 @@ function TeacherDashboardContent() {
               className="text-sm px-3 py-1.5 rounded-lg font-medium bg-[var(--t-accent)] hover:bg-[var(--t-accent-hover)] text-white transition-all duration-150 active:scale-[0.98]"
             >
               Complete Profile
+            </button>
+          </div>
+        )}
+
+        {isDemoTeacher && (
+          <div className="mb-6 p-4 rounded-xl border border-dashed border-[var(--t-accent)]/40 bg-[var(--t-accent)]/5 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-sm font-medium text-[var(--t-text)]">
+              🧪 QA build: test the Lumexa classroom
+            </p>
+            <button
+              onClick={() => router.push("/classroom-demo")}
+              className="text-sm px-3 py-1.5 rounded-lg font-medium bg-[var(--t-accent)] hover:bg-[var(--t-accent-hover)] text-white transition-all duration-150 active:scale-[0.98]"
+            >
+              Join Demo Classroom
             </button>
           </div>
         )}
