@@ -26,6 +26,18 @@ export class ClassroomController {
     return this.classroomService.joinLab(req.user.userId, body);
   }
 
+  /** Temporary QA-only route — see the DEMO_ROOM_NAME block comment in
+   * classroom.service.ts. Restricted server-side to the two seeded demo
+   * accounts regardless of what the client sends. */
+  @Post('join-demo')
+  @UseGuards(AuthGuard('jwt'))
+  joinDemo(@Request() req) {
+    return this.classroomService.joinDemoClassroom(
+      req.user.userId,
+      req.user.email,
+    );
+  }
+
   // ─── Teacher-only in-room management ───────────────────────────────────────
 
   @Post(':room/mute-participant')

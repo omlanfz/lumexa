@@ -35,6 +35,7 @@ import { useTheme } from "@/components/ThemeProvider";
 // FIX Issue 5 — import LumiChat
 import LumiChat from "@/components/LumiChat";
 import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
+import { computeTeacherProfileCompletion } from "@/lib/teacherProfileCompletion";
 
 interface Profile {
   id: string;
@@ -143,33 +144,6 @@ const DOC_REQUIREMENTS = [
   },
 ];
 
-function computeProfileCompletion(
-  profile: Profile,
-  docs: Doc[],
-): { score: number; breakdown: Record<string, boolean> } {
-  const has = {
-    avatar: !!profile.user?.avatarUrl,
-    bio: !!(profile.bio && profile.bio.length > 20),
-    grades: !!profile.grades?.length,
-    id_doc: docs.some((d) => d.type === "nid" || d.type === "birth_certificate"),
-    cert_doc: docs.some((d) =>
-      ["bachelor_certificate", "master_certificate", "teaching_cert"].includes(d.type),
-    ),
-  };
-  const weights: Record<string, number> = {
-    avatar: 20,
-    bio: 25,
-    grades: 15,
-    id_doc: 20,
-    cert_doc: 20,
-  };
-  const score = Object.entries(has).reduce(
-    (acc, [key, val]) => acc + (val ? (weights[key] ?? 0) : 0),
-    0,
-  );
-  return { score, breakdown: has };
-}
-
 function TeacherProfileContent() {
   const router = useRouter();
   const { isDark } = useTheme();
@@ -256,7 +230,10 @@ function TeacherProfileContent() {
   // Recompute completion bar whenever profile or docs change
   useEffect(() => {
     if (!profile) return;
-    const { score, breakdown } = computeProfileCompletion(profile, docs);
+    const { score, breakdown } = computeTeacherProfileCompletion({
+      ...profile,
+      verificationDocs: docs,
+    });
     setCompletionScore(score);
     setCompletionBreakdown(breakdown);
   }, [profile, docs]);
