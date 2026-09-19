@@ -84,7 +84,7 @@ export const LABELS = {
   STUDENT_DASHBOARD: { primary: "Dashboard", theme: "Mission Hub" },
   STUDENT_STREAK: { primary: "Streak", theme: "Mission Chain" },
   STUDENT_NEXT_CLASS: { primary: "Next Class", theme: "Next Mission" },
-  STUDENT_ENTER_CLASS: { primary: "Enter Star Lab", theme: "Launch Mission" },
+  STUDENT_ENTER_CLASS: { primary: "Join Class", theme: "Launch Mission" },
   STUDENT_BOOK_CLASS: { primary: "Book Your Next Mission", theme: "Select Mission" },
   STUDENT_RANK_UP: { primary: "Mission Accomplished!", theme: "Rank Achieved" },
   STUDENT_REQUEST_TOPUP: { primary: "Request Top-Up", theme: "Request Credits" },

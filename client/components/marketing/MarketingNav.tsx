@@ -74,7 +74,7 @@ export default function MarketingNav() {
           <Link href="/" onClick={handleLogoClick} className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-md shadow-purple-100 group-hover:shadow-purple-200 transition-shadow">
               <Image
-                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                src="/logo-mark.png"
                 alt="Lumexa AI School"
                 width={36}
                 height={36}

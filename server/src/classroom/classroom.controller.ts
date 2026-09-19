@@ -1,7 +1,9 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
+  Param,
   Headers,
   UseGuards,
   Request,
@@ -26,6 +28,63 @@ export class ClassroomController {
     @Body() body: { bookingId?: string; scheduledLessonId?: string },
   ) {
     return this.classroomService.joinLab(req.user.userId, body);
+  }
+
+  // ─── Teacher-only in-room management ───────────────────────────────────────
+
+  @Post(':room/mute-participant')
+  @UseGuards(AuthGuard('jwt'))
+  muteParticipant(
+    @Request() req,
+    @Param('room') room: string,
+    @Body() body: { identity: string; kind: 'audio' | 'video' },
+  ) {
+    return this.classroomService.muteParticipant(
+      req.user.userId,
+      room,
+      body.identity,
+      body.kind,
+    );
+  }
+
+  @Post(':room/mute-all')
+  @UseGuards(AuthGuard('jwt'))
+  muteAll(@Request() req, @Param('room') room: string) {
+    return this.classroomService.muteAllParticipants(req.user.userId, room);
+  }
+
+  @Post(':room/remove-participant')
+  @UseGuards(AuthGuard('jwt'))
+  removeParticipant(
+    @Request() req,
+    @Param('room') room: string,
+    @Body() body: { identity: string },
+  ) {
+    return this.classroomService.removeParticipant(
+      req.user.userId,
+      room,
+      body.identity,
+    );
+  }
+
+  @Post(':room/end')
+  @UseGuards(AuthGuard('jwt'))
+  endClass(@Request() req, @Param('room') room: string) {
+    return this.classroomService.endClass(req.user.userId, room);
+  }
+
+  @Patch(':room/state')
+  @UseGuards(AuthGuard('jwt'))
+  updateState(
+    @Request() req,
+    @Param('room') room: string,
+    @Body() body: { chatLocked?: boolean; studentsMuted?: boolean },
+  ) {
+    return this.classroomService.updateClassroomState(
+      req.user.userId,
+      room,
+      body,
+    );
   }
 
   /**

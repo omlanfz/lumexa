@@ -52,7 +52,7 @@ export default function StudentTopNav({
         >
           <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
             <Image
-              src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+              src="/logo-mark.png"
               width={32}
               height={32}
               alt="Lumexa"

@@ -241,7 +241,7 @@ function PaymentContent() {
           <Link href="/" className="flex items-center gap-2.5 group w-fit">
             <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-sm shadow-purple-100 dark:shadow-none">
               <Image
-                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                src="/logo-mark.png"
                 alt="Lumexa AI School"
                 width={36}
                 height={36}

@@ -141,7 +141,7 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
             onClick={() => router.push(joinHref)}
             className="flex-1 py-3 rounded-lg font-semibold text-sm bg-teal-500 hover:bg-teal-400 text-black active:scale-[0.98] transition-all duration-200"
           >
-            🚀 {LABELS.STUDENT_ENTER_CLASS.primary}
+            {LABELS.STUDENT_ENTER_CLASS.primary}
           </button>
         ) : (
           <button

@@ -689,3 +689,129 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb {
 html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
   background: rgba(79, 124, 255, 0.48);
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   LUMEXA CLASSROOM — dark, Zoom/Meet-inspired video experience.
+   Deliberately theme-independent (always dark) like other pro conferencing
+   apps, regardless of the site's light/dark mode setting.
+   ══════════════════════════════════════════════════════════════════════════════ */
+:root {
+  --cr-bg:            #08090F;
+  --cr-surface:       #12141F;
+  --cr-surface-2:     #191C2B;
+  --cr-surface-3:     #232640;
+  --cr-border:        rgba(255, 255, 255, 0.08);
+  --cr-border-strong: rgba(255, 255, 255, 0.16);
+  --cr-text:          #F1F2F8;
+  --cr-text-muted:    #9497B3;
+  --cr-text-faint:    #676A87;
+  --cr-accent:        #2DD4BF;
+  --cr-accent-2:      #7C6CF7;
+  --cr-accent-glow:   rgba(45, 212, 191, 0.35);
+  --cr-danger:        #F04452;
+  --cr-danger-hover:  #FF5F6C;
+  --cr-warning:       #F5A524;
+  --cr-live:          #F04452;
+}
+
+.cr-root {
+  background: var(--cr-bg);
+  color: var(--cr-text);
+  color-scheme: dark;
+}
+
+.cr-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.cr-scroll::-webkit-scrollbar-track { background: transparent; }
+.cr-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
+}
+.cr-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
+
+/* Icon control button used throughout the bottom bar / panels */
+.cr-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--cr-surface-2);
+  border: 1px solid var(--cr-border);
+  color: var(--cr-text);
+  transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease, color 150ms ease;
+}
+.cr-icon-btn:hover:not(:disabled) {
+  background: var(--cr-surface-3);
+  border-color: var(--cr-border-strong);
+}
+.cr-icon-btn:active:not(:disabled) { transform: scale(0.94); }
+.cr-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cr-icon-btn.is-active {
+  background: rgba(45, 212, 191, 0.16);
+  border-color: rgba(45, 212, 191, 0.4);
+  color: var(--cr-accent);
+}
+.cr-icon-btn.is-off {
+  background: rgba(240, 68, 82, 0.14);
+  border-color: rgba(240, 68, 82, 0.35);
+  color: #FF8790;
+}
+
+/* Tooltip — pure CSS, shown on hover/focus of any [data-tooltip] element */
+[data-tooltip] { position: relative; }
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  white-space: nowrap;
+  background: #0A0B12;
+  color: #F1F2F8;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 9px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.08);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 60;
+}
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+[data-tooltip-pos="bottom"]::after {
+  bottom: auto;
+  top: calc(100% + 10px);
+  transform: translateX(-50%) translateY(-4px);
+}
+[data-tooltip-pos="bottom"]:hover::after,
+[data-tooltip-pos="bottom"]:focus-visible::after {
+  transform: translateX(-50%) translateY(0);
+}
+
+@keyframes cr-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cr-fade-in { animation: cr-fade-in 0.2s ease-out forwards; }
+
+@keyframes cr-float-up {
+  0%   { opacity: 0; transform: translateY(0) scale(0.6); }
+  15%  { opacity: 1; transform: translateY(-10px) scale(1); }
+  100% { opacity: 0; transform: translateY(-120px) scale(1.1); }
+}
+.cr-reaction-float { animation: cr-float-up 2.4s ease-out forwards; }
+
+@keyframes cr-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0.5); }
+  70%  { box-shadow: 0 0 0 8px rgba(245, 165, 36, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0); }
+}
+.cr-hand-pulse { animation: cr-pulse-ring 1.8s ease-out infinite; }
+
+.cr-live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
