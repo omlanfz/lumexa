@@ -916,6 +916,70 @@ export class SchedulingService {
     return true;
   }
 
+  // ─── Pause / resume: freeze and restore a student's upcoming schedule ────
+  //
+  // Pausing cancels every still-UPCOMING lesson — the student can't attend
+  // while paused, and leaving them UPCOMING would keep blocking the
+  // teacher's slot (findTeacherConflict only looks at UPCOMING rows) from
+  // being handed to someone else in the meantime. RecurringSlot rows are
+  // deliberately left untouched: that's the remembered weekly pattern
+  // restoreScheduleAfterResume replays on resume, the same way
+  // reconcileCourseSchedules replays it after a curriculum change.
+
+  async cancelUpcomingLessonsForPause(studentUserId: string) {
+    await this.prisma.scheduledLesson.updateMany({
+      where: { studentUserId, status: LessonStatus.UPCOMING },
+      data: { status: LessonStatus.CANCELLED },
+    });
+  }
+
+  /** Regenerates this student's UPCOMING lessons from today, per course they
+   * had a RecurringSlot for — same weekday/time cadence, same teacher,
+   * continuing right after their last COMPLETED lesson (see
+   * reconcileStudentCourseSchedule, shared with curriculum-change
+   * reconciliation). Returns how many of the student's scheduled courses
+   * were restored vs. skipped (a teacher conflict picked up while paused
+   * leaves that course's schedule for manual admin re-scheduling). */
+  async restoreScheduleAfterResume(studentUserId: string, actorId: string) {
+    const slotCourses = await this.prisma.recurringSlot.findMany({
+      where: { studentUserId },
+      select: { courseId: true },
+      distinct: ['courseId'],
+    });
+    if (slotCourses.length === 0) return { restored: 0, skipped: 0 };
+
+    let restored = 0;
+    let skipped = 0;
+    for (const { courseId } of slotCourses) {
+      const course = await this.prisma.course.findUnique({
+        where: { id: courseId },
+        select: { sessions: true },
+      });
+      if (!course) {
+        skipped++;
+        continue;
+      }
+      const catalogLessons = await this.prisma.lesson.findMany({
+        where: { courseId },
+        select: { id: true, order: true },
+      });
+      const lessonIdByOrder = new Map(
+        catalogLessons.map((l) => [l.order, l.id]),
+      );
+
+      const ok = await this.reconcileStudentCourseSchedule(
+        studentUserId,
+        courseId,
+        lessonIdByOrder,
+        course.sessions,
+        actorId,
+      );
+      if (ok) restored++;
+      else skipped++;
+    }
+    return { restored, skipped };
+  }
+
   // ─── Backfill: link existing ScheduledLesson rows to their catalog Lesson ─
   // (rows created before Lesson.order-based test insertion existed). Safe to
   // call repeatedly — only fills rows where lessonId is still null.

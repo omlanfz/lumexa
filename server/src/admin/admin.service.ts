@@ -1341,6 +1341,12 @@ export class AdminService {
       data: { accountStatus: 'PAUSED' },
     });
 
+    // The student can't attend while paused — cancel their still-UPCOMING
+    // lessons so the teacher's slots free up. Their RecurringSlot pattern
+    // (weekday/time/teacher) is left untouched so resumeStudent can replay
+    // it later.
+    await this.scheduling.cancelUpcomingLessonsForPause(studentUserId);
+
     await this.audit.log({
       actorId: adminUserId,
       actorRole: 'ADMIN',
@@ -1369,6 +1375,14 @@ export class AdminService {
       data: { accountStatus: 'ACTIVE' },
     });
 
+    // Restore the same weekly schedule the student had before being
+    // paused — regenerated from today against their still-intact
+    // RecurringSlot pattern (see SchedulingService.restoreScheduleAfterResume).
+    const { restored, skipped } = await this.scheduling.restoreScheduleAfterResume(
+      studentUserId,
+      adminUserId,
+    );
+
     await this.audit.log({
       actorId: adminUserId,
       actorRole: 'ADMIN',
@@ -1379,7 +1393,11 @@ export class AdminService {
       afterData: { accountStatus: 'ACTIVE' },
     });
 
-    return updated;
+    return {
+      ...updated,
+      scheduleRestored: restored,
+      scheduleSkipped: skipped,
+    };
   }
 
   // ═══════════════════════════════════════════════════════════════════════

@@ -45,6 +45,9 @@ export default function StudentDetailPage() {
   const [student, setStudent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("Overview");
+  const [togglingPause, setTogglingPause] = useState(false);
+  const [pauseToggleError, setPauseToggleError] = useState<string | null>(null);
+  const [resumeNotice, setResumeNotice] = useState<string | null>(null);
   const [modal, setModal] = useState<
     | null
     | "pause"
@@ -59,14 +62,39 @@ export default function StudentDetailPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    api.get(`/admin/students/${studentUserId}`).then((res) => setStudent(res.data)).finally(() => setLoading(false));
+    return api
+      .get(`/admin/students/${studentUserId}`)
+      .then((res) => setStudent(res.data))
+      .finally(() => setLoading(false));
   }, [studentUserId]);
 
-  useEffect(() => load(), [load]);
-
-  const resume = async () => {
-    await api.post(`/admin/students/${studentUserId}/resume`);
+  useEffect(() => {
     load();
+  }, [load]);
+
+  const unpause = async () => {
+    setTogglingPause(true);
+    setPauseToggleError(null);
+    setResumeNotice(null);
+    try {
+      const res = await api.post(`/admin/students/${studentUserId}/resume`);
+      const { scheduleRestored, scheduleSkipped } = res.data ?? {};
+      if (scheduleSkipped > 0) {
+        setResumeNotice(
+          `Unpaused. Restored ${scheduleRestored} course schedule(s); ${scheduleSkipped} could not be restored automatically ` +
+            `(likely a teacher scheduling conflict) — check the Schedule tab and re-set it manually if needed.`,
+        );
+      } else if (scheduleRestored > 0) {
+        setResumeNotice(
+          `Unpaused — restored ${scheduleRestored} course schedule(s) to the same weekly time slots they had before pausing.`,
+        );
+      }
+      await load();
+    } catch (err: any) {
+      setPauseToggleError(err?.response?.data?.message ?? "Failed to unpause this student.");
+    } finally {
+      setTogglingPause(false);
+    }
   };
 
   if (loading) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
@@ -87,19 +115,40 @@ export default function StudentDetailPage() {
           <StatusBadge status={student.accountStatus} />
           <PaymentBadge badge={student.ledgerSummary?.paymentBadge} />
           {student.accountStatus === "PAUSED" ? (
-            <button onClick={resume} className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--a-success)] text-white hover:opacity-90">
-              Resume
+            <button
+              onClick={unpause}
+              disabled={togglingPause}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--a-success)] text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {togglingPause ? "Unpausing…" : "Unpause"}
             </button>
           ) : (
             <button
-              onClick={() => setModal("pause")}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--a-warning)] text-white hover:opacity-90"
+              onClick={() => {
+                setPauseToggleError(null);
+                setResumeNotice(null);
+                setModal("pause");
+              }}
+              disabled={togglingPause}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-[var(--a-warning)] text-white hover:opacity-90 disabled:opacity-60"
             >
               Pause
             </button>
           )}
         </div>
       </div>
+
+      {(resumeNotice || pauseToggleError) && (
+        <div
+          className={`px-4 py-3 rounded-lg text-sm ${
+            pauseToggleError
+              ? "bg-[var(--a-danger-bg)] text-[var(--a-danger-text)]"
+              : "bg-[var(--a-info-bg)] text-[var(--a-info)]"
+          }`}
+        >
+          {pauseToggleError ?? resumeNotice}
+        </div>
+      )}
 
       <div className="flex gap-1 border-b border-[var(--a-border)] overflow-x-auto">
         {TABS.map((t) => (
