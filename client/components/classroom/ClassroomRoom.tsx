@@ -18,7 +18,7 @@ import {
   isTrackReference,
   RoomAudioRenderer,
 } from '@livekit/components-react';
-import { Hand } from 'lucide-react';
+import { AlertTriangle, Hand } from 'lucide-react';
 import Header from './Header';
 import Stage from './Stage';
 import FilmStrip from './FilmStrip';
@@ -31,7 +31,8 @@ import { parseParticipantMeta } from '@/lib/classroom/types';
 import { useClassroomState } from '@/lib/classroom/useClassroomState';
 import { useClassroomControls } from '@/lib/classroom/useClassroomControls';
 import { useVideoEffects } from '@/lib/classroom/useVideoEffects';
-import { muteAllParticipants, endClass } from '@/lib/classroom/api';
+import { muteAllParticipants, endClass, startRecording, stopRecording } from '@/lib/classroom/api';
+import { playClassroomTone } from '@/lib/classroom/sounds';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
 import type { LightingOptions } from '@/lib/classroom/lightingProcessor';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
@@ -82,9 +83,19 @@ export default function ClassroomRoom({
   const [presentationMode, setPresentationMode] = useState(false);
   const [lastSeenChatCount, setLastSeenChatCount] = useState(0);
   const [handToasts, setHandToasts] = useState<HandToast[]>([]);
+  const [recordingPending, setRecordingPending] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [endClassError, setEndClassError] = useState<string | null>(null);
+  const [expiredNoticeVisible, setExpiredNoticeVisible] = useState(false);
+  const expiredFiredRef = useRef(false);
   const seededEffectsRef = useRef(false);
   const prevRaisedRef = useRef<Record<string, boolean>>({});
+  const prevParticipantIdentitiesRef = useRef<Set<string> | null>(null);
+  const participantRolesRef = useRef<Record<string, 'TEACHER' | 'STUDENT'>>({});
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const isLessonFlow = roomName.startsWith('lesson-');
+  const isRecording = !!classroomState.recording;
 
   const togglePresentationMode = () => {
     const next = !presentationMode;
@@ -105,6 +116,56 @@ export default function ClassroomRoom({
     document.addEventListener('fullscreenchange', onFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
+
+  // Subtle presence sounds — a remote participant (never the local user's
+  // own connect) joining or leaving plays a short, space-themed chime.
+  useEffect(() => {
+    const currentIdentities = new Set(participants.map((p) => p.identity));
+    const prev = prevParticipantIdentitiesRef.current;
+
+    for (const p of participants) {
+      participantRolesRef.current[p.identity] = parseParticipantMeta(p.identity, p.name || '').role;
+    }
+
+    if (prev) {
+      for (const p of participants) {
+        if (p.identity === localParticipant.identity) continue;
+        if (!prev.has(p.identity)) {
+          const role = participantRolesRef.current[p.identity];
+          playClassroomTone(role === 'TEACHER' ? 'teacher-join' : 'student-join');
+        }
+      }
+      for (const identity of prev) {
+        if (identity === localParticipant.identity) continue;
+        if (!currentIdentities.has(identity)) {
+          const role = participantRolesRef.current[identity];
+          playClassroomTone(role === 'TEACHER' ? 'teacher-leave' : 'student-leave');
+          delete participantRolesRef.current[identity];
+        }
+      }
+    }
+    prevParticipantIdentitiesRef.current = currentIdentities;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [participants]);
+
+  // Scheduled class time expiring — teacher-only friendly notice + subtle
+  // sound. The classroom never closes on its own; this is purely advisory.
+  const scheduledEnd = lessonData?.session?.end ? new Date(lessonData.session.end).getTime() : null;
+  useEffect(() => {
+    if (!isTeacher || !scheduledEnd || expiredFiredRef.current) return;
+    const msRemaining = scheduledEnd - Date.now();
+    const fire = () => {
+      expiredFiredRef.current = true;
+      setExpiredNoticeVisible(true);
+      playClassroomTone('class-expired');
+    };
+    if (msRemaining <= 0) {
+      fire();
+      return;
+    }
+    const timer = setTimeout(fire, msRemaining);
+    return () => clearTimeout(timer);
+  }, [isTeacher, scheduledEnd]);
 
   // Seed the effect choice made on the pre-join screen once, then keep
   // re-applying whatever's currently selected whenever the camera track is
@@ -164,6 +225,40 @@ export default function ClassroomRoom({
 
   const micDisabledByTeacher = !isTeacher && !!classroomState.studentsMuted;
 
+  const handleToggleRecording = async () => {
+    if (recordingPending) return;
+    setRecordingPending(true);
+    try {
+      // The server itself patches room metadata on start/stop (see
+      // ClassroomService.startTeacherRecording/stopTeacherRecording) — the
+      // resulting RoomMetadataChanged event is what updates classroomState
+      // here, for every participant, so no separate patchState call is
+      // needed on success.
+      setRecordingError(null);
+      if (isRecording) {
+        await stopRecording(roomName);
+      } else {
+        await startRecording(roomName);
+      }
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      setRecordingError(e.response?.data?.message ?? 'Could not update the recording. Please try again.');
+      setTimeout(() => setRecordingError(null), 6000);
+    } finally {
+      setRecordingPending(false);
+    }
+  };
+
+  const handleEndClass = (outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED') => {
+    setEndClassError(null);
+    void endClass(roomName, outcome)
+      .then(() => room.disconnect())
+      .catch((err: unknown) => {
+        const e = err as { response?: { data?: { message?: string } } };
+        setEndClassError(e.response?.data?.message ?? 'Could not end the class. Please try again.');
+      });
+  };
+
   return (
     <div ref={rootRef} className="cr-root h-screen w-full flex flex-col overflow-hidden">
       <RoomAudioRenderer />
@@ -175,6 +270,7 @@ export default function ClassroomRoom({
           isLive={isLive}
           presentationMode={presentationMode}
           onTogglePresentation={togglePresentationMode}
+          recording={isRecording}
         />
       )}
 
@@ -190,6 +286,29 @@ export default function ClassroomRoom({
           )}
 
           <ConnectionBanner />
+
+          {/* Scheduled time expired — teacher-only, advisory. The class
+              never ends on its own; this just nudges the teacher to wrap up
+              whenever they're ready. */}
+          {isTeacher && expiredNoticeVisible && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 backdrop-blur text-amber-300 text-xs font-medium shadow-lg cr-fade-in">
+              <AlertTriangle size={15} className="flex-shrink-0" />
+              Your scheduled class time is over. Please end the class when you&apos;re ready.
+              <button
+                onClick={() => setExpiredNoticeVisible(false)}
+                className="ml-1 text-amber-300/70 hover:text-amber-200"
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {recordingError && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 backdrop-blur text-red-400 text-xs font-medium shadow-lg cr-fade-in">
+              {recordingError}
+            </div>
+          )}
 
           {/* Hand-raise toasts (teacher only) */}
           {handToasts.length > 0 && (
@@ -275,9 +394,11 @@ export default function ClassroomRoom({
         classroomState={classroomState}
         onPatchState={patchState}
         onMuteAll={() => void muteAllParticipants(roomName)}
-        onEndClass={() => {
-          void endClass(roomName).then(() => room.disconnect());
-        }}
+        onEndClass={handleEndClass}
+        isLessonFlow={isLessonFlow}
+        endClassError={endClassError}
+        isRecording={isRecording}
+        onToggleRecording={() => void handleToggleRecording()}
         backgroundEffect={effects.backgroundEffect}
         onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
         lighting={effects.lighting}

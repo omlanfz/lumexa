@@ -16,7 +16,6 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClassType, LessonStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -25,9 +24,10 @@ import {
   addDaysToDateStr,
   dhakaToUtc,
   todayDhakaDateStr,
+  utcToDhakaParts,
   weekdayForDateStr,
 } from './dhaka-time.util';
-import { computeLateMinutes, getClassWindow } from './lesson-window.util';
+import { computeLateMinutes } from './lesson-window.util';
 
 export const CLASS_DURATION_MINUTES: Record<ClassType, number> = {
   ONE_TO_ONE: 45,
@@ -217,77 +217,83 @@ export class SchedulingService {
       );
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      // Replace any not-yet-happened lessons for this student+course — they
-      // were never attended, so regenerating them is not "modifying
-      // completed/past lessons" and never creates duplicates. Includes
-      // CANCELLED (e.g. an admin override cancellation from the Classes
-      // page) as well as UPCOMING: leaving a cancelled row behind would
-      // occupy its lessonNumber and collide with the freshly generated
-      // sequence below (@@unique([studentUserId, courseId, lessonNumber])).
-      await tx.scheduledLesson.deleteMany({
-        where: {
-          studentUserId,
-          courseId,
-          status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
-        },
-      });
-      await tx.recurringSlot.deleteMany({ where: { studentUserId } });
+    await this.prisma.$transaction(
+      async (tx) => {
+        // Replace any not-yet-happened lessons for this student+course — they
+        // were never attended, so regenerating them is not "modifying
+        // completed/past lessons" and never creates duplicates. Includes
+        // CANCELLED (e.g. an admin override cancellation from the Classes
+        // page) as well as UPCOMING: leaving a cancelled row behind would
+        // occupy its lessonNumber and collide with the freshly generated
+        // sequence below (@@unique([studentUserId, courseId, lessonNumber])).
+        await tx.scheduledLesson.deleteMany({
+          where: {
+            studentUserId,
+            courseId,
+            status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
+          },
+        });
+        await tx.recurringSlot.deleteMany({ where: { studentUserId } });
 
-      // Conflict-check sequentially inside the transaction so a collision
-      // aborts the whole regeneration atomically.
-      for (const lesson of newLessons) {
-        const conflict = await this.findTeacherConflict(
-          tx,
-          teacherId,
-          lesson.start,
-          lesson.end,
-        );
-        if (conflict) {
-          throw new BadRequestException(
-            `Teacher is already booked on ${lesson.start.toLocaleString('en-US', {
-              timeZone: 'Asia/Dhaka',
-            })} (Asia/Dhaka). Choose a different day/time.`,
+        // Conflict-check sequentially inside the transaction so a collision
+        // aborts the whole regeneration atomically.
+        for (const lesson of newLessons) {
+          const conflict = await this.findTeacherConflict(
+            tx,
+            teacherId,
+            lesson.start,
+            lesson.end,
           );
+          if (conflict) {
+            throw new BadRequestException(
+              `Teacher is already booked on ${lesson.start.toLocaleString(
+                'en-US',
+                {
+                  timeZone: 'Asia/Dhaka',
+                },
+              )} (Asia/Dhaka). Choose a different day/time.`,
+            );
+          }
         }
-      }
 
-      await tx.recurringSlot.createMany({
-        data: dto.slots.map((s) => ({
-          studentUserId,
-          teacherId,
-          courseId,
-          weekday: s.weekday,
-          hour: Number(s.time.slice(0, 2)),
-          minute: Number(s.time.slice(3, 5)),
-          classType,
-        })),
-      });
+        await tx.recurringSlot.createMany({
+          data: dto.slots.map((s) => ({
+            studentUserId,
+            teacherId,
+            courseId,
+            weekday: s.weekday,
+            hour: Number(s.time.slice(0, 2)),
+            minute: Number(s.time.slice(3, 5)),
+            classType,
+          })),
+        });
 
-      await tx.scheduledLesson.createMany({
-        data: newLessons.map((l) => ({
-          studentUserId,
-          teacherId,
-          courseId,
-          lessonNumber: l.lessonNumber,
-          lessonId: l.lessonId ?? undefined,
-          start: l.start,
-          end: l.end,
-          classType,
-          status: LessonStatus.UPCOMING,
-        })),
-      });
+        await tx.scheduledLesson.createMany({
+          data: newLessons.map((l) => ({
+            studentUserId,
+            teacherId,
+            courseId,
+            lessonNumber: l.lessonNumber,
+            lessonId: l.lessonId ?? undefined,
+            start: l.start,
+            end: l.end,
+            classType,
+            status: LessonStatus.UPCOMING,
+          })),
+        });
 
-      await tx.user.update({
-        where: { id: studentUserId },
-        data: { assignedClassType: classType },
-      });
+        await tx.user.update({
+          where: { id: studentUserId },
+          data: { assignedClassType: classType },
+        });
 
-      return tx.scheduledLesson.findMany({
-        where: { studentUserId, courseId },
-        orderBy: { lessonNumber: 'asc' },
-      });
-    }, { timeout: 20_000, maxWait: 10_000 });
+        return tx.scheduledLesson.findMany({
+          where: { studentUserId, courseId },
+          orderBy: { lessonNumber: 'asc' },
+        });
+      },
+      { timeout: 20_000, maxWait: 10_000 },
+    );
 
     await this.audit.log({
       actorId: adminUserId,
@@ -363,7 +369,11 @@ export class SchedulingService {
     return updated;
   }
 
-  async adminCancelLesson(lessonId: string, reason: string, adminUserId: string) {
+  async adminCancelLesson(
+    lessonId: string,
+    reason: string,
+    adminUserId: string,
+  ) {
     if (!reason?.trim()) {
       throw new BadRequestException('A reason is required to cancel a class.');
     }
@@ -394,7 +404,11 @@ export class SchedulingService {
     return updated;
   }
 
-  async adminDeleteLesson(lessonId: string, adminUserId: string, reason?: string) {
+  async adminDeleteLesson(
+    lessonId: string,
+    adminUserId: string,
+    reason?: string,
+  ) {
     const lesson = await this.prisma.scheduledLesson.findUnique({
       where: { id: lessonId },
     });
@@ -465,7 +479,13 @@ export class SchedulingService {
     const lessons = await this.prisma.scheduledLesson.findMany({
       where: {
         teacherId: teacher.id,
-        status: { in: [LessonStatus.UPCOMING, LessonStatus.COMPLETED] },
+        status: {
+          in: [
+            LessonStatus.UPCOMING,
+            LessonStatus.COMPLETED,
+            LessonStatus.PARTIALLY_COMPLETED,
+          ],
+        },
       },
       orderBy: { start: 'asc' },
       include: {
@@ -497,8 +517,18 @@ export class SchedulingService {
       status?: LessonStatus | { in: LessonStatus[] };
     } = { studentUserId };
     if (status === 'upcoming') where.status = LessonStatus.UPCOMING;
-    else if (status === 'completed') where.status = LessonStatus.COMPLETED;
-    else where.status = { in: [LessonStatus.UPCOMING, LessonStatus.COMPLETED] };
+    else if (status === 'completed')
+      where.status = {
+        in: [LessonStatus.COMPLETED, LessonStatus.PARTIALLY_COMPLETED],
+      };
+    else
+      where.status = {
+        in: [
+          LessonStatus.UPCOMING,
+          LessonStatus.COMPLETED,
+          LessonStatus.PARTIALLY_COMPLETED,
+        ],
+      };
 
     const lessons = await this.prisma.scheduledLesson.findMany({
       where,
@@ -666,10 +696,7 @@ export class SchedulingService {
     slots: { weekday: number; time: string }[],
     count: number,
   ): { dateStr: string; hour: number; minute: number }[] {
-    const byWeekday = new Map<
-      number,
-      { hour: number; minute: number }[]
-    >();
+    const byWeekday = new Map<number, { hour: number; minute: number }[]>();
     for (const s of slots) {
       const [hh, mm] = s.time.split(':').map(Number);
       const list = byWeekday.get(s.weekday) ?? [];
@@ -745,7 +772,9 @@ export class SchedulingService {
     if (reconciled > 0 || skipped > 0) {
       this.logger.log(
         `Reconciled ${reconciled} student schedule(s) for course ${courseId} after a curriculum change` +
-          (skipped > 0 ? ` (${skipped} skipped due to a scheduling conflict — left untouched).` : '.'),
+          (skipped > 0
+            ? ` (${skipped} skipped due to a scheduling conflict — left untouched).`
+            : '.'),
       );
     }
     return { reconciled, skipped, newTotal };
@@ -761,7 +790,9 @@ export class SchedulingService {
     newTotal: number,
     actorId: string,
   ): Promise<boolean> {
-    const slots = await this.prisma.recurringSlot.findMany({ where: { studentUserId, courseId } });
+    const slots = await this.prisma.recurringSlot.findMany({
+      where: { studentUserId, courseId },
+    });
     if (slots.length === 0) return false;
 
     const student = await this.prisma.user.findUnique({
@@ -786,14 +817,21 @@ export class SchedulingService {
       // The course got shorter than what this student already completed —
       // nothing left to schedule. Clear any now-stale upcoming rows only.
       await this.prisma.scheduledLesson.deleteMany({
-        where: { studentUserId, courseId, status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] } },
+        where: {
+          studentUserId,
+          courseId,
+          status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
+        },
       });
       return true;
     }
 
     const occurrences = this.generateOccurrences(
       todayDhakaDateStr(),
-      slots.map((s) => ({ weekday: s.weekday, time: `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}` })),
+      slots.map((s) => ({
+        weekday: s.weekday,
+        time: `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`,
+      })),
       remaining,
     );
     if (occurrences.length < remaining) return false;
@@ -802,7 +840,12 @@ export class SchedulingService {
       const start = dhakaToUtc(occ.dateStr, occ.hour, occ.minute);
       const end = new Date(start.getTime() + durationMinutes * 60_000);
       const lessonNumber = completedCount + i + 1;
-      return { lessonNumber, lessonId: lessonIdByOrder.get(lessonNumber) ?? null, start, end };
+      return {
+        lessonNumber,
+        lessonId: lessonIdByOrder.get(lessonNumber) ?? null,
+        start,
+        end,
+      };
     });
 
     // Delete this student's own stale UPCOMING/CANCELLED rows for this
@@ -816,30 +859,44 @@ export class SchedulingService {
     // which rolls back the whole transaction — this student's prior
     // schedule is restored to what it was, never left half-deleted.
     try {
-      await this.prisma.$transaction(async (tx) => {
-        await tx.scheduledLesson.deleteMany({
-          where: { studentUserId, courseId, status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] } },
-        });
-        for (const lesson of newLessons) {
-          const conflict = await this.findTeacherConflict(tx, teacherId, lesson.start, lesson.end);
-          if (conflict) {
-            throw new Error(`teacher conflict at ${lesson.start.toISOString()}`);
+      await this.prisma.$transaction(
+        async (tx) => {
+          await tx.scheduledLesson.deleteMany({
+            where: {
+              studentUserId,
+              courseId,
+              status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
+            },
+          });
+          for (const lesson of newLessons) {
+            const conflict = await this.findTeacherConflict(
+              tx,
+              teacherId,
+              lesson.start,
+              lesson.end,
+            );
+            if (conflict) {
+              throw new Error(
+                `teacher conflict at ${lesson.start.toISOString()}`,
+              );
+            }
           }
-        }
-        await tx.scheduledLesson.createMany({
-          data: newLessons.map((l) => ({
-            studentUserId,
-            teacherId,
-            courseId,
-            lessonNumber: l.lessonNumber,
-            lessonId: l.lessonId ?? undefined,
-            start: l.start,
-            end: l.end,
-            classType,
-            status: LessonStatus.UPCOMING,
-          })),
-        });
-      }, { timeout: 20_000, maxWait: 10_000 });
+          await tx.scheduledLesson.createMany({
+            data: newLessons.map((l) => ({
+              studentUserId,
+              teacherId,
+              courseId,
+              lessonNumber: l.lessonNumber,
+              lessonId: l.lessonId ?? undefined,
+              start: l.start,
+              end: l.end,
+              classType,
+              status: LessonStatus.UPCOMING,
+            })),
+          });
+        },
+        { timeout: 20_000, maxWait: 10_000 },
+      );
     } catch (err) {
       this.logger.warn(
         `Skipped schedule reconciliation for student ${studentUserId} / course ${courseId}: ${(err as Error).message}. ` +
@@ -867,7 +924,10 @@ export class SchedulingService {
     const courses = await this.prisma.course.findMany({ select: { id: true } });
     let updated = 0;
     for (const { id: courseId } of courses) {
-      const lessons = await this.prisma.lesson.findMany({ where: { courseId }, select: { id: true, order: true } });
+      const lessons = await this.prisma.lesson.findMany({
+        where: { courseId },
+        select: { id: true, order: true },
+      });
       const byOrder = new Map(lessons.map((l) => [l.order, l.id]));
       const rows = await this.prisma.scheduledLesson.findMany({
         where: { courseId, lessonId: null },
@@ -876,7 +936,10 @@ export class SchedulingService {
       for (const row of rows) {
         const lessonId = byOrder.get(row.lessonNumber);
         if (lessonId) {
-          await this.prisma.scheduledLesson.update({ where: { id: row.id }, data: { lessonId } });
+          await this.prisma.scheduledLesson.update({
+            where: { id: row.id },
+            data: { lessonId },
+          });
           updated++;
         }
       }
@@ -884,20 +947,157 @@ export class SchedulingService {
     return { updated };
   }
 
-  // ─── Auto-complete lessons whose end time has passed ─────────────────────
+  // NOTE: there is intentionally no "auto-complete past lessons" cron. A
+  // class's scheduled end time is never itself a reason to close it or mark
+  // it complete — only the teacher's explicit Completed/Partially Completed
+  // choice does that (see ClassroomService.endClass). Past-end classes stay
+  // UPCOMING and remain fully joinable until the teacher ends them.
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
-  async autoCompletePastLessons() {
-    try {
-      const { count } = await this.prisma.scheduledLesson.updateMany({
-        where: { status: LessonStatus.UPCOMING, end: { lt: new Date() } },
-        data: { status: LessonStatus.COMPLETED },
-      });
-      if (count > 0) {
-        this.logger.log(`Auto-completed ${count} scheduled lesson(s).`);
+  // ─── Partial-completion schedule shift ───────────────────────────────────
+  //
+  // Called by ClassroomService.endClass when a teacher marks a class
+  // PARTIALLY_COMPLETED: the student needs another occurrence to finish this
+  // same lesson. Operates purely at the ScheduledLesson occurrence level —
+  // never touches Lesson/Course catalog content or ordering:
+  //
+  //   1. The partially-completed row keeps its lessonNumber, but its status
+  //      moves to PARTIALLY_COMPLETED (freeing that lessonNumber slot, since
+  //      the partial unique index only covers UPCOMING/COMPLETED — see
+  //      schema.prisma).
+  //   2. Every already-generated future UPCOMING occurrence for this
+  //      student+course "shifts one classday later": each one keeps its own
+  //      calendar date but is reassigned the PREVIOUS occurrence's
+  //      lessonNumber (so the very next occurrence redoes the partial
+  //      lesson, and everything after cascades down by one).
+  //   3. One brand-new trailing occurrence is generated (via the student's
+  //      existing RecurringSlot cadence) to absorb the lessonNumber that
+  //      fell off the end — so the total number of remaining occurrences
+  //      grows by exactly one, and no lesson number is ever lost or
+  //      duplicated among active rows.
+  async handlePartialCompletion(lessonId: string, actorUserId: string) {
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+
+    const { studentUserId, courseId, teacherId, classType, lessonNumber } =
+      lesson;
+
+    const futureLessons = await this.prisma.scheduledLesson.findMany({
+      where: {
+        studentUserId,
+        courseId,
+        status: LessonStatus.UPCOMING,
+        start: { gt: lesson.start },
+      },
+      orderBy: { start: 'asc' },
+    });
+
+    const slots = await this.prisma.recurringSlot.findMany({
+      where: { studentUserId, courseId },
+    });
+
+    const durationMinutes = CLASS_DURATION_MINUTES[classType];
+    let newTrailing: { start: Date; end: Date } | null = null;
+
+    if (slots.length > 0) {
+      const lastDate =
+        futureLessons.length > 0
+          ? futureLessons[futureLessons.length - 1].start
+          : lesson.start;
+      const [occ] = this.generateOccurrences(
+        addDaysToDateStr(this.dateStrOf(lastDate), 1),
+        slots.map((s) => ({
+          weekday: s.weekday,
+          time: `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`,
+        })),
+        1,
+      );
+      if (occ) {
+        const start = dhakaToUtc(occ.dateStr, occ.hour, occ.minute);
+        newTrailing = {
+          start,
+          end: new Date(start.getTime() + durationMinutes * 60_000),
+        };
       }
-    } catch (err) {
-      this.logger.error('Failed to auto-complete past lessons.', err as Error);
     }
+
+    const catalogLessons = await this.prisma.lesson.findMany({
+      where: { courseId },
+      select: { id: true, order: true },
+    });
+    const lessonIdByOrder = new Map(catalogLessons.map((l) => [l.order, l.id]));
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.scheduledLesson.update({
+          where: { id: lessonId },
+          data: { status: LessonStatus.PARTIALLY_COMPLETED },
+        });
+
+        // Shift every future occurrence's lessonNumber/lessonId down to the
+        // previous slot's — dates never move for existing rows.
+        for (let i = 0; i < futureLessons.length; i++) {
+          const newNumber = lessonNumber + i;
+          await tx.scheduledLesson.update({
+            where: { id: futureLessons[i].id },
+            data: {
+              lessonNumber: newNumber,
+              lessonId: lessonIdByOrder.get(newNumber) ?? null,
+            },
+          });
+        }
+
+        if (newTrailing) {
+          const trailingNumber = lessonNumber + futureLessons.length;
+          const conflict = await this.findTeacherConflict(
+            tx,
+            teacherId,
+            newTrailing.start,
+            newTrailing.end,
+          );
+          if (conflict) {
+            throw new BadRequestException(
+              'Could not add a make-up class — the teacher is already booked at the next available recurring slot. An admin will need to reschedule manually.',
+            );
+          }
+          await tx.scheduledLesson.create({
+            data: {
+              studentUserId,
+              teacherId,
+              courseId,
+              lessonNumber: trailingNumber,
+              lessonId: lessonIdByOrder.get(trailingNumber) ?? undefined,
+              start: newTrailing.start,
+              end: newTrailing.end,
+              classType,
+              status: LessonStatus.UPCOMING,
+            },
+          });
+        }
+      },
+      { timeout: 20_000, maxWait: 10_000 },
+    );
+
+    await this.audit.log({
+      actorId: actorUserId,
+      actorRole: 'TEACHER',
+      action: 'LESSON_PARTIALLY_COMPLETED',
+      entityType: 'ScheduledLesson',
+      entityId: lessonId,
+      reason:
+        'Class ended as partially completed — schedule shifted by one occurrence so the student can finish this lesson. Needs admin review.',
+      afterData: {
+        lessonNumber,
+        shiftedCount: futureLessons.length,
+        addedTrailingOccurrence: !!newTrailing,
+      },
+    });
+
+    return { success: true };
+  }
+
+  private dateStrOf(date: Date): string {
+    return utcToDhakaParts(date).dateStr;
   }
 }

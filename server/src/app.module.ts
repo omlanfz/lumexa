@@ -32,6 +32,7 @@ import { AuditModule } from './audit/audit.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { AssessmentsModule } from './assessments/assessments.module';
+import { AlertsModule } from './alerts/alerts.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { AssessmentsModule } from './assessments/assessments.module';
     // ─── Core ───────────────────────────────────────────────────────────────
     PrismaModule,
     AuditModule,
+    AlertsModule,
     AuthModule,
     UsersModule,
     StudentsModule,

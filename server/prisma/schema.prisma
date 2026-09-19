@@ -180,6 +180,8 @@ model Booking {
   paymentIntentId      String?
   paymentStatus        PaymentStatus        @default(PENDING)
   recordingUrl         String?
+  recordingStatus      RecordingStatus      @default(NONE)
+  recordingStartedAt   DateTime?
   shift                Shift                @relation(fields: [shiftId], references: [id])
   student              Student?             @relation(fields: [studentId], references: [id])
   studentUser          User?                @relation("StudentBookings", fields: [studentUserId], references: [id])
@@ -371,6 +373,28 @@ model AuditLog {
   @@index([actorId, createdAt])
 }
 
+// ─── In-app dashboard notifications ──────────────────────────────────────────
+//
+// System-generated alerts surfaced on a user's own dashboard (e.g. a
+// teacher's automatic late-join penalty or completed-class earning). Purely
+// a read surface over events that already happened elsewhere (PayoutEntry
+// is still the financial source of truth) — never itself mutated to create
+// or reverse a financial record.
+model DashboardAlert {
+  id        String   @id @default(uuid())
+  userId    String
+  role      Role
+  type      String
+  title     String
+  message   String
+  metadata  Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, read])
+}
+
 model Review {
   id                   String         @id @default(uuid())
   bookingId            String         @unique
@@ -442,7 +466,27 @@ enum ClassType {
 enum LessonStatus {
   UPCOMING
   COMPLETED
+  // Teacher ended the class before the lesson was finished (see
+  // ClassroomService.endClass). The student needs another occurrence to
+  // finish this same lesson — see SchedulingService.handlePartialCompletion,
+  // which inserts a redo occurrence at the same lessonNumber and shifts
+  // every later occurrence one calendar slot later. Flagged for admin
+  // review; never auto-selected, only a teacher's explicit choice when
+  // ending a class.
+  PARTIALLY_COMPLETED
   CANCELLED
+}
+
+// Lifecycle of a LiveKit Egress recording of a ScheduledLesson's room.
+// AVAILABLE is only reached once the Egress webhook confirms the MP4
+// actually finished uploading to S3/MinIO — never optimistically set when
+// the teacher clicks Stop (see ClassroomService.stopTeacherRecording).
+enum RecordingStatus {
+  NONE
+  RECORDING
+  PROCESSING
+  AVAILABLE
+  FAILED
 }
 
 model RecurringSlot {
@@ -491,12 +535,34 @@ model ScheduledLesson {
   // a separately-entered value, so it can't drift from the actual schedule.
   teacherJoinedAt DateTime?
   studentJoinedAt DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+
+  // ─── Recording (self-hosted LiveKit Egress → MinIO/S3) ──────────────────
+  // Set only when the teacher explicitly clicks Record — never on room
+  // creation/join (see ClassroomService.startTeacherRecording).
+  egressId           String?
+  recordingStatus    RecordingStatus @default(NONE)
+  recordingUrl       String?
+  recordingStartedAt DateTime?
+
+  // Set when the teacher manually ends the class (COMPLETED or
+  // PARTIALLY_COMPLETED) — never set by any automatic/scheduled process.
+  endedAt      DateTime?
+  endedByRole  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   assessmentAttempt AssessmentAttempt?
 
-  @@unique([studentUserId, courseId, lessonNumber])
+  // NOTE: uniqueness of (studentUserId, courseId, lessonNumber) is enforced
+  // by a PARTIAL unique index created in migration SQL — scoped to
+  // status IN ('UPCOMING', 'COMPLETED') — rather than a plain @@unique here,
+  // so a partial-completion redo occurrence can legitimately reuse the same
+  // lessonNumber as the PARTIALLY_COMPLETED row it's redoing (see
+  // SchedulingService.handlePartialCompletion). Prisma can't express a
+  // filtered unique index natively, so this stays a plain index for query
+  // planning and the real constraint lives only in the migration.
+  @@index([studentUserId, courseId, lessonNumber])
   @@index([teacherId, start])
   @@index([studentUserId, start])
   @@index([start])

@@ -21,6 +21,8 @@ import {
   Wand2,
   ChevronUp,
   PhoneOff,
+  Circle,
+  Square,
 } from 'lucide-react';
 import IconButton from './IconButton';
 import DeviceMenu from './DeviceMenu';
@@ -53,7 +55,12 @@ interface ControlBarProps {
   classroomState: ClassroomState;
   onPatchState: (patch: ClassroomState) => void;
   onMuteAll: () => void;
-  onEndClass: () => void;
+  onEndClass: (outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED') => void;
+  isLessonFlow: boolean;
+  endClassError: string | null;
+
+  isRecording: boolean;
+  onToggleRecording: () => void;
 
   backgroundEffect: BackgroundEffect;
   onBackgroundChange: (e: BackgroundEffect) => void;
@@ -85,6 +92,10 @@ export default function ControlBar({
   onPatchState,
   onMuteAll,
   onEndClass,
+  isLessonFlow,
+  endClassError,
+  isRecording,
+  onToggleRecording,
   backgroundEffect,
   onBackgroundChange,
   lighting,
@@ -196,9 +207,17 @@ export default function ControlBar({
         </div>
       </div>
 
-      {/* Center: raise hand */}
+      {/* Center: raise hand / record (teacher only) */}
       <div className="flex items-center gap-2">
         <IconButton icon={Hand} label={handRaised ? 'Lower hand' : 'Raise hand'} onClick={onToggleHand} active={handRaised} />
+        {isTeacher && (
+          <IconButton
+            icon={isRecording ? Square : Circle}
+            label={isRecording ? 'Stop recording' : 'Record class'}
+            onClick={onToggleRecording}
+            className={isRecording ? 'text-red-500 animate-pulse' : ''}
+          />
+        )}
       </div>
 
       {/* Right: chat / participants / more / leave */}
@@ -236,6 +255,8 @@ export default function ControlBar({
                   onPatchState={onPatchState}
                   onMuteAll={onMuteAll}
                   onEndClass={onEndClass}
+                  isLessonFlow={isLessonFlow}
+                  endClassError={endClassError}
                   onClose={() => setMoreOpen(false)}
                 />
               </div>

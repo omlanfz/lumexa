@@ -28,6 +28,10 @@ export function parseParticipantMeta(identity: string, name: string): Participan
 export interface ClassroomState {
   chatLocked?: boolean;
   studentsMuted?: boolean;
+  /** True while the teacher's recording is actively running — synced via
+   * room metadata (see ClassroomService.startTeacherRecording/
+   * stopTeacherRecording) so every participant sees the same state. */
+  recording?: boolean;
 }
 
 export function parseClassroomState(metadata: string | undefined): ClassroomState {

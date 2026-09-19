@@ -21,15 +21,18 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { Prisma, PayoutEntryType, PayoutStatus } from '@prisma/client';
+import { Prisma, PayoutEntryType, PayoutStatus, Role } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { AlertsService } from '../alerts/alerts.service';
 import {
   CLASS_COMPLETED_AMOUNT_CENTS,
   PTM_AMOUNT_CENTS,
   CONVERSION_AMOUNT_CENTS,
   PENALTY_SEVERITY_AMOUNTS_CENTS,
   PenaltySeverity,
+  LATE_JOIN_GRACE_MINUTES,
+  LATE_JOIN_PENALTY_CENTS,
 } from './payout.constants';
 import { buildPayoutReportWorkbook } from './payout-report';
 
@@ -53,6 +56,7 @@ export class PayoutsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly alerts: AlertsService,
   ) {}
 
   // ─── Core append-only write path ──────────────────────────────────────────
@@ -166,6 +170,143 @@ export class PayoutsService {
       this.logger.log(
         `Synced ${candidates.length} completed-class earning entries.`,
       );
+    }
+  }
+
+  // ─── Trigger: curriculum class completed (+BDT 200) ───────────────────────
+  //
+  // The curriculum (ScheduledLesson) counterpart to triggerClassCompleted
+  // above (which is Booking/marketplace-only). Called exactly once, from
+  // ClassroomService.endClass, when a teacher marks a class COMPLETED — never
+  // automatically, and never if the student never joined (enforced by the
+  // caller before this is reached). Idempotency key is the scheduledLessonId
+  // itself, so a retried/duplicated call is always a no-op.
+  async triggerScheduledLessonCompleted(scheduledLessonId: string) {
+    const existing = await this.prisma.payoutEntry.findUnique({
+      where: {
+        referenceType_referenceId_type: {
+          referenceType: 'SCHEDULED_LESSON',
+          referenceId: scheduledLessonId,
+          type: PayoutEntryType.CLASS_COMPLETED,
+        },
+      },
+    });
+    if (existing) return existing;
+
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: scheduledLessonId },
+      include: {
+        teacher: { select: { id: true, userId: true } },
+        student: { select: { fullName: true } },
+      },
+    });
+    if (!lesson) throw new NotFoundException('Scheduled lesson not found.');
+
+    const entry = await this.createLedgerEntry({
+      teacherId: lesson.teacher.id,
+      type: PayoutEntryType.CLASS_COMPLETED,
+      amountCents: CLASS_COMPLETED_AMOUNT_CENTS,
+      description: `Completed class with ${lesson.student.fullName}`,
+      eventDate: lesson.end,
+      referenceType: 'SCHEDULED_LESSON',
+      referenceId: scheduledLessonId,
+    });
+
+    await this.alerts.create({
+      userId: lesson.teacher.userId,
+      role: Role.TEACHER,
+      type: 'CLASS_COMPLETED_EARNING',
+      title: 'Class completed',
+      message: `You earned ৳${(CLASS_COMPLETED_AMOUNT_CENTS / 100).toFixed(0)} for successfully completing this class. Great work!`,
+      metadata: { scheduledLessonId },
+    });
+
+    return entry;
+  }
+
+  // ─── Trigger: teacher late-join penalty (-BDT 50, automatic) ──────────────
+  //
+  // Fires at most once per class: idempotency key is the scheduledLessonId,
+  // backed by the same DB-level unique constraint as every other trigger, so
+  // concurrent callers (the join-time check in ClassroomService and the
+  // sweep cron below) can never double-penalize one class.
+  async triggerLateJoinPenalty(params: {
+    teacherId: string;
+    scheduledLessonId: string;
+    lateMinutes: number;
+  }) {
+    const existing = await this.prisma.payoutEntry.findUnique({
+      where: {
+        referenceType_referenceId_type: {
+          referenceType: 'SCHEDULED_LESSON_LATE_JOIN',
+          referenceId: params.scheduledLessonId,
+          type: PayoutEntryType.PENALTY,
+        },
+      },
+    });
+    if (existing) return existing;
+
+    const teacher = await this.requireTeacherById(params.teacherId);
+
+    const entry = await this.createLedgerEntry({
+      teacherId: params.teacherId,
+      type: PayoutEntryType.PENALTY,
+      amountCents: LATE_JOIN_PENALTY_CENTS,
+      description:
+        params.lateMinutes >= 999
+          ? 'Late-join penalty — teacher never joined the class.'
+          : `Late-join penalty — joined ${params.lateMinutes} minute(s) after the scheduled start time.`,
+      eventDate: new Date(),
+      referenceType: 'SCHEDULED_LESSON_LATE_JOIN',
+      referenceId: params.scheduledLessonId,
+    });
+
+    await this.alerts.create({
+      userId: teacher.userId,
+      role: Role.TEACHER,
+      type: 'LATE_JOIN_PENALTY',
+      title: 'Automatic penalty applied',
+      message: `Automatic penalty: ৳${Math.abs(LATE_JOIN_PENALTY_CENTS) / 100} deducted for joining this class late.`,
+      metadata: { scheduledLessonId: params.scheduledLessonId },
+    });
+
+    return entry;
+  }
+
+  // Safety net for a teacher who never joins at all (so recordLessonJoin's
+  // own immediate check — see ClassroomService — never fires): sweeps for
+  // classes whose grace period has elapsed with no teacherJoinedAt yet.
+  // Bounded lookback window keeps this a cheap scan; triggerLateJoinPenalty's
+  // idempotency means a class already penalized (e.g. the teacher joined
+  // late and the immediate check already handled it) is always a no-op here.
+  @Cron(CronExpression.EVERY_MINUTE)
+  async sweepLateJoinPenalties() {
+    const graceMs = LATE_JOIN_GRACE_MINUTES * 60_000;
+    const cutoff = new Date(Date.now() - graceMs);
+    const lookbackFloor = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    const candidates = await this.prisma.scheduledLesson.findMany({
+      where: {
+        teacherJoinedAt: null,
+        start: { lte: cutoff, gte: lookbackFloor },
+      },
+      select: { id: true, teacherId: true },
+      take: 200,
+    });
+
+    for (const c of candidates) {
+      try {
+        await this.triggerLateJoinPenalty({
+          teacherId: c.teacherId,
+          scheduledLessonId: c.id,
+          lateMinutes: 999,
+        });
+      } catch (err) {
+        this.logger.error(
+          `Failed to apply late-join penalty for lesson ${c.id}`,
+          err as Error,
+        );
+      }
     }
   }
 

@@ -52,6 +52,8 @@ interface ScheduledLessonItem {
   status: string;
   teacher: { id: string; user: { fullName: string; avatarUrl?: string | null } };
   course: { id: string; title: string };
+  recordingUrl?: string | null;
+  recordingStatus?: 'NONE' | 'RECORDING' | 'PROCESSING' | 'AVAILABLE' | 'FAILED';
 }
 
 const CLASS_TYPE_LABELS: Record<string, string> = {
@@ -195,6 +197,7 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
   const end = new Date(lesson.end);
   const initial = lesson.teacher.user.fullName ? lesson.teacher.user.fullName.charAt(0).toUpperCase() : 'T';
   const isUpcoming = lesson.status === 'UPCOMING';
+  const isPartial = lesson.status === 'PARTIALLY_COMPLETED';
 
   return (
     <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden card-hover">
@@ -243,10 +246,12 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
             className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
               isUpcoming
                 ? 'bg-teal-500/20 text-teal-600 dark:text-teal-400 border-teal-500/20'
-                : 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/20'
+                : isPartial
+                  ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                  : 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/20'
             }`}
           >
-            {isUpcoming ? 'Upcoming' : 'Completed'}
+            {isUpcoming ? 'Upcoming' : isPartial ? 'Partially completed' : 'Completed'}
           </span>
         </div>
       </div>
@@ -361,7 +366,42 @@ function LearningHubContent() {
         : nextScheduledLesson
           ? { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
           : null;
-  const recordingLessons = (completedData?.bookings ?? []).filter((l) => l.recordingUrl);
+  interface RecordingEntry {
+    key: string;
+    teacherName: string;
+    teacherAvatarUrl?: string | null;
+    classStart: string;
+    durationMinutes: number;
+    recordingUrl: string;
+    lessonLabel?: string;
+  }
+  const bookingRecordings: RecordingEntry[] = (completedData?.bookings ?? [])
+    .filter((l) => l.recordingUrl)
+    .map((l) => ({
+      key: l.bookingId,
+      teacherName: l.teacherName,
+      teacherAvatarUrl: l.teacherAvatarUrl,
+      classStart: l.classStart,
+      durationMinutes: l.durationMinutes,
+      recordingUrl: l.recordingUrl!,
+    }));
+  const scheduledRecordings: RecordingEntry[] = scheduledCompleted
+    .filter((l) => l.recordingStatus === 'AVAILABLE' && l.recordingUrl)
+    .map((l) => ({
+      key: l.id,
+      teacherName: l.teacher.user.fullName,
+      teacherAvatarUrl: l.teacher.user.avatarUrl,
+      classStart: l.start,
+      durationMinutes: Math.round((new Date(l.end).getTime() - new Date(l.start).getTime()) / 60000),
+      recordingUrl: l.recordingUrl!,
+      lessonLabel: `${l.course.title}${l.lessonTitle ? ` · Lesson ${l.lessonNumber}: ${l.lessonTitle}` : ''}`,
+    }));
+  const recordingLessons: RecordingEntry[] = [...scheduledRecordings, ...bookingRecordings].sort(
+    (a, b) => new Date(b.classStart).getTime() - new Date(a.classStart).getTime(),
+  );
+  const processingCount = scheduledCompleted.filter(
+    (l) => l.recordingStatus === 'RECORDING' || l.recordingStatus === 'PROCESSING',
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -573,7 +613,7 @@ function LearningHubContent() {
                       All badges earned!
                     </p>
                     <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
-                      You're a Lumexa legend.
+                      You&apos;re a Lumexa legend.
                     </p>
                   </>
                 )}
@@ -586,6 +626,11 @@ function LearningHubContent() {
       {/* ─── Recordings ───────────────────────────────────────────────── */}
       {tab === 'recordings' && (
         <div className="fade-in">
+          {processingCount > 0 && (
+            <div className="mb-3 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 text-amber-700 dark:text-amber-300 text-xs">
+              {processingCount} recording{processingCount !== 1 ? 's are' : ' is'} still processing and will appear here once ready.
+            </div>
+          )}
           {recordingLessons.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center bg-gray-50 dark:bg-gray-800/30 rounded-xl">
               <div className="text-5xl mb-4">🎬</div>
@@ -601,7 +646,7 @@ function LearningHubContent() {
                 const initial = lesson.teacherName ? lesson.teacherName.charAt(0).toUpperCase() : 'T';
                 return (
                   <div
-                    key={lesson.bookingId}
+                    key={lesson.key}
                     className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl card-hover"
                   >
                     {lesson.teacherAvatarUrl ? (
@@ -617,12 +662,15 @@ function LearningHubContent() {
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-gray-900 dark:text-white font-medium truncate">{lesson.teacherName}</p>
+                      {lesson.lessonLabel && (
+                        <p className="text-gray-500 dark:text-gray-400 text-xs truncate">{lesson.lessonLabel}</p>
+                      )}
                       <p className="text-gray-500 dark:text-gray-400 text-xs">
                         {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {lesson.durationMinutes} min
                       </p>
                     </div>
                     <a
-                      href={lesson.recordingUrl!}
+                      href={lesson.recordingUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0"

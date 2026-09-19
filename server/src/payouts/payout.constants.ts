@@ -23,3 +23,9 @@ export type PenaltySeverity = keyof typeof PENALTY_SEVERITY_AMOUNTS_CENTS;
 // and beyond incur a fixed penalty and are flagged for Operations review.
 export const FREE_EMERGENCY_RESCHEDULES_PER_MONTH = 3;
 export const EMERGENCY_RESCHEDULE_PENALTY_CENTS = -BDT(50);
+
+// Teacher joins a scheduled class more than this many minutes after its
+// scheduled start (or never joins at all) — automatic, once per class (see
+// PayoutsService.triggerLateJoinPenalty).
+export const LATE_JOIN_GRACE_MINUTES = 3;
+export const LATE_JOIN_PENALTY_CENTS = -BDT(50);
