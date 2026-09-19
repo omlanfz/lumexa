@@ -27,7 +27,9 @@ export const metadata: Metadata = {
   title: "Lumexa · Live AI Tutoring",
   description:
     "Connect with expert teachers for live one-on-one tutoring sessions.",
-  icons: { icon: "/favicon.ico" },
+  // favicon.ico, icon.png and apple-icon.png in app/ are picked up
+  // automatically by Next's file-based metadata convention — no explicit
+  // `icons` entry needed (and adding one here would duplicate the tags).
 };
 
 export default function RootLayout({

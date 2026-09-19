@@ -196,7 +196,7 @@ function RegisterContent() {
           <Link href="/" className="inline-block">
             <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 shadow-lg shadow-blue-600/30 overflow-hidden hover:shadow-blue-500/50 transition-shadow">
               <Image
-                src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                src="/logo-mark.png"
                 width={56}
                 height={56}
                 alt="Lumexa AI School"

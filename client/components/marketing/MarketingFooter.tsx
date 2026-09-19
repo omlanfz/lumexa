@@ -135,7 +135,7 @@ export default function MarketingFooter() {
               <div className="flex items-center gap-2.5 mb-3">
                 <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
                   <Image
-                    src="https://res.cloudinary.com/dunx0blwp/image/upload/v1772141559/logo_yr5wyw.jpg"
+                    src="/logo-mark.png"
                     alt="Lumexa AI School"
                     width={32}
                     height={32}

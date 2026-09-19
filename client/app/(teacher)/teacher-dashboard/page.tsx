@@ -279,14 +279,24 @@ function TeacherDashboardContent() {
                     </div>
                   ))}
                 </div>
-                {nextClass.joinable && (
-                  <button
-                    onClick={() => router.push(`/classroom/${nextClass.id}?type=${nextClass.type}`)}
-                    className="px-4 py-2 bg-[var(--t-success)] hover:opacity-90 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
-                  >
-                    Join Class →
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {nextClass.type === "lesson" && (
+                    <button
+                      onClick={() => window.open(`/lesson/${nextClass.id}`, "_blank", "noopener,noreferrer")}
+                      className="px-4 py-2 bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
+                    >
+                      View Lesson
+                    </button>
+                  )}
+                  {nextClass.joinable && (
+                    <button
+                      onClick={() => router.push(`/classroom/${nextClass.id}?type=${nextClass.type}`)}
+                      className="px-4 py-2 bg-[var(--t-success)] hover:opacity-90 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
+                    >
+                      Join Class →
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ) : (

@@ -1,10 +1,19 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { StudentsService } from '../students/students.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { getClassWindow } from '../scheduling/lesson-window.util';
 import { SpaceRank } from '@prisma/client';
-import { AccessToken } from 'livekit-server-sdk';
+import {
+  AccessToken,
+  RoomServiceClient,
+  TrackSource,
+} from 'livekit-server-sdk';
 
 const RANK_THRESHOLDS: { rank: SpaceRank; min: number }[] = [
   { rank: 'STARCHILD', min: 0 },
@@ -102,9 +111,13 @@ export class ClassroomService {
       canPublishData: true,
     });
 
-    await this.schedulingService.recordLessonJoin(lessonId, role).catch((err) => {
-      this.logger.error(`Failed to record join for lesson ${lessonId}: ${err}`);
-    });
+    await this.schedulingService
+      .recordLessonJoin(lessonId, role)
+      .catch((err) => {
+        this.logger.error(
+          `Failed to record join for lesson ${lessonId}: ${err}`,
+        );
+      });
 
     return {
       token: await at.toJwt(),
@@ -242,8 +255,8 @@ export class ClassroomService {
 
       const egress = new EgressClient(
         process.env.LIVEKIT_URL!,
-        process.env.LIVEKIT_API_KEY!,
-        process.env.LIVEKIT_API_SECRET!,
+        process.env.LIVEKIT_API_KEY,
+        process.env.LIVEKIT_API_SECRET,
       );
 
       const info = await egress.startRoomCompositeEgress(bookingId, {
@@ -336,14 +349,24 @@ export class ClassroomService {
                 data: { spaceRank: newRank },
               });
               await this.studentsService.awardGems(
-                booking.studentUserId, 15, 'RANK_UP', `Ranked up to ${newRank}`,
+                booking.studentUserId,
+                15,
+                'RANK_UP',
+                `Ranked up to ${newRank}`,
               );
             }
             const gemAmount = isFirst ? 15 : 5;
             const gemType = isFirst ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
-            const gemDesc = isFirst ? 'First session bonus' : 'Session completion reward';
+            const gemDesc = isFirst
+              ? 'First session bonus'
+              : 'Session completion reward';
             await Promise.all([
-              this.studentsService.awardGems(booking.studentUserId, gemAmount, gemType, gemDesc),
+              this.studentsService.awardGems(
+                booking.studentUserId,
+                gemAmount,
+                gemType,
+                gemDesc,
+              ),
               this.studentsService.checkAndAwardBadges(booking.studentUserId),
             ]);
           }
@@ -353,5 +376,146 @@ export class ClassroomService {
       this.logger.error(`Webhook processing error: ${err}`);
       // Don't throw — webhook endpoints should always return 200
     }
+  }
+
+  // ─── Teacher-only in-room controls ─────────────────────────────────────────
+  //
+  // Everything below is invoked from the classroom's Participants panel /
+  // Class Controls menu. All of it requires the caller to be the teacher
+  // that owns this room (see assertTeacherOfRoom) and talks to the LiveKit
+  // server API directly — the client never gets these credentials.
+
+  private getRoomServiceClient(): RoomServiceClient {
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+    const url = process.env.LIVEKIT_URL;
+    if (!apiKey || !apiSecret || !url) {
+      throw new BadRequestException('Video service is not configured.');
+    }
+    return new RoomServiceClient(url, apiKey, apiSecret);
+  }
+
+  /** Room names are either `lesson-<scheduledLessonId>` (curriculum flow) or
+   * a raw bookingId (marketplace flow) — mirrors the naming in joinLab. */
+  private async getRoomTeacherUserId(roomName: string): Promise<string> {
+    if (roomName.startsWith('lesson-')) {
+      const lessonId = roomName.slice('lesson-'.length);
+      const lesson =
+        await this.schedulingService.getLessonForClassroom(lessonId);
+      return lesson.teacher.userId;
+    }
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: roomName },
+      include: { shift: { include: { teacher: true } } },
+    });
+    if (!booking) throw new BadRequestException('Classroom not found.');
+    return booking.shift.teacher.userId;
+  }
+
+  private async assertTeacherOfRoom(
+    userId: string,
+    roomName: string,
+  ): Promise<void> {
+    const teacherUserId = await this.getRoomTeacherUserId(roomName);
+    if (teacherUserId !== userId) {
+      throw new ForbiddenException(
+        'Only the teacher can manage this classroom.',
+      );
+    }
+  }
+
+  private async findPublishedTrackSid(
+    client: RoomServiceClient,
+    room: string,
+    identity: string,
+    source: TrackSource,
+  ): Promise<string | null> {
+    const participant = await client.getParticipant(room, identity);
+    const track = participant.tracks.find((t) => t.source === source);
+    return track?.sid ?? null;
+  }
+
+  async muteParticipant(
+    userId: string,
+    room: string,
+    identity: string,
+    kind: 'audio' | 'video',
+  ): Promise<{ ok: true }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const client = this.getRoomServiceClient();
+    const source =
+      kind === 'audio' ? TrackSource.MICROPHONE : TrackSource.CAMERA;
+    const sid = await this.findPublishedTrackSid(
+      client,
+      room,
+      identity,
+      source,
+    );
+    if (sid) {
+      await client.mutePublishedTrack(room, identity, sid, true);
+    }
+    return { ok: true };
+  }
+
+  async muteAllParticipants(
+    userId: string,
+    room: string,
+  ): Promise<{ ok: true; mutedCount: number }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const client = this.getRoomServiceClient();
+    const participants = await client.listParticipants(room);
+    let mutedCount = 0;
+    for (const p of participants) {
+      if (p.identity === userId) continue; // never mute the teacher
+      const micTrack = p.tracks.find(
+        (t) => t.source === TrackSource.MICROPHONE,
+      );
+      if (micTrack && !micTrack.muted) {
+        await client.mutePublishedTrack(room, p.identity, micTrack.sid, true);
+        mutedCount++;
+      }
+    }
+    return { ok: true, mutedCount };
+  }
+
+  async removeParticipant(
+    userId: string,
+    room: string,
+    identity: string,
+  ): Promise<{ ok: true }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const client = this.getRoomServiceClient();
+    await client.removeParticipant(room, identity);
+    return { ok: true };
+  }
+
+  async endClass(userId: string, room: string): Promise<{ ok: true }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const client = this.getRoomServiceClient();
+    await client.deleteRoom(room);
+    return { ok: true };
+  }
+
+  /** Merges into the room's JSON metadata — the shared source of truth for
+   * classroom-wide state (chat lock, "students can unmute") that every
+   * participant's client picks up via LiveKit's RoomMetadataChanged event. */
+  async updateClassroomState(
+    userId: string,
+    room: string,
+    patch: { chatLocked?: boolean; studentsMuted?: boolean },
+  ): Promise<{ ok: true; state: Record<string, unknown> }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const client = this.getRoomServiceClient();
+    let current: Record<string, unknown> = {};
+    try {
+      const info = await client.listRooms([room]);
+      const meta = info[0]?.metadata;
+      if (meta) current = JSON.parse(meta) as Record<string, unknown>;
+    } catch {
+      current = {};
+    }
+    const next = { ...current, ...patch };
+    await client.updateRoomMetadata(room, JSON.stringify(next));
+    return { ok: true, state: next };
   }
 }
