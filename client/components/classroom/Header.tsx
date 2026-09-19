@@ -14,6 +14,7 @@ interface HeaderProps {
   isLive: boolean;
   presentationMode: boolean;
   onTogglePresentation: () => void;
+  recording?: boolean;
 }
 
 export default function Header({
@@ -22,6 +23,7 @@ export default function Header({
   isLive,
   presentationMode,
   onTogglePresentation,
+  recording,
 }: HeaderProps) {
   return (
     <header className="flex items-center justify-between gap-3 px-3 sm:px-5 h-14 flex-shrink-0 border-b border-[var(--cr-border)]">
@@ -40,6 +42,11 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        {recording && (
+          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] font-bold uppercase tracking-wide">
+            <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Rec
+          </span>
+        )}
         {isLive && (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] font-bold uppercase tracking-wide">
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Live

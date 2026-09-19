@@ -25,8 +25,21 @@ export async function removeParticipant(room: string, identity: string): Promise
   await api.post(`/classroom/${room}/remove-participant`, { identity });
 }
 
-export async function endClass(room: string): Promise<void> {
-  await api.post(`/classroom/${room}/end`);
+export async function endClass(
+  room: string,
+  outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED',
+): Promise<void> {
+  await api.post(`/classroom/${room}/end`, outcome ? { outcome } : {});
+}
+
+export async function startRecording(room: string): Promise<{ recordingStatus: string }> {
+  const res = await api.post(`/classroom/${room}/recording/start`);
+  return res.data;
+}
+
+export async function stopRecording(room: string): Promise<{ recordingStatus: string }> {
+  const res = await api.post(`/classroom/${room}/recording/stop`);
+  return res.data;
 }
 
 export async function updateClassroomState(

@@ -12,14 +12,10 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ClassroomService } from './classroom.service';
-import { StripeService } from '../payments/stripe.service';
 
 @Controller('classroom')
 export class ClassroomController {
-  constructor(
-    private readonly classroomService: ClassroomService,
-    private readonly stripeService: StripeService,
-  ) {}
+  constructor(private readonly classroomService: ClassroomService) {}
 
   @Post('join')
   @UseGuards(AuthGuard('jwt'))
@@ -69,8 +65,24 @@ export class ClassroomController {
 
   @Post(':room/end')
   @UseGuards(AuthGuard('jwt'))
-  endClass(@Request() req, @Param('room') room: string) {
-    return this.classroomService.endClass(req.user.userId, room);
+  endClass(
+    @Request() req,
+    @Param('room') room: string,
+    @Body() body: { outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED' },
+  ) {
+    return this.classroomService.endClass(req.user.userId, room, body?.outcome);
+  }
+
+  @Post(':room/recording/start')
+  @UseGuards(AuthGuard('jwt'))
+  startRecording(@Request() req, @Param('room') room: string) {
+    return this.classroomService.startTeacherRecording(req.user.userId, room);
+  }
+
+  @Post(':room/recording/stop')
+  @UseGuards(AuthGuard('jwt'))
+  stopRecording(@Request() req, @Param('room') room: string) {
+    return this.classroomService.stopTeacherRecording(req.user.userId, room);
   }
 
   @Patch(':room/state')
@@ -100,10 +112,6 @@ export class ClassroomController {
     @Body() body: any,
     @Headers('Authorization') authHeader: string,
   ) {
-    return this.classroomService.handleLiveKitWebhook(
-      body,
-      authHeader,
-      this.stripeService,
-    );
+    return this.classroomService.handleLiveKitWebhook(body, authHeader);
   }
 }

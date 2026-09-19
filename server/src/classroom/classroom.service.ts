@@ -4,16 +4,26 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { StudentsService } from '../students/students.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
-import { getClassWindow } from '../scheduling/lesson-window.util';
-import { SpaceRank } from '@prisma/client';
+import { PayoutsService } from '../payouts/payouts.service';
+import { AlertsService } from '../alerts/alerts.service';
+import { StripeService } from '../payments/stripe.service';
+import {
+  getClassWindow,
+  computeLateMinutes,
+} from '../scheduling/lesson-window.util';
+import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
+import { LessonStatus, RecordingStatus, SpaceRank } from '@prisma/client';
 import {
   AccessToken,
   RoomServiceClient,
   TrackSource,
 } from 'livekit-server-sdk';
+
+type EndClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED';
 
 const RANK_THRESHOLDS: { rank: SpaceRank; min: number }[] = [
   { rank: 'STARCHILD', min: 0 },
@@ -32,6 +42,9 @@ export class ClassroomService {
     private prisma: PrismaService,
     private studentsService: StudentsService,
     private schedulingService: SchedulingService,
+    private payoutsService: PayoutsService,
+    private alertsService: AlertsService,
+    private stripeService: StripeService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -63,17 +76,22 @@ export class ClassroomService {
   async joinScheduledLesson(userId: string, lessonId: string) {
     const lesson = await this.schedulingService.getLessonForClassroom(lessonId);
 
-    const window = getClassWindow(lesson.start, lesson.end);
-    if (!window.joinable) {
-      if (window.msUntilStart > 0) {
-        const minutesUntilOpen = Math.ceil(
-          (window.msUntilStart - 10 * 60 * 1000) / (1000 * 60),
-        );
-        throw new BadRequestException(
-          `Classroom opens 10 minutes before class. Please come back in ${Math.max(minutesUntilOpen, 1)} minute(s).`,
-        );
-      }
+    // A class is never closed by its own scheduled end time — only the
+    // teacher manually ending it (see endClass) changes its status away
+    // from UPCOMING. So the only time-based gate left is "hasn't opened
+    // yet"; once open, the room stays joinable for as long as the lesson
+    // is still UPCOMING, however long past its scheduled end that is.
+    if (lesson.status !== LessonStatus.UPCOMING) {
       throw new BadRequestException('This class has already ended.');
+    }
+    const window = getClassWindow(lesson.start, lesson.end);
+    if (window.msUntilStart > 10 * 60 * 1000) {
+      const minutesUntilOpen = Math.ceil(
+        (window.msUntilStart - 10 * 60 * 1000) / (1000 * 60),
+      );
+      throw new BadRequestException(
+        `Classroom opens 10 minutes before class. Please come back in ${Math.max(minutesUntilOpen, 1)} minute(s).`,
+      );
     }
 
     let participantName = '';
@@ -118,6 +136,26 @@ export class ClassroomService {
           `Failed to record join for lesson ${lessonId}: ${err}`,
         );
       });
+
+    // Immediate late-join check — a teacher who joins more than the grace
+    // period after the scheduled start is penalized right away rather than
+    // waiting for PayoutsService's sweep cron. Idempotent either way.
+    if (role === 'TEACHER') {
+      const lateMinutes = computeLateMinutes(lesson.start, new Date());
+      if (lateMinutes > LATE_JOIN_GRACE_MINUTES) {
+        await this.payoutsService
+          .triggerLateJoinPenalty({
+            teacherId: lesson.teacher.id,
+            scheduledLessonId: lessonId,
+            lateMinutes,
+          })
+          .catch((err) => {
+            this.logger.error(
+              `Failed to apply late-join penalty for lesson ${lessonId}: ${err}`,
+            );
+          });
+      }
+    }
 
     return {
       token: await at.toJwt(),
@@ -205,16 +243,8 @@ export class ClassroomService {
       canPublishData: true,
     });
 
-    // ─── START RECORDING ON FIRST JOIN ──────────────────────────────────────
-    // Only start recording if not already recording
-    if (!booking.egressId) {
-      await this.startRecording(bookingId).catch((err) => {
-        // Don't fail the join if recording fails to start — log and continue
-        this.logger.error(
-          `Failed to start recording for booking ${bookingId}: ${err}`,
-        );
-      });
-    }
+    // Recording is never automatic — it only starts when the teacher clicks
+    // Record in the classroom UI (see startTeacherRecording below).
 
     return {
       token: await at.toJwt(),
@@ -223,77 +253,201 @@ export class ClassroomService {
     };
   }
 
-  /**
-   * Start a LiveKit Egress recording.
-   * The recording is uploaded directly to S3 and the URL is stored via webhook.
-   *
-   * Requires LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET,
-   *          AWS_ACCESS_KEY, AWS_SECRET_KEY, AWS_REGION, AWS_S3_BUCKET
-   */
-  private async startRecording(bookingId: string): Promise<void> {
-    const requiredVars = [
-      'LIVEKIT_URL',
-      'LIVEKIT_API_KEY',
-      'LIVEKIT_API_SECRET',
-      'AWS_ACCESS_KEY',
-      'AWS_SECRET_KEY',
-      'AWS_REGION',
-      'AWS_S3_BUCKET',
-    ];
+  // ─── Recording (teacher-triggered only, self-hosted LiveKit Egress) ──────
+  //
+  // Room name convention (see joinScheduledLesson/joinBooking above):
+  //   "lesson-<scheduledLessonId>" → curriculum flow, recording fields live
+  //   on ScheduledLesson; any other room name is a raw Booking id, fields
+  //   live on Booking. Both flows share the exact same pipeline: LiveKit
+  //   Egress → S3-compatible storage (self-hosted MinIO in production, via
+  //   S3_ENDPOINT/forcePathStyle below) → the Egress webhook confirms the
+  //   upload and only then is the recording ever marked AVAILABLE.
 
-    const missing = requiredVars.filter((v) => !process.env[v]);
-    if (missing.length > 0) {
-      this.logger.warn(
-        `Recording skipped — missing env vars: ${missing.join(', ')}`,
+  private isLessonRoom(room: string): boolean {
+    return room.startsWith('lesson-');
+  }
+
+  private lessonIdFromRoom(room: string): string {
+    return room.slice('lesson-'.length);
+  }
+
+  private egressConfigured(): boolean {
+    return !!(
+      process.env.LIVEKIT_URL &&
+      process.env.LIVEKIT_API_KEY &&
+      process.env.LIVEKIT_API_SECRET &&
+      (process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY) &&
+      (process.env.S3_SECRET_KEY || process.env.AWS_SECRET_KEY) &&
+      (process.env.S3_BUCKET || process.env.AWS_S3_BUCKET)
+    );
+  }
+
+  /** LiveKit Egress S3Upload config — points at self-hosted MinIO whenever
+   * S3_ENDPOINT is set (MinIO requires path-style addressing), falling back
+   * to plain AWS S3 env vars for compatibility with the previous setup. */
+  private buildEgressS3Config() {
+    const endpoint = process.env.S3_ENDPOINT || undefined;
+    return {
+      accessKey: process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY,
+      secret: process.env.S3_SECRET_KEY || process.env.AWS_SECRET_KEY,
+      bucket: process.env.S3_BUCKET || process.env.AWS_S3_BUCKET,
+      region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
+      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    };
+  }
+
+  private async getEntityRecordingState(room: string): Promise<{
+    egressId: string | null;
+    recordingStatus: RecordingStatus;
+  } | null> {
+    if (this.isLessonRoom(room)) {
+      return this.prisma.scheduledLesson.findUnique({
+        where: { id: this.lessonIdFromRoom(room) },
+        select: { egressId: true, recordingStatus: true },
+      });
+    }
+    return this.prisma.booking.findUnique({
+      where: { id: room },
+      select: { egressId: true, recordingStatus: true },
+    });
+  }
+
+  private async updateEntityRecording(
+    room: string,
+    data: {
+      egressId?: string | null;
+      recordingStatus?: RecordingStatus;
+      recordingUrl?: string | null;
+      recordingStartedAt?: Date | null;
+    },
+  ): Promise<void> {
+    if (this.isLessonRoom(room)) {
+      await this.prisma.scheduledLesson.update({
+        where: { id: this.lessonIdFromRoom(room) },
+        data,
+      });
+    } else {
+      await this.prisma.booking.update({ where: { id: room }, data });
+    }
+  }
+
+  /** Teacher clicks Record. Never called automatically — see joinBooking/
+   * joinScheduledLesson, which no longer start recording on their own. */
+  async startTeacherRecording(
+    userId: string,
+    room: string,
+  ): Promise<{ ok: true; recordingStatus: RecordingStatus }> {
+    await this.assertTeacherOfRoom(userId, room);
+
+    if (!this.egressConfigured()) {
+      throw new BadRequestException(
+        'Recording is not configured for this environment yet.',
       );
-      return;
     }
 
-    // Dynamic import to avoid hard crash if livekit SDK version mismatch
+    const current = await this.getEntityRecordingState(room);
+    if (current?.recordingStatus === RecordingStatus.RECORDING) {
+      return { ok: true, recordingStatus: RecordingStatus.RECORDING };
+    }
+
+    const { EgressClient } = await import('livekit-server-sdk');
+    const egress = new EgressClient(
+      process.env.LIVEKIT_URL!,
+      process.env.LIVEKIT_API_KEY,
+      process.env.LIVEKIT_API_SECRET,
+    );
+
+    try {
+      const info = await egress.startRoomCompositeEgress(room, {
+        file: {
+          fileType: 3, // MP4
+          filepath: `recordings/${room}-${Date.now()}.mp4`,
+          s3: this.buildEgressS3Config(),
+        },
+      } as any);
+
+      await this.updateEntityRecording(room, {
+        egressId: info.egressId,
+        recordingStatus: RecordingStatus.RECORDING,
+        recordingStartedAt: new Date(),
+      });
+      await this.patchRoomMetadata(room, { recording: true });
+
+      this.logger.log(`Recording started for room ${room}`);
+      return { ok: true, recordingStatus: RecordingStatus.RECORDING };
+    } catch (err) {
+      this.logger.error(`Egress start error for ${room}: ${err}`);
+      throw new BadRequestException(
+        'Could not start recording. Please try again.',
+      );
+    }
+  }
+
+  /** Teacher clicks Stop Recording (or endClass stops it automatically when
+   * the room closes). Never marks the recording AVAILABLE here — only the
+   * Egress webhook does that, once the upload is actually confirmed. */
+  private async stopTeacherRecordingIfActive(room: string): Promise<void> {
+    const current = await this.getEntityRecordingState(room);
+    if (
+      !current?.egressId ||
+      current.recordingStatus !== RecordingStatus.RECORDING
+    ) {
+      return;
+    }
     try {
       const { EgressClient } = await import('livekit-server-sdk');
-
       const egress = new EgressClient(
         process.env.LIVEKIT_URL!,
         process.env.LIVEKIT_API_KEY,
         process.env.LIVEKIT_API_SECRET,
       );
-
-      const info = await egress.startRoomCompositeEgress(bookingId, {
-        file: {
-          fileType: 3, // MP4
-          filepath: `recordings/${bookingId}.mp4`,
-          s3: {
-            bucket: process.env.AWS_S3_BUCKET!,
-            region: process.env.AWS_REGION!,
-            accessKey: process.env.AWS_ACCESS_KEY!,
-            secret: process.env.AWS_SECRET_KEY!,
-          },
-        },
-      } as any);
-
-      // Save the egressId so we know recording is in progress
-      await this.prisma.booking.update({
-        where: { id: bookingId },
-        data: { egressId: info.egressId },
-      });
-
-      this.logger.log(`Recording started for booking ${bookingId}`);
+      await egress.stopEgress(current.egressId);
     } catch (err) {
-      this.logger.error(`Egress error for ${bookingId}: ${err}`);
-      throw err;
+      this.logger.error(`Egress stop error for ${room}: ${err}`);
     }
+    await this.updateEntityRecording(room, {
+      recordingStatus: RecordingStatus.PROCESSING,
+    });
+    await this.patchRoomMetadata(room, { recording: false }).catch(() => {});
+  }
+
+  async stopTeacherRecording(
+    userId: string,
+    room: string,
+  ): Promise<{ ok: true; recordingStatus: RecordingStatus }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const current = await this.getEntityRecordingState(room);
+    if (current?.recordingStatus !== RecordingStatus.RECORDING) {
+      throw new BadRequestException('There is no active recording to stop.');
+    }
+    await this.stopTeacherRecordingIfActive(room);
+    return { ok: true, recordingStatus: RecordingStatus.PROCESSING };
+  }
+
+  private async notifyTeacherOfRecordingFailure(room: string): Promise<void> {
+    const teacherUserId = await this.getRoomTeacherUserId(room).catch(
+      () => null,
+    );
+    if (!teacherUserId) return;
+    await this.alertsService.create({
+      userId: teacherUserId,
+      role: 'TEACHER',
+      type: 'RECORDING_FAILED',
+      title: 'Recording failed',
+      message:
+        "This class's recording could not be saved. Please contact support if you need a replacement.",
+      metadata: { room },
+    });
   }
 
   /**
-   * Handle LiveKit webhook events.
-   * Called when a recording ends — stores the S3 URL and triggers payment capture.
+   * Handle LiveKit webhook events. `egress_ended` is the ONLY point a
+   * recording is ever marked AVAILABLE — and only when the Egress status
+   * confirms the file actually finished uploading. Anything else (aborted,
+   * failed, or a missing file location) is marked FAILED so it's never
+   * silently mistaken for a successful recording.
    */
-  async handleLiveKitWebhook(
-    body: any,
-    authHeader: string,
-    stripeService: any,
-  ): Promise<void> {
+  async handleLiveKitWebhook(body: any, authHeader: string): Promise<void> {
     try {
       const { WebhookReceiver } = await import('livekit-server-sdk');
       const receiver = new WebhookReceiver(
@@ -304,77 +458,126 @@ export class ClassroomService {
       const event = await receiver.receive(JSON.stringify(body), authHeader);
 
       if (event.event === 'egress_ended') {
-        const bookingId = event.egressInfo?.roomName;
-        const recordingUrl = (event.egressInfo as any)?.file?.location;
+        const room = event.egressInfo?.roomName;
+        if (!room) return;
 
-        if (!bookingId) return;
+        const egressInfo = event.egressInfo as any;
+        const fileLocation: string | undefined = egressInfo?.file?.location;
+        // EgressStatus.EGRESS_COMPLETE === 3 in livekit-server-sdk's proto enum.
+        const succeeded =
+          egressInfo?.status === 3 || egressInfo?.status === 'EGRESS_COMPLETE';
 
-        const updateData: any = { recordingUrl: recordingUrl || null };
-
-        await this.prisma.booking.update({
-          where: { id: bookingId },
-          data: updateData,
-        });
-
-        // Capture payment now that class is confirmed complete
-        const booking = await this.prisma.booking.findUnique({
-          where: { id: bookingId },
-        });
-
-        if (
-          booking?.paymentIntentId &&
-          booking.paymentStatus === 'PENDING' &&
-          stripeService
-        ) {
-          await stripeService.capturePayment(booking.paymentIntentId);
-          await this.prisma.booking.update({
-            where: { id: bookingId },
-            data: { paymentStatus: 'CAPTURED' },
+        if (succeeded && fileLocation) {
+          await this.updateEntityRecording(room, {
+            recordingUrl: fileLocation,
+            recordingStatus: RecordingStatus.AVAILABLE,
           });
-          this.logger.log(`Payment captured for booking ${bookingId}`);
-
-          // Award gems and badges for STUDENT-role users
-          if (booking.studentUserId) {
-            const updatedUser = await this.prisma.user.update({
-              where: { id: booking.studentUserId },
-              data: { totalSessions: { increment: 1 } },
-              select: { totalSessions: true, spaceRank: true },
-            });
-            const isFirst = updatedUser.totalSessions === 1;
-            const newRank = this.computeSpaceRank(updatedUser.totalSessions);
-            const rankChanged = newRank !== updatedUser.spaceRank;
-            if (rankChanged) {
-              await this.prisma.user.update({
-                where: { id: booking.studentUserId },
-                data: { spaceRank: newRank },
-              });
-              await this.studentsService.awardGems(
-                booking.studentUserId,
-                15,
-                'RANK_UP',
-                `Ranked up to ${newRank}`,
-              );
-            }
-            const gemAmount = isFirst ? 15 : 5;
-            const gemType = isFirst ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
-            const gemDesc = isFirst
-              ? 'First session bonus'
-              : 'Session completion reward';
-            await Promise.all([
-              this.studentsService.awardGems(
-                booking.studentUserId,
-                gemAmount,
-                gemType,
-                gemDesc,
-              ),
-              this.studentsService.checkAndAwardBadges(booking.studentUserId),
-            ]);
-          }
+          this.logger.log(`Recording available for room ${room}`);
+        } else {
+          await this.updateEntityRecording(room, {
+            recordingStatus: RecordingStatus.FAILED,
+          });
+          this.logger.warn(
+            `Recording failed for room ${room} (egress status: ${egressInfo?.status})`,
+          );
+          await this.notifyTeacherOfRecordingFailure(room).catch(() => {});
         }
+
+        if (this.isLessonRoom(room)) return; // no payment/gem flow for curriculum lessons
+        await this.finalizeBookingIfDue(room);
       }
     } catch (err) {
       this.logger.error(`Webhook processing error: ${err}`);
       // Don't throw — webhook endpoints should always return 200
+    }
+  }
+
+  /**
+   * Capture a marketplace Booking's payment and award session gems/badges,
+   * once the class is confirmed complete. Idempotent — safe to call
+   * repeatedly for the same booking (checks paymentStatus === 'PENDING'
+   * first). Called from two places since recording is now optional and
+   * teacher-triggered rather than automatic: the Egress webhook (when a
+   * recording did happen) AND the sweep cron below (when it didn't) —
+   * either way, the class having actually ended is what matters, not
+   * whether it was recorded.
+   */
+  private async finalizeBookingIfDue(bookingId: string): Promise<void> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking?.paymentIntentId || booking.paymentStatus !== 'PENDING')
+      return;
+
+    await this.stripeService.capturePayment(booking.paymentIntentId);
+    await this.prisma.booking.update({
+      where: { id: bookingId },
+      data: { paymentStatus: 'CAPTURED' },
+    });
+    this.logger.log(`Payment captured for booking ${bookingId}`);
+
+    if (!booking.studentUserId) return;
+
+    const updatedUser = await this.prisma.user.update({
+      where: { id: booking.studentUserId },
+      data: { totalSessions: { increment: 1 } },
+      select: { totalSessions: true, spaceRank: true },
+    });
+    const isFirst = updatedUser.totalSessions === 1;
+    const newRank = this.computeSpaceRank(updatedUser.totalSessions);
+    const rankChanged = newRank !== updatedUser.spaceRank;
+    if (rankChanged) {
+      await this.prisma.user.update({
+        where: { id: booking.studentUserId },
+        data: { spaceRank: newRank },
+      });
+      await this.studentsService.awardGems(
+        booking.studentUserId,
+        15,
+        'RANK_UP',
+        `Ranked up to ${newRank}`,
+      );
+    }
+    const gemAmount = isFirst ? 15 : 5;
+    const gemType = isFirst ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
+    const gemDesc = isFirst
+      ? 'First session bonus'
+      : 'Session completion reward';
+    await Promise.all([
+      this.studentsService.awardGems(
+        booking.studentUserId,
+        gemAmount,
+        gemType,
+        gemDesc,
+      ),
+      this.studentsService.checkAndAwardBadges(booking.studentUserId),
+    ]);
+  }
+
+  /**
+   * Safety net for the marketplace flow now that recording is optional and
+   * teacher-triggered: a class whose scheduled end has passed still needs
+   * its payment captured even if nobody ever clicked Record. Bounded
+   * lookback keeps this a cheap scan; finalizeBookingIfDue's own PENDING
+   * check makes re-running it harmless.
+   */
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async sweepDueBookingPayments() {
+    const lookbackFloor = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const candidates = await this.prisma.booking.findMany({
+      where: {
+        paymentStatus: 'PENDING',
+        shift: { end: { lt: new Date(), gte: lookbackFloor } },
+      },
+      select: { id: true },
+      take: 200,
+    });
+    for (const { id } of candidates) {
+      try {
+        await this.finalizeBookingIfDue(id);
+      } catch (err) {
+        this.logger.error(`Failed to finalize booking ${id}: ${err}`);
+      }
     }
   }
 
@@ -489,10 +692,103 @@ export class ClassroomService {
     return { ok: true };
   }
 
-  async endClass(userId: string, room: string): Promise<{ ok: true }> {
-    await this.assertTeacherOfRoom(userId, room);
+  /** Merges into the room's JSON metadata — the shared source of truth for
+   * classroom-wide state (chat lock, "students can unmute", recording) that
+   * every participant's client picks up via LiveKit's RoomMetadataChanged
+   * event. */
+  private async patchRoomMetadata(
+    room: string,
+    patch: Record<string, unknown>,
+  ): Promise<Record<string, unknown>> {
     const client = this.getRoomServiceClient();
-    await client.deleteRoom(room);
+    let current: Record<string, unknown> = {};
+    try {
+      const info = await client.listRooms([room]);
+      const meta = info[0]?.metadata;
+      if (meta) current = JSON.parse(meta) as Record<string, unknown>;
+    } catch {
+      current = {};
+    }
+    const next = { ...current, ...patch };
+    await client.updateRoomMetadata(room, JSON.stringify(next));
+    return next;
+  }
+
+  /**
+   * Teacher manually ends the class — the ONLY way a curriculum
+   * (ScheduledLesson) class ever leaves UPCOMING; there is no automatic
+   * time-based ending. For the curriculum flow the teacher must choose an
+   * outcome:
+   *   - COMPLETED: requires the student to have actually joined (see
+   *     studentJoinedAt) — otherwise rejected — then awards the teacher's
+   *     +BDT 200 completed-class earning exactly once.
+   *   - PARTIALLY_COMPLETED: shifts the remaining schedule so the student
+   *     gets a make-up occurrence for the same lesson (see
+   *     SchedulingService.handlePartialCompletion). No earning is awarded.
+   * Any in-progress recording is stopped first either way (its upload still
+   * finalizes asynchronously — see stopTeacherRecordingIfActive/webhook).
+   * The legacy Booking (marketplace) flow has no such outcome/earning
+   * workflow — it just closes the room as before.
+   */
+  async endClass(
+    userId: string,
+    room: string,
+    outcome?: EndClassOutcome,
+  ): Promise<{ ok: true }> {
+    await this.assertTeacherOfRoom(userId, room);
+
+    await this.stopTeacherRecordingIfActive(room);
+
+    if (this.isLessonRoom(room)) {
+      const lessonId = this.lessonIdFromRoom(room);
+      const lesson = await this.prisma.scheduledLesson.findUnique({
+        where: { id: lessonId },
+      });
+      if (!lesson) throw new BadRequestException('Classroom not found.');
+      if (lesson.status !== LessonStatus.UPCOMING) {
+        throw new BadRequestException('This class has already been ended.');
+      }
+      if (!outcome) {
+        throw new BadRequestException(
+          'Choose Completed or Partially Completed to end this class.',
+        );
+      }
+
+      if (outcome === 'COMPLETED') {
+        if (!lesson.studentJoinedAt) {
+          throw new BadRequestException(
+            'This class cannot be marked as completed because the student did not join.',
+          );
+        }
+        await this.prisma.scheduledLesson.update({
+          where: { id: lessonId },
+          data: {
+            status: LessonStatus.COMPLETED,
+            endedAt: new Date(),
+            endedByRole: 'TEACHER',
+          },
+        });
+        await this.payoutsService
+          .triggerScheduledLessonCompleted(lessonId)
+          .catch((err) => {
+            this.logger.error(
+              `Failed to record completed-class earning for lesson ${lessonId}: ${err}`,
+            );
+          });
+      } else {
+        await this.prisma.scheduledLesson.update({
+          where: { id: lessonId },
+          data: { endedAt: new Date(), endedByRole: 'TEACHER' },
+        });
+        await this.schedulingService.handlePartialCompletion(lessonId, userId);
+      }
+    }
+
+    const client = this.getRoomServiceClient();
+    await client.deleteRoom(room).catch(() => {
+      // Room may already be empty/gone — ending the class record still
+      // succeeded above, which is what matters.
+    });
     return { ok: true };
   }
 
@@ -505,17 +801,7 @@ export class ClassroomService {
     patch: { chatLocked?: boolean; studentsMuted?: boolean },
   ): Promise<{ ok: true; state: Record<string, unknown> }> {
     await this.assertTeacherOfRoom(userId, room);
-    const client = this.getRoomServiceClient();
-    let current: Record<string, unknown> = {};
-    try {
-      const info = await client.listRooms([room]);
-      const meta = info[0]?.metadata;
-      if (meta) current = JSON.parse(meta) as Record<string, unknown>;
-    } catch {
-      current = {};
-    }
-    const next = { ...current, ...patch };
-    await client.updateRoomMetadata(room, JSON.stringify(next));
+    const next = await this.patchRoomMetadata(room, patch);
     return { ok: true, state: next };
   }
 }

@@ -74,6 +74,15 @@ interface Shift {
   isBooked: boolean;
 }
 
+interface DashboardAlertItem {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+}
+
 const RANK_NAMES = ["Cadet", "Navigator", "Pilot", "Commander", "Admiral", "Starmaster"];
 const RANK_ICONS = ["🌱", "🧭", "✈️", "🎖️", "⭐", "🌟"];
 
@@ -120,6 +129,7 @@ function TeacherDashboardContent() {
   const [openSlots, setOpenSlots] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<DashboardAlertItem[]>([]);
 
   const now = useClock(!!nextClass);
   const { hours, minutes, seconds } = nextClass
@@ -139,18 +149,20 @@ function TeacherDashboardContent() {
 
     (async () => {
       try {
-        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes] = await Promise.all([
+        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes, alertsRes] = await Promise.all([
           api.get("/teachers/me/stats"),
           api.get("/teachers/me/next-class"),
           api.get("/teachers/me/profile"),
           api.get("/teachers/me/students"),
           api.get("/shifts"),
+          api.get("/alerts/me", { params: { limit: 5 } }).catch(() => ({ data: [] })),
         ]);
 
         setStats(statsRes.data);
         setNextClass(nextRes.data ?? null);
         setProfile(profileRes.data);
         setStudents(studentsRes.data ?? []);
+        setAlerts((alertsRes.data ?? []).filter((a: DashboardAlertItem) => !a.read));
 
         const now = new Date();
         const open = (shiftsRes.data as Shift[]).filter(
@@ -178,6 +190,11 @@ function TeacherDashboardContent() {
   const rankTier = profile?.rankTier ?? 0;
   const card = "t-card t-card-hover shadow-sm";
 
+  const dismissAlert = (id: string) => {
+    setAlerts((prev) => prev.filter((a) => a.id !== id));
+    api.patch(`/alerts/${id}/read`).catch(() => {});
+  };
+
   return (
     <>
       <div className="p-4 sm:p-6 lg:p-8">
@@ -202,6 +219,30 @@ function TeacherDashboardContent() {
                 for reinstatement.
               </p>
             </div>
+          </div>
+        )}
+
+        {alerts.length > 0 && (
+          <div className="mb-6 space-y-2">
+            {alerts.map((a) => (
+              <div
+                key={a.id}
+                className={`p-3.5 rounded-xl flex items-start justify-between gap-3 text-sm ${
+                  a.type === "LATE_JOIN_PENALTY"
+                    ? "bg-[var(--t-danger-bg)] text-[var(--t-danger)]"
+                    : "bg-[var(--t-success-bg,rgba(16,185,129,0.1))] text-[var(--t-success,#10b981)]"
+                }`}
+              >
+                <p className="font-medium">{a.message}</p>
+                <button
+                  onClick={() => dismissAlert(a.id)}
+                  className="text-xs opacity-60 hover:opacity-100 flex-shrink-0"
+                  aria-label="Dismiss"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -298,6 +339,11 @@ function TeacherDashboardContent() {
                   )}
                 </div>
               </div>
+
+              <p className="mt-3 pt-3 border-t border-[var(--t-nav-border)] text-xs text-[var(--t-warning)] flex items-center gap-1.5">
+                <span aria-hidden>⚠</span>
+                Please join within the first 3 minutes to avoid an automatic late-join penalty.
+              </p>
             </div>
           ) : (
             <div className={`${card} p-6 flex flex-col items-center justify-center text-center`}>
