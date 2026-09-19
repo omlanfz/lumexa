@@ -1,4 +1,47 @@
+// FILE PATH: server/src/notifications/notifications.service.ts
+//
+// The single centralized place every part of the app asks for a
+// user-facing email. All transport, retry, and delivery-status tracking
+// lives in EmailService (Gmail SMTP + Nodemailer) — this service only
+// picks a template (server/src/email/templates/*) and a dedupe key, then
+// calls EmailService.send(). Callers always fire-and-forget
+// (`.catch(() => {})`), matching the convention used everywhere else in
+// this codebase (see StudentLedgerService, EngagementService, etc.).
+
 import { Injectable, Logger } from '@nestjs/common';
+import { EmailService, EmailAttachment } from '../email/email.service';
+import {
+  welcomeEmail,
+  passwordResetEmail,
+} from '../email/templates/auth.templates';
+import {
+  classBookedEmail,
+  classRescheduledEmail,
+  classCancelledEmail,
+  classReminderEmail,
+  missedClassEmail,
+  achievementEmail,
+  packageExpiringSoonEmail,
+  packageExpiredEmail,
+  certificateIssuedEmail,
+} from '../email/templates/student.templates';
+import {
+  teacherAccountCreatedEmail,
+  teacherApprovedEmail,
+  teacherStudentAssignedEmail,
+  teacherClassChangedByStudentEmail,
+  teacherClassReminderEmail,
+  teacherAdminMessageEmail,
+  teacherPenaltyEmail,
+} from '../email/templates/teacher.templates';
+import {
+  newStudentRegistrationEmail,
+  newTeacherApplicationEmail,
+  disputeFiledEmail,
+  highCancellationRateEmail,
+  lowActivityEmail,
+  systemErrorAlertEmail,
+} from '../email/templates/admin.templates';
 
 interface BookingEmailData {
   teacherName: string;
@@ -7,74 +50,54 @@ interface BookingEmailData {
   bookingId: string;
 }
 
+function adminRecipients(): string[] {
+  return (process.env.ADMIN_NOTIFICATION_EMAILS || '')
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private resend: any;
 
-  constructor() {
-    if (!process.env.RESEND_API_KEY) {
-      this.logger.warn(
-        'RESEND_API_KEY is not set. Email notifications are disabled.',
-      );
-      return;
-    }
-    try {
-      const { Resend } = require('resend');
-      this.resend = new Resend(process.env.RESEND_API_KEY);
-    } catch {
-      this.logger.warn('Resend package not installed. Run: npm install resend');
-    }
+  constructor(private readonly email: EmailService) {}
+
+  // ─── Legacy free-form send (kept for the pre-existing templates below,
+  // which render their own inline HTML rather than going through
+  // server/src/email/templates) ──────────────────────────────────────────
+  private async send(
+    to: string,
+    subject: string,
+    html: string,
+    category: string,
+    dedupeKey?: string,
+  ): Promise<void> {
+    await this.email.send({ to, subject, html, category, dedupeKey });
   }
 
-  private get fromAddress(): string {
-    return `Lumexa <noreply@${process.env.EMAIL_DOMAIN || 'lumexa.app'}>`;
-  }
-
-  private async send(to: string, subject: string, html: string): Promise<void> {
-    if (!this.resend) return;
-
-    try {
-      await this.resend.emails.send({
-        from: this.fromAddress,
-        to,
-        subject,
-        html,
-      });
-    } catch (err) {
-      this.logger.error(`Failed to send email to ${to}: ${err}`);
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════
+  // Pre-existing notifications (signatures unchanged — callers untouched)
+  // ══════════════════════════════════════════════════════════════════════
 
   async sendBookingConfirmation(
     recipientEmail: string,
     data: BookingEmailData,
   ): Promise<void> {
     const classUrl = `${process.env.FRONTEND_URL}/classroom/${data.bookingId}`;
-    const formattedDate = new Intl.DateTimeFormat('en-US', {
-      dateStyle: 'full',
-      timeStyle: 'short',
-    }).format(data.classStart);
-
+    const { subject, html } = classBookedEmail({
+      studentName: 'there',
+      teacherName: data.teacherName,
+      classStart: data.classStart,
+      classEnd: data.classEnd,
+      classUrl,
+    });
     await this.send(
       recipientEmail,
-      `✅ Class Confirmed with ${data.teacherName}`,
-      `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #0d9488;">Class Booking Confirmed</h2>
-        <p>Great news! Your class with <strong>${data.teacherName}</strong> is confirmed.</p>
-        <div style="background: #0f2027; color: #5eead4; padding: 16px; border-radius: 8px; margin: 24px 0;">
-          <p style="margin: 0;"><strong>📅 When:</strong> ${formattedDate}</p>
-        </div>
-        <p>Join the classroom using the link below 10 minutes before the class starts:</p>
-        <a href="${classUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-          Join Classroom →
-        </a>
-        <p style="color: #6b7280; font-size: 14px; margin-top: 32px;">
-          If you need to cancel, please do so at least 24 hours in advance for a full refund.
-        </p>
-      </div>
-      `,
+      subject,
+      html,
+      'CLASS_BOOKED',
+      `class-booked:${data.bookingId}`,
     );
   }
 
@@ -104,6 +127,7 @@ export class NotificationsService {
         </p>
       </div>
       `,
+      'CONSENT_REQUEST',
     );
   }
 
@@ -138,30 +162,8 @@ export class NotificationsService {
         </p>
       </div>
       `,
+      'GEM_TOPUP_REQUEST',
     );
-  }
-
-  async sendClassReminder(
-    parentEmail: string,
-    teacherEmail: string,
-    data: BookingEmailData,
-  ): Promise<void> {
-    const classUrl = `${process.env.FRONTEND_URL}/classroom/${data.bookingId}`;
-
-    const html = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #0d9488;">⏰ Your class starts in 30 minutes</h2>
-        <p>This is your reminder that a class with <strong>${data.teacherName}</strong> is starting soon.</p>
-        <a href="${classUrl}" style="display: inline-block; background: #0d9488; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">
-          Join Classroom →
-        </a>
-      </div>
-    `;
-
-    await Promise.all([
-      this.send(parentEmail, '⏰ Class starting in 30 minutes', html),
-      this.send(teacherEmail, '⏰ Class starting in 30 minutes', html),
-    ]);
   }
 
   async sendCancellationNotice(
@@ -180,11 +182,15 @@ export class NotificationsService {
         parentEmail,
         'Class Cancellation Confirmed',
         `<p>Your class with ${data.teacherName} has been cancelled.</p><p>${refundText}</p>`,
+        'CLASS_CANCELLED',
+        `cancel-notice-parent:${data.bookingId}`,
       ),
       this.send(
         teacherEmail,
         'A booking has been cancelled',
         `<p>A student has cancelled their booking scheduled for ${data.classStart.toLocaleString()}.</p>`,
+        'CLASS_CANCELLED_TEACHER_NOTICE',
+        `cancel-notice-teacher:${data.bookingId}`,
       ),
     ]);
   }
@@ -210,6 +216,7 @@ export class NotificationsService {
         </p>
       </div>
       `,
+      'STREAK_LOST',
     );
   }
 
@@ -253,23 +260,480 @@ export class NotificationsService {
         </p>
       </div>
       `,
+      'MONTHLY_DIGEST',
     );
   }
 
-  async sendTeacherStrikeWarning(
-    teacherEmail: string,
-    strikes: number,
-    teacherName: string,
-  ): Promise<void> {
-    const message =
-      strikes >= 3
-        ? 'Your account has been suspended due to 3 no-shows within 30 days. Please contact support.'
-        : `You have received strike ${strikes}/3 for a missed class. Reaching 3 strikes within 30 days will result in account suspension.`;
+  // ══════════════════════════════════════════════════════════════════════
+  // Auth
+  // ══════════════════════════════════════════════════════════════════════
 
+  async sendWelcomeEmail(
+    to: string,
+    data: {
+      userId: string;
+      name: string;
+      role: 'PARENT' | 'STUDENT' | 'TEACHER';
+    },
+  ): Promise<void> {
+    const dashboardUrl = `${process.env.FRONTEND_URL}/login`;
+    const { subject, html } = welcomeEmail({
+      name: data.name,
+      role: data.role,
+      dashboardUrl,
+    });
+    await this.send(to, subject, html, 'WELCOME', `welcome:${data.userId}`);
+  }
+
+  /** Never deduped — a parent/teacher/student may legitimately request a new reset link more than once. */
+  async sendPasswordResetEmail(
+    to: string,
+    data: { name: string; token: string; expiresMinutes: number },
+  ): Promise<void> {
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${data.token}`;
+    const { subject, html } = passwordResetEmail({
+      name: data.name,
+      resetUrl,
+      expiresMinutes: data.expiresMinutes,
+    });
+    await this.send(to, subject, html, 'PASSWORD_RESET');
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Student / parent
+  // ══════════════════════════════════════════════════════════════════════
+
+  /** No dedupe key — each call corresponds to a distinct, explicit admin
+   * scheduling action (Operations rarely re-triggers this for the same
+   * student/course on the same day), so unlike most other notifications a
+   * duplicate-looking call is legitimate rather than a retry. */
+  async sendClassBookedEmail(
+    to: string,
+    data: {
+      studentName: string;
+      teacherName: string;
+      classStart: Date;
+      classEnd: Date;
+      classUrl: string;
+    },
+  ): Promise<void> {
+    const { subject, html } = classBookedEmail(data);
+    await this.send(to, subject, html, 'CLASS_BOOKED');
+  }
+
+  async sendClassRescheduledToStudent(
+    to: string,
+    data: {
+      requestId: string;
+      studentName: string;
+      teacherName: string;
+      oldStart: Date;
+      newStart: Date;
+      changedBy: 'TEACHER' | 'ADMIN';
+      reason?: string;
+    },
+  ): Promise<void> {
+    const { subject, html } = classRescheduledEmail(data);
     await this.send(
-      teacherEmail,
-      strikes >= 3 ? '⚠️ Account Suspended' : `⚠️ No-Show Strike ${strikes}/3`,
-      `<div style="font-family: sans-serif;"><h2>Account Notice — ${teacherName}</h2><p>${message}</p></div>`,
+      to,
+      subject,
+      html,
+      'CLASS_RESCHEDULED',
+      `class-rescheduled:${data.requestId}`,
+    );
+  }
+
+  async sendClassCancelledToStudent(
+    to: string,
+    data: {
+      requestId: string;
+      studentName: string;
+      teacherName: string;
+      classStart: Date;
+      cancelledBy: 'TEACHER' | 'ADMIN';
+      refundText?: string;
+    },
+  ): Promise<void> {
+    const { subject, html } = classCancelledEmail(data);
+    await this.send(
+      to,
+      subject,
+      html,
+      'CLASS_CANCELLED',
+      `class-cancelled:${data.requestId}`,
+    );
+  }
+
+  async sendClassReminderToStudent(
+    to: string,
+    data: {
+      lessonId: string;
+      studentName: string;
+      teacherName: string;
+      classStart: Date;
+      classUrl: string;
+    },
+  ): Promise<void> {
+    const { subject, html } = classReminderEmail(data);
+    await this.send(
+      to,
+      subject,
+      html,
+      'CLASS_REMINDER',
+      `reminder-student:${data.lessonId}`,
+    );
+  }
+
+  async sendMissedClassNotice(
+    to: string,
+    data: {
+      lessonId: string;
+      studentName: string;
+      teacherName: string;
+      classStart: Date;
+    },
+  ): Promise<void> {
+    const { subject, html } = missedClassEmail(data);
+    await this.send(
+      to,
+      subject,
+      html,
+      'MISSED_CLASS',
+      `no-show:${data.lessonId}`,
+    );
+  }
+
+  async sendAchievementEmail(
+    to: string,
+    data: {
+      userId: string;
+      studentName: string;
+      badges: { label: string; icon: string }[];
+      newRank?: string;
+    },
+  ): Promise<void> {
+    if (data.badges.length === 0) return;
+    const dashboardUrl = `${process.env.FRONTEND_URL}/student-dashboard`;
+    const { subject, html } = achievementEmail({ ...data, dashboardUrl });
+    const key = `achievement:${data.userId}:${data.badges.map((b) => b.label).join(',')}`;
+    await this.send(to, subject, html, 'ACHIEVEMENT', key);
+  }
+
+  async sendPackageExpiringSoon(
+    to: string,
+    data: {
+      studentUserId: string;
+      studentName: string;
+      billingContactName: string;
+      lessonsRemaining: number;
+      courseName: string;
+      monthBucket: string;
+    },
+  ): Promise<void> {
+    const paymentUrl = `${process.env.FRONTEND_URL}/dashboard`;
+    const { subject, html } = packageExpiringSoonEmail({ ...data, paymentUrl });
+    await this.send(
+      to,
+      subject,
+      html,
+      'PACKAGE_EXPIRING_SOON',
+      `package-expiring:${data.studentUserId}:${data.monthBucket}`,
+    );
+  }
+
+  async sendPackageExpired(
+    to: string,
+    data: {
+      studentUserId: string;
+      studentName: string;
+      billingContactName: string;
+      courseName: string;
+      monthBucket: string;
+    },
+  ): Promise<void> {
+    const paymentUrl = `${process.env.FRONTEND_URL}/dashboard`;
+    const { subject, html } = packageExpiredEmail({ ...data, paymentUrl });
+    await this.send(
+      to,
+      subject,
+      html,
+      'PACKAGE_EXPIRED',
+      `package-expired:${data.studentUserId}:${data.monthBucket}`,
+    );
+  }
+
+  async sendCertificateIssuedEmail(
+    to: string,
+    data: {
+      studentUserId: string;
+      courseId: string;
+      studentName: string;
+      billingContactName: string;
+      courseName: string;
+      progressSummaryHtml: string;
+      recommendedCourseName: string | null;
+      recommendedCourseBlurb: string | null;
+    },
+    attachments: EmailAttachment[],
+  ): Promise<void> {
+    const dashboardUrl = `${process.env.FRONTEND_URL}/student-dashboard`;
+    const { subject, html } = certificateIssuedEmail({ ...data, dashboardUrl });
+    await this.email.send({
+      to,
+      subject,
+      html,
+      category: 'CERTIFICATE_ISSUED',
+      dedupeKey: `certificate:${data.studentUserId}:${data.courseId}`,
+      attachments,
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Teacher
+  // ══════════════════════════════════════════════════════════════════════
+
+  async sendTeacherAccountCreatedEmail(
+    to: string,
+    data: { userId: string; teacherName: string },
+  ): Promise<void> {
+    const dashboardUrl = `${process.env.FRONTEND_URL}/teacher-profile`;
+    const { subject, html } = teacherAccountCreatedEmail({
+      teacherName: data.teacherName,
+      dashboardUrl,
+    });
+    await this.send(
+      to,
+      subject,
+      html,
+      'TEACHER_WELCOME',
+      `teacher-welcome:${data.userId}`,
+    );
+  }
+
+  async sendTeacherApprovedEmail(
+    to: string,
+    data: { teacherProfileId: string; teacherName: string },
+  ): Promise<void> {
+    const dashboardUrl = `${process.env.FRONTEND_URL}/teacher-dashboard`;
+    const { subject, html } = teacherApprovedEmail({
+      teacherName: data.teacherName,
+      dashboardUrl,
+    });
+    await this.send(
+      to,
+      subject,
+      html,
+      'TEACHER_APPROVED',
+      `teacher-approved:${data.teacherProfileId}`,
+    );
+  }
+
+  async sendTeacherStudentAssignedEmail(
+    to: string,
+    data: { teacherName: string; studentName: string },
+  ): Promise<void> {
+    const dashboardUrl = `${process.env.FRONTEND_URL}/teacher-dashboard`;
+    const { subject, html } = teacherStudentAssignedEmail({
+      ...data,
+      dashboardUrl,
+    });
+    await this.send(to, subject, html, 'TEACHER_STUDENT_ASSIGNED');
+  }
+
+  async sendTeacherClassChangedByStudent(
+    to: string,
+    data: {
+      requestId: string;
+      teacherName: string;
+      studentName: string;
+      classStart: Date;
+      action: 'RESCHEDULED' | 'CANCELLED';
+    },
+  ): Promise<void> {
+    const { subject, html } = teacherClassChangedByStudentEmail(data);
+    await this.send(
+      to,
+      subject,
+      html,
+      'TEACHER_CLASS_CHANGED',
+      `teacher-class-changed:${data.requestId}`,
+    );
+  }
+
+  async sendTeacherClassReminder(
+    to: string,
+    data: {
+      lessonId: string;
+      teacherName: string;
+      studentName: string;
+      classStart: Date;
+      classUrl: string;
+    },
+  ): Promise<void> {
+    const { subject, html } = teacherClassReminderEmail(data);
+    await this.send(
+      to,
+      subject,
+      html,
+      'TEACHER_CLASS_REMINDER',
+      `reminder-teacher:${data.lessonId}`,
+    );
+  }
+
+  async sendTeacherAdminMessage(
+    to: string,
+    data: { teacherName: string; subject: string; message: string },
+  ): Promise<void> {
+    const { subject, html } = teacherAdminMessageEmail(data);
+    await this.send(to, subject, html, 'TEACHER_ADMIN_MESSAGE');
+  }
+
+  async sendTeacherPenalty(
+    to: string,
+    data: {
+      teacherProfileId: string;
+      teacherName: string;
+      strikes: number;
+      reason: string;
+    },
+  ): Promise<void> {
+    const { subject, html } = teacherPenaltyEmail(data);
+    await this.send(
+      to,
+      subject,
+      html,
+      'TEACHER_PENALTY',
+      `teacher-penalty:${data.teacherProfileId}:${data.strikes}`,
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Admin
+  // ══════════════════════════════════════════════════════════════════════
+
+  private async sendToAdmins(
+    subject: string,
+    html: string,
+    category: string,
+    dedupeKey?: string,
+  ): Promise<void> {
+    const recipients = adminRecipients();
+    if (recipients.length === 0) {
+      this.logger.warn(
+        `ADMIN_NOTIFICATION_EMAILS is not set — dropped admin alert "${subject}".`,
+      );
+      return;
+    }
+    await this.send(recipients.join(','), subject, html, category, dedupeKey);
+  }
+
+  async sendAdminNewRegistration(data: {
+    userId: string;
+    name: string;
+    email: string;
+    role: string;
+  }): Promise<void> {
+    const adminUrl = `${process.env.FRONTEND_URL}/admin/students`;
+    const { subject, html } = newStudentRegistrationEmail({
+      studentName: data.name,
+      email: data.email,
+      role: data.role,
+      adminUrl,
+    });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'ADMIN_NEW_REGISTRATION',
+      `admin-new-reg:${data.userId}`,
+    );
+  }
+
+  async sendAdminNewTeacherApplication(data: {
+    userId: string;
+    teacherName: string;
+    email: string;
+  }): Promise<void> {
+    const adminUrl = `${process.env.FRONTEND_URL}/admin/teachers`;
+    const { subject, html } = newTeacherApplicationEmail({
+      teacherName: data.teacherName,
+      email: data.email,
+      adminUrl,
+    });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'ADMIN_NEW_TEACHER',
+      `admin-new-teacher:${data.userId}`,
+    );
+  }
+
+  async sendAdminDisputeFiled(data: {
+    disputeId: string;
+    filedByName: string;
+    filedByRole: string;
+    category: string;
+    description: string;
+  }): Promise<void> {
+    const adminUrl = `${process.env.FRONTEND_URL}/admin`;
+    const { subject, html } = disputeFiledEmail({ ...data, adminUrl });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'ADMIN_DISPUTE',
+      `admin-dispute:${data.disputeId}`,
+    );
+  }
+
+  async sendAdminHighCancellationRate(data: {
+    teacherId: string;
+    teacherName: string;
+    count: number;
+    threshold: number;
+    monthLabel: string;
+    monthBucket: string;
+  }): Promise<void> {
+    const adminUrl = `${process.env.FRONTEND_URL}/admin/teachers`;
+    const { subject, html } = highCancellationRateEmail({ ...data, adminUrl });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'ADMIN_HIGH_CANCELLATION',
+      `admin-high-cancel:${data.teacherId}:${data.monthBucket}`,
+    );
+  }
+
+  async sendAdminLowActivity(data: {
+    teacherId: string;
+    teacherName: string;
+    daysInactive: number;
+    thresholdDays: number;
+    weekBucket: string;
+  }): Promise<void> {
+    const adminUrl = `${process.env.FRONTEND_URL}/admin/teachers`;
+    const { subject, html } = lowActivityEmail({ ...data, adminUrl });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'ADMIN_LOW_ACTIVITY',
+      `admin-low-activity:${data.teacherId}:${data.weekBucket}`,
+    );
+  }
+
+  async sendAdminSystemError(data: {
+    status: number;
+    message: string;
+    path: string;
+    bucketKey: string;
+  }): Promise<void> {
+    const { subject, html } = systemErrorAlertEmail({
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'ADMIN_SYSTEM_ERROR',
+      `admin-system-error:${data.bucketKey}`,
     );
   }
 }

@@ -17,6 +17,7 @@ import { PenaltyStatus } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateRescheduleEventDto } from './dto/create-reschedule-event.dto';
 import {
   FREE_EMERGENCY_RESCHEDULES_PER_MONTH,
@@ -31,7 +32,39 @@ export class RescheduleService {
     private readonly prisma: PrismaService,
     private readonly payoutsService: PayoutsService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /** Best-effort resolution of the student-side recipient for a legacy
+   * Booking — self-auth `studentUser` when present, else the parent-proxy
+   * `Student.parent`. Returns null if neither can be resolved (never
+   * blocks the reschedule/cancel itself). */
+  private async resolveStudentRecipient(
+    bookingId: string,
+  ): Promise<{ email: string; name: string } | null> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: {
+        studentUser: { select: { email: true, fullName: true } },
+        student: {
+          include: { parent: { select: { email: true, fullName: true } } },
+        },
+      },
+    });
+    if (booking?.studentUser) {
+      return {
+        email: booking.studentUser.email,
+        name: booking.studentUser.fullName,
+      };
+    }
+    if (booking?.student?.parent) {
+      return {
+        email: booking.student.parent.email,
+        name: booking.student.parent.fullName,
+      };
+    }
+    return null;
+  }
 
   async createEvent(
     teacherUserId: string,
@@ -40,6 +73,7 @@ export class RescheduleService {
   ) {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { userId: teacherUserId },
+      include: { user: { select: { fullName: true } } },
     });
     if (!teacher) throw new NotFoundException('Teacher profile not found.');
 
@@ -218,6 +252,39 @@ export class RescheduleService {
       }
     }
 
+    // Only a teacher-initiated (emergency) change is "rescheduled/cancelled
+    // BY the teacher" from the student's point of view — a student-requested
+    // change just confirms what they already asked for, which the UI they
+    // used already told them, so no extra email there.
+    if (isEmergency) {
+      const recipient = await this.resolveStudentRecipient(booking.id);
+      if (recipient) {
+        if (dto.action === 'RESCHEDULE') {
+          this.notifications
+            .sendClassRescheduledToStudent(recipient.email, {
+              requestId: result.audit.id,
+              studentName: recipient.name,
+              teacherName: teacher.user.fullName,
+              oldStart: booking.shift.start,
+              newStart,
+              changedBy: 'TEACHER',
+              reason: dto.reason,
+            })
+            .catch(() => {});
+        } else {
+          this.notifications
+            .sendClassCancelledToStudent(recipient.email, {
+              requestId: result.audit.id,
+              studentName: recipient.name,
+              teacherName: teacher.user.fullName,
+              classStart: booking.shift.start,
+              cancelledBy: 'TEACHER',
+            })
+            .catch(() => {});
+        }
+      }
+    }
+
     return {
       id: result.audit.id,
       action: dto.action,
@@ -384,7 +451,13 @@ export class RescheduleService {
 
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { shift: true },
+      include: {
+        shift: {
+          include: {
+            teacher: { include: { user: { select: { fullName: true } } } },
+          },
+        },
+      },
     });
     if (!booking) throw new NotFoundException('Booking not found.');
 
@@ -428,6 +501,21 @@ export class RescheduleService {
       afterData: { start: newStart, end: newEnd },
     });
 
+    const recipient = await this.resolveStudentRecipient(booking.id);
+    if (recipient) {
+      this.notifications
+        .sendClassRescheduledToStudent(recipient.email, {
+          requestId: audit.id,
+          studentName: recipient.name,
+          teacherName: booking.shift.teacher.user.fullName,
+          oldStart: booking.shift.start,
+          newStart,
+          changedBy: 'ADMIN',
+          reason: params.reason,
+        })
+        .catch(() => {});
+    }
+
     return audit;
   }
 
@@ -444,7 +532,13 @@ export class RescheduleService {
 
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
-      include: { shift: true },
+      include: {
+        shift: {
+          include: {
+            teacher: { include: { user: { select: { fullName: true } } } },
+          },
+        },
+      },
     });
     if (!booking) throw new NotFoundException('Booking not found.');
 
@@ -483,6 +577,19 @@ export class RescheduleService {
       entityId: booking.id,
       reason: params.reason,
     });
+
+    const recipient = await this.resolveStudentRecipient(booking.id);
+    if (recipient) {
+      this.notifications
+        .sendClassCancelledToStudent(recipient.email, {
+          requestId: audit.id,
+          studentName: recipient.name,
+          teacherName: booking.shift.teacher.user.fullName,
+          classStart: booking.shift.start,
+          cancelledBy: 'ADMIN',
+        })
+        .catch(() => {});
+    }
 
     return audit;
   }

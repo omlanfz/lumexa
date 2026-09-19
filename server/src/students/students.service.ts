@@ -138,6 +138,13 @@ export class StudentsService {
     const payload = { sub: user.id, email: user.email, role: user.role };
     const access_token = this.jwtService.sign(payload);
 
+    this.notifications
+      .sendWelcomeEmail(user.email, { userId: user.id, name: user.fullName, role: 'STUDENT' })
+      .catch(() => {});
+    this.notifications
+      .sendAdminNewRegistration({ userId: user.id, name: user.fullName, email: user.email, role: 'STUDENT' })
+      .catch(() => {});
+
     return {
       status: 'ACTIVE' as const,
       access_token,
@@ -165,6 +172,10 @@ export class StudentsService {
     }
 
     const payload = { sub: user.id, email: user.email, role: user.role };
+    this.prisma.user
+      .update({ where: { id: user.id }, data: { lastLoginAt: new Date() } })
+      .catch(() => {});
+
     return {
       access_token: this.jwtService.sign(payload),
       user: this.safeUser(user),
@@ -670,11 +681,19 @@ export class StudentsService {
   }
 
   // ─── Check and award badges (run after session captured) ──────────────────
+  //
+  // Also the single centralized trigger for the "level-up / mission
+  // completed" email — a RANK_* badge newly earned here means the caller
+  // already persisted the new spaceRank (see ClassroomService.
+  // finalizeBookingIfDue, which updates spaceRank then calls this in the
+  // same flow), so this is the one place that knows both "a rank changed"
+  // and "a non-rank milestone was hit" without duplicating that check
+  // anywhere else.
 
   async checkAndAwardBadges(userId: string): Promise<string[]> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { totalSessions: true, streakWeeks: true, spaceRank: true },
+      select: { email: true, fullName: true, totalSessions: true, streakWeeks: true, spaceRank: true },
     });
     if (!user) return [];
 
@@ -711,6 +730,21 @@ export class StudentsService {
         data: toAward.map((type) => ({ userId, type })),
         skipDuplicates: true,
       });
+
+      const newRankBadge = toAward.find((t) => t.startsWith('RANK_'));
+      const badgeMeta = toAward
+        .map((type) => StudentsService.BADGE_DEFS.find((d) => d.type === type))
+        .filter((d): d is (typeof StudentsService.BADGE_DEFS)[number] => !!d)
+        .map((d) => ({ label: d.label, icon: d.icon }));
+
+      this.notifications
+        .sendAchievementEmail(user.email, {
+          userId,
+          studentName: user.fullName,
+          badges: badgeMeta,
+          newRank: newRankBadge ? user.spaceRank : undefined,
+        })
+        .catch(() => {});
     }
 
     return toAward;

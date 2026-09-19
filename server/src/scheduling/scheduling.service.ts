@@ -19,6 +19,7 @@ import {
 import { ClassType, LessonStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { SetScheduleDto } from './dto/set-schedule.dto';
 import {
   addDaysToDateStr,
@@ -43,6 +44,7 @@ export class SchedulingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── Admin: read current schedule + lesson summary for a student ────────
@@ -111,6 +113,7 @@ export class SchedulingService {
         id: true,
         role: true,
         fullName: true,
+        email: true,
         assignedTeacherId: true,
         assignedCourseId: true,
       },
@@ -309,6 +312,25 @@ export class SchedulingService {
       },
     });
 
+    if (newLessons.length > 0) {
+      const teacherProfile = await this.prisma.teacherProfile.findUnique({
+        where: { id: teacherId },
+        select: { user: { select: { fullName: true } } },
+      });
+      if (teacherProfile) {
+        const classUrl = `${process.env.FRONTEND_URL}/dashboard`;
+        this.notifications
+          .sendClassBookedEmail(student.email, {
+            studentName: student.fullName,
+            teacherName: teacherProfile.user.fullName,
+            classStart: newLessons[0].start,
+            classEnd: newLessons[0].end,
+            classUrl,
+          })
+          .catch(() => {});
+      }
+    }
+
     return this.getStudentSchedule(studentUserId);
   }
 
@@ -366,6 +388,23 @@ export class SchedulingService {
       afterData: { start: newStart, end: newEnd },
     });
 
+    const recipient = await this.getLessonNotificationRecipient(
+      lesson.studentUserId,
+      lesson.teacherId,
+    );
+    if (recipient) {
+      this.notifications
+        .sendClassRescheduledToStudent(recipient.studentEmail, {
+          requestId: lessonId,
+          studentName: recipient.studentName,
+          teacherName: recipient.teacherName,
+          oldStart: lesson.start,
+          newStart,
+          changedBy: 'ADMIN',
+        })
+        .catch(() => {});
+    }
+
     return updated;
   }
 
@@ -401,7 +440,102 @@ export class SchedulingService {
       afterData: { status: 'CANCELLED' },
     });
 
+    const recipient = await this.getLessonNotificationRecipient(
+      lesson.studentUserId,
+      lesson.teacherId,
+    );
+    if (recipient) {
+      this.notifications
+        .sendClassCancelledToStudent(recipient.studentEmail, {
+          requestId: lessonId,
+          studentName: recipient.studentName,
+          teacherName: recipient.teacherName,
+          classStart: lesson.start,
+          cancelledBy: 'ADMIN',
+        })
+        .catch(() => {});
+    }
+
     return updated;
+  }
+
+  /** Operations-only data correction: marks a single lesson COMPLETED
+   * without going through the real teacher-led class flow (ClassroomService.
+   * endClass) — no studentJoinedAt check, no teacher earning, no ledger
+   * consumption, and deliberately NO student/teacher notification of any
+   * kind. This is for fixing a student's recorded progress (e.g. crediting
+   * a lesson taught outside the platform), not for simulating a real class
+   * — the audit log is the only record of who did this and why. */
+  async adminMarkLessonCompleted(
+    lessonId: string,
+    reason: string,
+    adminUserId: string,
+  ) {
+    if (!reason?.trim()) {
+      throw new BadRequestException(
+        'A reason is required to mark a class as completed.',
+      );
+    }
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+    if (lesson.status !== LessonStatus.UPCOMING) {
+      throw new BadRequestException(
+        'Only upcoming classes can be marked completed this way.',
+      );
+    }
+
+    const updated = await this.prisma.scheduledLesson.update({
+      where: { id: lessonId },
+      data: {
+        status: LessonStatus.COMPLETED,
+        endedAt: new Date(),
+        endedByRole: 'ADMIN',
+      },
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'ADMIN_LESSON_MARKED_COMPLETED',
+      entityType: 'ScheduledLesson',
+      entityId: lessonId,
+      reason,
+      beforeData: { status: lesson.status },
+      afterData: { status: 'COMPLETED', endedByRole: 'ADMIN' },
+    });
+
+    // Intentionally silent — no email/notification to the student or
+    // teacher. This is an Operations-only correction (see the doc comment
+    // above); the student must never learn it happened this way.
+
+    return updated;
+  }
+
+  /** Best-effort student+teacher display info for a ScheduledLesson
+   * notification — returns null rather than throwing so a lookup failure
+   * never blocks the reschedule/cancel action itself. */
+  private async getLessonNotificationRecipient(
+    studentUserId: string,
+    teacherId: string,
+  ) {
+    const [student, teacher] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: studentUserId },
+        select: { email: true, fullName: true },
+      }),
+      this.prisma.teacherProfile.findUnique({
+        where: { id: teacherId },
+        select: { user: { select: { fullName: true } } },
+      }),
+    ]);
+    if (!student || !teacher) return null;
+    return {
+      studentEmail: student.email,
+      studentName: student.fullName,
+      teacherName: teacher.user.fullName,
+    };
   }
 
   async adminDeleteLesson(

@@ -504,6 +504,7 @@ function ScheduleTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [markCompletingLessonId, setMarkCompletingLessonId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -723,6 +724,7 @@ function ScheduleTab({
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Time (Dhaka)</th>
                   <th className="px-4 py-3">Class Type</th>
+                  <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -736,12 +738,39 @@ function ScheduleTab({
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">
                       {CLASS_TYPE_LABELS[l.classType] ?? l.classType}
                     </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => setMarkCompletingLessonId(l.id)}
+                        className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline"
+                        title="Admin-only correction — the student is not notified"
+                      >
+                        Mark Completed
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         </Card>
+      )}
+
+      {markCompletingLessonId && (
+        <ReasonActionModal
+          title="Mark lesson as completed"
+          actionLabel="Mark Completed"
+          onClose={() => setMarkCompletingLessonId(null)}
+          onSubmit={async (reason) => {
+            await api.post(`/admin/lessons/${markCompletingLessonId}/mark-completed`, { reason });
+            load();
+          }}
+          extraFields={
+            <p className="text-xs text-[var(--a-text-muted)]">
+              This is a silent Operations correction — it updates the student's recorded progress but does{" "}
+              <strong>not</strong> notify the student or teacher, and does not affect payouts or billing.
+            </p>
+          }
+        />
       )}
     </div>
   );

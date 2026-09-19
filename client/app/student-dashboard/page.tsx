@@ -8,6 +8,7 @@ import { isDemoStudentEmail } from '@/lib/demoClassroom';
 import LiveClassCard, { LiveClass } from '@/components/student/LiveClassCard';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
+import CertificatesCard from '@/components/student/CertificatesCard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -427,6 +428,9 @@ export default function StudentDashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* 6. Certificates — only renders once the student has earned one */}
+          <CertificatesCard />
         </>
       )}
     </div>

@@ -632,11 +632,13 @@ export class AdminService {
     };
   }
 
-  async addTeacherStrike(teacherId: string, reason: string, adminUserId: string) {
+  async addTeacherStrike(
+    teacherId: string,
+    reason: string,
+    adminUserId: string,
+  ) {
     if (!reason?.trim()) {
-      throw new BadRequestException(
-        'A reason is required to add a strike.',
-      );
+      throw new BadRequestException('A reason is required to add a strike.');
     }
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { id: teacherId },
@@ -661,17 +663,53 @@ export class AdminService {
     });
 
     try {
-      await this.notifications.sendTeacherStrikeWarning(
-        teacher.user.email,
-        updated.strikes,
-        teacher.user.fullName,
-      );
+      await this.notifications.sendTeacherPenalty(teacher.user.email, {
+        teacherProfileId: teacherId,
+        teacherName: teacher.user.fullName,
+        strikes: updated.strikes,
+        reason,
+      });
     } catch {
       // Non-fatal — the strike itself is already recorded; a failed email
       // shouldn't roll back an Operations action.
     }
 
     return updated;
+  }
+
+  /** A free-form Operations→teacher note (policy update, schedule change,
+   * performance note, etc.) — email only, no in-app record beyond the
+   * AuditLog entry, since AlertsService's DashboardAlert is reserved for
+   * automatic system-triggered events (see its doc comment). */
+  async sendTeacherMessage(
+    teacherId: string,
+    subject: string,
+    message: string,
+    adminUserId: string,
+  ) {
+    const teacher = await this.prisma.teacherProfile.findUnique({
+      where: { id: teacherId },
+      include: { user: { select: { email: true, fullName: true } } },
+    });
+    if (!teacher) throw new NotFoundException('Teacher not found.');
+
+    await this.notifications.sendTeacherAdminMessage(teacher.user.email, {
+      teacherName: teacher.user.fullName,
+      subject,
+      message,
+    });
+
+    await this.audit.log({
+      actorId: adminUserId,
+      actorRole: 'ADMIN',
+      action: 'TEACHER_MESSAGE_SENT',
+      entityType: 'TeacherProfile',
+      entityId: teacherId,
+      reason: subject,
+      afterData: { message },
+    });
+
+    return { success: true };
   }
 
   async suspendTeacher(teacherId: string, reason: string, adminUserId: string) {
@@ -755,6 +793,7 @@ export class AdminService {
   async setDocsLocked(teacherId: string, locked: boolean, adminUserId: string) {
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { id: teacherId },
+      include: { user: { select: { email: true, fullName: true } } },
     });
     if (!teacher) throw new NotFoundException('Teacher not found.');
 
@@ -770,6 +809,19 @@ export class AdminService {
       entityType: 'TeacherProfile',
       entityId: teacherId,
     });
+
+    // Locking docs is Operations' way of saying "reviewed and finalized" —
+    // the closest real signal this app has to "onboarding approved", so
+    // that's the moment the teacher hears about it. Only on the false→true
+    // transition, never on a re-lock or an unlock.
+    if (locked && !teacher.docsLocked) {
+      this.notifications
+        .sendTeacherApprovedEmail(teacher.user.email, {
+          teacherProfileId: teacherId,
+          teacherName: teacher.user.fullName,
+        })
+        .catch(() => {});
+    }
 
     return updated;
   }
@@ -1244,6 +1296,21 @@ export class AdminService {
       await this.scheduling.clearStudentSchedule(studentUserId);
     }
 
+    if (teacherProfileId && teacherProfileId !== student.assignedTeacherId) {
+      const teacherUser = await this.prisma.teacherProfile.findUnique({
+        where: { id: teacherProfileId },
+        select: { user: { select: { email: true, fullName: true } } },
+      });
+      if (teacherUser) {
+        this.notifications
+          .sendTeacherStudentAssignedEmail(teacherUser.user.email, {
+            teacherName: teacherUser.user.fullName,
+            studentName: updated.fullName,
+          })
+          .catch(() => {});
+      }
+    }
+
     return updated;
   }
 
@@ -1378,10 +1445,11 @@ export class AdminService {
     // Restore the same weekly schedule the student had before being
     // paused — regenerated from today against their still-intact
     // RecurringSlot pattern (see SchedulingService.restoreScheduleAfterResume).
-    const { restored, skipped } = await this.scheduling.restoreScheduleAfterResume(
-      studentUserId,
-      adminUserId,
-    );
+    const { restored, skipped } =
+      await this.scheduling.restoreScheduleAfterResume(
+        studentUserId,
+        adminUserId,
+      );
 
     await this.audit.log({
       actorId: adminUserId,

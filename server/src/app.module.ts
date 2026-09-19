@@ -18,6 +18,7 @@ import { BookingsModule } from './bookings/bookings.module';
 import { TeachersModule } from './teachers/teachers.module';
 import { ClassroomModule } from './classroom/classroom.module';
 import { PaymentsModule } from './payments/payments.module';
+import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadsModule } from './uploads/uploads.module';
@@ -33,6 +34,11 @@ import { SchedulingModule } from './scheduling/scheduling.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { AssessmentsModule } from './assessments/assessments.module';
 import { AlertsModule } from './alerts/alerts.module';
+import { DisputesModule } from './disputes/disputes.module';
+import { CertificatesModule } from './certificates/certificates.module';
+import { RemindersModule } from './reminders/reminders.module';
+import { PackageAlertsModule } from './package-alerts/package-alerts.module';
+import { AdminAlertsModule } from './admin-alerts/admin-alerts.module';
 
 @Module({
   imports: [
@@ -64,6 +70,7 @@ import { AlertsModule } from './alerts/alerts.module';
 
     // ─── Global services ────────────────────────────────────────────────────
     PaymentsModule,
+    EmailModule,
     NotificationsModule,
     TeachersModule,
     UploadsModule,
@@ -82,6 +89,11 @@ import { AlertsModule } from './alerts/alerts.module';
     SchedulingModule,
     CurriculumModule,
     AssessmentsModule,
+    DisputesModule,
+    CertificatesModule,
+    RemindersModule,
+    PackageAlertsModule,
+    AdminAlertsModule,
   ],
   controllers: [AppController],
   providers: [
