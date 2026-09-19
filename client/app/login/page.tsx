@@ -174,11 +174,19 @@ function LoginContent() {
           </div>
 
           <div>
-            <label
-              className={`block text-xs uppercase tracking-wider font-semibold mb-2 ${labelCls}`}
-            >
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label
+                className={`block text-xs uppercase tracking-wider font-semibold ${labelCls}`}
+              >
+                Password
+              </label>
+              <Link
+                href="/forgot-password"
+                className="text-xs font-semibold text-blue-500 hover:text-blue-400 transition-colors"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}

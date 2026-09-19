@@ -11,6 +11,7 @@ import { SchedulingService } from '../scheduling/scheduling.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { StripeService } from '../payments/stripe.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   getClassWindow,
   computeLateMinutes,
@@ -65,6 +66,7 @@ export class ClassroomService {
     private payoutsService: PayoutsService,
     private alertsService: AlertsService,
     private stripeService: StripeService,
+    private notifications: NotificationsService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -867,6 +869,32 @@ export class ClassroomService {
           data: { endedAt: new Date(), endedByRole: 'TEACHER' },
         });
         await this.schedulingService.handlePartialCompletion(lessonId, userId);
+
+        // A genuine no-show: the teacher ended the class and the student
+        // never joined at all (vs. a partial-completion that ran long with
+        // both sides present — that case has studentJoinedAt set).
+        if (!lesson.studentJoinedAt) {
+          const [student, teacherProfile] = await Promise.all([
+            this.prisma.user.findUnique({
+              where: { id: lesson.studentUserId },
+              select: { email: true, fullName: true },
+            }),
+            this.prisma.teacherProfile.findUnique({
+              where: { id: lesson.teacherId },
+              select: { user: { select: { fullName: true } } },
+            }),
+          ]);
+          if (student && teacherProfile) {
+            this.notifications
+              .sendMissedClassNotice(student.email, {
+                lessonId,
+                studentName: student.fullName,
+                teacherName: teacherProfile.user.fullName,
+                classStart: lesson.start,
+              })
+              .catch(() => {});
+          }
+        }
       }
     }
 

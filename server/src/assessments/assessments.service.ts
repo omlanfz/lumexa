@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma.service';
 import { todayDhakaDateStr, utcToDhakaParts } from '../scheduling/dhaka-time.util';
 import { AiGradingService } from './ai-grading.service';
 import { CodeRunnerService } from './code-runner.service';
+import { CertificatesService } from '../certificates/certificates.service';
 import { RecordVivaDto, SubmitMCQAnswerDto, SubmitPracticalDto } from './dto/assessment.dto';
 
 interface Requester {
@@ -33,6 +34,7 @@ export class AssessmentsService {
     private readonly prisma: PrismaService,
     private readonly aiGrading: AiGradingService,
     private readonly codeRunner: CodeRunnerService,
+    private readonly certificates: CertificatesService,
   ) {}
 
   // ── Start / resume an attempt ─────────────────────────────────────────────
@@ -425,6 +427,7 @@ export class AssessmentsService {
       vivaMaxScore: attempt.vivaMaxScore,
     });
     const passScorePct = await this.passThreshold(attempt.assessmentId);
+    const passed = totalScore >= passScorePct;
 
     await this.prisma.assessmentAttempt.update({
       where: { id: attemptId },
@@ -432,11 +435,21 @@ export class AssessmentsService {
         vivaScore: dto.score,
         totalScore,
         totalMaxScore,
-        passed: totalScore >= passScorePct,
+        passed,
         status: AttemptStatus.GRADED,
         gradedAt: new Date(),
       },
     });
+
+    // A Final Test is only ever graded here (see the doc comment atop this
+    // method) — so this is the single point in the app that can detect
+    // "curriculum completed" and issue a certificate. Fire-and-forget: a
+    // slow PDF render/upload must never block recording a viva score.
+    if (passed) {
+      this.certificates
+        .checkAndIssueCertificate(attempt.studentUserId, attempt.assessment.lesson.courseId)
+        .catch(() => {});
+    }
 
     return viva;
   }

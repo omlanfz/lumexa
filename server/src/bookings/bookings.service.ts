@@ -414,6 +414,7 @@ export class BookingsService {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
+        studentUser: { select: { email: true, fullName: true } },
         shift: {
           include: {
             teacher: {
@@ -457,6 +458,20 @@ export class BookingsService {
         data: { isBooked: false },
       }),
     ]);
+
+    // Only the teacher gets a notification here — the student is the one
+    // who took this action, so a "your class was cancelled" email (the
+    // required notification is specifically for a change made BY a
+    // teacher/admin) would be redundant with the UI they just used.
+    this.notifications
+      .sendTeacherClassChangedByStudent(booking.shift.teacher.user.email, {
+        requestId: bookingId,
+        teacherName: booking.shift.teacher.user.fullName,
+        studentName: booking.studentUser?.fullName ?? 'A student',
+        classStart: booking.shift.start,
+        action: 'CANCELLED',
+      })
+      .catch(() => {});
 
     return { message: 'Booking cancelled.', refundCents, reason };
   }
@@ -623,7 +638,12 @@ export class BookingsService {
       // Award bonus gems for 5-star review (fire-and-forget)
       if (rating === 5) {
         this.studentsService
-          .awardGems(studentUserId, 3, 'FIVE_STAR_REVIEW', '5-star review bonus')
+          .awardGems(
+            studentUserId,
+            3,
+            'FIVE_STAR_REVIEW',
+            '5-star review bonus',
+          )
           .catch(() => {});
       }
 
@@ -633,10 +653,15 @@ export class BookingsService {
 
   // ─── Post-capture gamification trigger ────────────────────────────────────────
 
-  async triggerSessionCompletedRewards(studentUserId: string, isFirstSession: boolean) {
+  async triggerSessionCompletedRewards(
+    studentUserId: string,
+    isFirstSession: boolean,
+  ) {
     const gems = isFirstSession ? 15 : 5; // 10 first-session + 5 session = 15 first time
     const type = isFirstSession ? 'FIRST_SESSION' : 'SESSION_COMPLETE';
-    const desc = isFirstSession ? 'First session completion bonus' : 'Session completion reward';
+    const desc = isFirstSession
+      ? 'First session completion bonus'
+      : 'Session completion reward';
 
     await Promise.all([
       this.studentsService.awardGems(studentUserId, gems, type, desc),
@@ -645,7 +670,12 @@ export class BookingsService {
 
     if (isFirstSession) {
       // Award rank-up gems (FIRST_MISSION badge)
-      await this.studentsService.awardGems(studentUserId, 10, 'FIRST_SESSION_BONUS', 'First mission bonus');
+      await this.studentsService.awardGems(
+        studentUserId,
+        10,
+        'FIRST_SESSION_BONUS',
+        'First mission bonus',
+      );
     }
   }
 

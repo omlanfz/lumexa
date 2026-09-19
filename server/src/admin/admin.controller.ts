@@ -26,6 +26,7 @@ import { PayoutsService } from '../payouts/payouts.service';
 import { RescheduleService } from '../reschedule/reschedule.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { DisputesService } from '../disputes/disputes.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
@@ -75,14 +76,18 @@ class RecordPaymentDto {
   @IsNumber() @IsPositive() lessonsPurchased: number;
   @IsOptional() @IsString() courseId?: string;
   @IsOptional() @IsString() @MaxLength(500) description?: string;
-  @IsOptional() @IsIn(['BKASH', 'BANK', 'CASH', 'OTHER']) paymentMethod?: string;
+  @IsOptional()
+  @IsIn(['BKASH', 'BANK', 'CASH', 'OTHER'])
+  paymentMethod?: string;
   @IsOptional() @IsString() @MaxLength(200) paymentDetail?: string;
 }
 
 class RecordRefundDto {
   @IsNumber() @IsPositive() amountTaka: number;
   @IsOptional() @IsString() @MaxLength(500) description?: string;
-  @IsOptional() @IsIn(['BKASH', 'BANK', 'CASH', 'OTHER']) paymentMethod?: string;
+  @IsOptional()
+  @IsIn(['BKASH', 'BANK', 'CASH', 'OTHER'])
+  paymentMethod?: string;
   @IsOptional() @IsString() @MaxLength(200) paymentDetail?: string;
 }
 
@@ -93,6 +98,15 @@ class RecordAdjustmentDto {
 
 class ContactDto {
   @IsOptional() @IsString() @MaxLength(30) whatsappNumber?: string | null;
+}
+
+class TeacherMessageDto {
+  @IsString() @IsNotEmpty() @MaxLength(150) subject: string;
+  @IsString() @IsNotEmpty() @MaxLength(4000) message: string;
+}
+
+class ResolveDisputeDto {
+  @IsString() @IsNotEmpty() @MaxLength(2000) resolutionNotes: string;
 }
 
 class SetPasswordDto {
@@ -114,6 +128,7 @@ export class AdminController {
     private readonly rescheduleService: RescheduleService,
     private readonly studentLedgerService: StudentLedgerService,
     private readonly schedulingService: SchedulingService,
+    private readonly disputesService: DisputesService,
   ) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
@@ -239,6 +254,19 @@ export class AdminController {
     );
   }
 
+  @Post('lessons/:lessonId/mark-completed')
+  adminMarkLessonCompleted(
+    @Param('lessonId') lessonId: string,
+    @Body() dto: ReasonDto,
+    @Request() req: any,
+  ) {
+    return this.schedulingService.adminMarkLessonCompleted(
+      lessonId,
+      dto.reason,
+      req.user.userId,
+    );
+  }
+
   @Delete('lessons/:lessonId')
   deleteLesson(
     @Param('lessonId') lessonId: string,
@@ -317,6 +345,40 @@ export class AdminController {
       teacherId,
       dto.reason,
       req.user.userId,
+    );
+  }
+
+  @Post('teachers/:teacherId/message')
+  sendTeacherMessage(
+    @Param('teacherId') teacherId: string,
+    @Body() dto: TeacherMessageDto,
+    @Request() req: any,
+  ) {
+    return this.adminService.sendTeacherMessage(
+      teacherId,
+      dto.subject,
+      dto.message,
+      req.user.userId,
+    );
+  }
+
+  // ── Disputes ─────────────────────────────────────────────────────────────
+
+  @Get('disputes')
+  listDisputes(@Query('status') status?: 'OPEN' | 'RESOLVED') {
+    return this.disputesService.listAll(status);
+  }
+
+  @Post('disputes/:disputeId/resolve')
+  resolveDispute(
+    @Param('disputeId') disputeId: string,
+    @Body() dto: ResolveDisputeDto,
+    @Request() req: any,
+  ) {
+    return this.disputesService.resolve(
+      disputeId,
+      req.user.userId,
+      dto.resolutionNotes,
     );
   }
 
@@ -457,10 +519,7 @@ export class AdminController {
     @Param('studentUserId') studentUserId: string,
     @Request() req: any,
   ) {
-    return this.adminService.impersonateStudent(
-      studentUserId,
-      req.user.userId,
-    );
+    return this.adminService.impersonateStudent(studentUserId, req.user.userId);
   }
 
   // ── Student BDT ledger ──────────────────────────────────────────────────

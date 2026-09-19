@@ -38,7 +38,12 @@ describe('AdminService - assignTeacherToStudent', () => {
           provide: SchedulingService,
           useValue: { clearStudentSchedule: jest.fn() },
         },
-        { provide: NotificationsService, useValue: {} },
+        {
+          provide: NotificationsService,
+          useValue: {
+            sendTeacherStudentAssignedEmail: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         { provide: JwtService, useValue: { sign: jest.fn() } },
       ],
     }).compile();
@@ -51,7 +56,13 @@ describe('AdminService - assignTeacherToStudent', () => {
       id: 'student-1',
       role: 'STUDENT',
     });
-    prisma.teacherProfile.findUnique.mockResolvedValue({ id: 'teacher-1' });
+    // Reused for both the existence check (select: { id: true }) and the
+    // new-assignment notification lookup (select: { user: {...} } }) — the
+    // shape below satisfies both regardless of which `select` was passed.
+    prisma.teacherProfile.findUnique.mockResolvedValue({
+      id: 'teacher-1',
+      user: { email: 'teacher@example.com', fullName: 'Mr T' },
+    });
     prisma.user.update.mockResolvedValue({
       id: 'student-1',
       fullName: 'Ada Lovelace',

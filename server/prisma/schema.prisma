@@ -18,6 +18,12 @@ model User {
   coppaConsentAt DateTime?
   avatarUrl      String?
 
+  // Set on every successful password login (AuthService.login /
+  // StudentsService.loginStudent) — used only to detect platform
+  // inactivity (see AdminAlertsService low-activity check). Never set on
+  // registration, impersonation, or any other flow.
+  lastLoginAt DateTime?
+
   // Admin-recorded WhatsApp contact number (any role) — Lumexa Operations
   // corresponds with students/teachers over WhatsApp, so this is entered/
   // edited by Operations from the admin dashboard, not self-served today.
@@ -1026,6 +1032,143 @@ model PracticalSubmission {
 
   @@unique([attemptId, questionId])
   @@index([attemptId])
+}
+
+// ─── Centralized email notification system ───────────────────────────────────
+//
+// EmailService (server/src/email/email.service.ts) is the ONLY place that
+// sends outbound mail (Gmail SMTP via Nodemailer). Every send is first
+// journaled here as PENDING, then attempted immediately (fire-and-forget —
+// callers never block on delivery) and updated to SENT/FAILED. A cron sweep
+// retries FAILED rows below the attempt cap, giving the "lightweight
+// queue" behavior without a separate broker. `dedupeKey` is how one-shot
+// notifications (a specific booking confirmed, a specific certificate
+// issued) stay idempotent: callers pass a deterministic key and rely on the
+// unique constraint (P2002) to no-op a duplicate attempt — the same pattern
+// StudentLedgerEntry uses for LESSON_COMPLETED rows.
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model EmailLog {
+  id            String      @id @default(uuid())
+  toEmail       String
+  subject       String
+  html          String      @db.Text // full rendered body, kept so the retry sweep can resend without the original caller re-running
+  category      String // e.g. "STUDENT_WELCOME", "CLASS_REMINDER" — informational, not FK'd to an enum so new categories never need a migration
+  dedupeKey     String?     @unique
+  status        EmailStatus @default(PENDING)
+  attempts      Int         @default(0)
+  lastError     String?
+  relatedUserId String? // best-effort reference for admin/debug lookup — not a Prisma relation, deliberately decoupled so this model never blocks on user deletion
+  // { attachments?: { filename: string; path: string }[] } — `path` is a
+  // local file path or remote URL Nodemailer can fetch, never inline binary,
+  // so a retry never needs to regenerate a certificate/curriculum PDF.
+  metadata      Json?
+  createdAt     DateTime    @default(now())
+  sentAt        DateTime?
+  updatedAt     DateTime    @updatedAt
+
+  @@index([status, createdAt])
+  @@index([relatedUserId])
+  @@index([category, createdAt])
+}
+
+// ─── Forgot Password ──────────────────────────────────────────────────────────
+//
+// Only the SHA-256 hash of the reset token is ever stored — the raw token
+// (crypto.randomBytes(32)) exists only in the emailed link and briefly in
+// memory server-side. Single-use: usedAt is set the moment the password is
+// actually changed, and AuthService.resetPassword refuses any token that is
+// expired, already used, or not found — the same generic error either way.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+// ─── Package/subscription balance alerts ──────────────────────────────────────
+//
+// Tracks the last alert level actually emailed to a student's billing
+// contact so the daily threshold check (PackageAlertsService) only emails
+// on a state TRANSITION (NONE→EXPIRING_SOON, →EXPIRED) — never repeatedly
+// while the balance sits in the same bracket, and resets silently (no email)
+// the moment a new payment lifts the student back out of it.
+enum PackageAlertLevel {
+  NONE
+  EXPIRING_SOON
+  EXPIRED
+}
+
+model PackageAlertState {
+  id            String             @id @default(uuid())
+  studentUserId String             @unique
+  lastState     PackageAlertLevel  @default(NONE)
+  lastSentAt    DateTime?
+  updatedAt     DateTime           @updatedAt
+}
+
+// ─── Curriculum-completion certificates ───────────────────────────────────────
+//
+// One row per (student, completed course) — @@unique enforces that a
+// certificate is issued at most once per curriculum per student, which is
+// also how CertificateService.checkAndIssueCertificate stays idempotent
+// (relies on the P2002 from a duplicate create, same pattern as
+// StudentLedgerEntry). Deliberately holds no Prisma relation to User/Course
+// (plain ids only) so this model never gains a migration dependency on
+// those — see CertificateService for the lookups.
+model Certificate {
+  id                     String   @id @default(uuid())
+  studentUserId          String
+  courseId               String
+  courseName             String // denormalized snapshot at issue time
+  certificateNumber      String   @unique
+  pdfUrl                 String
+  issuedAt               DateTime @default(now())
+  recommendedCourseId    String?
+  recommendedCourseName  String?
+  metadata               Json? // progress report snapshot (lessons completed, hours, final score, etc.)
+
+  @@unique([studentUserId, courseId])
+  @@index([studentUserId])
+}
+
+// ─── Disputes / complaints ─────────────────────────────────────────────────────
+//
+// Minimal filing record for "a class dispute or complaint filed by a
+// student/teacher" (no existing model covered this — Review is a rating,
+// not a complaint). Filing sends an admin alert email; resolution is a
+// simple status flip from the admin dashboard. Plain scalar references
+// only, by design — see the Certificate comment above for why.
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+}
+
+model Dispute {
+  id                 String        @id @default(uuid())
+  filedByUserId      String
+  filedByRole        Role
+  againstUserId      String?
+  scheduledLessonId  String?
+  bookingId          String?
+  category           String
+  description        String
+  status             DisputeStatus @default(OPEN)
+  createdAt          DateTime      @default(now())
+  resolvedAt         DateTime?
+  resolvedByAdminId  String?
+  resolutionNotes    String?
+
+  @@index([status, createdAt])
+  @@index([filedByUserId])
 }
 
 // Final Test Part C — teacher-recorded viva/demo.
