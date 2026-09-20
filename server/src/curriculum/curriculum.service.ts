@@ -290,7 +290,7 @@ export class CurriculumService {
 
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
-      select: { id: true, title: true },
+      select: { id: true, title: true, isCustom: true },
     });
     if (!course) throw new NotFoundException('Course not found');
 
@@ -333,6 +333,15 @@ export class CurriculumService {
   // curriculum's own tests (if any) are hand-built via the regular lesson
   // editor instead.
 
+  /** Every default curriculum's full, ordered session list — every course
+   * (module) and every session, learning and test alike — grouped by
+   * curriculum -> module, exactly matching that curriculum's real teaching
+   * order (Lesson.order is the session number within the whole course, not
+   * per-module — see ScheduledLesson.lessonId's doc comment). Test-type
+   * sessions (COURSE_TEST/STAGE_TEST/FINAL_TEST) ARE included here for a
+   * true "all 28 lessons" picker, but importing one copies only its
+   * content — never its Assessment/question bank, which isn't safe to
+   * duplicate blind (see importLesson). */
   async getReusableLessons() {
     const courses = await this.prisma.course.findMany({
       where: { isCustom: false },
@@ -341,22 +350,36 @@ export class CurriculumService {
         id: true,
         title: true,
         category: true,
+        sessions: true,
         modules: {
           orderBy: { order: 'asc' },
           select: {
             id: true,
             title: true,
+            stageNumber: true,
             lessons: {
-              where: { type: SessionType.LEARNING },
               orderBy: { order: 'asc' },
               select: {
                 id: true,
                 title: true,
                 order: true,
                 duration: true,
+                type: true,
                 homework: true,
               },
             },
+          },
+        },
+        lessons: {
+          where: { moduleId: null },
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            order: true,
+            duration: true,
+            type: true,
+            homework: true,
           },
         },
       },
@@ -366,13 +389,27 @@ export class CurriculumService {
         courseId: c.id,
         courseTitle: c.title,
         category: c.category,
-        modules: c.modules
-          .filter((m) => m.lessons.length > 0)
-          .map((m) => ({
+        totalSessions: c.sessions,
+        modules: [
+          ...c.modules.map((m) => ({
             moduleId: m.id,
             moduleTitle: m.title,
+            stageNumber: m.stageNumber,
             lessons: m.lessons,
           })),
+          // Loose (non-module) sessions — Stage/Final Tests — appended as
+          // their own pseudo-section so they still appear in sequence.
+          ...(c.lessons.length > 0
+            ? [
+                {
+                  moduleId: null,
+                  moduleTitle: 'Stage / Final Tests',
+                  stageNumber: null,
+                  lessons: c.lessons,
+                },
+              ]
+            : []),
+        ].filter((m) => m.lessons.length > 0),
       }))
       .filter((c) => c.modules.length > 0);
   }
@@ -380,7 +417,10 @@ export class CurriculumService {
   /** Copies one default-curriculum Lesson's content into a custom course as
    * a new, independent, flat (moduleId: null) lesson at the given order —
    * the default lesson and its module/course are never touched, so this can
-   * never mutate a default curriculum. */
+   * never mutate a default curriculum. The session type is preserved for an
+   * accurate structure preview, but no Assessment/question bank is cloned —
+   * an imported test session has no question bank until the admin builds
+   * one fresh for it. */
   async importLesson(targetCourseId: string, dto: ImportLessonDto) {
     const [target, source] = await Promise.all([
       this.prisma.course.findUnique({
@@ -403,7 +443,7 @@ export class CurriculumService {
         title: source.title,
         order: dto.order,
         duration: source.duration,
-        type: SessionType.LEARNING,
+        type: source.type,
         objectives: source.objectives,
         contentMarkdown: source.contentMarkdown,
         reviewNotes: source.reviewNotes,

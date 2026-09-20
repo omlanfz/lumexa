@@ -410,7 +410,7 @@ export default function StudentDetailPage() {
         <AssignModal
           title="Change assigned teacher"
           searchLabel="Search teacher…"
-          searchUrl={(q) => `/admin/teachers?limit=8&search=${encodeURIComponent(q)}`}
+          searchUrl={(q) => `/admin/teachers?limit=20&search=${encodeURIComponent(q)}`}
           extractOptions={(data) => data.teachers.map((t: any) => ({ id: t.id, label: t.user.fullName, sub: t.user.email }))}
           onSelect={async (id) => {
             await api.post(`/admin/students/${studentUserId}/assign-teacher`, { teacherProfileId: id });
@@ -797,11 +797,9 @@ function AssignModal({
   const [options, setOptions] = useState<{ id: string; label: string; sub?: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // Loads a default browsable list immediately (not just once the admin
+  // already knows a name to type), then narrows as they search.
   useEffect(() => {
-    if (!query.trim()) {
-      setOptions([]);
-      return;
-    }
     const t = setTimeout(() => {
       api.get(searchUrl(query)).then((res) => setOptions(extractOptions(res.data)));
     }, 250);

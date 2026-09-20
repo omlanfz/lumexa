@@ -475,13 +475,11 @@ function AssignStudentModal({ teacherId, onClose, onDone }: { teacherId: string;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Loads a default browsable list of students immediately (not just once
+  // the admin already knows a name to type), then narrows as they search.
   useEffect(() => {
-    if (!query.trim()) {
-      setOptions([]);
-      return;
-    }
     const t = setTimeout(() => {
-      api.get(`/admin/students?limit=8&search=${encodeURIComponent(query)}`).then((res) => setOptions(res.data.students ?? []));
+      api.get(`/admin/students?limit=20&search=${encodeURIComponent(query)}`).then((res) => setOptions(res.data.students ?? []));
     }, 250);
     return () => clearTimeout(t);
   }, [query]);
