@@ -23,6 +23,7 @@ import {
   CreateModuleDto,
   CreateProjectDto,
   ImportLessonDto,
+  ImportLessonsDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -80,13 +81,36 @@ export class CurriculumController {
     return this.curriculum.importLesson(courseId, dto);
   }
 
-  /** Generates (or regenerates) the branded, parent-ready curriculum PDF for
-   * one custom course and caches its URL on Course.curriculumPdfUrl. */
-  @Post('courses/:courseId/curriculum-pdf')
+  /** Bulk version of the above — the Curriculum Builder's "select all"
+   * actions (a whole curriculum, a stage, or one module at a time). */
+  @Post('courses/:courseId/lessons/import-many')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  generateCurriculumPdf(@Param('courseId') courseId: string) {
-    return this.documents.generateCustomCurriculumPdf(courseId);
+  importLessons(
+    @Param('courseId') courseId: string,
+    @Body() dto: ImportLessonsDto,
+  ) {
+    return this.curriculum.importLessons(courseId, dto);
+  }
+
+  /** GET /curriculum/courses/:courseId/curriculum.xlsx — a branded .xlsx
+   * for one custom curriculum: a Summary sheet plus a full Lesson
+   * Breakdown sheet, in the sequence the admin built. */
+  @Get('courses/:courseId/curriculum.xlsx')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  async downloadCurriculumWorkbook(
+    @Param('courseId') courseId: string,
+    @Response() res: ExpressResponse,
+  ) {
+    const { buffer, filename } =
+      await this.documents.buildCustomCurriculumWorkbook(courseId);
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    res.send(buffer);
   }
 
   /** GET /curriculum/default-curriculum-summary.xlsx — one row per default

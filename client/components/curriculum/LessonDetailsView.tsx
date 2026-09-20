@@ -129,37 +129,51 @@ export default function LessonDetailsView({
         </div>
       ) : (
         <div className="space-y-5">
-          {data.lesson?.objectives && data.lesson.objectives.length > 0 && (
-            <section className={SECTION}>
-              <h2 className="font-bold text-gray-900 dark:text-white mb-2">🎯 Learning Objectives</h2>
-              <ul className="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300 text-sm">
-                {data.lesson.objectives.map((o, i) => (
-                  <li key={i}>{o}</li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {data.lesson?.project && (
-            <section className={SECTION}>
-              <h2 className="font-bold text-gray-900 dark:text-white mb-1">🛠️ Project: {data.lesson.project.title}</h2>
-              {data.lesson.project.description && (
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{data.lesson.project.description}</p>
-              )}
-              {data.lesson.checkpoint && (
-                <div className="mt-2 inline-block text-sm px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 font-medium">
-                  ✅ This session&apos;s checkpoint: {data.lesson.checkpoint}
-                </div>
-              )}
-            </section>
-          )}
-          {!data.lesson?.project && data.lesson?.checkpoint && (
-            <section className={SECTION}>
-              <div className="inline-block text-sm px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 font-medium">
-                ✅ This session&apos;s checkpoint: {data.lesson.checkpoint}
+          {(() => {
+            const hasObjectives = !!data.lesson?.objectives && data.lesson.objectives.length > 0;
+            const hasProjectOrCheckpoint = !!data.lesson?.project || !!data.lesson?.checkpoint;
+            if (!hasObjectives && !hasProjectOrCheckpoint) return null;
+            // Objectives and project/checkpoint are both short — pairing them
+            // side by side on wider screens uses the width instead of
+            // stacking two half-empty cards, and each still goes full-width
+            // alone (e.g. no project this session) or on mobile.
+            const paired = hasObjectives && hasProjectOrCheckpoint;
+            return (
+              <div className={paired ? 'grid lg:grid-cols-2 gap-4 items-start' : ''}>
+                {hasObjectives && (
+                  <section className={SECTION}>
+                    <h2 className="font-bold text-gray-900 dark:text-white mb-2">🎯 Learning Objectives</h2>
+                    <ul className="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300 text-sm">
+                      {data.lesson!.objectives.map((o, i) => (
+                        <li key={i}>{o}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+                {data.lesson?.project ? (
+                  <section className={SECTION}>
+                    <h2 className="font-bold text-gray-900 dark:text-white mb-1">🛠️ Project: {data.lesson.project.title}</h2>
+                    {data.lesson.project.description && (
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{data.lesson.project.description}</p>
+                    )}
+                    {data.lesson.checkpoint && (
+                      <div className="mt-2 inline-block text-sm px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 font-medium">
+                        ✅ This session&apos;s checkpoint: {data.lesson.checkpoint}
+                      </div>
+                    )}
+                  </section>
+                ) : (
+                  data.lesson?.checkpoint && (
+                    <section className={SECTION}>
+                      <div className="inline-block text-sm px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 font-medium">
+                        ✅ This session&apos;s checkpoint: {data.lesson.checkpoint}
+                      </div>
+                    </section>
+                  )
+                )}
               </div>
-            </section>
-          )}
+            );
+          })()}
 
           {data.lesson?.contentMarkdown && (
             <section className={SECTION}>
