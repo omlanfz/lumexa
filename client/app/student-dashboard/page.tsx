@@ -9,6 +9,7 @@ import LiveClassCard, { LiveClass } from '@/components/student/LiveClassCard';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
 import CertificatesCard from '@/components/student/CertificatesCard';
+import HomeworkDueCard, { PendingHomeworkItem } from '@/components/student/HomeworkDueCard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ interface DashboardData {
   continueLearning: ContinueLearning | null;
   metrics: Metrics;
   pendingReview: PendingReview | null;
+  pendingHomework: PendingHomeworkItem[];
 }
 
 const RANK_ORDER = [
@@ -337,6 +339,8 @@ export default function StudentDashboardPage() {
               }}
             />
           )}
+
+          {data && data.pendingHomework.length > 0 && <HomeworkDueCard items={data.pendingHomework} />}
 
           <div className="grid lg:grid-cols-2 gap-4">
             {/* 3. Continue Learning */}

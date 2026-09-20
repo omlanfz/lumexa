@@ -139,10 +139,19 @@ export class StudentsService {
     const access_token = this.jwtService.sign(payload);
 
     this.notifications
-      .sendWelcomeEmail(user.email, { userId: user.id, name: user.fullName, role: 'STUDENT' })
+      .sendWelcomeEmail(user.email, {
+        userId: user.id,
+        name: user.fullName,
+        role: 'STUDENT',
+      })
       .catch(() => {});
     this.notifications
-      .sendAdminNewRegistration({ userId: user.id, name: user.fullName, email: user.email, role: 'STUDENT' })
+      .sendAdminNewRegistration({
+        userId: user.id,
+        name: user.fullName,
+        email: user.email,
+        role: 'STUDENT',
+      })
       .catch(() => {});
 
     return {
@@ -296,38 +305,61 @@ export class StudentsService {
 
     const now = new Date();
 
-    const [bookings, nextScheduledLesson, completedLessonCount] =
-      await Promise.all([
-        this.prisma.booking.findMany({
-          where: {
-            studentUserId: userId,
-            paymentStatus: { in: ['PENDING', 'CAPTURED'] },
-          },
-          include: {
-            shift: {
-              include: {
-                teacher: {
-                  include: {
-                    user: { select: { fullName: true, avatarUrl: true } },
-                  },
+    const [
+      bookings,
+      nextScheduledLesson,
+      completedLessonCount,
+      pendingHomeworkLessons,
+    ] = await Promise.all([
+      this.prisma.booking.findMany({
+        where: {
+          studentUserId: userId,
+          paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+        },
+        include: {
+          shift: {
+            include: {
+              teacher: {
+                include: {
+                  user: { select: { fullName: true, avatarUrl: true } },
                 },
               },
             },
-            review: { select: { id: true, rating: true } },
           },
-          orderBy: { shift: { start: 'asc' } },
-        }),
-        this.scheduling.getStudentLiveOrNextLesson(userId),
-        user.assignedCourse
-          ? this.prisma.scheduledLesson.count({
-              where: {
-                studentUserId: userId,
-                courseId: user.assignedCourse.id,
-                status: 'COMPLETED',
-              },
-            })
-          : Promise.resolve(0),
-      ]);
+          review: { select: { id: true, rating: true } },
+        },
+        orderBy: { shift: { start: 'asc' } },
+      }),
+      this.scheduling.getStudentLiveOrNextLesson(userId),
+      user.assignedCourse
+        ? this.prisma.scheduledLesson.count({
+            where: {
+              studentUserId: userId,
+              courseId: user.assignedCourse.id,
+              status: 'COMPLETED',
+            },
+          })
+        : Promise.resolve(0),
+      // Homework the student has genuinely not acted on yet: the class is
+      // done, the lesson has an assignment, and nothing's been submitted
+      // for it (see Submission model). Surfaced on Student Home.
+      this.prisma.scheduledLesson.findMany({
+        where: {
+          studentUserId: userId,
+          status: 'COMPLETED',
+          lesson: { homework: { not: null } },
+          submission: null,
+        },
+        orderBy: { end: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          lessonNumber: true,
+          course: { select: { title: true } },
+          lesson: { select: { title: true } },
+        },
+      }),
+    ]);
 
     const captured = bookings.filter((b) => b.paymentStatus === 'CAPTURED');
     const upcoming = bookings.filter((b) => new Date(b.shift.start) > now);
@@ -367,7 +399,10 @@ export class StudentsService {
         : (bookingNext ?? lessonNext);
 
     const liveClass = chosen
-      ? { ...chosen, ...getClassWindow(new Date(chosen.start), new Date(chosen.end)) }
+      ? {
+          ...chosen,
+          ...getClassWindow(new Date(chosen.start), new Date(chosen.end)),
+        }
       : null;
 
     const pendingReview =
@@ -397,7 +432,10 @@ export class StudentsService {
           currentLessonNumber,
           progressPct:
             totalLessons && totalLessons > 0
-              ? Math.min(100, Math.round((completedLessonCount / totalLessons) * 100))
+              ? Math.min(
+                  100,
+                  Math.round((completedLessonCount / totalLessons) * 100),
+                )
               : 0,
         }
       : null;
@@ -440,6 +478,12 @@ export class StudentsService {
             teacherAvatarUrl: pendingReview.shift.teacher.user.avatarUrl,
           }
         : null,
+      pendingHomework: pendingHomeworkLessons.map((l) => ({
+        scheduledLessonId: l.id,
+        lessonNumber: l.lessonNumber,
+        courseTitle: l.course.title,
+        lessonTitle: l.lesson?.title ?? `Session ${l.lessonNumber}`,
+      })),
       stats: {
         totalSessions: user.totalSessions,
         upcomingCount: upcoming.length,
@@ -509,7 +553,11 @@ export class StudentsService {
             60000,
         ),
         review: b.review
-          ? { id: b.review.id, rating: b.review.rating, comment: b.review.comment }
+          ? {
+              id: b.review.id,
+              rating: b.review.rating,
+              comment: b.review.comment,
+            }
           : null,
         recordingUrl: b.recordingUrl ?? null,
         isUpcoming: new Date(b.shift.start) > now,
@@ -588,18 +636,19 @@ export class StudentsService {
     const nextBadge = badges.find((b) => !b.earned) ?? null;
 
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [totalLessonsCompleted, lessonsCompletedThisMonth] = await Promise.all([
-      this.prisma.scheduledLesson.count({
-        where: { studentUserId: userId, status: 'COMPLETED' },
-      }),
-      this.prisma.scheduledLesson.count({
-        where: {
-          studentUserId: userId,
-          status: 'COMPLETED',
-          end: { gte: monthStart },
-        },
-      }),
-    ]);
+    const [totalLessonsCompleted, lessonsCompletedThisMonth] =
+      await Promise.all([
+        this.prisma.scheduledLesson.count({
+          where: { studentUserId: userId, status: 'COMPLETED' },
+        }),
+        this.prisma.scheduledLesson.count({
+          where: {
+            studentUserId: userId,
+            status: 'COMPLETED',
+            end: { gte: monthStart },
+          },
+        }),
+      ]);
 
     return {
       spaceRank: user.spaceRank,
@@ -657,7 +706,13 @@ export class StudentsService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: limit,
-      select: { id: true, amount: true, type: true, description: true, createdAt: true },
+      select: {
+        id: true,
+        amount: true,
+        type: true,
+        description: true,
+        createdAt: true,
+      },
     });
   }
 
@@ -693,7 +748,13 @@ export class StudentsService {
   async checkAndAwardBadges(userId: string): Promise<string[]> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, fullName: true, totalSessions: true, streakWeeks: true, spaceRank: true },
+      select: {
+        email: true,
+        fullName: true,
+        totalSessions: true,
+        streakWeeks: true,
+        spaceRank: true,
+      },
     });
     if (!user) return [];
 
@@ -703,7 +764,14 @@ export class StudentsService {
     });
     const earned = new Set(existingBadges.map((b) => b.type));
 
-    const rankOrder = ['STARCHILD', 'EXPLORER', 'COSMONAUT', 'NAVIGATOR', 'CAPTAIN', 'GALAXY_COMMANDER'];
+    const rankOrder = [
+      'STARCHILD',
+      'EXPLORER',
+      'COSMONAUT',
+      'NAVIGATOR',
+      'CAPTAIN',
+      'GALAXY_COMMANDER',
+    ];
     const rankIdx = rankOrder.indexOf(user.spaceRank);
 
     const toAward: string[] = [];
@@ -791,7 +859,10 @@ export class StudentsService {
           reviewCount: t.reviewCount,
           subjects: t.subjects,
           hourlyRate: t.hourlyRate,
-          user: { fullName: t.user.fullName, avatarUrl: t.user.avatarUrl ?? null },
+          user: {
+            fullName: t.user.fullName,
+            avatarUrl: t.user.avatarUrl ?? null,
+          },
           sessionCount: 0,
           lastSession: new Date(b.shift.start),
         });
@@ -817,7 +888,12 @@ export class StudentsService {
   async getMyRankings(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { totalSessions: true, spaceRank: true, subjects: true, createdAt: true },
+      select: {
+        totalSessions: true,
+        spaceRank: true,
+        subjects: true,
+        createdAt: true,
+      },
     });
     if (!user) throw new NotFoundException('Student not found.');
 
@@ -828,42 +904,79 @@ export class StudentsService {
     const cohortEnd = new Date(cohortYear, cohortMonth, 1);
 
     const [
-      globalHigher, globalTotal, topGlobal,
-      cohortHigher, cohortTotal, topCohort,
+      globalHigher,
+      globalTotal,
+      topGlobal,
+      cohortHigher,
+      cohortTotal,
+      topCohort,
       lastSnapshot,
     ] = await Promise.all([
       this.prisma.user.count({
-        where: { role: 'STUDENT', accountStatus: 'ACTIVE', totalSessions: { gt: user.totalSessions } },
+        where: {
+          role: 'STUDENT',
+          accountStatus: 'ACTIVE',
+          totalSessions: { gt: user.totalSessions },
+        },
       }),
-      this.prisma.user.count({ where: { role: 'STUDENT', accountStatus: 'ACTIVE' } }),
+      this.prisma.user.count({
+        where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
+      }),
       this.prisma.user.findMany({
-        where: { role: 'STUDENT', accountStatus: 'ACTIVE', totalSessions: { gt: 0 } },
-        select: { id: true, fullName: true, avatarUrl: true, totalSessions: true, spaceRank: true },
+        where: {
+          role: 'STUDENT',
+          accountStatus: 'ACTIVE',
+          totalSessions: { gt: 0 },
+        },
+        select: {
+          id: true,
+          fullName: true,
+          avatarUrl: true,
+          totalSessions: true,
+          spaceRank: true,
+        },
         orderBy: { totalSessions: 'desc' },
         take: 20,
       }),
       this.prisma.user.count({
         where: {
-          role: 'STUDENT', accountStatus: 'ACTIVE',
+          role: 'STUDENT',
+          accountStatus: 'ACTIVE',
           createdAt: { gte: cohortStart, lt: cohortEnd },
           totalSessions: { gt: user.totalSessions },
         },
       }),
       this.prisma.user.count({
-        where: { role: 'STUDENT', accountStatus: 'ACTIVE', createdAt: { gte: cohortStart, lt: cohortEnd } },
+        where: {
+          role: 'STUDENT',
+          accountStatus: 'ACTIVE',
+          createdAt: { gte: cohortStart, lt: cohortEnd },
+        },
       }),
       this.prisma.user.findMany({
         where: {
-          role: 'STUDENT', accountStatus: 'ACTIVE',
+          role: 'STUDENT',
+          accountStatus: 'ACTIVE',
           createdAt: { gte: cohortStart, lt: cohortEnd },
           totalSessions: { gt: 0 },
         },
-        select: { id: true, fullName: true, avatarUrl: true, totalSessions: true, spaceRank: true },
+        select: {
+          id: true,
+          fullName: true,
+          avatarUrl: true,
+          totalSessions: true,
+          spaceRank: true,
+        },
         orderBy: { totalSessions: 'desc' },
         take: 20,
       }),
       this.prisma.rankSnapshot.findFirst({
-        where: { userId, month: now.getMonth() === 0 ? 12 : now.getMonth(), year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear() },
+        where: {
+          userId,
+          month: now.getMonth() === 0 ? 12 : now.getMonth(),
+          year:
+            now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(),
+        },
       }),
     ]);
 
@@ -873,21 +986,40 @@ export class StudentsService {
     // Save snapshot for current month if not already saved
     const snapMonth = now.getMonth() + 1;
     const snapYear = now.getFullYear();
-    this.prisma.rankSnapshot.upsert({
-      where: { userId_month_year: { userId, month: snapMonth, year: snapYear } },
-      update: { globalRank, cohortRank },
-      create: { userId, globalRank, cohortRank, month: snapMonth, year: snapYear },
-    }).catch(() => {});
+    this.prisma.rankSnapshot
+      .upsert({
+        where: {
+          userId_month_year: { userId, month: snapMonth, year: snapYear },
+        },
+        update: { globalRank, cohortRank },
+        create: {
+          userId,
+          globalRank,
+          cohortRank,
+          month: snapMonth,
+          year: snapYear,
+        },
+      })
+      .catch(() => {});
 
     // Subject ranks
     const subjectRanks: Record<string, { rank: number; total: number }> = {};
     for (const subject of user.subjects) {
       const [subHigher, subTotal] = await Promise.all([
         this.prisma.user.count({
-          where: { role: 'STUDENT', accountStatus: 'ACTIVE', subjects: { has: subject }, totalSessions: { gt: user.totalSessions } },
+          where: {
+            role: 'STUDENT',
+            accountStatus: 'ACTIVE',
+            subjects: { has: subject },
+            totalSessions: { gt: user.totalSessions },
+          },
         }),
         this.prisma.user.count({
-          where: { role: 'STUDENT', accountStatus: 'ACTIVE', subjects: { has: subject } },
+          where: {
+            role: 'STUDENT',
+            accountStatus: 'ACTIVE',
+            subjects: { has: subject },
+          },
         }),
       ]);
       subjectRanks[subject] = { rank: subHigher + 1, total: subTotal };
@@ -915,7 +1047,7 @@ export class StudentsService {
       avatarUrl: s.avatarUrl ?? null,
       totalSessions: s.totalSessions,
       spaceRank: s.spaceRank,
-      spaceRankIcon: rankMeta(s.spaceRank as SpaceRank).icon,
+      spaceRankIcon: rankMeta(s.spaceRank).icon,
       isCurrentUser: s.id === userId,
     });
 
@@ -925,12 +1057,21 @@ export class StudentsService {
     return {
       globalRank,
       totalStudents: globalTotal,
-      globalPercentile: globalTotal > 1 ? Math.round((1 - globalHigher / globalTotal) * 100) : 100,
+      globalPercentile:
+        globalTotal > 1
+          ? Math.round((1 - globalHigher / globalTotal) * 100)
+          : 100,
       topStudents: topGlobal.map(mapEntry),
       cohortRank,
       totalInCohort: cohortTotal,
-      cohortPercentile: cohortTotal > 1 ? Math.round((1 - cohortHigher / cohortTotal) * 100) : 100,
-      cohortMonth: user.createdAt.toLocaleString('en-US', { month: 'long', year: 'numeric' }),
+      cohortPercentile:
+        cohortTotal > 1
+          ? Math.round((1 - cohortHigher / cohortTotal) * 100)
+          : 100,
+      cohortMonth: user.createdAt.toLocaleString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      }),
       topCohort: topCohort.map(mapEntry),
       subjectRanks,
       movedUpThisMonth: movedUp,

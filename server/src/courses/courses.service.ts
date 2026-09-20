@@ -1,6 +1,13 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { seedCourseCatalog } from './course-catalog.seed';
@@ -12,6 +19,7 @@ export class CoursesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scheduling: SchedulingService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Ensures the default 7-course catalog (Odyssey + 6 specialized paths)
@@ -19,16 +27,23 @@ export class CoursesService implements OnModuleInit {
    *  touches lessons an admin has already edited (see seedCourseCatalog). */
   async onModuleInit() {
     try {
-      const results = await seedCourseCatalog(this.prisma, this.logger, (courseId, actorId) =>
-        this.scheduling.reconcileCourseSchedules(courseId, actorId),
+      const results = await seedCourseCatalog(
+        this.prisma,
+        this.logger,
+        (courseId, actorId) =>
+          this.scheduling.reconcileCourseSchedules(courseId, actorId),
       );
       const created = results.filter((r) => r.created).length;
       if (created > 0) {
-        this.logger.log(`Seeded ${created} default course(s) into the catalog.`);
+        this.logger.log(
+          `Seeded ${created} default course(s) into the catalog.`,
+        );
       }
       const backfill = await this.scheduling.backfillLessonLinks();
       if (backfill.updated > 0) {
-        this.logger.log(`Backfilled lessonId on ${backfill.updated} scheduled lesson(s).`);
+        this.logger.log(
+          `Backfilled lessonId on ${backfill.updated} scheduled lesson(s).`,
+        );
       }
     } catch (err) {
       this.logger.error('Failed to seed default course catalog.', err as Error);
@@ -65,7 +80,15 @@ export class CoursesService implements OnModuleInit {
       include: {
         lessons: {
           orderBy: { order: 'asc' },
-          select: { id: true, title: true, order: true, duration: true, type: true, courseId: true, createdAt: true },
+          select: {
+            id: true,
+            title: true,
+            order: true,
+            duration: true,
+            type: true,
+            courseId: true,
+            createdAt: true,
+          },
         },
       },
     });
@@ -86,6 +109,67 @@ export class CoursesService implements OnModuleInit {
     const course = await this.prisma.course.findUnique({ where: { id } });
     if (!course) throw new NotFoundException('Course not found');
     return course;
+  }
+
+  // ─── Delete ─────────────────────────────────────────────────────────────
+  //
+  // A course is only ever safe to hard-delete if nobody has actually taken a
+  // class against it yet (no ScheduledLesson rows) — that's the real class
+  // history (attendance, recordings, assessment attempts, homework
+  // submissions, and the StudentLedgerEntry rows that were deducted for it)
+  // and destroying it would corrupt a student's record and a teacher's
+  // earnings history. If any exist, refuse and point the admin at
+  // Deactivate instead (already the safe way to retire a course from
+  // rotation without losing history). When it IS safe, this clears every
+  // other place a still-unused course can be referenced from (an assigned
+  // student who was never actually scheduled, a RecurringSlot nobody has
+  // met for yet, a stray ledger row) before deleting the course itself —
+  // CourseModule already cascades to Project/module-scoped Lesson/
+  // Assessment, so only "loose" (non-module) lessons need an explicit
+  // delete.
+  async deleteCourse(id: string, actorId: string) {
+    const course = await this.prisma.course.findUnique({
+      where: { id },
+      select: { id: true, title: true, slug: true, isCustom: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+
+    const scheduledLessonCount = await this.prisma.scheduledLesson.count({
+      where: { courseId: id },
+    });
+    if (scheduledLessonCount > 0) {
+      throw new BadRequestException(
+        `"${course.title}" has ${scheduledLessonCount} scheduled/completed class${scheduledLessonCount === 1 ? '' : 'es'} on record and can't be deleted — deactivate it instead to hide it without losing student class history.`,
+      );
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.updateMany({
+        where: { assignedCourseId: id },
+        data: { assignedCourseId: null, assignedClassType: null },
+      }),
+      this.prisma.recurringSlot.deleteMany({ where: { courseId: id } }),
+      this.prisma.studentLedgerEntry.updateMany({
+        where: { courseId: id },
+        data: { courseId: null }, // courseName snapshot is preserved
+      }),
+      this.prisma.lesson.deleteMany({
+        where: { courseId: id, moduleId: null }, // module-scoped ones cascade with the module below
+      }),
+      this.prisma.courseModule.deleteMany({ where: { courseId: id } }),
+      this.prisma.course.delete({ where: { id } }),
+    ]);
+
+    await this.audit.log({
+      actorId,
+      actorRole: 'ADMIN',
+      action: 'COURSE_DELETED',
+      entityType: 'Course',
+      entityId: id,
+      beforeData: course,
+    });
+
+    return { success: true };
   }
 
   // ─── Lessons ────────────────────────────────────────────────────────────
@@ -112,12 +196,19 @@ export class CoursesService implements OnModuleInit {
     return lesson;
   }
 
-  async updateLesson(lessonId: string, dto: Partial<CreateLessonDto>, actorId: string) {
+  async updateLesson(
+    lessonId: string,
+    dto: Partial<CreateLessonDto>,
+    actorId: string,
+  ) {
     const lesson = await this.prisma.lesson.findUnique({
       where: { id: lessonId },
     });
     if (!lesson) throw new NotFoundException('Lesson not found');
-    const updated = await this.prisma.lesson.update({ where: { id: lessonId }, data: dto });
+    const updated = await this.prisma.lesson.update({
+      where: { id: lessonId },
+      data: dto,
+    });
     if (dto.order !== undefined && dto.order !== lesson.order) {
       await this.reconcileSafely(lesson.courseId, actorId);
     }
@@ -138,7 +229,10 @@ export class CoursesService implements OnModuleInit {
     try {
       await this.scheduling.reconcileCourseSchedules(courseId, actorId);
     } catch (err) {
-      this.logger.error(`Schedule reconciliation failed for course ${courseId}`, err as Error);
+      this.logger.error(
+        `Schedule reconciliation failed for course ${courseId}`,
+        err as Error,
+      );
     }
   }
 }

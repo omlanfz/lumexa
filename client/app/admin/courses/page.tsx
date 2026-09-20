@@ -17,6 +17,7 @@ interface Course {
   gemCost: number;
   priceCents: number | null;
   isActive: boolean;
+  isCustom: boolean;
   _count: { lessons: number; assignedStudents: number };
 }
 
@@ -25,6 +26,30 @@ export default function ManageCoursesPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<null | "create" | { course: Course }>(null);
   const [lessonsFor, setLessonsFor] = useState<Course | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Course | null>(null);
+  const [downloadingSummary, setDownloadingSummary] = useState(false);
+
+  const downloadDefaultSummary = async () => {
+    setDownloadingSummary(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/curriculum/default-curriculum-summary.xlsx`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to generate summary");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lumexa-default-curriculums.xlsx";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // Best-effort — no persistent error surface needed for an admin export button.
+    } finally {
+      setDownloadingSummary(false);
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -45,70 +70,89 @@ export default function ManageCoursesPage() {
           <h1 className="text-2xl font-bold text-[var(--a-text)]">Manage Courses</h1>
           <p className="text-sm text-[var(--a-text-muted)] mt-1">{courses.length} courses</p>
         </div>
-        <button
-          onClick={() => setModal("create")}
-          className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)]"
-        >
-          + New Course
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={downloadDefaultSummary}
+            disabled={downloadingSummary}
+            className="px-4 py-2 rounded-lg text-sm font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)] disabled:opacity-60"
+          >
+            {downloadingSummary ? "Preparing…" : "Export Default Curriculums (.xlsx)"}
+          </button>
+          <button
+            onClick={() => setModal("create")}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)]"
+          >
+            + New Course
+          </button>
+        </div>
       </div>
 
       <Card className="p-0 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Ages</th>
-              <th className="px-4 py-3">Lessons</th>
-              <th className="px-4 py-3">Price</th>
-              <th className="px-4 py-3">Students</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>}
-            {!loading && courses.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No courses yet.</td></tr>
-            )}
-            {!loading &&
-              courses.map((c) => (
-                <tr key={c.id} className="border-b border-[var(--a-border)] last:border-0">
-                  <td className="px-4 py-3 text-[var(--a-text)] font-medium">{c.title}</td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.category}</td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.ageMin}–{c.ageMax}</td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.lessons}</td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">
-                    {c.priceCents ? (
-                      <>
-                        {formatBDT(c.priceCents)}
-                        <span className="text-xs text-[var(--a-text-faint)]"> ({formatBDT(Math.round(c.priceCents / c.sessions))}/lesson)</span>
-                      </>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.assignedStudents}</td>
-                  <td className="px-4 py-3"><StatusBadge status={c.isActive ? "ACTIVE" : "DEACTIVATED"} /></td>
-                  <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
-                    <a href={`/admin/courses/${c.id}/curriculum`} className="text-sm text-[var(--a-accent)] hover:underline">
-                      Curriculum
-                    </a>
-                    <button onClick={() => setLessonsFor(c)} className="text-sm text-[var(--a-accent)] hover:underline">
-                      Lessons
-                    </button>
-                    <button onClick={() => setModal({ course: c })} className="text-sm text-[var(--a-accent)] hover:underline">
-                      Edit
-                    </button>
-                    <button onClick={() => toggleActive(c)} className="text-sm text-[var(--a-text-muted)] hover:underline">
-                      {c.isActive ? "Deactivate" : "Activate"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+        {/* overflow-x-auto + a min-w floor on the table is what lets the
+            Actions column stay reachable by swiping sideways on mobile
+            instead of the browser squeezing every column to fit — the
+            -webkit-overflow-scrolling touch prop keeps the scroll feeling
+            native on iOS. */}
+        <div className="overflow-x-auto" style={{ WebkitOverflowScrolling: "touch" }}>
+          <table className="w-full min-w-[860px] text-sm">
+            <thead>
+              <tr className="border-b border-[var(--a-border)] text-left text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+                <th className="px-4 py-3">Title</th>
+                <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Ages</th>
+                <th className="px-4 py-3">Lessons</th>
+                <th className="px-4 py-3">Price</th>
+                <th className="px-4 py-3">Students</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading && <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">Loading…</td></tr>}
+              {!loading && courses.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-[var(--a-text-faint)]">No courses yet.</td></tr>
+              )}
+              {!loading &&
+                courses.map((c) => (
+                  <tr key={c.id} className="border-b border-[var(--a-border)] last:border-0">
+                    <td className="px-4 py-3 text-[var(--a-text)] font-medium">{c.title}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.category}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.ageMin}–{c.ageMax}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.lessons}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      {c.priceCents ? (
+                        <>
+                          {formatBDT(c.priceCents)}
+                          <span className="text-xs text-[var(--a-text-faint)]"> ({formatBDT(Math.round(c.priceCents / c.sessions))}/lesson)</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.assignedStudents}</td>
+                    <td className="px-4 py-3"><StatusBadge status={c.isActive ? "ACTIVE" : "DEACTIVATED"} /></td>
+                    <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                      <a href={`/admin/courses/${c.id}/curriculum`} className="text-sm text-[var(--a-accent)] hover:underline">
+                        Curriculum
+                      </a>
+                      <button onClick={() => setLessonsFor(c)} className="text-sm text-[var(--a-accent)] hover:underline">
+                        Lessons
+                      </button>
+                      <button onClick={() => setModal({ course: c })} className="text-sm text-[var(--a-accent)] hover:underline">
+                        Edit
+                      </button>
+                      <button onClick={() => toggleActive(c)} className="text-sm text-[var(--a-text-muted)] hover:underline">
+                        {c.isActive ? "Deactivate" : "Activate"}
+                      </button>
+                      <button onClick={() => setDeleteTarget(c)} className="text-sm text-[var(--a-danger)] hover:underline">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {modal && (
@@ -121,7 +165,67 @@ export default function ManageCoursesPage() {
       {lessonsFor && (
         <LessonsModal course={lessonsFor} onClose={() => setLessonsFor(null)} onDone={load} />
       )}
+      {deleteTarget && (
+        <DeleteCourseModal course={deleteTarget} onClose={() => setDeleteTarget(null)} onDone={load} />
+      )}
     </div>
+  );
+}
+
+function DeleteCourseModal({
+  course,
+  onClose,
+  onDone,
+}: {
+  course: Course;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirmDelete = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await api.delete(`/courses/${course.id}`);
+      onDone();
+      onClose();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? "Couldn't delete this course.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title="Delete course" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--a-text)]">
+          Permanently delete <span className="font-semibold">{course.title}</span>? This removes its {course._count.lessons} lesson
+          {course._count.lessons === 1 ? "" : "s"} and curriculum content. This can&apos;t be undone.
+        </p>
+        {course._count.assignedStudents > 0 && (
+          <p className="text-sm text-[var(--a-warning-text)]">
+            {course._count.assignedStudents} student{course._count.assignedStudents === 1 ? " is" : "s are"} currently assigned to
+            this course — they&apos;ll be unassigned.
+          </p>
+        )}
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)]">
+            Cancel
+          </button>
+          <button
+            onClick={confirmDelete}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-danger)] hover:opacity-90 disabled:opacity-60"
+          >
+            {submitting ? "Deleting…" : "Delete course"}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -209,7 +313,7 @@ function CourseFormModal({
             : Math.round(Number(priceTaka) * 100),
         // Custom one-off courses stay out of the public catalog — they
         // exist only to be assigned directly to the student below.
-        ...(isCustom ? { isActive: false } : {}),
+        ...(isCustom ? { isActive: false, isCustom: true } : {}),
       };
       let courseId = course?.id;
       if (course) {
@@ -378,6 +482,8 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -402,6 +508,26 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
     await api.delete(`/courses/lessons/${id}`);
     load();
     onDone();
+  };
+
+  const importLesson = async (sourceLessonId: string) => {
+    const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1;
+    await api.post(`/curriculum/courses/${course.id}/lessons/import`, { sourceLessonId, order: nextOrder });
+    load();
+    onDone();
+  };
+
+  const generatePdf = async () => {
+    setGeneratingPdf(true);
+    setPdfError(null);
+    try {
+      const res = await api.post(`/curriculum/courses/${course.id}/curriculum-pdf`);
+      window.open(res.data.url, "_blank");
+    } catch (err: any) {
+      setPdfError(err?.response?.data?.message ?? "Couldn't generate the curriculum PDF.");
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   // Drag-to-reorder — reorders the local list immediately for a responsive
@@ -433,14 +559,26 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
     }
   };
 
+  // Custom curriculums keep the doc in sync automatically whenever the admin
+  // finishes an editing session here — a manual "Download" button below
+  // still exists for an on-demand copy, but this is the "save" the PDF
+  // requirement means (there's no separate explicit save step in this UI).
+  const closeAndSync = () => {
+    if (course.isCustom && lessons.length > 0) {
+      api.post(`/curriculum/courses/${course.id}/curriculum-pdf`).catch(() => {});
+    }
+    onClose();
+  };
+
   return (
-    <Modal title={`Lessons — ${course.title}`} onClose={onClose}>
+    <Modal title={`Lessons — ${course.title}`} onClose={closeAndSync}>
       <div className="space-y-4">
+        {course.isCustom && <ReuseLessonsPanel onImport={importLesson} />}
         <div className="flex gap-2">
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Lesson title"
+            placeholder="Or add a brand-new lesson title"
             className="flex-1 px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
           />
           <button onClick={addLesson} className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)]">
@@ -493,7 +631,125 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
             ))}
           {reordering && <p className="text-xs text-[var(--a-text-faint)]">Saving new order…</p>}
         </div>
+
+        {course.isCustom && (
+          <div className="pt-3 border-t border-[var(--a-border)] flex items-center justify-between gap-2">
+            <p className="text-xs text-[var(--a-text-faint)]">
+              A branded curriculum PDF is kept in sync automatically — download the latest copy anytime.
+            </p>
+            <button
+              onClick={generatePdf}
+              disabled={generatingPdf || lessons.length === 0}
+              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)] disabled:opacity-50"
+            >
+              {generatingPdf ? "Generating…" : "Download Curriculum PDF"}
+            </button>
+          </div>
+        )}
+        {pdfError && <p className="text-xs text-[var(--a-danger)]">{pdfError}</p>}
       </div>
     </Modal>
+  );
+}
+
+interface ReusableModule {
+  moduleId: string;
+  moduleTitle: string;
+  lessons: { id: string; title: string; order: number; duration: number; homework: string | null }[];
+}
+interface ReusableCourse {
+  courseId: string;
+  courseTitle: string;
+  category: string;
+  modules: ReusableModule[];
+}
+
+// Lets an admin browse every default curriculum's lessons, categorized by
+// course -> module, and pull any of them into the custom course being built
+// — so a new custom curriculum never has to start empty. Importing copies
+// the lesson's content; the source lesson/course is never touched.
+function ReuseLessonsPanel({ onImport }: { onImport: (sourceLessonId: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [catalog, setCatalog] = useState<ReusableCourse[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
+  const [importingId, setImportingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || catalog.length > 0) return;
+    setLoading(true);
+    api
+      .get("/curriculum/reusable-lessons")
+      .then((res) => setCatalog(res.data ?? []))
+      .finally(() => setLoading(false));
+  }, [open, catalog.length]);
+
+  const handleImport = async (lessonId: string) => {
+    setImportingId(lessonId);
+    try {
+      await onImport(lessonId);
+    } finally {
+      setImportingId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-[var(--a-border)] overflow-hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-[var(--a-text)] bg-[var(--a-surface-2)] hover:bg-[var(--a-nav-hover)]"
+      >
+        <span>Reuse a lesson from a default curriculum</span>
+        <span className="text-[var(--a-text-faint)]">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
+          {loading && <p className="text-sm text-[var(--a-text-muted)] px-2 py-1">Loading…</p>}
+          {!loading && catalog.length === 0 && (
+            <p className="text-sm text-[var(--a-text-muted)] px-2 py-1">No reusable lessons found.</p>
+          )}
+          {!loading &&
+            catalog.map((c) => (
+              <div key={c.courseId} className="rounded-lg border border-[var(--a-border)]">
+                <button
+                  onClick={() => setExpandedCourse((cur) => (cur === c.courseId ? null : c.courseId))}
+                  className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-semibold text-[var(--a-text)]"
+                >
+                  <span>
+                    {c.courseTitle} <span className="text-[var(--a-text-faint)] font-normal">({c.category})</span>
+                  </span>
+                  <span className="text-[var(--a-text-faint)]">{expandedCourse === c.courseId ? "▲" : "▼"}</span>
+                </button>
+                {expandedCourse === c.courseId && (
+                  <div className="px-2.5 pb-2 space-y-2">
+                    {c.modules.map((m) => (
+                      <div key={m.moduleId}>
+                        <p className="text-xs text-[var(--a-text-faint)] uppercase tracking-wide mt-1 mb-1">{m.moduleTitle}</p>
+                        <div className="space-y-1">
+                          {m.lessons.map((l) => (
+                            <div
+                              key={l.id}
+                              className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-[var(--a-surface-2)] text-xs"
+                            >
+                              <span className="text-[var(--a-text)] truncate">{l.title}</span>
+                              <button
+                                onClick={() => handleImport(l.id)}
+                                disabled={importingId === l.id}
+                                className="flex-shrink-0 text-[var(--a-accent)] hover:underline disabled:opacity-50"
+                              >
+                                {importingId === l.id ? "Adding…" : "+ Add"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -433,6 +433,111 @@ export class StudentLedgerService {
     }
   }
 
+  // ─── Automatic lesson consumption — curriculum (ScheduledLesson) flow ────
+  //
+  // The ScheduledLesson counterpart to consumeLessonForBooking above (which
+  // is Booking/marketplace-only). Called exactly once, from
+  // ClassroomService.endClass, when a teacher marks a class COMPLETED.
+  // Idempotency is the DB-level @@unique([scheduledLessonId, type])
+  // constraint (see consumeLessonForScheduledLesson) — a retried/duplicated
+  // call, or a later cron sweep picking up the same lesson, is always a
+  // no-op, so callers don't need to pre-check.
+  async triggerScheduledLessonCompleted(
+    scheduledLessonId: string,
+  ): Promise<boolean> {
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: scheduledLessonId },
+      select: { studentUserId: true, end: true },
+    });
+    if (!lesson) throw new NotFoundException('Scheduled lesson not found.');
+
+    return this.consumeLessonForScheduledLesson(
+      scheduledLessonId,
+      lesson.studentUserId,
+      lesson.end,
+    );
+  }
+
+  // Scans for curriculum classes that are COMPLETED but have no
+  // LESSON_COMPLETED ledger entry yet (safety net alongside the synchronous
+  // call in ClassroomService.endClass — a missed or repeated run is
+  // harmless, same as syncCompletedLessons below).
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async syncCompletedScheduledLessons() {
+    const candidates = await this.prisma.scheduledLesson.findMany({
+      where: {
+        status: 'COMPLETED',
+        ledgerEntries: {
+          none: { type: StudentLedgerEntryType.LESSON_COMPLETED },
+        },
+      },
+      select: { id: true, studentUserId: true, end: true },
+      take: 500,
+    });
+
+    let recorded = 0;
+    for (const lesson of candidates) {
+      try {
+        const created = await this.consumeLessonForScheduledLesson(
+          lesson.id,
+          lesson.studentUserId,
+          lesson.end,
+        );
+        if (created) recorded++;
+      } catch (err) {
+        this.logger.error(
+          `Failed to record LESSON_COMPLETED for scheduled lesson ${lesson.id}`,
+          err as Error,
+        );
+      }
+    }
+
+    if (recorded > 0) {
+      this.logger.log(
+        `Recorded ${recorded} curriculum lesson-completed ledger entries.`,
+      );
+    }
+  }
+
+  private async consumeLessonForScheduledLesson(
+    scheduledLessonId: string,
+    studentUserId: string,
+    eventDate: Date,
+  ): Promise<boolean> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const prev = await this.latestEntry(studentUserId, tx);
+        // Never billed on this system (no PAYMENT_RECEIVED/curriculum-change
+        // history) — nothing to consume, so no entry is created.
+        if (!prev || prev.rateCents <= 0) return false;
+
+        const amountCents = -prev.rateCents;
+        const balanceAfterCents = prev.balanceAfterCents + amountCents;
+
+        await tx.studentLedgerEntry.create({
+          data: {
+            studentUserId,
+            type: StudentLedgerEntryType.LESSON_COMPLETED,
+            amountCents,
+            balanceAfterCents,
+            rateCents: prev.rateCents,
+            courseId: prev.courseId,
+            courseName: prev.courseName,
+            description: `Lesson completed on ${eventDate.toDateString()}`,
+            scheduledLessonId,
+          },
+        });
+        return true;
+      });
+    } catch (err: any) {
+      // P2002 = unique constraint violation on (scheduledLessonId, type) —
+      // this scheduled lesson already has a LESSON_COMPLETED entry.
+      // Idempotent no-op.
+      if (err?.code === 'P2002') return false;
+      throw err;
+    }
+  }
+
   private async consumeLessonForBooking(
     bookingId: string,
     studentUserId: string,

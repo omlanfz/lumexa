@@ -7,6 +7,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { StudentsService } from '../students/students.service';
+import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { AlertsService } from '../alerts/alerts.service';
@@ -62,6 +63,7 @@ export class ClassroomService {
   constructor(
     private prisma: PrismaService,
     private studentsService: StudentsService,
+    private studentLedgerService: StudentLedgerService,
     private schedulingService: SchedulingService,
     private payoutsService: PayoutsService,
     private alertsService: AlertsService,
@@ -861,6 +863,13 @@ export class ClassroomService {
           .catch((err) => {
             this.logger.error(
               `Failed to record completed-class earning for lesson ${lessonId}: ${err}`,
+            );
+          });
+        await this.studentLedgerService
+          .triggerScheduledLessonCompleted(lessonId)
+          .catch((err) => {
+            this.logger.error(
+              `Failed to record student lesson-completed deduction for lesson ${lessonId}: ${err}`,
             );
           });
       } else {

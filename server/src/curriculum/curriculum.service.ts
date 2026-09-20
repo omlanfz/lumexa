@@ -15,13 +15,21 @@
 //                                    assigned teacher of, so they can prepare.
 //   - Admin                       -> full access, same as teacher.
 
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { LessonStatus, Role, SessionType } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
-import { todayDhakaDateStr, utcToDhakaParts } from '../scheduling/dhaka-time.util';
+import {
+  todayDhakaDateStr,
+  utcToDhakaParts,
+} from '../scheduling/dhaka-time.util';
 import {
   CreateModuleDto,
   CreateProjectDto,
+  ImportLessonDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -54,7 +62,9 @@ export class CurriculumService {
       include: {
         module: true,
         project: true,
-        assessment: { select: { id: true, type: true, title: true, isPublished: true } },
+        assessment: {
+          select: { id: true, type: true, title: true, isPublished: true },
+        },
         course: { select: { id: true, title: true } },
       },
     });
@@ -62,10 +72,16 @@ export class CurriculumService {
 
     if (requester.role === Role.TEACHER) {
       const teaches = await this.prisma.scheduledLesson.findFirst({
-        where: { courseId: lesson.courseId, teacher: { userId: requester.userId } },
+        where: {
+          courseId: lesson.courseId,
+          teacher: { userId: requester.userId },
+        },
         select: { id: true },
       });
-      if (!teaches) throw new ForbiddenException('You are not assigned to teach this curriculum.');
+      if (!teaches)
+        throw new ForbiddenException(
+          'You are not assigned to teach this curriculum.',
+        );
     } else if (requester.role !== Role.ADMIN) {
       throw new ForbiddenException('You do not have access to this lesson.');
     }
@@ -93,14 +109,29 @@ export class CurriculumService {
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
-        module: lesson.module ? { id: lesson.module.id, title: lesson.module.title, stageNumber: lesson.module.stageNumber } : null,
-        project: lesson.project ? { id: lesson.project.id, title: lesson.project.title, description: lesson.project.description } : null,
+        module: lesson.module
+          ? {
+              id: lesson.module.id,
+              title: lesson.module.title,
+              stageNumber: lesson.module.stageNumber,
+            }
+          : null,
+        project: lesson.project
+          ? {
+              id: lesson.project.id,
+              title: lesson.project.title,
+              description: lesson.project.description,
+            }
+          : null,
       },
       assessment: lesson.assessment ?? null,
     };
   }
 
-  async getScheduledLessonDetails(scheduledLessonId: string, requester: Requester) {
+  async getScheduledLessonDetails(
+    scheduledLessonId: string,
+    requester: Requester,
+  ) {
     const sl = await this.prisma.scheduledLesson.findUnique({
       where: { id: scheduledLessonId },
       include: {
@@ -108,24 +139,43 @@ export class CurriculumService {
           include: {
             module: true,
             project: true,
-            assessment: { select: { id: true, type: true, title: true, isPublished: true } },
+            assessment: {
+              select: { id: true, type: true, title: true, isPublished: true },
+            },
           },
         },
         teacher: { select: { userId: true } },
         course: { select: { id: true, title: true } },
+        submission: {
+          select: {
+            id: true,
+            status: true,
+            fileUrl: true,
+            fileName: true,
+            note: true,
+            submittedAt: true,
+            reviewedAt: true,
+            feedback: true,
+          },
+        },
       },
     });
     if (!sl) throw new NotFoundException('Scheduled lesson not found');
 
     const isOwner = sl.studentUserId === requester.userId;
-    const isAssignedTeacher = requester.role === Role.TEACHER && sl.teacher.userId === requester.userId;
+    const isAssignedTeacher =
+      requester.role === Role.TEACHER && sl.teacher.userId === requester.userId;
     const isAdmin = requester.role === Role.ADMIN;
 
     if (!isOwner && !isAssignedTeacher && !isAdmin) {
       throw new ForbiddenException('You do not have access to this class.');
     }
     if (!sl.lesson) {
-      return { available: false, reason: 'NO_CATALOG_LESSON', session: this.baseSessionInfo(sl) };
+      return {
+        available: false,
+        reason: 'NO_CATALOG_LESSON',
+        session: this.baseSessionInfo(sl),
+      };
     }
 
     const isTest = sl.lesson.type !== SessionType.LEARNING;
@@ -139,7 +189,10 @@ export class CurriculumService {
     } else if (isTest) {
       if (sl.status === LessonStatus.COMPLETED) {
         available = true;
-      } else if (sl.status === LessonStatus.UPCOMING && dhakaDateStrOf(sl.start) === todayDhakaDateStr()) {
+      } else if (
+        sl.status === LessonStatus.UPCOMING &&
+        dhakaDateStrOf(sl.start) === todayDhakaDateStr()
+      ) {
         available = true;
       } else if (sl.status === LessonStatus.UPCOMING) {
         reason = 'TEST_NOT_YET_TODAY';
@@ -174,16 +227,34 @@ export class CurriculumService {
         homework: sl.lesson.homework,
         checkpoint: sl.lesson.checkpoint,
         codeSnippets: sl.lesson.codeSnippets,
-        module: sl.lesson.module ? { id: sl.lesson.module.id, title: sl.lesson.module.title, stageNumber: sl.lesson.module.stageNumber } : null,
+        module: sl.lesson.module
+          ? {
+              id: sl.lesson.module.id,
+              title: sl.lesson.module.title,
+              stageNumber: sl.lesson.module.stageNumber,
+            }
+          : null,
         project: sl.lesson.project
-          ? { id: sl.lesson.project.id, title: sl.lesson.project.title, description: sl.lesson.project.description }
+          ? {
+              id: sl.lesson.project.id,
+              title: sl.lesson.project.title,
+              description: sl.lesson.project.description,
+            }
           : null,
       },
       assessment: sl.lesson.assessment ?? null,
+      submission: sl.lesson.homework ? sl.submission : null,
     };
   }
 
-  private baseSessionInfo(sl: { id: string; lessonNumber: number; start: Date; end: Date; status: LessonStatus; course: { id: string; title: string } }) {
+  private baseSessionInfo(sl: {
+    id: string;
+    lessonNumber: number;
+    start: Date;
+    end: Date;
+    status: LessonStatus;
+    course: { id: string; title: string };
+  }) {
     return {
       scheduledLessonId: sl.id,
       lessonNumber: sl.lessonNumber,
@@ -207,12 +278,20 @@ export class CurriculumService {
         where: { courseId, teacher: { userId: requester.userId } },
         select: { id: true },
       });
-      if (!teaches) throw new ForbiddenException('You are not assigned to teach this curriculum.');
+      if (!teaches)
+        throw new ForbiddenException(
+          'You are not assigned to teach this curriculum.',
+        );
     } else if (requester.role !== Role.ADMIN) {
-      throw new ForbiddenException('You do not have access to the full curriculum structure.');
+      throw new ForbiddenException(
+        'You do not have access to the full curriculum structure.',
+      );
     }
 
-    const course = await this.prisma.course.findUnique({ where: { id: courseId }, select: { id: true, title: true } });
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, title: true },
+    });
     if (!course) throw new NotFoundException('Course not found');
 
     const modules = await this.prisma.courseModule.findMany({
@@ -222,7 +301,11 @@ export class CurriculumService {
         projects: { orderBy: { order: 'asc' } },
         lessons: {
           orderBy: { order: 'asc' },
-          include: { assessment: { select: { id: true, type: true, title: true, isPublished: true } } },
+          include: {
+            assessment: {
+              select: { id: true, type: true, title: true, isPublished: true },
+            },
+          },
         },
       },
     });
@@ -230,10 +313,106 @@ export class CurriculumService {
     const looseLessons = await this.prisma.lesson.findMany({
       where: { courseId, moduleId: null },
       orderBy: { order: 'asc' },
-      include: { assessment: { select: { id: true, type: true, title: true, isPublished: true } } },
+      include: {
+        assessment: {
+          select: { id: true, type: true, title: true, isPublished: true },
+        },
+      },
     });
 
     return { course, modules, looseLessons };
+  }
+
+  // ── Custom Curriculum Builder: reuse existing default-curriculum content ──
+  //
+  // Every LEARNING-type lesson from every default (non-custom) course,
+  // categorized by curriculum -> module, for the "reuse existing
+  // lessons/courses" picker. Test-type sessions (COURSE_TEST/STAGE_TEST/
+  // FINAL_TEST) are deliberately excluded — they carry an Assessment +
+  // question bank that isn't safe to duplicate blind, so a custom
+  // curriculum's own tests (if any) are hand-built via the regular lesson
+  // editor instead.
+
+  async getReusableLessons() {
+    const courses = await this.prisma.course.findMany({
+      where: { isCustom: false },
+      orderBy: [{ category: 'asc' }, { title: 'asc' }],
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        modules: {
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            title: true,
+            lessons: {
+              where: { type: SessionType.LEARNING },
+              orderBy: { order: 'asc' },
+              select: {
+                id: true,
+                title: true,
+                order: true,
+                duration: true,
+                homework: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    return courses
+      .map((c) => ({
+        courseId: c.id,
+        courseTitle: c.title,
+        category: c.category,
+        modules: c.modules
+          .filter((m) => m.lessons.length > 0)
+          .map((m) => ({
+            moduleId: m.id,
+            moduleTitle: m.title,
+            lessons: m.lessons,
+          })),
+      }))
+      .filter((c) => c.modules.length > 0);
+  }
+
+  /** Copies one default-curriculum Lesson's content into a custom course as
+   * a new, independent, flat (moduleId: null) lesson at the given order —
+   * the default lesson and its module/course are never touched, so this can
+   * never mutate a default curriculum. */
+  async importLesson(targetCourseId: string, dto: ImportLessonDto) {
+    const [target, source] = await Promise.all([
+      this.prisma.course.findUnique({
+        where: { id: targetCourseId },
+        select: { id: true, isCustom: true },
+      }),
+      this.prisma.lesson.findUnique({ where: { id: dto.sourceLessonId } }),
+    ]);
+    if (!target) throw new NotFoundException('Course not found');
+    if (!target.isCustom) {
+      throw new ForbiddenException(
+        'Lessons can only be imported into a custom curriculum.',
+      );
+    }
+    if (!source) throw new NotFoundException('Source lesson not found');
+
+    return this.prisma.lesson.create({
+      data: {
+        courseId: targetCourseId,
+        title: source.title,
+        order: dto.order,
+        duration: source.duration,
+        type: SessionType.LEARNING,
+        objectives: source.objectives,
+        contentMarkdown: source.contentMarkdown,
+        reviewNotes: source.reviewNotes,
+        checkpoint: source.checkpoint,
+        codeSnippets: source.codeSnippets as object | undefined,
+        homework: source.homework,
+        sourceRefs: { importedFromLessonId: source.id } as object,
+      },
+    });
   }
 
   // ── Admin CRUD: modules ───────────────────────────────────────────────────
@@ -244,7 +423,10 @@ export class CurriculumService {
 
   async updateModule(moduleId: string, dto: UpdateModuleDto) {
     await this.ensure(this.prisma.courseModule, moduleId, 'Module');
-    return this.prisma.courseModule.update({ where: { id: moduleId }, data: dto });
+    return this.prisma.courseModule.update({
+      where: { id: moduleId },
+      data: dto,
+    });
   }
 
   async deleteModule(moduleId: string) {
@@ -281,12 +463,20 @@ export class CurriculumService {
       data: {
         ...rest,
         ...(type ? { type: type as SessionType } : {}),
-        ...(codeSnippets ? { codeSnippets: codeSnippets as unknown as object } : {}),
+        ...(codeSnippets
+          ? { codeSnippets: codeSnippets as unknown as object }
+          : {}),
       },
     });
   }
 
-  private async ensure(delegate: { findUnique: (args: { where: { id: string } }) => Promise<unknown> }, id: string, label: string) {
+  private async ensure(
+    delegate: {
+      findUnique: (args: { where: { id: string } }) => Promise<unknown>;
+    },
+    id: string,
+    label: string,
+  ) {
     const row = await delegate.findUnique({ where: { id } });
     if (!row) throw new NotFoundException(`${label} not found`);
     return row;
