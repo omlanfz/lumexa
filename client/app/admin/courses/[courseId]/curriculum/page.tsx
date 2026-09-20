@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import api from '@/lib/axios';
-import { Card, Modal } from '@/components/admin/AdminUI';
+import { Card } from '@/components/admin/AdminUI';
 
 interface CodeSnippet {
   label: string;
@@ -34,6 +34,7 @@ interface ModuleRow {
   projects: { id: string; slug: string; title: string }[];
 }
 interface Structure {
+  course: { id: string; title: string; isCustom: boolean };
   modules: ModuleRow[];
   looseLessons: LessonRow[];
 }
@@ -49,7 +50,6 @@ export default function AdminCurriculumPage() {
   const params = useParams<{ courseId: string }>();
   const [data, setData] = useState<Structure | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<LessonRow | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => {
@@ -74,17 +74,29 @@ export default function AdminCurriculumPage() {
   if (loading) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
   if (!data) return null;
 
+  const isFlatCustomCourse = data.course.isCustom && data.modules.length === 0;
+
   return (
     <div className="space-y-6">
-      <div>
-        <a href="/admin/courses" className="text-sm text-[var(--a-accent)] hover:underline">
-          ← Back to courses
-        </a>
-        <h1 className="text-2xl font-bold text-[var(--a-text)] mt-2">Curriculum</h1>
-        <p className="text-sm text-[var(--a-text-muted)]">
-          {data.modules.reduce((s, m) => s + m.lessons.length, 0) + data.looseLessons.length} sessions across{' '}
-          {data.modules.length} module(s)
-        </p>
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <a href="/admin/courses" className="text-sm text-[var(--a-accent)] hover:underline">
+            ← Back to courses
+          </a>
+          <h1 className="text-2xl font-bold text-[var(--a-text)] mt-2">{data.course.title} — Curriculum</h1>
+          <p className="text-sm text-[var(--a-text-muted)]">
+            {data.modules.reduce((s, m) => s + m.lessons.length, 0) + data.looseLessons.length} sessions
+            {data.modules.length > 0 ? ` across ${data.modules.length} module(s)` : ''}
+          </p>
+        </div>
+        {data.course.isCustom && (
+          <a
+            href={`/admin/courses/${data.course.id}/builder`}
+            className="px-3 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+          >
+            Open Curriculum Builder
+          </a>
+        )}
       </div>
 
       {data.modules.map((mod) => (
@@ -102,7 +114,7 @@ export default function AdminCurriculumPage() {
           {expanded.has(mod.id) && (
             <div className="divide-y divide-[var(--a-border)]">
               {mod.lessons.map((l) => (
-                <LessonRowView key={l.id} lesson={l} onEdit={() => setEditing(l)} />
+                <LessonRowView key={l.id} lesson={l} />
               ))}
             </div>
           )}
@@ -111,32 +123,23 @@ export default function AdminCurriculumPage() {
 
       {data.looseLessons.length > 0 && (
         <Card className="p-0 overflow-hidden">
-          <div className="px-4 py-3 font-semibold text-[var(--a-text)] border-b border-[var(--a-border)]">
-            Stage / Final Tests
-          </div>
+          {!isFlatCustomCourse && (
+            <div className="px-4 py-3 font-semibold text-[var(--a-text)] border-b border-[var(--a-border)]">
+              Stage / Final Tests
+            </div>
+          )}
           <div className="divide-y divide-[var(--a-border)]">
             {data.looseLessons.map((l) => (
-              <LessonRowView key={l.id} lesson={l} onEdit={() => setEditing(l)} />
+              <LessonRowView key={l.id} lesson={l} />
             ))}
           </div>
         </Card>
-      )}
-
-      {editing && (
-        <LessonEditModal
-          lesson={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null);
-            load();
-          }}
-        />
       )}
     </div>
   );
 }
 
-function LessonRowView({ lesson, onEdit }: { lesson: LessonRow; onEdit: () => void }) {
+function LessonRowView({ lesson }: { lesson: LessonRow }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
@@ -154,104 +157,15 @@ function LessonRowView({ lesson, onEdit }: { lesson: LessonRow; onEdit: () => vo
         <a href={`/curriculum-lesson/${lesson.id}`} target="_blank" rel="noreferrer" className="text-xs text-[var(--a-accent)] hover:underline">
           View Lesson
         </a>
-        <button onClick={onEdit} className="text-xs text-[var(--a-accent)] hover:underline">
+        <a href={`/admin/lessons/${lesson.id}/edit`} className="text-xs text-[var(--a-accent)] hover:underline">
           Edit Content
-        </button>
+        </a>
         {lesson.assessment && (
           <a href={`/admin/assessments/${lesson.assessment.id}`} className="text-xs text-[var(--a-accent)] hover:underline">
             Question Bank {lesson.assessment.isPublished ? '' : '(unpublished)'}
           </a>
         )}
       </div>
-    </div>
-  );
-}
-
-function LessonEditModal({ lesson, onClose, onSaved }: { lesson: LessonRow; onClose: () => void; onSaved: () => void }) {
-  const [title, setTitle] = useState(lesson.title);
-  const [objectives, setObjectives] = useState(lesson.objectives.join('\n'));
-  const [contentMarkdown, setContentMarkdown] = useState(lesson.contentMarkdown ?? '');
-  const [homework, setHomework] = useState(lesson.homework ?? '');
-  const [checkpoint, setCheckpoint] = useState(lesson.checkpoint ?? '');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      await api.patch(`/curriculum/lessons/${lesson.id}/content`, {
-        title,
-        objectives: objectives.split('\n').map((s) => s.trim()).filter(Boolean),
-        contentMarkdown,
-        homework,
-        checkpoint,
-      });
-      onSaved();
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Could not save.');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal title={`Edit: ${lesson.title}`} onClose={onClose}>
-      <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1">
-        <Field label="Title">
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className="a-input" />
-        </Field>
-        <Field label="Learning objectives (one per line)">
-          <textarea value={objectives} onChange={(e) => setObjectives(e.target.value)} rows={4} className="a-input font-mono text-xs" />
-        </Field>
-        <Field label="Project checkpoint for this session">
-          <input value={checkpoint} onChange={(e) => setCheckpoint(e.target.value)} className="a-input" />
-        </Field>
-        <Field label="Lesson material (Markdown)">
-          <textarea value={contentMarkdown} onChange={(e) => setContentMarkdown(e.target.value)} rows={10} className="a-input font-mono text-xs" />
-        </Field>
-        <Field label="Homework / practice">
-          <textarea value={homework} onChange={(e) => setHomework(e.target.value)} rows={3} className="a-input font-mono text-xs" />
-        </Field>
-        {lesson.codeSnippets?.length > 0 && (
-          <p className="text-xs text-[var(--a-text-faint)]">
-            {lesson.codeSnippets.length} code snippet(s) attached — imported from source content, edit via API/database for now.
-          </p>
-        )}
-        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)]">
-            Cancel
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
-          >
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      </div>
-      <style jsx global>{`
-        .a-input {
-          width: 100%;
-          padding: 0.5rem 0.75rem;
-          border-radius: 0.5rem;
-          border: 1px solid var(--a-border);
-          background: var(--a-surface-2);
-          color: var(--a-text);
-          font-size: 0.875rem;
-        }
-      `}</style>
-    </Modal>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">{label}</label>
-      {children}
     </div>
   );
 }

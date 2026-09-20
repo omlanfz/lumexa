@@ -115,7 +115,18 @@ export default function ManageCoursesPage() {
               {!loading &&
                 courses.map((c) => (
                   <tr key={c.id} className="border-b border-[var(--a-border)] last:border-0">
-                    <td className="px-4 py-3 text-[var(--a-text)] font-medium">{c.title}</td>
+                    <td className="px-4 py-3 text-[var(--a-text)] font-medium">
+                      {c.title}
+                      <span
+                        className={`ml-2 text-[10px] px-1.5 py-0.5 rounded-full font-semibold uppercase align-middle ${
+                          c.isCustom
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "bg-teal-500/15 text-teal-600 dark:text-teal-400"
+                        }`}
+                      >
+                        {c.isCustom ? "Custom" : "Core"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.category}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.ageMin}–{c.ageMax}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.lessons}</td>
@@ -135,9 +146,15 @@ export default function ManageCoursesPage() {
                       <a href={`/admin/courses/${c.id}/curriculum`} className="text-sm text-[var(--a-accent)] hover:underline">
                         Curriculum
                       </a>
-                      <button onClick={() => setLessonsFor(c)} className="text-sm text-[var(--a-accent)] hover:underline">
-                        Lessons
-                      </button>
+                      {c.isCustom ? (
+                        <a href={`/admin/courses/${c.id}/builder`} className="text-sm text-[var(--a-accent)] hover:underline">
+                          Lessons
+                        </a>
+                      ) : (
+                        <button onClick={() => setLessonsFor(c)} className="text-sm text-[var(--a-accent)] hover:underline">
+                          Lessons
+                        </button>
+                      )}
                       <button onClick={() => setModal({ course: c })} className="text-sm text-[var(--a-accent)] hover:underline">
                         Edit
                       </button>
@@ -262,7 +279,14 @@ function CourseFormModal({
     priceTaka: course?.priceCents ? course.priceCents / 100 : "",
   });
   const [slugTouched, setSlugTouched] = useState(!!course);
-  const [isCustom, setIsCustom] = useState(false);
+  // New courses default to Custom — only the seeded 7-curriculum catalog is
+  // "Core" (Course.isCustom starts false there); anything an admin creates
+  // by hand is, by definition, not part of that official catalog unless
+  // they deliberately flip this, so Core has to be an explicit opt-in
+  // rather than something a plain "+ New Course" can accidentally leak into
+  // the default-curriculum .xlsx export as. Editing reflects the real value.
+  const [isCustom, setIsCustom] = useState(course ? course.isCustom : true);
+  const [assignNow, setAssignNow] = useState(false);
   const [studentQuery, setStudentQuery] = useState("");
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null);
@@ -276,28 +300,27 @@ function CourseFormModal({
     if (!slugTouched) set("slug", slugify(v));
   };
 
-  // Student search for the "custom course" flow — same debounce pattern
-  // used elsewhere in admin (see AssignModal on the student detail page).
+  // Student picker for "assign now" — loads a default browsable list of
+  // students immediately (rather than requiring the admin already know a
+  // name to type), then narrows as they search. Same pattern used across
+  // admin — see SearchableList.
   useEffect(() => {
-    if (!isCustom || !studentQuery.trim()) {
-      setStudentOptions([]);
-      return;
-    }
+    if (!isCustom || !assignNow) return;
     const t = setTimeout(() => {
       api
-        .get(`/admin/students?limit=8&search=${encodeURIComponent(studentQuery)}`)
+        .get(`/admin/students?limit=20&search=${encodeURIComponent(studentQuery)}`)
         .then((res) => setStudentOptions(res.data?.students ?? []));
     }, 250);
     return () => clearTimeout(t);
-  }, [isCustom, studentQuery]);
+  }, [isCustom, assignNow, studentQuery]);
 
   const submit = async () => {
     if (!form.title.trim() || !form.slug.trim() || !form.category.trim()) {
       setError("Title, slug, and category are required.");
       return;
     }
-    if (isCustom && !selectedStudent) {
-      setError("Pick which student this custom course is for.");
+    if (assignNow && !selectedStudent) {
+      setError("Pick a student to assign, or turn off \"Assign to a student now\".");
       return;
     }
     setSubmitting(true);
@@ -311,9 +334,11 @@ function CourseFormModal({
           priceTaka === "" || priceTaka === null
             ? undefined
             : Math.round(Number(priceTaka) * 100),
-        // Custom one-off courses stay out of the public catalog — they
-        // exist only to be assigned directly to the student below.
-        ...(isCustom ? { isActive: false, isCustom: true } : {}),
+        isCustom,
+        // A brand-new custom course stays out of the public catalog by
+        // default — an existing course's active state is left alone on
+        // edit (that's what the table's Activate/Deactivate button is for).
+        ...(isCustom && !course ? { isActive: false } : {}),
       };
       let courseId = course?.id;
       if (course) {
@@ -322,7 +347,7 @@ function CourseFormModal({
         const res = await api.post("/courses", payload);
         courseId = res.data.id;
       }
-      if (isCustom && selectedStudent && courseId) {
+      if (assignNow && selectedStudent && courseId) {
         await api.post(`/admin/students/${selectedStudent.id}/assign-course`, { courseId });
       }
       onDone();
@@ -376,62 +401,92 @@ function CourseFormModal({
           />
         </div>
 
-        {!course && (
-          <div className="pt-1 border-t border-[var(--a-border)]">
-            <label className="flex items-center gap-2 pt-3 text-sm text-[var(--a-text)] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isCustom}
-                onChange={(e) => {
-                  setIsCustom(e.target.checked);
-                  if (e.target.checked && !form.category.trim()) set("category", "Custom");
-                }}
-                className="rounded border-[var(--a-border)]"
-              />
-              Custom course for one student
-            </label>
-            <p className="text-xs text-[var(--a-text-faint)] mt-1">
-              e.g. Odyssey starting from course 3 onward. Won&apos;t be shown in the public catalog — assigned directly to the student below.
-            </p>
-            {isCustom && (
-              <div className="mt-3 space-y-1.5">
-                <input
-                  value={studentQuery}
-                  onChange={(e) => {
-                    setStudentQuery(e.target.value);
-                    setSelectedStudent(null);
-                  }}
-                  placeholder="Search student by name or email…"
-                  className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
-                />
-                {selectedStudent ? (
-                  <p className="text-sm text-[var(--a-success-text)]">
-                    Assigning to <span className="font-semibold">{selectedStudent.fullName}</span> ({selectedStudent.email})
-                  </p>
-                ) : (
-                  studentOptions.length > 0 && (
-                    <div className="max-h-32 overflow-y-auto space-y-1">
-                      {studentOptions.map((s) => (
-                        <button
-                          key={s.id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedStudent(s);
-                            setStudentQuery(s.fullName);
-                            setStudentOptions([]);
-                          }}
-                          className="w-full text-left px-3 py-1.5 rounded-lg text-sm hover:bg-[var(--a-nav-hover)] text-[var(--a-text)]"
-                        >
-                          {s.fullName} <span className="text-[var(--a-text-faint)]">({s.email})</span>
-                        </button>
-                      ))}
-                    </div>
-                  )
-                )}
-              </div>
-            )}
+        <div className="pt-1 border-t border-[var(--a-border)]">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mt-3 mb-1.5">
+            Curriculum type
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setIsCustom(true)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border text-left transition-colors ${
+                isCustom
+                  ? "border-[var(--a-accent)] bg-[var(--a-accent)]/10 text-[var(--a-text)]"
+                  : "border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)]"
+              }`}
+            >
+              Custom
+              <span className="block text-xs font-normal text-[var(--a-text-faint)]">
+                Built for one or more specific students. Not shown in the public catalog or the default-curriculum export.
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsCustom(false)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border text-left transition-colors ${
+                !isCustom
+                  ? "border-[var(--a-accent)] bg-[var(--a-accent)]/10 text-[var(--a-text)]"
+                  : "border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)]"
+              }`}
+            >
+              Core
+              <span className="block text-xs font-normal text-[var(--a-text-faint)]">
+                An official Lumexa curriculum — included in the default-curriculum export.
+              </span>
+            </button>
           </div>
-        )}
+
+          {isCustom && (
+            <div className="mt-3">
+              <label className="flex items-center gap-2 text-sm text-[var(--a-text)] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={assignNow}
+                  onChange={(e) => setAssignNow(e.target.checked)}
+                  className="rounded border-[var(--a-border)]"
+                />
+                Assign to a student now
+              </label>
+              {assignNow && (
+                <div className="mt-2 space-y-1.5">
+                  <input
+                    value={studentQuery}
+                    onChange={(e) => {
+                      setStudentQuery(e.target.value);
+                      setSelectedStudent(null);
+                    }}
+                    placeholder="Search by name or email, or pick from the list below…"
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+                  />
+                  {selectedStudent ? (
+                    <p className="text-sm text-[var(--a-success-text)]">
+                      Assigning to <span className="font-semibold">{selectedStudent.fullName}</span> ({selectedStudent.email})
+                    </p>
+                  ) : (
+                    studentOptions.length > 0 && (
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {studentOptions.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedStudent(s);
+                              setStudentQuery(s.fullName);
+                              setStudentOptions([]);
+                            }}
+                            className="w-full text-left px-3 py-1.5 rounded-lg text-sm hover:bg-[var(--a-nav-hover)] text-[var(--a-text)]"
+                          >
+                            {s.fullName} <span className="text-[var(--a-text-faint)]">({s.email})</span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
@@ -475,6 +530,9 @@ function LabeledInput({
   );
 }
 
+// Plain flat title/order editor for a Core course's lesson list. A Custom
+// course uses the dedicated Curriculum Builder page instead (reuse-from-
+// catalog, sequencing, PDF export) — see /admin/courses/[courseId]/builder.
 function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: () => void; onDone: () => void }) {
   const [lessons, setLessons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -482,8 +540,6 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -510,29 +566,9 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
     onDone();
   };
 
-  const importLesson = async (sourceLessonId: string) => {
-    const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1;
-    await api.post(`/curriculum/courses/${course.id}/lessons/import`, { sourceLessonId, order: nextOrder });
-    load();
-    onDone();
-  };
-
-  const generatePdf = async () => {
-    setGeneratingPdf(true);
-    setPdfError(null);
-    try {
-      const res = await api.post(`/curriculum/courses/${course.id}/curriculum-pdf`);
-      window.open(res.data.url, "_blank");
-    } catch (err: any) {
-      setPdfError(err?.response?.data?.message ?? "Couldn't generate the curriculum PDF.");
-    } finally {
-      setGeneratingPdf(false);
-    }
-  };
-
   // Drag-to-reorder — reorders the local list immediately for a responsive
   // feel, then persists every lesson whose position actually changed as a
-  // new `order` value. Same mechanism a custom course's lesson plan uses.
+  // new `order` value.
   const dropAt = async (dropIndex: number) => {
     const fromIndex = dragIndex;
     setDragIndex(null);
@@ -559,21 +595,9 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
     }
   };
 
-  // Custom curriculums keep the doc in sync automatically whenever the admin
-  // finishes an editing session here — a manual "Download" button below
-  // still exists for an on-demand copy, but this is the "save" the PDF
-  // requirement means (there's no separate explicit save step in this UI).
-  const closeAndSync = () => {
-    if (course.isCustom && lessons.length > 0) {
-      api.post(`/curriculum/courses/${course.id}/curriculum-pdf`).catch(() => {});
-    }
-    onClose();
-  };
-
   return (
-    <Modal title={`Lessons — ${course.title}`} onClose={closeAndSync}>
+    <Modal title={`Lessons — ${course.title}`} onClose={onClose}>
       <div className="space-y-4">
-        {course.isCustom && <ReuseLessonsPanel onImport={importLesson} />}
         <div className="flex gap-2">
           <input
             value={title}
@@ -631,125 +655,7 @@ function LessonsModal({ course, onClose, onDone }: { course: Course; onClose: ()
             ))}
           {reordering && <p className="text-xs text-[var(--a-text-faint)]">Saving new order…</p>}
         </div>
-
-        {course.isCustom && (
-          <div className="pt-3 border-t border-[var(--a-border)] flex items-center justify-between gap-2">
-            <p className="text-xs text-[var(--a-text-faint)]">
-              A branded curriculum PDF is kept in sync automatically — download the latest copy anytime.
-            </p>
-            <button
-              onClick={generatePdf}
-              disabled={generatingPdf || lessons.length === 0}
-              className="flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)] disabled:opacity-50"
-            >
-              {generatingPdf ? "Generating…" : "Download Curriculum PDF"}
-            </button>
-          </div>
-        )}
-        {pdfError && <p className="text-xs text-[var(--a-danger)]">{pdfError}</p>}
       </div>
     </Modal>
-  );
-}
-
-interface ReusableModule {
-  moduleId: string;
-  moduleTitle: string;
-  lessons: { id: string; title: string; order: number; duration: number; homework: string | null }[];
-}
-interface ReusableCourse {
-  courseId: string;
-  courseTitle: string;
-  category: string;
-  modules: ReusableModule[];
-}
-
-// Lets an admin browse every default curriculum's lessons, categorized by
-// course -> module, and pull any of them into the custom course being built
-// — so a new custom curriculum never has to start empty. Importing copies
-// the lesson's content; the source lesson/course is never touched.
-function ReuseLessonsPanel({ onImport }: { onImport: (sourceLessonId: string) => Promise<void> }) {
-  const [open, setOpen] = useState(false);
-  const [catalog, setCatalog] = useState<ReusableCourse[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
-  const [importingId, setImportingId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open || catalog.length > 0) return;
-    setLoading(true);
-    api
-      .get("/curriculum/reusable-lessons")
-      .then((res) => setCatalog(res.data ?? []))
-      .finally(() => setLoading(false));
-  }, [open, catalog.length]);
-
-  const handleImport = async (lessonId: string) => {
-    setImportingId(lessonId);
-    try {
-      await onImport(lessonId);
-    } finally {
-      setImportingId(null);
-    }
-  };
-
-  return (
-    <div className="rounded-lg border border-[var(--a-border)] overflow-hidden">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-[var(--a-text)] bg-[var(--a-surface-2)] hover:bg-[var(--a-nav-hover)]"
-      >
-        <span>Reuse a lesson from a default curriculum</span>
-        <span className="text-[var(--a-text-faint)]">{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="max-h-64 overflow-y-auto p-2 space-y-1.5">
-          {loading && <p className="text-sm text-[var(--a-text-muted)] px-2 py-1">Loading…</p>}
-          {!loading && catalog.length === 0 && (
-            <p className="text-sm text-[var(--a-text-muted)] px-2 py-1">No reusable lessons found.</p>
-          )}
-          {!loading &&
-            catalog.map((c) => (
-              <div key={c.courseId} className="rounded-lg border border-[var(--a-border)]">
-                <button
-                  onClick={() => setExpandedCourse((cur) => (cur === c.courseId ? null : c.courseId))}
-                  className="w-full flex items-center justify-between px-2.5 py-2 text-xs font-semibold text-[var(--a-text)]"
-                >
-                  <span>
-                    {c.courseTitle} <span className="text-[var(--a-text-faint)] font-normal">({c.category})</span>
-                  </span>
-                  <span className="text-[var(--a-text-faint)]">{expandedCourse === c.courseId ? "▲" : "▼"}</span>
-                </button>
-                {expandedCourse === c.courseId && (
-                  <div className="px-2.5 pb-2 space-y-2">
-                    {c.modules.map((m) => (
-                      <div key={m.moduleId}>
-                        <p className="text-xs text-[var(--a-text-faint)] uppercase tracking-wide mt-1 mb-1">{m.moduleTitle}</p>
-                        <div className="space-y-1">
-                          {m.lessons.map((l) => (
-                            <div
-                              key={l.id}
-                              className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-[var(--a-surface-2)] text-xs"
-                            >
-                              <span className="text-[var(--a-text)] truncate">{l.title}</span>
-                              <button
-                                onClick={() => handleImport(l.id)}
-                                disabled={importingId === l.id}
-                                className="flex-shrink-0 text-[var(--a-accent)] hover:underline disabled:opacity-50"
-                              >
-                                {importingId === l.id ? "Adding…" : "+ Add"}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-        </div>
-      )}
-    </div>
   );
 }

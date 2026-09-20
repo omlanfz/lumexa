@@ -52,6 +52,7 @@ export default function ClassesPage() {
   const [studentQuery, setStudentQuery] = useState("");
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
   const [studentFilter, setStudentFilter] = useState<StudentOption | null>(null);
+  const [studentFieldFocused, setStudentFieldFocused] = useState(false);
 
   const [date, setDate] = useState(searchParams.get("date") ?? "");
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
@@ -63,14 +64,12 @@ export default function ClassesPage() {
     api.get("/courses/admin/all").then((res) => setCourses(res.data ?? []));
   }, []);
 
+  // Loads a default browsable list of students immediately, then narrows as
+  // the admin searches — same pattern used across admin's other pickers.
   useEffect(() => {
-    if (!studentQuery.trim()) {
-      setStudentOptions([]);
-      return;
-    }
     const t = setTimeout(() => {
       api
-        .get(`/admin/students?limit=8&search=${encodeURIComponent(studentQuery)}`)
+        .get(`/admin/students?limit=20&search=${encodeURIComponent(studentQuery)}`)
         .then((res) => setStudentOptions(res.data.students ?? []));
     }, 250);
     return () => clearTimeout(t);
@@ -190,11 +189,13 @@ export default function ClassesPage() {
             <input
               value={studentQuery}
               onChange={(e) => setStudentQuery(e.target.value)}
-              placeholder="Search name/email…"
+              onFocus={() => setStudentFieldFocused(true)}
+              onBlur={() => setTimeout(() => setStudentFieldFocused(false), 150)}
+              placeholder="Search, or click to browse all students…"
               className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
             />
           )}
-          {studentOptions.length > 0 && !studentFilter && (
+          {studentFieldFocused && studentOptions.length > 0 && !studentFilter && (
             <div className="absolute z-10 mt-1 w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] shadow-lg overflow-hidden">
               {studentOptions.map((s) => (
                 <button

@@ -151,7 +151,11 @@ export class CurriculumDocumentsService {
       // one is added, so switchToPage(0) throws "out of bounds" the moment
       // a curriculum spans more than one page (pdfkit's default streaming
       // behavior, not something bufferedPageRange alone works around).
-      const doc = new PDFDocument({ size: 'A4', margin: 50, bufferPages: true });
+      const doc = new PDFDocument({
+        size: 'A4',
+        margin: 50,
+        bufferPages: true,
+      });
       const chunks: Buffer[] = [];
       doc.on('data', (chunk) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -335,33 +339,55 @@ export class CurriculumDocumentsService {
     });
 
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Lumexa';
+    workbook.creator = 'Lumexa AI School';
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet('Default Curriculums');
+    const COLUMN_COUNT = 7;
     sheet.columns = [
-      { header: 'Curriculum Name', key: 'name', width: 28 },
-      { header: 'Category', key: 'category', width: 20 },
-      { header: 'Target Ages', key: 'ages', width: 14 },
-      { header: 'Courses', key: 'courses', width: 10 },
-      { header: 'Lessons', key: 'lessons', width: 10 },
-      { header: 'Projects', key: 'projects', width: 10 },
-      { header: 'Tests/Assessments', key: 'tests', width: 18 },
-      { header: 'Price (BDT)', key: 'price', width: 14 },
-      { header: 'Duration', key: 'duration', width: 20 },
-      { header: 'Status', key: 'status', width: 12 },
+      { key: 'name', width: 30 },
+      { key: 'ages', width: 14 },
+      { key: 'courses', width: 10 },
+      { key: 'lessons', width: 10 },
+      { key: 'projects', width: 10 },
+      { key: 'tests', width: 18 },
+      { key: 'price', width: 14 },
     ];
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: 'FFE0F2F1' },
-    };
+
+    // ── Branding header ──
+    sheet.mergeCells(1, 1, 1, COLUMN_COUNT);
+    const brandCell = sheet.getCell(1, 1);
+    brandCell.value = '🚀 Lumexa AI School';
+    brandCell.font = { bold: true, size: 16, color: { argb: 'FF0D9488' } };
+
+    sheet.mergeCells(2, 1, 2, COLUMN_COUNT);
+    const subtitleCell = sheet.getCell(2, 1);
+    subtitleCell.value = `Default Curriculum Summary · Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' } as any)}`;
+    subtitleCell.font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
+
+    // ── Table header ──
+    const HEADER_ROW = 4;
+    const headerRow = sheet.getRow(HEADER_ROW);
+    headerRow.values = [
+      'Curriculum Name',
+      'Target Ages',
+      'Courses',
+      'Lessons',
+      'Projects',
+      'Tests/Assessments',
+      'Price (BDT)',
+    ];
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.alignment = { vertical: 'middle' };
+    headerRow.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0D9488' },
+      };
+    });
 
     for (const course of courses) {
-      const learningLessons = course.lessons.filter(
-        (l) => l.type === SessionType.LEARNING,
-      ).length;
       const testLessons = course.lessons.filter(
         (l) => l.type !== SessionType.LEARNING,
       ).length;
@@ -371,21 +397,21 @@ export class CurriculumDocumentsService {
       );
 
       sheet.addRow({
-        name: course.title,
-        category: course.category,
+        name: course.title.replace(/\s*Path$/i, '').trim(),
         ages: `${course.ageMin}–${course.ageMax}`,
         courses: course.modules.length,
-        lessons: learningLessons,
+        // Lessons = every session (learning + tests/assessments), e.g. a
+        // 28-session pathway shows 28, not just its 24 learning sessions.
+        lessons: course.sessions,
         projects: projectCount,
         tests: testLessons,
         price: course.priceCents ? course.priceCents / 100 : 'TBD',
-        duration: `${course.sessions} sessions`,
-        status: course.isActive ? 'Active' : 'Inactive',
       });
     }
 
     sheet.getColumn('price').numFmt = '#,##0';
-    sheet.eachRow((row) => {
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber < HEADER_ROW) return;
       row.eachCell((cell) => {
         cell.border = {
           bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
