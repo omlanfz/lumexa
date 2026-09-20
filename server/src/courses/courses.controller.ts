@@ -63,7 +63,11 @@ export class CoursesController {
   @Post(':id/lessons')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.ADMIN)
-  createLesson(@Param('id') id: string, @Body() dto: CreateLessonDto, @Req() req: any) {
+  createLesson(
+    @Param('id') id: string,
+    @Body() dto: CreateLessonDto,
+    @Req() req: any,
+  ) {
     return this.coursesService.createLesson(id, dto, req.user.userId);
   }
 
@@ -85,5 +89,15 @@ export class CoursesController {
   @Roles(Role.ADMIN)
   deleteLesson(@Param('lessonId') lessonId: string, @Req() req: any) {
     return this.coursesService.deleteLesson(lessonId, req.user.userId);
+  }
+
+  /** Admin — permanently delete a course. Refuses if it has real class
+   * history (see CoursesService.deleteCourse); must be registered after
+   * `lessons/:lessonId` so that path never matches here. */
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN)
+  deleteCourse(@Param('id') id: string, @Req() req: any) {
+    return this.coursesService.deleteCourse(id, req.user.userId);
   }
 }

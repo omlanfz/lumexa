@@ -14,7 +14,7 @@
             "Open browser DevTools and inspect a live page's HTML."
           ],
           "contentMarkdown": "## Learn\n\nEvery website you have ever visited — including the three projects you will build this module — starts the same way: a browser asks a server for an HTML file, the server sends it back, and the browser reads it top to bottom to build the page. HTML (HyperText Markup Language) is not a programming language in the loops-and-variables sense — it is a markup language: a set of tags that describe *what each piece of content is* (a heading, a paragraph, an image, a link), never how it looks. That separation — structure in HTML, appearance in CSS — is the single most important idea in this module, and it is exactly how `index.html` and `styles.css` are split in every project you will open below.",
-          "homework": "Review today's concept notes and skim the README of the next project folder before the next class.",
+          "homework": "Open DevTools on three websites you use daily and inspect their HTML. For each, name one semantic tag you spot (e.g. `<nav>`, `<header>`, `<article>`) and what content it wraps. Then skim the \"Personal Landing Page\" starter `index.html` you'll build on in Lesson 2.",
           "codeSnippets": [],
           "miniQuiz": [],
           "sourceRefs": {
@@ -201,7 +201,7 @@
             "Confirm all three module projects (Personal Landing Page, Responsive Portfolio Layout, Product Showcase Site) are live and polished."
           ],
           "contentMarkdown": "## Learn\n\nA static HTML/CSS/JS site needs no build step to deploy — Vercel (or Netlify/GitHub Pages) simply serves the files from a CDN, giving you a real public URL you can share. Today is review and polish: revisit all three projects from this module, fix any rough edges, and deploy each one for real.",
-          "homework": "Review today's concept notes and skim the README of the next project folder before the next class.",
+          "homework": "Deploy all three of this module's projects (Personal Landing Page, Responsive Portfolio Layout, Product Showcase Site) to Vercel. Open each live URL on your phone, and fix at least one mobile issue you spot (spacing, a broken image, overflow) before sharing the links for feedback.",
           "codeSnippets": [],
           "miniQuiz": [],
           "sourceRefs": {
@@ -252,7 +252,7 @@
             "Use `for`/`for...of` loops and array methods (`map`, `filter`) on real data."
           ],
           "contentMarkdown": "## Learn\n\nJavaScript is the only language that runs natively in every browser, which is why it is the language of web interactivity. Today is a fast, practical refresher on the building blocks — variables, functions, loops — aimed specifically at what you need for this module's three apps: reading and changing data, and reacting to what the user does.",
-          "homework": "Review today's concept notes and skim the README of the next project folder before the next class.",
+          "homework": "In your browser's Console, write and run: a variable declared with `let`/`const`, a small function that takes a parameter and returns a value, and one `.map()` or `for...of` loop over an array of at least 4 items. Save all three snippets — you'll reuse these exact patterns in the Interactive To-Do App next lesson.",
           "codeSnippets": [],
           "miniQuiz": [],
           "sourceRefs": {
@@ -451,7 +451,7 @@
             "Polish all three module apps (To-Do, Weather Dashboard, Memory Game) for a final review."
           ],
           "contentMarkdown": "## Learn\n\nProfessional JavaScript debugging leans on DevTools, not guesswork: `console.log` to inspect values, breakpoints to pause execution, and the Elements panel to check the live DOM against what your code intended. Today is review and polish across all three apps from this module — deliberately break something on purpose and practice diagnosing it fast.",
-          "homework": "Review today's concept notes and skim the README of the next project folder before the next class.",
+          "homework": "Polish all three apps from this module (To-Do, Weather Dashboard, Memory Game): in DevTools, trigger one real error in each (e.g. a misspelled variable), read the stack trace, and fix it. Then fix one rough edge per app (a missing empty state, an ugly error case, a layout glitch) before calling it finished.",
           "codeSnippets": [],
           "miniQuiz": [],
           "sourceRefs": {
@@ -502,7 +502,7 @@
             "Set up a React project with Vite and run it locally."
           ],
           "contentMarkdown": "## Learn\n\nAs apps grow, manually finding and updating DOM elements (Module 2's approach) gets unmanageable — React instead lets you describe UI as a function of state (\"given this data, render this\") and handles the DOM updates for you. A component is just a JavaScript function that returns markup; this module's three projects are built entirely out of small, composed components.",
-          "homework": "Review today's concept notes and skim the README of the next project folder before the next class.",
+          "homework": "Create a new React project with Vite (`npm create vite@latest`) and get it running locally. Write your own component that takes a `name` prop and returns a greeting, then render it twice in `App.jsx` with different names — the same reusable-component pattern the E-commerce Product Page uses for product cards.",
           "codeSnippets": [],
           "miniQuiz": [],
           "sourceRefs": {
@@ -713,7 +713,7 @@
             "Present a finished, deployed full-stack web project as a portfolio piece."
           ],
           "contentMarkdown": "## Learn\n\nVercel (made by the creators of Next.js) auto-detects a Next.js project and builds/deploys it with zero config — push to GitHub, import the repo, done. Today is final review and deployment: polish and ship the E-commerce Product Page, Social Media Feed Clone, and Full Portfolio React App, and confirm all three are live.",
-          "homework": "Review today's concept notes and skim the README of the next project folder before the next class.",
+          "homework": "Deploy your strongest of this module's three React projects (E-commerce Product Page, Social Media Feed Clone, Full Portfolio React App) to Vercel from GitHub. Do a final pass on all three, fix at least one real issue you find (a console warning, a broken prop, an unstyled element), and confirm the deployed link works in an incognito window.",
           "codeSnippets": [],
           "miniQuiz": [],
           "sourceRefs": {

@@ -39,6 +39,7 @@ import { CertificatesModule } from './certificates/certificates.module';
 import { RemindersModule } from './reminders/reminders.module';
 import { PackageAlertsModule } from './package-alerts/package-alerts.module';
 import { AdminAlertsModule } from './admin-alerts/admin-alerts.module';
+import { SubmissionsModule } from './submissions/submissions.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { AdminAlertsModule } from './admin-alerts/admin-alerts.module';
     RemindersModule,
     PackageAlertsModule,
     AdminAlertsModule,
+    SubmissionsModule,
   ],
   controllers: [AppController],
   providers: [

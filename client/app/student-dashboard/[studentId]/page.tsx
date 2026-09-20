@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import { parseStoredUser, getStoredToken } from '@/lib/storage';
+import SubmissionsList from '@/components/teacher/SubmissionsList';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,7 @@ interface TeacherDashboardPayload {
 
 // ─── Sidebar (parent / teacher proxy view) ───────────────────────────────────
 
-type Tab = 'overview' | 'schedule';
+type Tab = 'overview' | 'schedule' | 'submissions';
 
 function ProxySidebar({
   student,
@@ -63,6 +64,12 @@ function ProxySidebar({
   const navItems: { id: Tab; label: string; icon: string; sub: string }[] = [
     { id: 'overview', label: 'Dashboard', icon: '🏠', sub: 'Home Base' },
     { id: 'schedule', label: 'Schedule', icon: '📅', sub: 'My Classes' },
+    // Reviewing homework is a teacher-only action — a parent viewing their
+    // own child's proxy dashboard has no review capability, so this tab
+    // only exists in the teacher view.
+    ...(isTeacherView
+      ? [{ id: 'submissions' as Tab, label: 'Submissions', icon: '📝', sub: 'Homework' }]
+      : []),
   ];
 
   return (
@@ -553,6 +560,14 @@ function ProxyDashboardContent() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Submissions Tab (teacher view only) ── */}
+        {activeTab === 'submissions' && isTeacherView && (
+          <div className="max-w-3xl mx-auto fade-in">
+            <h2 className="text-xl font-bold mb-6 text-white">Submissions</h2>
+            <SubmissionsList studentUserId={studentId} />
           </div>
         )}
       </main>

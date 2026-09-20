@@ -66,6 +66,38 @@ const documentStorage = new CloudinaryStorage({
   })) as any,
 });
 
+// Homework submissions: PDFs, photos of written work, and common document/
+// archive formats a student might turn in (a zipped code project, a Word
+// doc). Same raw-vs-image resource_type split as documentStorage above —
+// PDFs and non-image files need 'raw' delivery or Cloudinary's restricted-
+// media-types setting 401s the download link the teacher clicks to review it.
+const homeworkStorage = new CloudinaryStorage({
+  cloudinary,
+  params: (async (_req: any, file: Express.Multer.File) => ({
+    folder: 'lumexa/homework',
+    resource_type: file.mimetype.startsWith('image/') ? 'image' : 'raw',
+    allowed_formats: [
+      'pdf',
+      'jpg',
+      'jpeg',
+      'png',
+      'heic',
+      'heif',
+      'doc',
+      'docx',
+      'txt',
+      'zip',
+    ],
+    // Same phone-camera HEIC/HEIF problem as avatars/documents above.
+    ...((file.mimetype === 'image/heic' || file.mimetype === 'image/heif') && {
+      format: 'jpg',
+    }),
+  })) as any,
+});
+
+const HOMEWORK_MIME_PATTERN =
+  /\/(pdf|jpg|jpeg|png|heic|heif|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|zip|x-zip-compressed|plain)$/;
+
 const REQUIRED_DOC_TYPES = new Set([
   'nid',
   'birth_certificate',
@@ -246,6 +278,39 @@ export class UploadsController {
     }),
   )
   uploadProof(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file provided.');
+    const url = (file as any).path ?? (file as any).secure_url;
+    return { url, name: file.originalname };
+  }
+
+  /**
+   * POST /uploads/homework
+   * Multer field name: "homework"
+   * Uploads a student's homework file for a completed lesson. Just returns
+   * the stored URL — SubmissionsController.submit is what actually records
+   * it against the scheduled lesson.
+   */
+  @Post('homework')
+  @UseGuards(RolesGuard)
+  @Roles(Role.STUDENT)
+  @UseInterceptors(
+    FileInterceptor('homework', {
+      storage: homeworkStorage,
+      fileFilter: (_req, file, cb) => {
+        if (!HOMEWORK_MIME_PATTERN.test(file.mimetype)) {
+          return cb(
+            new BadRequestException(
+              'Only PDF, Word, TXT, ZIP, JPG, and PNG files are allowed.',
+            ) as unknown as Error,
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB — a zipped mini-project can be bigger than a single doc
+    }),
+  )
+  uploadHomework(@UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('No file provided.');
     const url = (file as any).path ?? (file as any).secure_url;
     return { url, name: file.originalname };

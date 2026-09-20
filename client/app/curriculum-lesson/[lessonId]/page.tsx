@@ -54,7 +54,7 @@ export default function CatalogLessonDetailsPage() {
   if (!data) return null;
 
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6">
+    <div className="max-w-3xl mx-auto px-3 py-5 sm:px-6 sm:py-6">
       <button onClick={() => history.back()} className="text-sm text-teal-600 dark:text-teal-400 hover:underline">
         ← Back
       </button>

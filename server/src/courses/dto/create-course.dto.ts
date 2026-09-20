@@ -68,4 +68,10 @@ export class CreateCourseDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  // True only for a one-off curriculum built for a single student/parent via
+  // the Custom Curriculum Builder — see Course.isCustom's schema comment.
+  @IsOptional()
+  @IsBoolean()
+  isCustom?: boolean;
 }

@@ -81,7 +81,9 @@ export class UpdateLessonContentDto {
   @IsOptional() @IsString() @MaxLength(200) title?: string;
   @IsOptional() @IsInt() @Min(1) order?: number;
   @IsOptional() @IsInt() @Min(10) @Max(240) duration?: number;
-  @IsOptional() @IsIn(['LEARNING', 'COURSE_TEST', 'STAGE_TEST', 'FINAL_TEST']) type?: string;
+  @IsOptional()
+  @IsIn(['LEARNING', 'COURSE_TEST', 'STAGE_TEST', 'FINAL_TEST'])
+  type?: string;
   @IsOptional() @IsString() moduleId?: string;
   @IsOptional() @IsString() projectId?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) objectives?: string[];
@@ -130,11 +132,24 @@ export class CreatePracticalQuestionDto {
   @IsString() instructions: string;
   @IsOptional() @IsString() language?: string;
   @IsOptional() @IsString() starterCode?: string;
-  @IsOptional() testCases?: { name: string; input: unknown[]; expectedOutput: unknown }[];
+  @IsOptional() testCases?: {
+    name: string;
+    input: unknown[];
+    expectedOutput: unknown;
+  }[];
   @IsOptional() rubric?: { criterion: string; maxPoints: number }[];
   @IsOptional() @IsInt() maxScore?: number;
   @IsOptional() @IsInt() order?: number;
   @IsOptional() @IsBoolean() isPublished?: boolean;
+}
+
+export class ImportLessonDto {
+  @IsString()
+  sourceLessonId: string;
+
+  @IsInt()
+  @Min(1)
+  order: number;
 }
 
 export class UpdatePracticalQuestionDto {
@@ -142,7 +157,11 @@ export class UpdatePracticalQuestionDto {
   @IsOptional() @IsString() instructions?: string;
   @IsOptional() @IsString() language?: string;
   @IsOptional() @IsString() starterCode?: string;
-  @IsOptional() testCases?: { name: string; input: unknown[]; expectedOutput: unknown }[];
+  @IsOptional() testCases?: {
+    name: string;
+    input: unknown[];
+    expectedOutput: unknown;
+  }[];
   @IsOptional() rubric?: { criterion: string; maxPoints: number }[];
   @IsOptional() @IsInt() maxScore?: number;
   @IsOptional() @IsInt() order?: number;

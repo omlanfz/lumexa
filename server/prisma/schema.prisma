@@ -85,6 +85,7 @@ model User {
   recurringSlots     RecurringSlot[]
   scheduledLessons   ScheduledLesson[]
   assessmentAttempts AssessmentAttempt[] @relation("StudentAssessmentAttempts")
+  submissions        Submission[]        @relation("StudentSubmissions")
 
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
@@ -154,6 +155,7 @@ model TeacherProfile {
   recurringSlots        RecurringSlot[]
   scheduledLessons      ScheduledLesson[]
   vivaRecords           VivaRecord[]
+  submissions           Submission[]
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -438,6 +440,19 @@ model Course {
   // StudentLedgerService.
   priceCents       Int?
   isActive         Boolean              @default(true)
+  // True only for a one-off curriculum an admin builds for a single
+  // student/parent via the Custom Curriculum Builder (see CoursesService).
+  // Distinct from isActive (which also covers deactivating an ordinary
+  // default course) so the default-curriculum .xlsx summary and other
+  // "default catalog only" views can filter reliably without guessing from
+  // category/isActive.
+  isCustom         Boolean              @default(false)
+  // Cloudinary URL of the most recently generated branded curriculum PDF for
+  // this course — set on custom courses when the admin saves the builder
+  // (see CurriculumDocsService), regenerated (overwritten) on every save.
+  // Never set for default courses, which ship their own static PDFs under
+  // server/assets/curriculum-pdfs instead.
+  curriculumPdfUrl String?
   createdAt        DateTime             @default(now())
   lessons          Lesson[]
   modules          CourseModule[]
@@ -448,6 +463,7 @@ model Course {
 
   @@index([isActive])
   @@index([category])
+  @@index([isCustom])
 }
 
 // ─── Recurring weekly schedule + generated lesson instances ─────────────────
@@ -559,6 +575,8 @@ model ScheduledLesson {
   updatedAt DateTime @updatedAt
 
   assessmentAttempt AssessmentAttempt?
+  submission        Submission?
+  ledgerEntries     StudentLedgerEntry[]
 
   // NOTE: uniqueness of (studentUserId, courseId, lessonNumber) is enforced
   // by a PARTIAL unique index created in migration SQL — scoped to
@@ -667,10 +685,52 @@ model Lesson {
 
   scheduledLessons ScheduledLesson[]
   assessment       Assessment?
+  submissions      Submission[]
 
   @@index([courseId])
   @@index([moduleId])
   @@index([projectId])
+}
+
+// ─── Student homework submissions ────────────────────────────────────────────
+//
+// One row per ScheduledLesson occurrence that a student has submitted
+// homework for (@unique scheduledLessonId — resubmitting the same occurrence
+// overwrites fileUrl/note/submittedAt in place rather than creating a second
+// row, so "already submitted" is always a single unambiguous lookup). Only
+// created once the student actually submits — a lesson with homework but no
+// Submission row yet is exactly the "needs attention" case surfaced on
+// Student Home. lessonId/teacherId are denormalized from the ScheduledLesson
+// at submission time so teacher review queries (by teacher, by catalog
+// lesson) never need to join through it.
+model Submission {
+  id                String           @id @default(uuid())
+  scheduledLessonId String           @unique
+  scheduledLesson   ScheduledLesson  @relation(fields: [scheduledLessonId], references: [id])
+  lessonId          String
+  lesson            Lesson           @relation(fields: [lessonId], references: [id])
+  studentUserId     String
+  student           User             @relation("StudentSubmissions", fields: [studentUserId], references: [id])
+  teacherId         String
+  teacher           TeacherProfile   @relation(fields: [teacherId], references: [id])
+  fileUrl           String
+  fileName          String?
+  note              String? // optional message the student attaches
+  status            SubmissionStatus @default(PENDING)
+  submittedAt       DateTime         @default(now())
+  reviewedAt        DateTime?
+  feedback          String? // optional teacher note left when reviewing
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([studentUserId])
+  @@index([teacherId, status])
+  @@index([lessonId])
+}
+
+enum SubmissionStatus {
+  PENDING
+  REVIEWED
 }
 
 model GemWallet {
@@ -718,7 +778,10 @@ model GemPurchase {
 // lessonsPurchased) and on CURRICULUM_CHANGE (new course's list rate, when
 // known). Idempotency for the automatic per-booking consumption trigger is
 // enforced by @@unique([bookingId, type]) — Postgres treats NULL bookingId
-// values as distinct, so this only constrains LESSON_COMPLETED rows.
+// values as distinct, so this only constrains LESSON_COMPLETED rows. The
+// curriculum (ScheduledLesson) flow's consumption trigger mirrors this with
+// its own scheduledLessonId + @@unique([scheduledLessonId, type]) — the two
+// columns never collide since a row is only ever written by one flow.
 model StudentLedgerEntry {
   id                String                 @id @default(uuid())
   studentUserId     String
@@ -741,9 +804,12 @@ model StudentLedgerEntry {
   createdByAdmin    User?                  @relation("StudentLedgerCreatedBy", fields: [createdByAdminId], references: [id])
   bookingId         String?
   booking           Booking?               @relation(fields: [bookingId], references: [id])
+  scheduledLessonId String?
+  scheduledLesson   ScheduledLesson?       @relation(fields: [scheduledLessonId], references: [id])
   createdAt         DateTime               @default(now())
 
   @@unique([bookingId, type])
+  @@unique([scheduledLessonId, type])
   @@index([studentUserId, createdAt])
 }
 

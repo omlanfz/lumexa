@@ -133,6 +133,7 @@ function TeacherDashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlertItem[]>([]);
+  const [pendingSubmissions, setPendingSubmissions] = useState<number>(0);
 
   const now = useClock(!!nextClass);
   const { hours, minutes, seconds } = nextClass
@@ -152,13 +153,14 @@ function TeacherDashboardContent() {
 
     (async () => {
       try {
-        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes, alertsRes] = await Promise.all([
+        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes, alertsRes, submissionsRes] = await Promise.all([
           api.get("/teachers/me/stats"),
           api.get("/teachers/me/next-class"),
           api.get("/teachers/me/profile"),
           api.get("/teachers/me/students"),
           api.get("/shifts"),
           api.get("/alerts/me", { params: { limit: 5 } }).catch(() => ({ data: [] })),
+          api.get("/submissions/pending-count").catch(() => ({ data: { count: 0 } })),
         ]);
 
         setStats(statsRes.data);
@@ -166,6 +168,7 @@ function TeacherDashboardContent() {
         setProfile(profileRes.data);
         setStudents(studentsRes.data ?? []);
         setAlerts((alertsRes.data ?? []).filter((a: DashboardAlertItem) => !a.read));
+        setPendingSubmissions(submissionsRes.data?.count ?? 0);
 
         const now = new Date();
         const open = (shiftsRes.data as Shift[]).filter(
@@ -454,6 +457,28 @@ function TeacherDashboardContent() {
             </div>
           </section>
         </div>
+
+        {/* ── Pending homework submissions ────────────────────────────── */}
+        {pendingSubmissions > 0 && (
+          <section className="mb-8">
+            <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+              Pending Submissions
+            </p>
+            <div className={`${card} p-5 flex items-center justify-between flex-wrap gap-3`}>
+              <div>
+                <p className="text-lg font-semibold text-[var(--t-text)]">
+                  {pendingSubmissions} student submission{pendingSubmissions !== 1 ? "s" : ""} need{pendingSubmissions === 1 ? "s" : ""} your review
+                </p>
+              </div>
+              <button
+                onClick={() => router.push("/teacher-submissions")}
+                className="text-sm px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors duration-150"
+              >
+                Review Submissions →
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* ── 6. This month's earnings ────────────────────────────────── */}
         <section className="mb-8">

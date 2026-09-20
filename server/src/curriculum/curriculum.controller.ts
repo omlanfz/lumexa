@@ -1,14 +1,28 @@
 // FILE PATH: server/src/curriculum/curriculum.controller.ts
 
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Response,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
+import type { Response as ExpressResponse } from 'express';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurriculumService } from './curriculum.service';
+import { CurriculumDocumentsService } from './curriculum-documents.service';
 import {
   CreateModuleDto,
   CreateProjectDto,
+  ImportLessonDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -17,7 +31,10 @@ import {
 @Controller('curriculum')
 @UseGuards(AuthGuard('jwt'))
 export class CurriculumController {
-  constructor(private readonly curriculum: CurriculumService) {}
+  constructor(
+    private readonly curriculum: CurriculumService,
+    private readonly documents: CurriculumDocumentsService,
+  ) {}
 
   // ── Lesson Details (student sees own; teacher/admin see any assigned course) ──
 
@@ -40,12 +57,63 @@ export class CurriculumController {
     return this.curriculum.getCourseStructure(courseId, req.user);
   }
 
+  // ── Custom Curriculum Builder ──────────────────────────────────────────────
+
+  /** Every default curriculum's LEARNING lessons, grouped by course ->
+   * module, for the "reuse an existing lesson" picker. */
+  @Get('reusable-lessons')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getReusableLessons() {
+    return this.curriculum.getReusableLessons();
+  }
+
+  /** Copies a default-curriculum lesson's content into a custom course at
+   * the given order — the source lesson/course is never modified. */
+  @Post('courses/:courseId/lessons/import')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  importLesson(
+    @Param('courseId') courseId: string,
+    @Body() dto: ImportLessonDto,
+  ) {
+    return this.curriculum.importLesson(courseId, dto);
+  }
+
+  /** Generates (or regenerates) the branded, parent-ready curriculum PDF for
+   * one custom course and caches its URL on Course.curriculumPdfUrl. */
+  @Post('courses/:courseId/curriculum-pdf')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  generateCurriculumPdf(@Param('courseId') courseId: string) {
+    return this.documents.generateCustomCurriculumPdf(courseId);
+  }
+
+  /** GET /curriculum/default-curriculum-summary.xlsx — one row per default
+   * (non-custom) curriculum; auto-includes any added later. */
+  @Get('default-curriculum-summary.xlsx')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  async downloadDefaultCurriculumSummary(@Response() res: ExpressResponse) {
+    const buffer = await this.documents.buildDefaultCurriculumSummaryWorkbook();
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition':
+        'attachment; filename="lumexa-default-curriculums.xlsx"',
+    });
+    res.send(buffer);
+  }
+
   // ── Admin CRUD: modules ────────────────────────────────────────────────────
 
   @Post('courses/:courseId/modules')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  createModule(@Param('courseId') courseId: string, @Body() dto: CreateModuleDto) {
+  createModule(
+    @Param('courseId') courseId: string,
+    @Body() dto: CreateModuleDto,
+  ) {
     return this.curriculum.createModule(courseId, dto);
   }
 
@@ -68,7 +136,10 @@ export class CurriculumController {
   @Post('modules/:moduleId/projects')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  createProject(@Param('moduleId') moduleId: string, @Body() dto: CreateProjectDto) {
+  createProject(
+    @Param('moduleId') moduleId: string,
+    @Body() dto: CreateProjectDto,
+  ) {
     return this.curriculum.createProject(moduleId, dto);
   }
 
@@ -91,7 +162,10 @@ export class CurriculumController {
   @Patch('lessons/:id/content')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  updateLessonContent(@Param('id') id: string, @Body() dto: UpdateLessonContentDto) {
+  updateLessonContent(
+    @Param('id') id: string,
+    @Body() dto: UpdateLessonContentDto,
+  ) {
     return this.curriculum.updateLessonContent(id, dto);
   }
 }
