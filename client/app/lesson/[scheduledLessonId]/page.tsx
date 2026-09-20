@@ -37,7 +37,7 @@ export default function LessonDetailsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-5xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto p-6">
         <div className="animate-pulse h-6 w-40 bg-gray-200 dark:bg-gray-700 rounded mb-4" />
         <div className="animate-pulse h-40 bg-gray-200 dark:bg-gray-800 rounded-xl" />
       </div>
@@ -46,7 +46,7 @@ export default function LessonDetailsPage() {
 
   if (error) {
     return (
-      <div className="max-w-5xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto p-6">
         <p className="text-red-500">{error}</p>
         <Link href={backHref} className="text-teal-600 hover:underline text-sm">
           ← Back
@@ -58,7 +58,7 @@ export default function LessonDetailsPage() {
   if (!data) return null;
 
   return (
-    <div className="max-w-5xl mx-auto px-3 py-5 sm:px-6 sm:py-6">
+    <div className="max-w-6xl mx-auto px-3 py-5 sm:px-6 sm:py-6">
       <Link href={backHref} className="text-sm text-teal-600 dark:text-teal-400 hover:underline">
         ← Back
       </Link>

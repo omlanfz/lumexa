@@ -46,6 +46,21 @@ const TYPE_LABELS: Record<string, string> = {
   FINAL_TEST: "Final Test",
 };
 
+// Groups a curriculum's modules under their stage (Odyssey only — everything
+// else has no stageNumber and comes back as one implicit group) so the
+// builder can offer a "select all" at curriculum, stage, and module level.
+function groupByStage(modules: ReusableModule[]): { stageNumber: number | null; modules: ReusableModule[] }[] {
+  const hasStages = modules.some((m) => m.stageNumber != null);
+  if (!hasStages) return [{ stageNumber: null, modules }];
+  const groups = new Map<number, ReusableModule[]>();
+  for (const m of modules) {
+    const key = m.stageNumber ?? 0;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(m);
+  }
+  return [...groups.entries()].sort((a, b) => a[0] - b[0]).map(([stageNumber, mods]) => ({ stageNumber, modules: mods }));
+}
+
 export default function CustomCurriculumBuilderPage() {
   const params = useParams<{ courseId: string }>();
   const [course, setCourse] = useState<Course | null>(null);
@@ -54,12 +69,12 @@ export default function CustomCurriculumBuilderPage() {
   const [loading, setLoading] = useState(true);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
-  const [importingId, setImportingId] = useState<string | null>(null);
+  const [importingKey, setImportingKey] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
-  const [generatingPdf, setGeneratingPdf] = useState(false);
-  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [downloadingXlsx, setDownloadingXlsx] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [catalogFilter, setCatalogFilter] = useState("");
 
   const loadCourse = useCallback(async () => {
@@ -101,13 +116,26 @@ export default function CustomCurriculumBuilderPage() {
 
   const importLesson = async (sourceLessonId: string) => {
     if (!course) return;
-    setImportingId(sourceLessonId);
+    setImportingKey(sourceLessonId);
     try {
       const nextOrder = lessons.length > 0 ? Math.max(...lessons.map((l) => l.order)) + 1 : 1;
       await api.post(`/curriculum/courses/${course.id}/lessons/import`, { sourceLessonId, order: nextOrder });
       refreshLessons();
     } finally {
-      setImportingId(null);
+      setImportingKey(null);
+    }
+  };
+
+  // Bulk "select all" — one request for a whole curriculum, stage, or
+  // module's worth of lessons at once instead of clicking + Add repeatedly.
+  const importMany = async (key: string, sourceLessonIds: string[]) => {
+    if (!course || sourceLessonIds.length === 0) return;
+    setImportingKey(key);
+    try {
+      await api.post(`/curriculum/courses/${course.id}/lessons/import-many`, { sourceLessonIds });
+      refreshLessons();
+    } finally {
+      setImportingKey(null);
     }
   };
 
@@ -141,17 +169,27 @@ export default function CustomCurriculumBuilderPage() {
     }
   };
 
-  const generatePdf = async () => {
+  const downloadCurriculum = async () => {
     if (!course) return;
-    setGeneratingPdf(true);
-    setPdfError(null);
+    setDownloadingXlsx(true);
+    setDownloadError(null);
     try {
-      const res = await api.post(`/curriculum/courses/${course.id}/curriculum-pdf`);
-      window.open(res.data.url, "_blank");
-    } catch (err: any) {
-      setPdfError(err?.response?.data?.message ?? "Couldn't generate the curriculum PDF.");
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/curriculum/courses/${course.id}/curriculum.xlsx`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed to generate curriculum export");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${course.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-curriculum.xlsx`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      setDownloadError("Couldn't generate the curriculum export.");
     } finally {
-      setGeneratingPdf(false);
+      setDownloadingXlsx(false);
     }
   };
 
@@ -192,15 +230,15 @@ export default function CustomCurriculumBuilderPage() {
             View Curriculum
           </a>
           <button
-            onClick={generatePdf}
-            disabled={generatingPdf || lessons.length === 0}
+            onClick={downloadCurriculum}
+            disabled={downloadingXlsx || lessons.length === 0}
             className="px-3 py-2 rounded-lg text-sm font-semibold border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)] disabled:opacity-50"
           >
-            {generatingPdf ? "Generating…" : "Download Curriculum PDF"}
+            {downloadingXlsx ? "Preparing…" : "Download Curriculum"}
           </button>
         </div>
       </div>
-      {pdfError && <p className="text-sm text-[var(--a-danger)]">{pdfError}</p>}
+      {downloadError && <p className="text-sm text-[var(--a-danger)]">{downloadError}</p>}
 
       <div className="grid lg:grid-cols-[1fr_380px] gap-4 items-start">
         {/* Left: full reusable catalog, categorized by curriculum, in sequence */}
@@ -209,7 +247,7 @@ export default function CustomCurriculumBuilderPage() {
             <h2 className="font-semibold text-[var(--a-text)]">Reuse from Lumexa&apos;s curriculums</h2>
             <p className="text-xs text-[var(--a-text-faint)] mt-0.5">
               Every session from every default curriculum, in teaching order. Click + Add to copy one into{" "}
-              {course.title}.
+              {course.title}, or use Select All to import a whole curriculum, stage, or course at once.
             </p>
             <input
               value={catalogFilter}
@@ -224,47 +262,88 @@ export default function CustomCurriculumBuilderPage() {
               <p className="text-sm text-[var(--a-text-muted)] p-4">No matching lessons.</p>
             )}
             {!catalogLoading &&
-              filteredCatalog.map((c) => (
-                <div key={c.courseId} className="p-4">
-                  <h3 className="font-bold text-[var(--a-text)] mb-2">
-                    {c.courseTitle} <span className="text-xs font-normal text-[var(--a-text-faint)]">({c.totalSessions} sessions)</span>
-                  </h3>
-                  <div className="space-y-3">
-                    {c.modules.map((m) => (
-                      <div key={m.moduleId ?? "loose"}>
-                        <p className="text-xs uppercase tracking-wide text-[var(--a-text-faint)] font-semibold mb-1">
-                          {m.stageNumber ? `Stage ${m.stageNumber} · ` : ""}
-                          {m.moduleTitle}
-                        </p>
-                        <div className="space-y-1">
-                          {m.lessons.map((l) => (
-                            <div
-                              key={l.id}
-                              className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--a-surface-2)] text-sm"
-                            >
-                              <span className="text-[var(--a-text)] truncate min-w-0">
-                                {l.order}. {l.title}
-                                {TYPE_LABELS[l.type] && (
-                                  <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-semibold uppercase align-middle">
-                                    {TYPE_LABELS[l.type]}
-                                  </span>
-                                )}
-                              </span>
-                              <button
-                                onClick={() => importLesson(l.id)}
-                                disabled={importingId === l.id}
-                                className="flex-shrink-0 text-xs font-medium text-[var(--a-accent)] hover:underline disabled:opacity-50"
-                              >
-                                {importingId === l.id ? "Adding…" : "+ Add"}
-                              </button>
+              filteredCatalog.map((c) => {
+                const allLessonIds = c.modules.flatMap((m) => m.lessons.map((l) => l.id));
+                const stages = groupByStage(c.modules);
+                return (
+                  <div key={c.courseId} className="p-4">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h3 className="font-bold text-[var(--a-text)]">
+                        {c.courseTitle} <span className="text-xs font-normal text-[var(--a-text-faint)]">({c.totalSessions} sessions)</span>
+                      </h3>
+                      <SelectAllButton
+                        label="Select all"
+                        active={importingKey === `course:${c.courseId}`}
+                        onClick={() => importMany(`course:${c.courseId}`, allLessonIds)}
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      {stages.map((stage) => {
+                        const stageLessonIds = stage.modules.flatMap((m) => m.lessons.map((l) => l.id));
+                        return (
+                          <div key={stage.stageNumber ?? "single"}>
+                            {stage.stageNumber != null && (
+                              <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className="text-xs uppercase tracking-wide text-[var(--a-accent)] font-bold">
+                                  Stage {stage.stageNumber}
+                                </p>
+                                <SelectAllButton
+                                  label="Select stage"
+                                  active={importingKey === `stage:${c.courseId}:${stage.stageNumber}`}
+                                  onClick={() => importMany(`stage:${c.courseId}:${stage.stageNumber}`, stageLessonIds)}
+                                />
+                              </div>
+                            )}
+                            <div className="space-y-3 pl-0">
+                              {stage.modules.map((m) => {
+                                const moduleLessonIds = m.lessons.map((l) => l.id);
+                                return (
+                                  <div key={m.moduleId ?? "loose"}>
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <p className="text-xs uppercase tracking-wide text-[var(--a-text-faint)] font-semibold">
+                                        {m.moduleTitle}
+                                      </p>
+                                      <SelectAllButton
+                                        label="Select course"
+                                        active={importingKey === `module:${m.moduleId}`}
+                                        onClick={() => importMany(`module:${m.moduleId}`, moduleLessonIds)}
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      {m.lessons.map((l) => (
+                                        <div
+                                          key={l.id}
+                                          className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--a-surface-2)] text-sm"
+                                        >
+                                          <span className="text-[var(--a-text)] truncate min-w-0">
+                                            {l.order}. {l.title}
+                                            {TYPE_LABELS[l.type] && (
+                                              <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-semibold uppercase align-middle">
+                                                {TYPE_LABELS[l.type]}
+                                              </span>
+                                            )}
+                                          </span>
+                                          <button
+                                            onClick={() => importLesson(l.id)}
+                                            disabled={importingKey === l.id}
+                                            className="flex-shrink-0 text-xs font-medium text-[var(--a-accent)] hover:underline disabled:opacity-50"
+                                          >
+                                            {importingKey === l.id ? "Adding…" : "+ Add"}
+                                          </button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </Card>
 
@@ -336,5 +415,17 @@ export default function CustomCurriculumBuilderPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function SelectAllButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={active}
+      className="flex-shrink-0 text-[11px] font-semibold px-2 py-1 rounded-md border border-[var(--a-border)] text-[var(--a-accent)] hover:bg-[var(--a-accent)]/10 disabled:opacity-50"
+    >
+      {active ? "Adding…" : label}
+    </button>
   );
 }

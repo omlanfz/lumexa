@@ -447,12 +447,6 @@ model Course {
   // "default catalog only" views can filter reliably without guessing from
   // category/isActive.
   isCustom         Boolean              @default(false)
-  // Cloudinary URL of the most recently generated branded curriculum PDF for
-  // this course — set on custom courses when the admin saves the builder
-  // (see CurriculumDocsService), regenerated (overwritten) on every save.
-  // Never set for default courses, which ship their own static PDFs under
-  // server/assets/curriculum-pdfs instead.
-  curriculumPdfUrl String?
   createdAt        DateTime             @default(now())
   lessons          Lesson[]
   modules          CourseModule[]

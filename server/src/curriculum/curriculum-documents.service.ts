@@ -1,43 +1,79 @@
 // FILE PATH: server/src/curriculum/curriculum-documents.service.ts
 //
-// Two admin-only document generators built on the same local, free
-// libraries already used elsewhere in this codebase (pdfkit for the
-// certificate PDF, exceljs for the payout report — see those files' header
-// comments) so nothing new needs to be installed or paid for:
+// Two admin-only .xlsx generators, both built on exceljs (already used
+// elsewhere in this codebase — see payout-report.ts) so nothing new needs
+// to be installed or paid for, and both streamed straight to the response
+// with no storage/upload step needed (see CurriculumController):
 //
-//   1. generateCustomCurriculumPdf — a branded, parent-ready PDF for one
-//      admin-built custom curriculum (student info, lesson breakdown,
-//      projects, homework/tests, totals). Uploaded to Cloudinary the same
-//      way CertificatesService does, and the URL is cached on
-//      Course.curriculumPdfUrl so re-opening it doesn't require regenerating.
-//   2. buildDefaultCurriculumSummaryWorkbook — one .xlsx row per DEFAULT
-//      (non-custom) curriculum, streamed straight to the response (no
-//      storage needed — see CurriculumDocumentsController).
+//   1. buildCustomCurriculumWorkbook — one admin-built custom curriculum: a
+//      Summary sheet (student info, totals) plus a full Lesson Breakdown
+//      sheet, branded to match buildDefaultCurriculumSummaryWorkbook.
+//   2. buildDefaultCurriculumSummaryWorkbook — one row per DEFAULT
+//      (non-custom) curriculum.
 
 import {
   Injectable,
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import PDFDocument from 'pdfkit';
 import ExcelJS from 'exceljs';
 import { SessionType } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
-import { cloudinary, signedDocumentUrl } from '../lib/cloudinary';
 
-const TEAL = '#0d9488';
-const NAVY = '#0f172a';
-const MUTED = '#64748b';
+const LUMEXA_TEAL = 'FF0D9488';
+const HEADER_WHITE = 'FFFFFFFF';
+const MUTED_GREY = 'FF64748B';
 
 @Injectable()
 export class CurriculumDocumentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // ─── Custom curriculum PDF ────────────────────────────────────────────────
+  private brandHeader(
+    sheet: ExcelJS.Worksheet,
+    columnCount: number,
+    subtitle: string,
+  ) {
+    sheet.mergeCells(1, 1, 1, columnCount);
+    const brandCell = sheet.getCell(1, 1);
+    brandCell.value = '🚀 Lumexa AI School';
+    brandCell.font = { bold: true, size: 16, color: { argb: LUMEXA_TEAL } };
 
-  async generateCustomCurriculumPdf(
+    sheet.mergeCells(2, 1, 2, columnCount);
+    const subtitleCell = sheet.getCell(2, 1);
+    subtitleCell.value = subtitle;
+    subtitleCell.font = { italic: true, size: 10, color: { argb: MUTED_GREY } };
+  }
+
+  private brandTableHeader(
+    sheet: ExcelJS.Worksheet,
+    rowIndex: number,
+    headers: string[],
+  ) {
+    const row = sheet.getRow(rowIndex);
+    row.values = headers;
+    row.font = { bold: true, color: { argb: HEADER_WHITE } };
+    row.alignment = { vertical: 'middle' };
+    row.eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: LUMEXA_TEAL },
+      };
+    });
+  }
+
+  // ─── Custom curriculum workbook (.xlsx) ───────────────────────────────────
+  //
+  // Everything an admin/parent needs about one admin-built custom
+  // curriculum: a Summary sheet (who it's for, totals) and a full
+  // Lesson Breakdown sheet (every session in the sequence the admin built,
+  // with objectives/project/homework flag) — replaces the earlier PDF
+  // generator with a simpler, dependency-free format the admin can also
+  // open and skim in Excel/Sheets directly.
+
+  async buildCustomCurriculumWorkbook(
     courseId: string,
-  ): Promise<{ url: string }> {
+  ): Promise<{ buffer: Buffer; filename: string }> {
     const course = await this.prisma.course.findUnique({
       where: { id: courseId },
       select: {
@@ -46,7 +82,6 @@ export class CurriculumDocumentsService {
         category: true,
         ageMin: true,
         ageMax: true,
-        sessions: true,
         priceCents: true,
         isCustom: true,
         assignedStudents: { select: { fullName: true } },
@@ -55,7 +90,7 @@ export class CurriculumDocumentsService {
     if (!course) throw new NotFoundException('Course not found.');
     if (!course.isCustom) {
       throw new BadRequestException(
-        'Only custom curriculums generate a curriculum PDF.',
+        'Only custom curriculums generate this export.',
       );
     }
 
@@ -78,7 +113,6 @@ export class CurriculumDocumentsService {
       ...modules.flatMap((m) => m.lessons),
       ...looseLessons,
     ].sort((a, b) => a.order - b.order);
-
     const projectCount = new Set(
       lessons.map((l) => l.projectId).filter(Boolean),
     ).size;
@@ -86,238 +120,101 @@ export class CurriculumDocumentsService {
       (l) => l.type !== SessionType.LEARNING,
     ).length;
     const homeworkCount = lessons.filter((l) => !!l.homework).length;
-    const studentNames = course.assignedStudents.map((s) => s.fullName);
 
-    const buffer = await this.renderCurriculumPdf({
-      title: course.title,
-      studentNames,
-      category: course.category,
-      ageMin: course.ageMin,
-      ageMax: course.ageMax,
-      priceCents: course.priceCents,
-      lessons: lessons.map((l) => ({
-        order: l.order,
-        title: l.title,
-        type: l.type,
-        objectives: l.objectives,
-        projectTitle: l.project?.title ?? null,
-        checkpoint: l.checkpoint,
-        homework: l.homework,
-        duration: l.duration,
-      })),
-      totals: {
-        lessonCount: lessons.length,
-        projectCount,
-        testCount,
-        homeworkCount,
-      },
-    });
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Lumexa AI School';
+    workbook.created = new Date();
 
-    const url = await this.uploadCurriculumPdf(buffer, courseId);
-    await this.prisma.course.update({
-      where: { id: courseId },
-      data: { curriculumPdfUrl: url },
-    });
-    return { url };
-  }
+    // ── Summary sheet ──
+    const summary = workbook.addWorksheet('Summary');
+    summary.columns = [
+      { key: 'field', width: 26 },
+      { key: 'value', width: 46 },
+    ];
+    this.brandHeader(
+      summary,
+      2,
+      `Custom Curriculum Summary · Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' } as any)}`,
+    );
+    this.brandTableHeader(summary, 4, ['Field', 'Value']);
 
-  private renderCurriculumPdf(data: {
-    title: string;
-    studentNames: string[];
-    category: string;
-    ageMin: number;
-    ageMax: number;
-    priceCents: number | null;
-    lessons: {
-      order: number;
-      title: string;
-      type: SessionType;
-      objectives: string[];
-      projectTitle: string | null;
-      checkpoint: string | null;
-      homework: string | null;
-      duration: number;
-    }[];
-    totals: {
-      lessonCount: number;
-      projectCount: number;
-      testCount: number;
-      homeworkCount: number;
-    };
-  }): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      // bufferPages is required for the page-numbering footer loop below —
-      // without it, pdfkit only keeps the current page buffered once a new
-      // one is added, so switchToPage(0) throws "out of bounds" the moment
-      // a curriculum spans more than one page (pdfkit's default streaming
-      // behavior, not something bufferedPageRange alone works around).
-      const doc = new PDFDocument({
-        size: 'A4',
-        margin: 50,
-        bufferPages: true,
+    const summaryRows: [string, string | number][] = [
+      ['Curriculum Name', course.title],
+      [
+        'Prepared For',
+        course.assignedStudents.map((s) => s.fullName).join(', ') || '—',
+      ],
+      ['Category', course.category],
+      ['Target Ages', `${course.ageMin}–${course.ageMax}`],
+      ['Price (BDT)', course.priceCents ? course.priceCents / 100 : 'TBD'],
+      ['Courses (Modules)', modules.length],
+      ['Lessons (Total Sessions)', lessons.length],
+      ['Projects', projectCount],
+      ['Tests / Assessments', testCount],
+      ['Lessons with Homework', homeworkCount],
+    ];
+    for (const [field, value] of summaryRows) {
+      summary.addRow({ field, value });
+    }
+    summary.eachRow((row, rowNumber) => {
+      if (rowNumber < 4) return;
+      row.eachCell((cell) => {
+        cell.border = {
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
       });
-      const chunks: Buffer[] = [];
-      doc.on('data', (chunk) => chunks.push(chunk));
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-      doc.on('error', reject);
-
-      // ── Header ──
-      doc
-        .fillColor(TEAL)
-        .font('Helvetica-Bold')
-        .fontSize(20)
-        .text('🚀 LUMEXA', { align: 'left' });
-      doc
-        .fillColor(NAVY)
-        .font('Helvetica-Bold')
-        .fontSize(16)
-        .text('Custom Curriculum', { align: 'left' });
-      doc
-        .fillColor(MUTED)
-        .font('Helvetica')
-        .fontSize(9)
-        .text(
-          `Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' } as any)}`,
-          {
-            align: 'left',
-          },
-        );
-      doc.moveDown(1);
-      doc
-        .strokeColor('#e2e8f0')
-        .lineWidth(1)
-        .moveTo(50, doc.y)
-        .lineTo(545, doc.y)
-        .stroke();
-      doc.moveDown(1);
-
-      // ── Curriculum info box ──
-      doc.fillColor(NAVY).font('Helvetica-Bold').fontSize(18).text(data.title);
-      doc.moveDown(0.3);
-      if (data.studentNames.length > 0) {
-        doc
-          .fillColor(MUTED)
-          .font('Helvetica')
-          .fontSize(11)
-          .text(`Prepared for: ${data.studentNames.join(', ')}`);
-      }
-      doc
-        .fillColor(MUTED)
-        .font('Helvetica')
-        .fontSize(11)
-        .text(
-          `${data.category} · Ages ${data.ageMin}–${data.ageMax}${
-            data.priceCents
-              ? ` · ৳${(data.priceCents / 100).toLocaleString()}`
-              : ''
-          }`,
-        );
-      doc.moveDown(1);
-
-      // ── Totals row ──
-      const totalsLine = [
-        `${data.totals.lessonCount} session${data.totals.lessonCount === 1 ? '' : 's'}`,
-        `${data.totals.projectCount} project${data.totals.projectCount === 1 ? '' : 's'}`,
-        `${data.totals.testCount} test${data.totals.testCount === 1 ? '' : 's'}/assessment${data.totals.testCount === 1 ? '' : 's'}`,
-        `${data.totals.homeworkCount} homework assignment${data.totals.homeworkCount === 1 ? '' : 's'}`,
-      ].join('   ·   ');
-      doc
-        .fillColor(TEAL)
-        .font('Helvetica-Bold')
-        .fontSize(10)
-        .text(totalsLine.toUpperCase());
-      doc.moveDown(1.2);
-
-      // ── Lesson-by-lesson breakdown ──
-      doc
-        .fillColor(NAVY)
-        .font('Helvetica-Bold')
-        .fontSize(13)
-        .text('Lesson Breakdown');
-      doc.moveDown(0.5);
-
-      for (const lesson of data.lessons) {
-        if (doc.y > doc.page.height - 140) doc.addPage();
-
-        const isTest = lesson.type !== SessionType.LEARNING;
-        doc
-          .fillColor(NAVY)
-          .font('Helvetica-Bold')
-          .fontSize(11)
-          .text(
-            `Session ${lesson.order}: ${lesson.title}${isTest ? '  (Assessment)' : ''}`,
-          );
-
-        if (lesson.objectives.length > 0) {
-          doc
-            .fillColor('#334155')
-            .font('Helvetica')
-            .fontSize(9.5)
-            .text(lesson.objectives.map((o) => `•  ${o}`).join('\n'), {
-              indent: 10,
-            });
-        }
-        if (lesson.projectTitle) {
-          doc
-            .fillColor(TEAL)
-            .font('Helvetica-Bold')
-            .fontSize(9.5)
-            .text(
-              `Project: ${lesson.projectTitle}${lesson.checkpoint ? ` — ${lesson.checkpoint}` : ''}`,
-              {
-                indent: 10,
-              },
-            );
-        }
-        if (lesson.homework) {
-          doc
-            .fillColor(MUTED)
-            .font('Helvetica-Oblique')
-            .fontSize(9)
-            .text('Includes take-home assignment', { indent: 10 });
-        }
-        doc.moveDown(0.7);
-      }
-
-      // ── Footer page numbers ──
-      const pages = doc.bufferedPageRange();
-      for (let i = 0; i < pages.count; i++) {
-        doc.switchToPage(i);
-        doc
-          .fillColor(MUTED)
-          .font('Helvetica')
-          .fontSize(8)
-          .text(
-            `Lumexa · Page ${i + 1} of ${pages.count}`,
-            50,
-            doc.page.height - 40,
-            {
-              width: 495,
-              align: 'center',
-            },
-          );
-      }
-
-      doc.end();
     });
-  }
 
-  private async uploadCurriculumPdf(
-    buffer: Buffer,
-    courseId: string,
-  ): Promise<string> {
-    const dataUri = `data:application/pdf;base64,${buffer.toString('base64')}`;
-    const result = await cloudinary.uploader.upload(dataUri, {
-      resource_type: 'raw',
-      folder: 'lumexa/custom-curriculums',
-      public_id: courseId,
-      overwrite: true,
+    // ── Lesson Breakdown sheet ──
+    const breakdown = workbook.addWorksheet('Lesson Breakdown');
+    const BREAKDOWN_COLS = 6;
+    breakdown.columns = [
+      { key: 'order', width: 8 },
+      { key: 'title', width: 36 },
+      { key: 'type', width: 16 },
+      { key: 'objectives', width: 60 },
+      { key: 'project', width: 28 },
+      { key: 'homework', width: 14 },
+    ];
+    this.brandHeader(breakdown, BREAKDOWN_COLS, course.title);
+    this.brandTableHeader(breakdown, 4, [
+      'Session #',
+      'Title',
+      'Type',
+      'Objectives',
+      'Project / Checkpoint',
+      'Homework',
+    ]);
+
+    for (const lesson of lessons) {
+      breakdown.addRow({
+        order: lesson.order,
+        title: lesson.title,
+        type: lesson.type.replace('_', ' '),
+        objectives: lesson.objectives.join(' | '),
+        project: lesson.project
+          ? `${lesson.project.title}${lesson.checkpoint ? ` — ${lesson.checkpoint}` : ''}`
+          : (lesson.checkpoint ?? ''),
+        homework: lesson.homework ? 'Yes' : 'No',
+      });
+    }
+    breakdown.getColumn('objectives').alignment = {
+      wrapText: true,
+      vertical: 'top',
+    };
+    breakdown.eachRow((row, rowNumber) => {
+      if (rowNumber < 4) return;
+      row.eachCell((cell) => {
+        cell.border = {
+          bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        };
+        cell.alignment = { ...cell.alignment, vertical: 'top' };
+      });
     });
-    return signedDocumentUrl({
-      url: result.secure_url,
-      publicId: result.public_id,
-      resourceType: 'raw',
-    });
+
+    const arrayBuffer = await workbook.xlsx.writeBuffer();
+    const filename = `${course.title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-curriculum.xlsx`;
+    return { buffer: Buffer.from(arrayBuffer), filename };
   }
 
   // ─── Default curriculum summary (.xlsx) ───────────────────────────────────
@@ -354,21 +251,13 @@ export class CurriculumDocumentsService {
       { key: 'price', width: 14 },
     ];
 
-    // ── Branding header ──
-    sheet.mergeCells(1, 1, 1, COLUMN_COUNT);
-    const brandCell = sheet.getCell(1, 1);
-    brandCell.value = '🚀 Lumexa AI School';
-    brandCell.font = { bold: true, size: 16, color: { argb: 'FF0D9488' } };
-
-    sheet.mergeCells(2, 1, 2, COLUMN_COUNT);
-    const subtitleCell = sheet.getCell(2, 1);
-    subtitleCell.value = `Default Curriculum Summary · Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' } as any)}`;
-    subtitleCell.font = { italic: true, size: 10, color: { argb: 'FF64748B' } };
-
-    // ── Table header ──
+    this.brandHeader(
+      sheet,
+      COLUMN_COUNT,
+      `Default Curriculum Summary · Generated ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' } as any)}`,
+    );
     const HEADER_ROW = 4;
-    const headerRow = sheet.getRow(HEADER_ROW);
-    headerRow.values = [
+    this.brandTableHeader(sheet, HEADER_ROW, [
       'Curriculum Name',
       'Target Ages',
       'Courses',
@@ -376,16 +265,7 @@ export class CurriculumDocumentsService {
       'Projects',
       'Tests/Assessments',
       'Price (BDT)',
-    ];
-    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-    headerRow.alignment = { vertical: 'middle' };
-    headerRow.eachCell((cell) => {
-      cell.fill = {
-        type: 'pattern',
-        pattern: 'solid',
-        fgColor: { argb: 'FF0D9488' },
-      };
-    });
+    ]);
 
     for (const course of courses) {
       const testLessons = course.lessons.filter(

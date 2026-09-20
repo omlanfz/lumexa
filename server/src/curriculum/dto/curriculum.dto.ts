@@ -152,6 +152,12 @@ export class ImportLessonDto {
   order: number;
 }
 
+export class ImportLessonsDto {
+  @IsArray()
+  @IsString({ each: true })
+  sourceLessonIds: string[];
+}
+
 export class UpdatePracticalQuestionDto {
   @IsOptional() @IsString() title?: string;
   @IsOptional() @IsString() instructions?: string;

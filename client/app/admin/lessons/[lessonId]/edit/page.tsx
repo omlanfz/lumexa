@@ -83,7 +83,7 @@ export default function AdminLessonEditPage() {
   if (loading) return <p className="text-sm text-[var(--a-text-muted)] p-6">Loading…</p>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 pb-24">
+    <div className="max-w-7xl mx-auto space-y-5 pb-24">
       <div className="flex items-center justify-between flex-wrap gap-3 sticky top-0 z-10 bg-[var(--a-bg)] py-3 -mx-1 px-1 border-b border-[var(--a-border)]">
         <div>
           <button onClick={() => router.back()} className="text-sm text-[var(--a-accent)] hover:underline">
@@ -106,29 +106,49 @@ export default function AdminLessonEditPage() {
         </div>
       </div>
 
-      <Section title="Title">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-base a-focus"
-        />
-      </Section>
+      {/* Title and Checkpoint are both single-line fields — pairing them
+          keeps two mostly-empty cards from stacking. */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Section title="Title">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-base a-focus"
+          />
+        </Section>
+        <Section title="Project Checkpoint" hint="What's due by the end of this specific session, if any.">
+          <input
+            value={checkpoint}
+            onChange={(e) => setCheckpoint(e.target.value)}
+            className="w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-sm a-focus"
+          />
+        </Section>
+      </div>
 
-      <Section title="Learning Objectives" hint="One per line.">
-        <textarea
-          value={objectives}
-          onChange={(e) => setObjectives(e.target.value)}
-          rows={7}
-          className="w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-sm font-mono leading-relaxed a-focus"
-        />
-      </Section>
-
-      <Section title="Project Checkpoint" hint="What's due by the end of this specific session, if any.">
-        <input
-          value={checkpoint}
-          onChange={(e) => setCheckpoint(e.target.value)}
-          className="w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-sm a-focus"
-        />
+      <Section title="Learning Objectives" hint="One per line — preview updates live on the right.">
+        <div className="grid md:grid-cols-2 gap-4">
+          <textarea
+            value={objectives}
+            onChange={(e) => setObjectives(e.target.value)}
+            rows={7}
+            className="w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-sm font-mono leading-relaxed a-focus"
+          />
+          <div className="rounded-lg border border-[var(--a-border)] p-4 bg-[var(--a-surface)]">
+            {objectives.trim() ? (
+              <ul className="list-disc list-inside space-y-1 text-sm text-[var(--a-text)]">
+                {objectives
+                  .split('\n')
+                  .map((o) => o.trim())
+                  .filter(Boolean)
+                  .map((o, i) => (
+                    <li key={i}>{o}</li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-[var(--a-text-faint)] italic">Nothing to preview yet.</p>
+            )}
+          </div>
+        </div>
       </Section>
 
       <Section title="Lesson Material" hint="Markdown — preview updates live on the right.">

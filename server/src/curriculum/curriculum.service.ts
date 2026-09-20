@@ -30,6 +30,7 @@ import {
   CreateModuleDto,
   CreateProjectDto,
   ImportLessonDto,
+  ImportLessonsDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -422,37 +423,93 @@ export class CurriculumService {
    * an imported test session has no question bank until the admin builds
    * one fresh for it. */
   async importLesson(targetCourseId: string, dto: ImportLessonDto) {
-    const [target, source] = await Promise.all([
-      this.prisma.course.findUnique({
-        where: { id: targetCourseId },
-        select: { id: true, isCustom: true },
-      }),
-      this.prisma.lesson.findUnique({ where: { id: dto.sourceLessonId } }),
-    ]);
-    if (!target) throw new NotFoundException('Course not found');
-    if (!target.isCustom) {
+    const target = await this.requireCustomCourse(targetCourseId);
+    const source = await this.prisma.lesson.findUnique({
+      where: { id: dto.sourceLessonId },
+    });
+    if (!source) throw new NotFoundException('Source lesson not found');
+
+    return this.prisma.lesson.create({
+      data: this.lessonImportData(target.id, dto.order, source),
+    });
+  }
+
+  /** Same as importLesson, but for a whole batch at once — the "select all"
+   * actions in the Curriculum Builder (a module, a stage, or an entire
+   * curriculum). Orders are assigned sequentially starting right after the
+   * course's current last lesson, in the same order the source lessons were
+   * given in (already teaching-order from the reusable-lessons endpoint). */
+  async importLessons(targetCourseId: string, dto: ImportLessonsDto) {
+    const target = await this.requireCustomCourse(targetCourseId);
+    const sources = await this.prisma.lesson.findMany({
+      where: { id: { in: dto.sourceLessonIds } },
+    });
+    if (sources.length === 0) {
+      throw new NotFoundException('No matching source lessons found');
+    }
+    const byId = new Map(sources.map((s) => [s.id, s]));
+
+    const currentMax = await this.prisma.lesson.aggregate({
+      where: { courseId: target.id },
+      _max: { order: true },
+    });
+    let nextOrder = (currentMax._max.order ?? 0) + 1;
+
+    const creates = dto.sourceLessonIds
+      .map((id) => byId.get(id))
+      .filter((s): s is NonNullable<typeof s> => !!s)
+      .map((source) =>
+        this.prisma.lesson.create({
+          data: this.lessonImportData(target.id, nextOrder++, source),
+        }),
+      );
+    return this.prisma.$transaction(creates);
+  }
+
+  private async requireCustomCourse(courseId: string) {
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { id: true, isCustom: true },
+    });
+    if (!course) throw new NotFoundException('Course not found');
+    if (!course.isCustom) {
       throw new ForbiddenException(
         'Lessons can only be imported into a custom curriculum.',
       );
     }
-    if (!source) throw new NotFoundException('Source lesson not found');
+    return course;
+  }
 
-    return this.prisma.lesson.create({
-      data: {
-        courseId: targetCourseId,
-        title: source.title,
-        order: dto.order,
-        duration: source.duration,
-        type: source.type,
-        objectives: source.objectives,
-        contentMarkdown: source.contentMarkdown,
-        reviewNotes: source.reviewNotes,
-        checkpoint: source.checkpoint,
-        codeSnippets: source.codeSnippets as object | undefined,
-        homework: source.homework,
-        sourceRefs: { importedFromLessonId: source.id } as object,
-      },
-    });
+  private lessonImportData(
+    targetCourseId: string,
+    order: number,
+    source: {
+      id: string;
+      title: string;
+      duration: number;
+      type: SessionType;
+      objectives: string[];
+      contentMarkdown: string | null;
+      reviewNotes: string | null;
+      checkpoint: string | null;
+      codeSnippets: unknown;
+      homework: string | null;
+    },
+  ) {
+    return {
+      courseId: targetCourseId,
+      title: source.title,
+      order,
+      duration: source.duration,
+      type: source.type,
+      objectives: source.objectives,
+      contentMarkdown: source.contentMarkdown,
+      reviewNotes: source.reviewNotes,
+      checkpoint: source.checkpoint,
+      codeSnippets: source.codeSnippets as object | undefined,
+      homework: source.homework,
+      sourceRefs: { importedFromLessonId: source.id } as object,
+    };
   }
 
   // ── Admin CRUD: modules ───────────────────────────────────────────────────
