@@ -20,12 +20,12 @@
 // shaped space is left — that's what was producing the ultra-wide, cropped
 // face people were seeing.
 //
-// Screen-share recursion fix: the LOCAL presenter never gets a <VideoTrack>
-// of their own screen-share track — if they're capturing their whole
-// monitor, that track's content already includes this very page, so
-// rendering it back would create a hall-of-mirrors effect. Everyone else
-// sees the presenter's screen normally; the presenter's own tile in the
-// grid is a small "You are presenting" placeholder instead.
+// Every presenter — including the local one — sees the real video for
+// every active share, their own included. Sharing a specific window/tab
+// (the common case) has no recursion risk at all; sharing your entire
+// screen while this page is visible on it can produce a hall-of-mirrors
+// look, but that's an acceptable, understood tradeoff for actually being
+// able to see what you're presenting, same as any other video-call app.
 
 'use client';
 
@@ -69,15 +69,24 @@ interface FullscreenChromeProps {
   onToggleRecording: () => void;
 }
 
-function RemoteScreenShareTile({
+/** One tile per active screen share, remote or local — every tile shows
+ * the real video and gets its own fullscreen toggle. The button lives in
+ * a dedicated always-rendered layer so it can never silently disappear
+ * (explicit fallback icon + high-contrast chip, not just a bare icon on
+ * transparent black — visible over both light and dark shared content). */
+function ScreenShareTile({
   trackRef,
   isTeacher,
+  isLocal,
   onForceStopShare,
+  onStopOwnShare,
   fullscreenChromeProps,
 }: {
   trackRef: TrackReference;
   isTeacher: boolean;
+  isLocal: boolean;
   onForceStopShare?: (identity: string) => void;
+  onStopOwnShare?: () => void;
   fullscreenChromeProps: FullscreenChromeProps;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,42 +115,37 @@ function RemoteScreenShareTile({
       <VideoTrack trackRef={trackRef} className="w-full h-full object-contain bg-black" />
       <div className="absolute top-3 left-3 flex items-center gap-2">
         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
-          <Monitor size={12} /> {meta.displayName} is presenting
+          <Monitor size={12} /> {isLocal ? 'You are presenting' : `${meta.displayName} is presenting`}
         </div>
-        {isTeacher && (
+        {isLocal ? (
           <button
-            onClick={() => onForceStopShare?.(trackRef.participant.identity)}
-            data-tooltip="Stop this screen share"
+            onClick={onStopOwnShare}
+            data-tooltip="Stop sharing"
             className="w-7 h-7 rounded-lg bg-black/50 hover:bg-red-500/70 backdrop-blur flex items-center justify-center text-white transition-colors"
           >
             <MonitorX size={13} />
           </button>
+        ) : (
+          isTeacher && (
+            <button
+              onClick={() => onForceStopShare?.(trackRef.participant.identity)}
+              data-tooltip="Stop this screen share"
+              className="w-7 h-7 rounded-lg bg-black/50 hover:bg-red-500/70 backdrop-blur flex items-center justify-center text-white transition-colors"
+            >
+              <MonitorX size={13} />
+            </button>
+          )
         )}
       </div>
       <button
         onClick={toggleFullscreen}
         data-tooltip={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-black/50 hover:bg-black/70 backdrop-blur flex items-center justify-center text-white transition-colors"
+        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 border border-white/15 backdrop-blur flex items-center justify-center text-white transition-colors"
       >
-        {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+        {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>
 
       {isFullscreen && <ScreenShareFullscreenChrome {...fullscreenChromeProps} onExit={toggleFullscreen} />}
-    </div>
-  );
-}
-
-function OwnScreenSharePlaceholder({ onStopShare }: { onStopShare: () => void }) {
-  return (
-    <div className="w-full h-full rounded-2xl bg-[var(--cr-surface)] border border-[var(--cr-border)] flex flex-col items-center justify-center gap-2 p-4 text-center">
-      <Monitor size={22} className="text-[var(--cr-accent)]" />
-      <p className="text-[var(--cr-text)] text-xs font-semibold">You are presenting</p>
-      <button
-        onClick={onStopShare}
-        className="text-[11px] font-medium text-red-400 hover:text-red-300 underline underline-offset-2"
-      >
-        Stop sharing
-      </button>
     </div>
   );
 }
@@ -197,13 +201,10 @@ export default function Stage({
 }: StageProps) {
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenShareRefs = screenTracks.filter(isTrackReference);
-  const remoteShares = screenShareRefs.filter((t) => !t.participant.isLocal);
-  const localShare = screenShareRefs.find((t) => t.participant.isLocal);
 
   // ── 1. Screen share(s) ─────────────────────────────────────────────────
-  if (remoteShares.length > 0 || localShare) {
-    const tileCount = remoteShares.length + (localShare ? 1 : 0);
-    const cols = gridColumns(tileCount);
+  if (screenShareRefs.length > 0) {
+    const cols = gridColumns(screenShareRefs.length);
     const fullscreenChromeProps: FullscreenChromeProps = {
       cameraTracks,
       raisedHands,
@@ -224,16 +225,17 @@ export default function Stage({
         className="w-full h-full grid gap-2"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: '1fr' }}
       >
-        {remoteShares.map((t) => (
-          <RemoteScreenShareTile
+        {screenShareRefs.map((t) => (
+          <ScreenShareTile
             key={t.participant.identity}
             trackRef={t}
             isTeacher={isTeacher}
+            isLocal={t.participant.isLocal}
             onForceStopShare={onForceStopShare}
+            onStopOwnShare={onStopShare}
             fullscreenChromeProps={fullscreenChromeProps}
           />
         ))}
-        {localShare && <OwnScreenSharePlaceholder onStopShare={onStopShare} />}
       </div>
     );
   }

@@ -1,15 +1,16 @@
 // FILE PATH: client/lib/classroom/useVideoEffects.ts
 //
-// Applies background blur / virtual backgrounds and lighting adjustment to a
-// local video track via @livekit/track-processors + our own lighting
-// processor. Works for both the pre-join preview track and the in-room
-// published camera track — callers just hand it whichever LocalVideoTrack is
-// currently live.
+// Applies background blur / virtual backgrounds and the Appearance bundle
+// (lighting, touch-up, auto-framing) to a local video track via
+// @livekit/track-processors + our own appearance processor. Works for both
+// the pre-join preview track and the in-room published camera track —
+// callers just hand it whichever LocalVideoTrack is currently live.
 //
 // LiveKit tracks hold one processor at a time, so background effects and
-// lighting are mutually exclusive here — picking one clears the other. This
-// keeps the pipeline to what's actually needed rather than a multi-pass
-// compositor.
+// the appearance bundle are mutually exclusive here — picking one clears
+// the other. This keeps the pipeline to what's actually needed rather than
+// a multi-pass compositor mixing both ML segmentation and our own canvas
+// passes at once.
 
 import { useCallback, useRef, useState } from 'react';
 import type { LocalVideoTrack } from 'livekit-client';
@@ -20,11 +21,20 @@ import {
   supportsBackgroundProcessors,
 } from '@livekit/track-processors';
 import { BackgroundEffect, DEFAULT_BACKGROUND_EFFECT } from './backgrounds';
-import { createLightingProcessor, LightingOptions } from './lightingProcessor';
+import { createAppearanceProcessor, AppearanceOptions } from './appearanceProcessor';
 
 const BLUR_SLIGHT_RADIUS = 8;
 const BLUR_FULL_RADIUS = 20;
-export const DEFAULT_LIGHTING: LightingOptions = { brightness: 1, contrast: 1 };
+export const DEFAULT_LIGHTING: AppearanceOptions = {
+  brightness: 1,
+  contrast: 1,
+  touchUp: false,
+  autoFraming: false,
+};
+
+function isAppearanceNeutral(o: AppearanceOptions): boolean {
+  return o.brightness === 1 && o.contrast === 1 && !o.touchUp && !o.autoFraming;
+}
 
 function isSupported(): boolean {
   if (typeof window === 'undefined') return false;
@@ -37,13 +47,13 @@ function isSupported(): boolean {
 
 type ActiveProcessor =
   | { kind: 'background'; wrapper: BackgroundProcessorWrapper }
-  | { kind: 'lighting'; wrapper: ProcessorWrapper<LightingOptions> }
+  | { kind: 'lighting'; wrapper: ProcessorWrapper<AppearanceOptions> }
   | null;
 
 export function useVideoEffects() {
   const processorRef = useRef<ActiveProcessor>(null);
   const [backgroundEffect, setBackgroundEffectState] = useState<BackgroundEffect>(DEFAULT_BACKGROUND_EFFECT);
-  const [lighting, setLightingState] = useState<LightingOptions>(DEFAULT_LIGHTING);
+  const [lighting, setLightingState] = useState<AppearanceOptions>(DEFAULT_LIGHTING);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [supported] = useState(isSupported);
@@ -80,8 +90,8 @@ export function useVideoEffects() {
             await track.setProcessor(wrapper);
             processorRef.current = { kind: 'background', wrapper };
           }
-          // Background and lighting share one processor slot — picking a
-          // background clears any active lighting adjustment.
+          // Background and the appearance bundle share one processor slot
+          // — picking a background clears any active appearance settings.
           setLightingState(DEFAULT_LIGHTING);
         }
       } catch (err) {
@@ -95,14 +105,13 @@ export function useVideoEffects() {
   );
 
   const setLighting = useCallback(
-    async (track: LocalVideoTrack | undefined | null, next: LightingOptions) => {
+    async (track: LocalVideoTrack | undefined | null, next: AppearanceOptions) => {
       setLightingState(next);
       if (!supported || !track) return;
-      const isNeutral = next.brightness === 1 && next.contrast === 1;
       setPending(true);
       setError(null);
       try {
-        if (isNeutral) {
+        if (isAppearanceNeutral(next)) {
           if (processorRef.current?.kind === 'lighting') await clearProcessor(track);
           return;
         }
@@ -110,16 +119,16 @@ export function useVideoEffects() {
           await processorRef.current.wrapper.updateTransformerOptions(next);
         } else {
           if (processorRef.current) await track.stopProcessor();
-          const wrapper = createLightingProcessor();
+          const wrapper = createAppearanceProcessor();
           await track.setProcessor(wrapper);
           await wrapper.updateTransformerOptions(next);
           processorRef.current = { kind: 'lighting', wrapper };
         }
-        // Lighting and background share one processor slot.
+        // The appearance bundle and background share one processor slot.
         setBackgroundEffectState(DEFAULT_BACKGROUND_EFFECT);
       } catch (err) {
-        console.error('Failed to apply lighting effect', err);
-        setError('Could not apply lighting adjustment on your device.');
+        console.error('Failed to apply appearance effect', err);
+        setError('Could not apply this on your device.');
       } finally {
         setPending(false);
       }
@@ -133,7 +142,7 @@ export function useVideoEffects() {
     (track: LocalVideoTrack | undefined | null) => {
       processorRef.current = null;
       if (backgroundEffect.mode !== 'none') void setBackground(track, backgroundEffect);
-      else if (lighting.brightness !== 1 || lighting.contrast !== 1) void setLighting(track, lighting);
+      else if (!isAppearanceNeutral(lighting)) void setLighting(track, lighting);
     },
     [backgroundEffect, lighting, setBackground, setLighting],
   );

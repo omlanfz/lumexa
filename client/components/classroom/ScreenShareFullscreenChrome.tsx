@@ -58,17 +58,16 @@ function FloatingParticipants({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [size, setSize] = useState<PresetSize>('md');
+  // null = never dragged — render corner-anchored via CSS (right/bottom),
+  // which is always correct regardless of the box's actual rendered width
+  // (collapsed pill vs. expanded box are different widths). Only switch to
+  // an explicit pixel `left/top` once the user actually drags it, using
+  // the box's real measured size at that moment so it's still fully
+  // clamped inside the viewport — this is what fixes the collapsed pill
+  // previously overflowing off the right edge on mount.
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (pos) return;
-    // Default: bottom-right, clear of the (also floating) control bar.
-    setPos({ x: window.innerWidth - PRESET_DIMENSIONS.md.width - 24, y: window.innerHeight - 260 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const boxRef = useRef<HTMLElement>(null);
 
   const clamp = (x: number, y: number) => {
     const el = boxRef.current;
@@ -81,8 +80,9 @@ function FloatingParticipants({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
-    if (!pos) return;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: pos.x, originY: pos.y };
+    const rect = boxRef.current?.getBoundingClientRect();
+    const origin = pos ?? { x: rect?.left ?? 0, y: rect?.top ?? 0 };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: origin.x, originY: origin.y };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
@@ -95,14 +95,18 @@ function FloatingParticipants({
     dragRef.current = null;
   };
 
-  if (!pos) return null;
+  const positionStyle: React.CSSProperties = pos
+    ? { left: pos.x, top: pos.y }
+    : { right: 24, bottom: 92 }; // clear of the floating control bar below
 
   if (collapsed) {
     return (
       <button
+        ref={boxRef as React.RefObject<HTMLButtonElement>}
         onClick={() => setCollapsed(false)}
-        style={{ left: pos.x, top: pos.y }}
-        className="fixed z-[70] flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/70 hover:bg-black/85 backdrop-blur text-white text-xs font-medium shadow-xl transition-colors cr-fade-in"
+        type="button"
+        style={positionStyle}
+        className="fixed z-[70] flex items-center gap-2 px-3.5 py-2 rounded-full bg-black/70 hover:bg-black/85 backdrop-blur text-white text-xs font-medium shadow-xl transition-colors cr-fade-in whitespace-nowrap"
       >
         <Users size={14} /> Show participants
       </button>
@@ -113,8 +117,8 @@ function FloatingParticipants({
 
   return (
     <div
-      ref={boxRef}
-      style={{ left: pos.x, top: pos.y, width: dims.width }}
+      ref={boxRef as React.RefObject<HTMLDivElement>}
+      style={{ ...positionStyle, width: dims.width }}
       className="fixed z-[70] rounded-xl overflow-hidden bg-black/70 backdrop-blur border border-white/10 shadow-2xl cr-fade-in"
     >
       <div

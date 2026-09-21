@@ -36,7 +36,7 @@ import VideoEffectsPanel from './VideoEffectsPanel';
 import { useClickOutside } from '@/lib/classroom/useClickOutside';
 import type { ClassroomState } from '@/lib/classroom/types';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
-import type { LightingOptions } from '@/lib/classroom/lightingProcessor';
+import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 
 export type PanelKind = 'chat' | 'participants' | 'lesson' | null;
 type PopoverKind = 'mic' | 'cam' | 'effects' | 'more' | null;
@@ -69,8 +69,8 @@ interface ControlBarProps {
 
   backgroundEffect: BackgroundEffect;
   onBackgroundChange: (e: BackgroundEffect) => void;
-  lighting: LightingOptions;
-  onLightingChange: (l: LightingOptions) => void;
+  lighting: AppearanceOptions;
+  onLightingChange: (l: AppearanceOptions) => void;
   effectsSupported: boolean;
   effectsPending: boolean;
   onUploadImage: (file: File) => void;

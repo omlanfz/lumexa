@@ -18,7 +18,7 @@ import IconButton from './IconButton';
 import VideoEffectsPanel from './VideoEffectsPanel';
 import { useVideoEffects } from '@/lib/classroom/useVideoEffects';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
-import type { LightingOptions } from '@/lib/classroom/lightingProcessor';
+import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 
 export interface JoinChoices {
   audioEnabled: boolean;
@@ -26,7 +26,7 @@ export interface JoinChoices {
   audioDeviceId?: string;
   videoDeviceId?: string;
   backgroundEffect: BackgroundEffect;
-  lighting: LightingOptions;
+  lighting: AppearanceOptions;
 }
 
 interface PreJoinScreenProps {
@@ -175,17 +175,21 @@ export default function PreJoinScreen({
   return (
     <div className="cr-root min-h-screen flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-4xl grid md:grid-cols-[1.3fr_1fr] gap-6 items-center">
-        {/* Camera preview */}
-        <div className="relative aspect-video rounded-2xl overflow-hidden bg-[var(--cr-surface)] border border-[var(--cr-border)]">
+        {/* Camera preview — deliberately NOT overflow-hidden: the video
+            effects popover below needs to extend above this box without
+            being clipped, so the rounded corners are applied directly to
+            the video/placeholder elements instead of via a clipping
+            ancestor. */}
+        <div className="relative aspect-video rounded-2xl bg-[var(--cr-surface)] border border-[var(--cr-border)]">
           <video
             ref={videoElRef}
             autoPlay
             muted
             playsInline
-            className={`w-full h-full object-cover -scale-x-100 ${videoEnabled ? '' : 'hidden'}`}
+            className={`w-full h-full object-cover rounded-2xl -scale-x-100 ${videoEnabled ? '' : 'hidden'}`}
           />
           {!videoEnabled && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-[var(--cr-text-muted)]">
+            <div className="absolute inset-0 rounded-2xl overflow-hidden flex flex-col items-center justify-center gap-2 text-[var(--cr-text-muted)] bg-[var(--cr-surface)]">
               <div className="w-16 h-16 rounded-full bg-[var(--cr-surface-2)] flex items-center justify-center">
                 <VideoOff size={26} />
               </div>

@@ -62,7 +62,7 @@ import {
 } from '@/lib/classroom/api';
 import { playClassroomTone } from '@/lib/classroom/sounds';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
-import type { LightingOptions } from '@/lib/classroom/lightingProcessor';
+import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
 interface ClassroomRoomProps {
@@ -72,7 +72,7 @@ interface ClassroomRoomProps {
   isLive: boolean;
   lessonData: LessonDetailsResponse | null;
   initialBackgroundEffect: BackgroundEffect;
-  initialLighting: LightingOptions;
+  initialLighting: AppearanceOptions;
   scheduledStart?: string;
   classType?: 'ONE_TO_ONE' | 'BATCH';
   /** Admin silently observing — no controls, no heartbeat, no recording. */
@@ -156,15 +156,16 @@ export default function ClassroomRoom({
   const prevAdmissionIdsRef = useRef<Set<string> | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // "lesson-<scheduledLessonId>" rooms are the only ones with real lesson
-  // material behind them (see roomForLesson/isLessonRoom on the server) —
-  // the QA demo room and legacy marketplace bookings never have any, so
-  // "View Lesson" simply doesn't show for them.
+  // "lesson-<scheduledLessonId>" rooms are the ones with real lesson
+  // material behind them (see roomForLesson/isLessonRoom on the server).
+  // The QA demo room has none — lessonData is simply null for it — but it
+  // still gets the full Completed/Incomplete outcome flow (see
+  // EndClassModal) AND the "View Lesson" panel (showing LessonPanel's empty
+  // state) so both can actually be exercised end-to-end while testing,
+  // even though the server ignores the end-class outcome for this room
+  // (no real economics) and there's no lesson content to show. Legacy
+  // marketplace bookings get neither — they're a different flow entirely.
   const isCurriculumLesson = roomName.startsWith('lesson-');
-  // The full Completed/Incomplete outcome flow (see EndClassModal) is a
-  // curriculum (ScheduledLesson) concept — but the QA demo room gets it too
-  // so that flow can actually be tested end-to-end, even though the server
-  // deliberately ignores the outcome params for it (no real economics).
   const isLessonFlow = isCurriculumLesson || !!demo;
   const isRecordingLive = !!classroomState.recording;
   const presentationMode = !!screenShare;
@@ -271,7 +272,12 @@ export default function ClassroomRoom({
     if (seededEffectsRef.current || observerMode) return;
     seededEffectsRef.current = true;
     if (initialBackgroundEffect.mode !== 'none') void effects.setBackground(undefined, initialBackgroundEffect);
-    else if (initialLighting.brightness !== 1 || initialLighting.contrast !== 1) {
+    else if (
+      initialLighting.brightness !== 1 ||
+      initialLighting.contrast !== 1 ||
+      initialLighting.touchUp ||
+      initialLighting.autoFraming
+    ) {
       void effects.setLighting(undefined, initialLighting);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -312,6 +318,19 @@ export default function ClassroomRoom({
   useEffect(() => {
     if (activePanel === 'chat') setLastSeenChatCount(chatMessages.length);
   }, [activePanel, chatMessages.length]);
+
+  // Subtle tone on every new chat message from someone else — own sent
+  // messages stay silent (that's already visible feedback enough).
+  const prevChatCountRef = useRef(chatMessages.length);
+  useEffect(() => {
+    if (chatMessages.length > prevChatCountRef.current) {
+      const latest = chatMessages[chatMessages.length - 1];
+      if (latest?.from && latest.from.identity !== localParticipant.identity) {
+        playClassroomTone('chat-message');
+      }
+    }
+    prevChatCountRef.current = chatMessages.length;
+  }, [chatMessages, localParticipant.identity]);
 
   useEffect(() => {
     if (activePanel !== 'lesson') setLessonFocused(false);
@@ -361,7 +380,7 @@ export default function ClassroomRoom({
     const elapsedMs = Date.now() - new Date(scheduledStart).getTime();
     if (elapsedMs < 10 * 60_000) {
       const remaining = Math.ceil((10 * 60_000 - elapsedMs) / 60_000);
-      return `Available ${remaining} minute(s) after class starts`;
+      return `Available in ${remaining} min`;
     }
     return null;
   })();
@@ -580,7 +599,7 @@ export default function ClassroomRoom({
           onLeave={() => room.disconnect()}
           onOpenEndClass={() => setShowEndClassModal(true)}
           endClassDisabledReason={endClassGate}
-          onViewLesson={isCurriculumLesson ? () => setActivePanel('lesson') : undefined}
+          onViewLesson={isLessonFlow ? () => setActivePanel('lesson') : undefined}
         />
       )}
 

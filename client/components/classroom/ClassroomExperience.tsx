@@ -25,6 +25,7 @@ import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
 import PreJoinScreen, { JoinChoices } from './PreJoinScreen';
 import ClassroomRoom from './ClassroomRoom';
+import { DEFAULT_LIGHTING } from '@/lib/classroom/useVideoEffects';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
 interface ClassroomExperienceProps {
@@ -251,7 +252,7 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         isLive
         lessonData={lessonData}
         initialBackgroundEffect={choices?.backgroundEffect ?? { mode: 'none' }}
-        initialLighting={choices?.lighting ?? { brightness: 1, contrast: 1 }}
+        initialLighting={choices?.lighting ?? DEFAULT_LIGHTING}
         scheduledStart={join.scheduledStart}
         classType={join.classType}
         observerMode={adminObserve}
