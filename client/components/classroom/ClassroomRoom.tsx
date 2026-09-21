@@ -483,7 +483,7 @@ export default function ClassroomRoom({
       <RoomAudioRenderer />
 
       {fullscreenTrack && (
-        <div className="fixed inset-0 z-30 bg-black">
+        <div className="fixed inset-0 z-30 bg-black" onDoubleClick={() => setFullscreenIdentity(null)}>
           <VideoTrack trackRef={fullscreenTrack} className="w-full h-full object-contain bg-black" />
           <div
             className={`absolute top-[72px] right-4 flex items-center gap-2 transition-opacity duration-300 ${
