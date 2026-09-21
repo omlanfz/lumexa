@@ -3,12 +3,17 @@
 // The "More" popover. Teacher-only classroom management (mute all, allow
 // students to unmute, lock chat) — End Class now lives as its own bottom-bar
 // button + EndClassModal, not buried in here. Students get the same
-// trigger button in the bar (see ControlBar) but never see any of these
-// teacher actions.
+// trigger button in the bar (see ControlBar) but never see any of the
+// teacher-only moderation actions.
+//
+// "View Lesson" is the one item both roles get — it opens the lesson
+// material as a right-side panel inside the classroom (see LessonSidePanel)
+// so a teacher who can't screen-share for some reason, or a student without
+// the shared view, can still follow along without leaving the class.
 
 'use client';
 
-import { MicOff, Unlock, Lock, ToggleLeft, ToggleRight } from 'lucide-react';
+import { MicOff, Unlock, Lock, ToggleLeft, ToggleRight, BookOpen } from 'lucide-react';
 import type { ClassroomState } from '@/lib/classroom/types';
 
 interface ClassControlsMenuProps {
@@ -17,10 +22,33 @@ interface ClassControlsMenuProps {
   onPatchState: (patch: ClassroomState) => void;
   onMuteAll: () => void;
   onClose: () => void;
+  /** Omitted (undefined) when this room has no lesson material at all — the
+   * item is hidden rather than shown disabled. */
+  onViewLesson?: () => void;
 }
 
-export default function ClassControlsMenu({ isTeacher, state, onPatchState, onMuteAll, onClose }: ClassControlsMenuProps) {
+export default function ClassControlsMenu({
+  isTeacher,
+  state,
+  onPatchState,
+  onMuteAll,
+  onClose,
+  onViewLesson,
+}: ClassControlsMenuProps) {
   const studentsCanUnmute = !state.studentsMuted;
+
+  const viewLessonButton = onViewLesson && (
+    <button
+      onClick={() => {
+        onViewLesson();
+        onClose();
+      }}
+      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--cr-text)] hover:bg-[var(--cr-surface-2)] transition-colors"
+    >
+      <BookOpen size={16} className="text-[var(--cr-text-muted)]" />
+      View lesson
+    </button>
+  );
 
   if (!isTeacher) {
     return (
@@ -28,9 +56,12 @@ export default function ClassControlsMenu({ isTeacher, state, onPatchState, onMu
         <div className="px-4 py-3 border-b border-[var(--cr-border)]">
           <p className="text-sm font-semibold text-[var(--cr-text)]">More</p>
         </div>
-        <div className="px-4 py-4 text-xs text-[var(--cr-text-faint)]">
-          {state.chatLocked ? 'Chat is currently locked by the teacher.' : 'Nothing here yet.'}
-        </div>
+        {viewLessonButton && <div className="p-2">{viewLessonButton}</div>}
+        {state.chatLocked ? (
+          <p className="px-4 pb-4 text-xs text-[var(--cr-text-faint)]">Chat is currently locked by the teacher.</p>
+        ) : (
+          !viewLessonButton && <div className="px-4 py-4 text-xs text-[var(--cr-text-faint)]">Nothing here yet.</div>
+        )}
       </div>
     );
   }
@@ -42,6 +73,8 @@ export default function ClassControlsMenu({ isTeacher, state, onPatchState, onMu
       </div>
 
       <div className="p-2">
+        {viewLessonButton}
+
         <button
           onClick={() => {
             onMuteAll();

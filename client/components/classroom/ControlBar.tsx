@@ -38,7 +38,7 @@ import type { ClassroomState } from '@/lib/classroom/types';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
 import type { LightingOptions } from '@/lib/classroom/lightingProcessor';
 
-export type PanelKind = 'chat' | 'participants' | null;
+export type PanelKind = 'chat' | 'participants' | 'lesson' | null;
 type PopoverKind = 'mic' | 'cam' | 'effects' | 'more' | null;
 export type RecordingUiState = 'inactive' | 'active' | 'starting' | 'stopping';
 
@@ -78,6 +78,11 @@ interface ControlBarProps {
   onLeave: () => void;
   onOpenEndClass: () => void;
   endClassDisabledReason?: string | null;
+
+  /** Omitted when this room has no lesson material at all (e.g. the QA
+   * demo room or a legacy marketplace booking) — hides the "View Lesson"
+   * item entirely rather than showing it disabled. */
+  onViewLesson?: () => void;
 }
 
 export default function ControlBar({
@@ -110,6 +115,7 @@ export default function ControlBar({
   onLeave,
   onOpenEndClass,
   endClassDisabledReason,
+  onViewLesson,
 }: ControlBarProps) {
   const [openPopover, setOpenPopover] = useState<PopoverKind>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -261,6 +267,7 @@ export default function ControlBar({
             onPatchState={onPatchState}
             onMuteAll={onMuteAll}
             onClose={() => setOpenPopover(null)}
+            onViewLesson={onViewLesson}
           />
         </div>
       )}
@@ -290,6 +297,7 @@ export default function ControlBar({
               onClick={onOpenEndClass}
               disabled={!!endClassDisabledReason}
               data-tooltip={endClassDisabledReason ?? undefined}
+              data-tooltip-align="end"
               className="flex items-center gap-1.5 px-4 h-11 rounded-full bg-[var(--cr-danger)] hover:bg-[var(--cr-danger-hover)] text-white text-sm font-semibold transition-colors ml-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <PhoneOff size={16} />

@@ -829,6 +829,18 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
 [data-tooltip-pos="bottom"]:focus-visible::after {
   transform: translateX(-50%) translateY(0);
 }
+/* For elements near the right viewport edge (e.g. the last button in a
+   bar) — right-anchors the tooltip box instead of centering it, so long
+   text never overflows off-screen. */
+[data-tooltip-align="end"]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(4px);
+}
+[data-tooltip-align="end"]:hover::after,
+[data-tooltip-align="end"]:focus-visible::after {
+  transform: translateY(0);
+}
 
 @keyframes cr-fade-in {
   from { opacity: 0; transform: translateY(4px); }
