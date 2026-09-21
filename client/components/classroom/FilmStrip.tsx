@@ -14,16 +14,17 @@ interface FilmStripProps {
   pinnedIdentity: string | null;
   onTogglePin: (identity: string) => void;
   compact?: boolean;
+  className?: string;
 }
 
-export default function FilmStrip({ tracks, raisedHands, pinnedIdentity, onTogglePin, compact }: FilmStripProps) {
+export default function FilmStrip({ tracks, raisedHands, pinnedIdentity, onTogglePin, compact, className }: FilmStripProps) {
   if (tracks.length === 0) return null;
 
   return (
     <div
       className={`flex gap-2.5 overflow-x-auto cr-scroll flex-shrink-0 ${
         compact ? 'h-20' : 'h-28 sm:h-32'
-      }`}
+      } ${className ?? ''}`}
     >
       {tracks.map((t) => (
         <div key={t.participant.identity} className={`${compact ? 'w-32' : 'w-40 sm:w-48'} h-full flex-shrink-0`}>

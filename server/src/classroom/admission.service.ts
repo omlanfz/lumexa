@@ -6,7 +6,11 @@
 // block them — this service is what lets them ask to come back in, and
 // lets the teacher Admit/Deny that request.
 
-import { Injectable, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { ClassroomAdmissionStatus } from '@prisma/client';
 
@@ -48,17 +52,35 @@ export class AdmissionService {
       where: { room, userId, status: ClassroomAdmissionStatus.PENDING },
       orderBy: { createdAt: 'desc' },
     });
-    if (pending) return { ok: false, admissionId: pending.id, status: 'PENDING' };
+    if (pending)
+      return { ok: false, admissionId: pending.id, status: 'PENDING' };
 
     const created = await this.prisma.classroomAdmission.create({
-      data: { room, userId, displayName, role, status: ClassroomAdmissionStatus.PENDING },
+      data: {
+        room,
+        userId,
+        displayName,
+        role,
+        status: ClassroomAdmissionStatus.PENDING,
+      },
     });
     return { ok: false, admissionId: created.id, status: 'PENDING' };
   }
 
-  async markRemoved(room: string, userId: string, displayName: string, role: string): Promise<void> {
+  async markRemoved(
+    room: string,
+    userId: string,
+    displayName: string,
+    role: string,
+  ): Promise<void> {
     await this.prisma.classroomAdmission.create({
-      data: { room, userId, displayName, role, status: ClassroomAdmissionStatus.REMOVED },
+      data: {
+        room,
+        userId,
+        displayName,
+        role,
+        status: ClassroomAdmissionStatus.REMOVED,
+      },
     });
   }
 
@@ -79,15 +101,21 @@ export class AdmissionService {
     admissionId: string,
     decision: 'APPROVE' | 'DENY',
   ): Promise<{ ok: true }> {
-    const admission = await this.prisma.classroomAdmission.findUnique({ where: { id: admissionId } });
-    if (!admission || admission.room !== room) throw new BadRequestException('Admission request not found.');
+    const admission = await this.prisma.classroomAdmission.findUnique({
+      where: { id: admissionId },
+    });
+    if (!admission || admission.room !== room)
+      throw new BadRequestException('Admission request not found.');
     if (admission.status !== ClassroomAdmissionStatus.PENDING) {
       throw new BadRequestException('This request has already been resolved.');
     }
     await this.prisma.classroomAdmission.update({
       where: { id: admissionId },
       data: {
-        status: decision === 'APPROVE' ? ClassroomAdmissionStatus.APPROVED : ClassroomAdmissionStatus.DENIED,
+        status:
+          decision === 'APPROVE'
+            ? ClassroomAdmissionStatus.APPROVED
+            : ClassroomAdmissionStatus.DENIED,
         resolvedAt: new Date(),
         resolvedBy: teacherUserId,
       },
@@ -98,8 +126,11 @@ export class AdmissionService {
   /** Student polls this while waiting. No auth beyond "you must know the
    * admission id", which is only ever handed to the student it belongs to. */
   async getStatus(admissionId: string, userId: string) {
-    const admission = await this.prisma.classroomAdmission.findUnique({ where: { id: admissionId } });
-    if (!admission || admission.userId !== userId) throw new ForbiddenException('Not found.');
+    const admission = await this.prisma.classroomAdmission.findUnique({
+      where: { id: admissionId },
+    });
+    if (!admission || admission.userId !== userId)
+      throw new ForbiddenException('Not found.');
     return { status: admission.status };
   }
 }

@@ -1,15 +1,17 @@
 // FILE PATH: client/components/classroom/ParticipantsPanel.tsx
 //
 // Full participant roster: name, role, mic/cam state, connection quality,
-// raised hand — with teacher-only moderation actions. Students see a
-// read-only version of the same list.
+// speaking indicator, raised hand — with teacher-only moderation actions.
+// Students see a read-only version of the same list. Teachers also see a
+// "Waiting to join" section here for anyone who was removed and is asking
+// to be re-admitted (see AdmissionService / useAdmissionRequests).
 
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Participant } from 'livekit-client';
 import { ConnectionQuality } from 'livekit-client';
-import { useConnectionQualityIndicator } from '@livekit/components-react';
+import { useConnectionQualityIndicator, useIsSpeaking } from '@livekit/components-react';
 import {
   X,
   Mic,
@@ -24,9 +26,13 @@ import {
   Wifi,
   WifiOff,
   GraduationCap,
+  UserPlus,
+  Check,
 } from 'lucide-react';
 import { parseParticipantMeta } from '@/lib/classroom/types';
-import { muteParticipant, removeParticipant } from '@/lib/classroom/api';
+import { muteParticipant, removeParticipant, setParticipantMicLocked } from '@/lib/classroom/api';
+import { useClickOutside } from '@/lib/classroom/useClickOutside';
+import type { PendingAdmission } from '@/lib/classroom/api';
 
 interface ParticipantsPanelProps {
   participants: Participant[];
@@ -38,6 +44,8 @@ interface ParticipantsPanelProps {
   localIdentity: string;
   spotlightIdentity: string | null;
   onSetSpotlight: (identity: string | null) => void;
+  pendingAdmissions?: PendingAdmission[];
+  onDecideAdmission?: (admissionId: string, decision: 'APPROVE' | 'DENY') => void;
 }
 
 function QualityBadge({ participant }: { participant: Participant }) {
@@ -68,6 +76,9 @@ function ParticipantRow({
   isSelf,
   spotlighted,
   onSetSpotlight,
+  menuOpen,
+  onOpenMenu,
+  onCloseMenu,
 }: {
   participant: Participant;
   isTeacher: boolean;
@@ -77,12 +88,18 @@ function ParticipantRow({
   isSelf: boolean;
   spotlighted: boolean;
   onSetSpotlight: () => void;
+  menuOpen: boolean;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useClickOutside(menuRef, menuOpen, onCloseMenu);
+
   const meta = parseParticipantMeta(participant.identity, participant.name || participant.identity);
   const micOn = participant.isMicrophoneEnabled;
   const camOn = participant.isCameraEnabled;
+  const isSpeaking = useIsSpeaking(participant);
   const canManage = isTeacher && !isSelf;
 
   const handleMute = async (kind: 'audio' | 'video') => {
@@ -93,7 +110,22 @@ function ParticipantRow({
       // best-effort — panel state will simply reflect what LiveKit reports
     } finally {
       setBusy(false);
-      setMenuOpen(false);
+      onCloseMenu();
+    }
+  };
+
+  const handleToggleMicLock = async () => {
+    setBusy(true);
+    try {
+      // A muted mic implies "not currently allowed to unmute" from the
+      // panel's point of view — locking always mutes; unlocking just
+      // restores the ability to unmute, it doesn't force them back on.
+      await setParticipantMicLocked(roomName, participant.identity, micOn);
+    } catch {
+      // best-effort
+    } finally {
+      setBusy(false);
+      onCloseMenu();
     }
   };
 
@@ -105,15 +137,15 @@ function ParticipantRow({
     } catch {
       setBusy(false);
     }
-    setMenuOpen(false);
+    onCloseMenu();
   };
 
   return (
     <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[var(--cr-surface-2)] transition-colors group">
       <div
-        className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 bg-gradient-to-br ${
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 bg-gradient-to-br transition-shadow ${
           meta.role === 'TEACHER' ? 'from-[#7B61FF] to-[#5B3FCF]' : 'from-[#2DD4BF] to-[#0F9C8D]'
-        }`}
+        } ${isSpeaking && micOn ? 'ring-2 ring-[var(--cr-accent)] ring-offset-2 ring-offset-[var(--cr-surface)]' : ''}`}
       >
         {meta.displayName.charAt(0).toUpperCase()}
       </div>
@@ -159,21 +191,28 @@ function ParticipantRow({
         )}
 
         {canManage && (
-          <div className="relative">
+          <div className="relative" ref={menuRef}>
             <button
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={() => (menuOpen ? onCloseMenu() : onOpenMenu())}
               disabled={busy}
               className="w-6 h-6 rounded-md flex items-center justify-center text-[var(--cr-text-faint)] hover:text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] transition-colors disabled:opacity-40"
             >
               <MoreVertical size={14} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border border-[var(--cr-border)] bg-[var(--cr-surface-2)] shadow-xl z-30 overflow-hidden cr-fade-in">
+              <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-[var(--cr-border)] bg-[var(--cr-surface-2)] shadow-xl z-30 overflow-hidden cr-fade-in">
                 <button
                   onClick={() => handleMute('audio')}
                   className="w-full text-left px-3 py-2 text-xs text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] flex items-center gap-2"
                 >
                   <MicOff size={13} /> Mute microphone
+                </button>
+                <button
+                  onClick={handleToggleMicLock}
+                  className="w-full text-left px-3 py-2 text-xs text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] flex items-center gap-2"
+                >
+                  {micOn ? <MicOff size={13} /> : <Mic size={13} />}
+                  {micOn ? 'Disallow unmute' : 'Allow unmute'}
                 </button>
                 <button
                   onClick={() => handleMute('video')}
@@ -207,7 +246,11 @@ export default function ParticipantsPanel({
   localIdentity,
   spotlightIdentity,
   onSetSpotlight,
+  pendingAdmissions = [],
+  onDecideAdmission,
 }: ParticipantsPanelProps) {
+  const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
+
   const sorted = [...participants].sort((a, b) => {
     const aTeacher = parseParticipantMeta(a.identity, a.name || '').role === 'TEACHER';
     const bTeacher = parseParticipantMeta(b.identity, b.name || '').role === 'TEACHER';
@@ -229,6 +272,42 @@ export default function ParticipantsPanel({
           <X size={14} />
         </button>
       </div>
+
+      {isTeacher && pendingAdmissions.length > 0 && (
+        <div className="px-3 pt-3 pb-1 flex-shrink-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-400 mb-1.5 flex items-center gap-1.5">
+            <UserPlus size={12} /> Waiting to join ({pendingAdmissions.length})
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {pendingAdmissions.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25"
+              >
+                <span className="text-xs font-medium text-[var(--cr-text)] truncate">{a.displayName}</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => onDecideAdmission?.(a.id, 'DENY')}
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-red-400 hover:bg-red-500/15"
+                    data-tooltip="Deny"
+                  >
+                    <X size={13} />
+                  </button>
+                  <button
+                    onClick={() => onDecideAdmission?.(a.id, 'APPROVE')}
+                    className="w-6 h-6 rounded-md flex items-center justify-center text-emerald-400 hover:bg-emerald-500/15"
+                    data-tooltip="Admit"
+                  >
+                    <Check size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="border-b border-[var(--cr-border)] mt-3" />
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto cr-scroll px-2 py-2">
         {sorted.map((p) => (
           <ParticipantRow
@@ -241,6 +320,9 @@ export default function ParticipantsPanel({
             isSelf={p.identity === localIdentity}
             spotlighted={spotlightIdentity === p.identity}
             onSetSpotlight={() => onSetSpotlight(spotlightIdentity === p.identity ? null : p.identity)}
+            menuOpen={openMenuIdentity === p.identity}
+            onOpenMenu={() => setOpenMenuIdentity(p.identity)}
+            onCloseMenu={() => setOpenMenuIdentity(null)}
           />
         ))}
       </div>

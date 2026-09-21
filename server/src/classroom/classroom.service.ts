@@ -18,7 +18,12 @@ import {
   computeLateMinutes,
 } from '../scheduling/lesson-window.util';
 import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
-import { LessonStatus, RecordingStatus, ClassEndReason, SpaceRank } from '@prisma/client';
+import {
+  LessonStatus,
+  RecordingStatus,
+  ClassEndReason,
+  SpaceRank,
+} from '@prisma/client';
 import {
   AccessToken,
   RoomServiceClient,
@@ -26,7 +31,11 @@ import {
 } from 'livekit-server-sdk';
 import { RecordingService } from './recording.service';
 import { AdmissionService } from './admission.service';
-import { DEMO_ROOM_NAME, isLessonRoom, lessonIdFromRoom } from './room-ref.util';
+import {
+  DEMO_ROOM_NAME,
+  isLessonRoom,
+  lessonIdFromRoom,
+} from './room-ref.util';
 
 type EndClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED';
 
@@ -143,19 +152,34 @@ export class ClassroomService {
   ): Promise<{ token: string; url: string | undefined; roomName: string }> {
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
-    if (!apiKey || !apiSecret) throw new BadRequestException('Video service is not configured.');
+    if (!apiKey || !apiSecret)
+      throw new BadRequestException('Video service is not configured.');
 
     let room: string;
     if (kind === 'LESSON') {
-      const lesson = await this.prisma.scheduledLesson.findUnique({ where: { id } });
-      if (!lesson || lesson.status !== LessonStatus.UPCOMING || !lesson.teacherJoinedAt) {
+      const lesson = await this.prisma.scheduledLesson.findUnique({
+        where: { id },
+      });
+      if (
+        !lesson ||
+        lesson.status !== LessonStatus.UPCOMING ||
+        !lesson.teacherJoinedAt
+      ) {
         throw new BadRequestException('This class is not currently live.');
       }
       room = `lesson-${id}`;
     } else {
-      const booking = await this.prisma.booking.findUnique({ where: { id }, include: { shift: true } });
+      const booking = await this.prisma.booking.findUnique({
+        where: { id },
+        include: { shift: true },
+      });
       const now = new Date();
-      if (!booking || booking.paymentStatus !== 'PENDING' || now < booking.shift.start || now > booking.shift.end) {
+      if (
+        !booking ||
+        booking.paymentStatus !== 'PENDING' ||
+        now < booking.shift.start ||
+        now > booking.shift.end
+      ) {
         throw new BadRequestException('This class is not currently live.');
       }
       room = id;
@@ -175,11 +199,21 @@ export class ClassroomService {
       hidden: true,
     });
 
-    return { token: await at.toJwt(), url: process.env.LIVEKIT_URL, roomName: room };
+    return {
+      token: await at.toJwt(),
+      url: process.env.LIVEKIT_URL,
+      roomName: room,
+    };
   }
 
-  async retryRecordingMerge(kind: 'BOOKING' | 'LESSON', id: string): Promise<{ ok: true }> {
-    return this.recordingService.retryMerge(kind === 'LESSON' ? 'lesson' : 'booking', id);
+  async retryRecordingMerge(
+    kind: 'BOOKING' | 'LESSON',
+    id: string,
+  ): Promise<{ ok: true }> {
+    return this.recordingService.retryMerge(
+      kind === 'LESSON' ? 'lesson' : 'booking',
+      id,
+    );
   }
 
   /** Dispatches to the marketplace-booking flow or the curriculum
@@ -248,9 +282,18 @@ export class ClassroomService {
     // A student the teacher removed must knock and be re-admitted rather
     // than silently rejoining — see AdmissionService.
     if (role === 'STUDENT') {
-      const admission = await this.admissionService.checkJoin(roomName, userId, lesson.student.fullName, role);
+      const admission = await this.admissionService.checkJoin(
+        roomName,
+        userId,
+        lesson.student.fullName,
+        role,
+      );
       if (!admission.ok) {
-        return { waitingForAdmission: true as const, admissionId: admission.admissionId, roomName };
+        return {
+          waitingForAdmission: true as const,
+          admissionId: admission.admissionId,
+          roomName,
+        };
       }
     }
 
@@ -370,9 +413,18 @@ export class ClassroomService {
     // A student the teacher removed must knock and be re-admitted rather
     // than silently rejoining — see AdmissionService.
     if (isStudent) {
-      const admission = await this.admissionService.checkJoin(bookingId, userId, studentDisplayName, 'STUDENT');
+      const admission = await this.admissionService.checkJoin(
+        bookingId,
+        userId,
+        studentDisplayName,
+        'STUDENT',
+      );
       if (!admission.ok) {
-        return { waitingForAdmission: true as const, admissionId: admission.admissionId, roomName: bookingId };
+        return {
+          waitingForAdmission: true as const,
+          admissionId: admission.admissionId,
+          roomName: bookingId,
+        };
       }
     }
 
@@ -617,13 +669,19 @@ export class ClassroomService {
   /** Public wrapper for services split out of this one (AdmissionService's
    * teacher-only endpoints, reached only via ClassroomController) that need
    * the same "is this caller the teacher of this room" check. */
-  async assertTeacherOfRoomPublic(userId: string, roomName: string): Promise<void> {
+  async assertTeacherOfRoomPublic(
+    userId: string,
+    roomName: string,
+  ): Promise<void> {
     await this.assertTeacherOfRoom(userId, roomName);
   }
 
   /** Used by the heartbeat endpoint — trusts the room's own teacher
    * assignment rather than whatever role the client claims to be. */
-  async resolveParticipantRole(userId: string, roomName: string): Promise<'TEACHER' | 'STUDENT'> {
+  async resolveParticipantRole(
+    userId: string,
+    roomName: string,
+  ): Promise<'TEACHER' | 'STUDENT'> {
     const teacherUserId = await this.getRoomTeacherUserId(roomName);
     return teacherUserId === userId ? 'TEACHER' : 'STUDENT';
   }
@@ -699,7 +757,12 @@ export class ClassroomService {
     const current = participant.permission;
     const currentSources = current?.canPublishSources?.length
       ? current.canPublishSources
-      : [TrackSource.CAMERA, TrackSource.MICROPHONE, TrackSource.SCREEN_SHARE, TrackSource.SCREEN_SHARE_AUDIO];
+      : [
+          TrackSource.CAMERA,
+          TrackSource.MICROPHONE,
+          TrackSource.SCREEN_SHARE,
+          TrackSource.SCREEN_SHARE_AUDIO,
+        ];
     const nextSources = locked
       ? currentSources.filter((s) => s !== TrackSource.MICROPHONE)
       : Array.from(new Set([...currentSources, TrackSource.MICROPHONE]));
@@ -712,7 +775,9 @@ export class ClassroomService {
     });
 
     if (locked) {
-      const micTrack = participant.tracks.find((t) => t.source === TrackSource.MICROPHONE);
+      const micTrack = participant.tracks.find(
+        (t) => t.source === TrackSource.MICROPHONE,
+      );
       if (micTrack && !micTrack.muted) {
         await client.mutePublishedTrack(room, identity, micTrack.sid, true);
       }
@@ -730,9 +795,17 @@ export class ClassroomService {
 
     const displayName = await client
       .getParticipant(room, identity)
-      .then((p) => p.name.replace(/\s*\((Teacher|Student)\)\s*$/i, '').trim() || p.name)
+      .then(
+        (p) =>
+          p.name.replace(/\s*\((Teacher|Student)\)\s*$/i, '').trim() || p.name,
+      )
       .catch(() => 'Student');
-    await this.admissionService.markRemoved(room, identity, displayName, 'STUDENT');
+    await this.admissionService.markRemoved(
+      room,
+      identity,
+      displayName,
+      'STUDENT',
+    );
 
     await client.removeParticipant(room, identity);
     return { ok: true };
@@ -768,9 +841,14 @@ export class ClassroomService {
 
   private assertEndClassWindowOpen(scheduledStart: Date): void {
     const elapsedMs = Date.now() - scheduledStart.getTime();
-    if (elapsedMs < ClassroomService.END_CLASS_MIN_MINUTES_AFTER_START * 60_000) {
+    if (
+      elapsedMs <
+      ClassroomService.END_CLASS_MIN_MINUTES_AFTER_START * 60_000
+    ) {
       const remaining = Math.ceil(
-        (ClassroomService.END_CLASS_MIN_MINUTES_AFTER_START * 60_000 - elapsedMs) / 60_000,
+        (ClassroomService.END_CLASS_MIN_MINUTES_AFTER_START * 60_000 -
+          elapsedMs) /
+          60_000,
       );
       throw new BadRequestException(
         `You can end this class ${remaining} minute(s) from now, once it's been running for ${ClassroomService.END_CLASS_MIN_MINUTES_AFTER_START} minutes.`,
@@ -798,13 +876,19 @@ export class ClassroomService {
    * The legacy Booking (marketplace) flow has no outcome/earning workflow —
    * it just closes the room, recording an end reason if one was given.
    */
-  async endClass(userId: string, room: string, params: EndClassParams = {}): Promise<{ ok: true }> {
+  async endClass(
+    userId: string,
+    room: string,
+    params: EndClassParams = {},
+  ): Promise<{ ok: true }> {
     const { outcome, reason, note } = params;
     await this.assertTeacherOfRoom(userId, room);
 
     if (outcome === 'PARTIALLY_COMPLETED') {
       if (!reason) {
-        throw new BadRequestException('Choose a reason for marking this class incomplete.');
+        throw new BadRequestException(
+          'Choose a reason for marking this class incomplete.',
+        );
       }
       if (reason === ClassEndReason.OTHER && !note?.trim()) {
         throw new BadRequestException('Add a short note explaining why.');
@@ -813,13 +897,17 @@ export class ClassroomService {
 
     if (isLessonRoom(room)) {
       const lessonId = lessonIdFromRoom(room);
-      const lesson = await this.prisma.scheduledLesson.findUnique({ where: { id: lessonId } });
+      const lesson = await this.prisma.scheduledLesson.findUnique({
+        where: { id: lessonId },
+      });
       if (!lesson) throw new BadRequestException('Classroom not found.');
       if (lesson.status !== LessonStatus.UPCOMING) {
         throw new BadRequestException('This class has already been ended.');
       }
       if (!outcome) {
-        throw new BadRequestException('Choose Completed or Incomplete to end this class.');
+        throw new BadRequestException(
+          'Choose Completed or Incomplete to end this class.',
+        );
       }
       this.assertEndClassWindowOpen(lesson.start);
 
@@ -841,18 +929,35 @@ export class ClassroomService {
         // below are safety-netted by their own cron sweeps either way.
         await this.prisma.scheduledLesson.update({
           where: { id: lessonId },
-          data: { status: LessonStatus.COMPLETED, endedAt: new Date(), endedByRole: 'TEACHER' },
+          data: {
+            status: LessonStatus.COMPLETED,
+            endedAt: new Date(),
+            endedByRole: 'TEACHER',
+          },
         });
-        await this.payoutsService.triggerScheduledLessonCompleted(lessonId).catch((err) => {
-          this.logger.error(`Failed to record completed-class earning for lesson ${lessonId}: ${err}`);
-        });
-        await this.studentLedgerService.triggerScheduledLessonCompleted(lessonId).catch((err) => {
-          this.logger.error(`Failed to record student lesson-completed deduction for lesson ${lessonId}: ${err}`);
-        });
+        await this.payoutsService
+          .triggerScheduledLessonCompleted(lessonId)
+          .catch((err) => {
+            this.logger.error(
+              `Failed to record completed-class earning for lesson ${lessonId}: ${err}`,
+            );
+          });
+        await this.studentLedgerService
+          .triggerScheduledLessonCompleted(lessonId)
+          .catch((err) => {
+            this.logger.error(
+              `Failed to record student lesson-completed deduction for lesson ${lessonId}: ${err}`,
+            );
+          });
       } else {
         await this.prisma.scheduledLesson.update({
           where: { id: lessonId },
-          data: { endedAt: new Date(), endedByRole: 'TEACHER', endReason: reason, endNote: note?.trim() || null },
+          data: {
+            endedAt: new Date(),
+            endedByRole: 'TEACHER',
+            endReason: reason,
+            endNote: note?.trim() || null,
+          },
         });
         // Keeps the SAME lessonNumber for the next occurrence, shifting only
         // that redo + later occurrences — it never touches lesson content
@@ -917,7 +1022,10 @@ export class ClassroomService {
    * window gate (a human didn't fat-finger this). Returns false if the
    * room already isn't live — nothing to do, so the caller doesn't log a
    * spurious "auto-ended" line. */
-  async autoEndClassForServerReason(room: string, reason: ClassEndReason): Promise<boolean> {
+  async autoEndClassForServerReason(
+    room: string,
+    reason: ClassEndReason,
+  ): Promise<boolean> {
     await this.recordingService.stopActiveSegmentIfAny(room);
 
     if (isLessonRoom(room)) {
@@ -935,7 +1043,9 @@ export class ClassroomService {
       });
       await this.schedulingService
         .handlePartialCompletion(lessonId, lesson.teacher.userId)
-        .catch((err) => this.logger.error(`Could not auto-end lesson ${lessonId}: ${err}`));
+        .catch((err) =>
+          this.logger.error(`Could not auto-end lesson ${lessonId}: ${err}`),
+        );
 
       const client = this.getRoomServiceClient();
       await client.deleteRoom(room).catch(() => {});
@@ -944,10 +1054,15 @@ export class ClassroomService {
 
     if (room === DEMO_ROOM_NAME) return false;
 
-    const booking = await this.prisma.booking.findUnique({ where: { id: room } });
+    const booking = await this.prisma.booking.findUnique({
+      where: { id: room },
+    });
     if (!booking) return false;
     await this.recordingService.finalizeAtClassEnd(room);
-    await this.prisma.booking.update({ where: { id: room }, data: { endReason: reason } });
+    await this.prisma.booking.update({
+      where: { id: room },
+      data: { endReason: reason },
+    });
     const client = this.getRoomServiceClient();
     await client.deleteRoom(room).catch(() => {});
     return true;

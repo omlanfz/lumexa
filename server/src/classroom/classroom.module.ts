@@ -12,7 +12,12 @@ import { AlertsModule } from '../alerts/alerts.module';
 @Module({
   imports: [StudentsModule, SchedulingModule, PayoutsModule, AlertsModule],
   controllers: [ClassroomController],
-  providers: [ClassroomService, RecordingService, PresenceService, AdmissionService],
+  providers: [
+    ClassroomService,
+    RecordingService,
+    PresenceService,
+    AdmissionService,
+  ],
   exports: [RecordingService, ClassroomService],
 })
 export class ClassroomModule {}

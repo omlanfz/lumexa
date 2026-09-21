@@ -25,7 +25,11 @@ export class PresenceService {
     private readonly classroomService: ClassroomService,
   ) {}
 
-  async touch(room: string, userId: string, role: 'TEACHER' | 'STUDENT'): Promise<void> {
+  async touch(
+    room: string,
+    userId: string,
+    role: 'TEACHER' | 'STUDENT',
+  ): Promise<void> {
     await this.prisma.classroomPresence.upsert({
       where: { room_userId: { room, userId } },
       create: { room, userId, role, lastSeenAt: new Date() },
@@ -34,7 +38,9 @@ export class PresenceService {
   }
 
   async clearRoom(room: string): Promise<void> {
-    await this.prisma.classroomPresence.deleteMany({ where: { room } }).catch(() => {});
+    await this.prisma.classroomPresence
+      .deleteMany({ where: { room } })
+      .catch(() => {});
   }
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -43,13 +49,20 @@ export class PresenceService {
 
     // Start the grace clock for any teacher presence row that's gone quiet.
     await this.prisma.classroomPresence.updateMany({
-      where: { role: 'TEACHER', disconnectedAt: null, lastSeenAt: { lt: staleCutoff } },
+      where: {
+        role: 'TEACHER',
+        disconnectedAt: null,
+        lastSeenAt: { lt: staleCutoff },
+      },
       data: { disconnectedAt: new Date() },
     });
 
     const graceCutoff = new Date(Date.now() - DISCONNECT_GRACE_MS);
     const overdue = await this.prisma.classroomPresence.findMany({
-      where: { role: 'TEACHER', disconnectedAt: { not: null, lt: graceCutoff } },
+      where: {
+        role: 'TEACHER',
+        disconnectedAt: { not: null, lt: graceCutoff },
+      },
     });
 
     for (const presence of overdue) {
@@ -64,7 +77,9 @@ export class PresenceService {
           );
         }
       } catch (err) {
-        this.logger.error(`Failed to auto-end room ${presence.room} for teacher disconnect: ${err}`);
+        this.logger.error(
+          `Failed to auto-end room ${presence.room} for teacher disconnect: ${err}`,
+        );
       } finally {
         // Always clear — either it's handled, or the room already isn't
         // live anymore (class ended some other way) and there's nothing

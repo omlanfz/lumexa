@@ -42,6 +42,8 @@ interface JoinResponse {
   token: string;
   url: string;
   roomName: string;
+  scheduledStart?: string;
+  classType?: 'ONE_TO_ONE' | 'BATCH';
 }
 
 interface WaitingResponse {
@@ -250,6 +252,9 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         lessonData={lessonData}
         initialBackgroundEffect={choices?.backgroundEffect ?? { mode: 'none' }}
         initialLighting={choices?.lighting ?? { brightness: 1, contrast: 1 }}
+        scheduledStart={join.scheduledStart}
+        classType={join.classType}
+        observerMode={adminObserve}
       />
     </LiveKitRoom>
   );

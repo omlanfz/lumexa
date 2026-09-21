@@ -7,7 +7,7 @@
 // participant — each browser remembers its own choice, that's the whole
 // point.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 const STORAGE_KEY = 'lumexa-classroom-theme';
 
@@ -24,11 +24,10 @@ function readStored(): ClassroomTheme {
 }
 
 export function useClassroomTheme() {
-  const [theme, setTheme] = useState<ClassroomTheme>('light');
-
-  useEffect(() => {
-    setTheme(readStored());
-  }, []);
+  // Lazy initializer, not an effect: ClassroomRoom is only ever mounted
+  // client-side (behind an async join step, never server-rendered), so
+  // there's no SSR/hydration mismatch to guard against here.
+  const [theme, setTheme] = useState<ClassroomTheme>(readStored);
 
   const toggle = useCallback(() => {
     setTheme((prev) => {

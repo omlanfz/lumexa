@@ -560,6 +560,7 @@ export class StudentsService {
             }
           : null,
         recordingUrl: b.recordingUrl ?? null,
+        recordingStatus: b.recordingStatus,
         isUpcoming: new Date(b.shift.start) > now,
       })),
       total,

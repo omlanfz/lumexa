@@ -417,7 +417,10 @@ export class AdminService {
       // by the scheduled time window plus payment not yet captured (which
       // only happens once the class is confirmed over — see
       // ClassroomService.finalizeBookingIfDue).
-      isLive: b.paymentStatus === 'PENDING' && now >= b.shift.start && now <= b.shift.end,
+      isLive:
+        b.paymentStatus === 'PENDING' &&
+        now >= b.shift.start &&
+        now <= b.shift.end,
       displayStatus: this.computeDisplayStatus(b as any),
       raw: b,
     }));

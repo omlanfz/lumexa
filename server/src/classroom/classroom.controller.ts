@@ -51,7 +51,10 @@ export class ClassroomController {
   @Post(':room/heartbeat')
   @UseGuards(AuthGuard('jwt'))
   async heartbeat(@Request() req, @Param('room') room: string) {
-    const role = await this.classroomService.resolveParticipantRole(req.user.userId, room);
+    const role = await this.classroomService.resolveParticipantRole(
+      req.user.userId,
+      room,
+    );
     await this.presenceService.touch(room, req.user.userId, role);
     return { ok: true };
   }
@@ -61,7 +64,10 @@ export class ClassroomController {
   @Get(':room/admissions')
   @UseGuards(AuthGuard('jwt'))
   async listAdmissions(@Request() req, @Param('room') room: string) {
-    await this.classroomService.assertTeacherOfRoomPublic(req.user.userId, room);
+    await this.classroomService.assertTeacherOfRoomPublic(
+      req.user.userId,
+      room,
+    );
     return this.admissionService.listPending(room);
   }
 
@@ -73,8 +79,16 @@ export class ClassroomController {
     @Param('admissionId') admissionId: string,
     @Body() body: { decision: 'APPROVE' | 'DENY' },
   ) {
-    await this.classroomService.assertTeacherOfRoomPublic(req.user.userId, room);
-    return this.admissionService.decide(req.user.userId, room, admissionId, body.decision);
+    await this.classroomService.assertTeacherOfRoomPublic(
+      req.user.userId,
+      room,
+    );
+    return this.admissionService.decide(
+      req.user.userId,
+      room,
+      admissionId,
+      body.decision,
+    );
   }
 
   /** Student polls this while waiting to be re-admitted. */

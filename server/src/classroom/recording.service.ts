@@ -35,7 +35,12 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { Role, RecordingStatus, RecordingSegmentStatus } from '@prisma/client';
-import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import { spawn } from 'child_process';
 import { createWriteStream, createReadStream } from 'fs';
@@ -45,7 +50,8 @@ import { join } from 'path';
 import { pipeline } from 'stream/promises';
 import { DEMO_ROOM_NAME, getRoomRef, roomForLesson } from './room-ref.util';
 
-const RECORDING_MAX_DURATION_MINUTES = Number(process.env.RECORDING_MAX_DURATION_MINUTES) || 70;
+const RECORDING_MAX_DURATION_MINUTES =
+  Number(process.env.RECORDING_MAX_DURATION_MINUTES) || 70;
 const RECORDING_STORAGE_LIMIT_BYTES =
   Number(process.env.RECORDING_STORAGE_LIMIT_BYTES) || 50 * 1024 * 1024 * 1024; // 50 GB default
 const STORAGE_WARNING_RATIO = 0.8;
@@ -68,7 +74,9 @@ export class RecordingService {
   // In-memory recording state for the demo classroom only (see
   // ClassroomService's DEMO_ROOM_NAME block comment) — there is no
   // Booking/ScheduledLesson row to persist against.
-  private demoMirror: RecordingMirror = { recordingStatus: RecordingStatus.NONE };
+  private demoMirror: RecordingMirror = {
+    recordingStatus: RecordingStatus.NONE,
+  };
   private demoSegments: Array<{
     id: string;
     egressId: string | null;
@@ -92,9 +100,12 @@ export class RecordingService {
     if (!process.env.LIVEKIT_URL) missing.push('LIVEKIT_URL');
     if (!process.env.LIVEKIT_API_KEY) missing.push('LIVEKIT_API_KEY');
     if (!process.env.LIVEKIT_API_SECRET) missing.push('LIVEKIT_API_SECRET');
-    if (!process.env.S3_ACCESS_KEY && !process.env.AWS_ACCESS_KEY) missing.push('S3_ACCESS_KEY');
-    if (!process.env.S3_SECRET_KEY && !process.env.AWS_SECRET_KEY) missing.push('S3_SECRET_KEY');
-    if (!process.env.S3_BUCKET && !process.env.AWS_S3_BUCKET) missing.push('S3_BUCKET');
+    if (!process.env.S3_ACCESS_KEY && !process.env.AWS_ACCESS_KEY)
+      missing.push('S3_ACCESS_KEY');
+    if (!process.env.S3_SECRET_KEY && !process.env.AWS_SECRET_KEY)
+      missing.push('S3_SECRET_KEY');
+    if (!process.env.S3_BUCKET && !process.env.AWS_S3_BUCKET)
+      missing.push('S3_BUCKET');
     return missing;
   }
 
@@ -119,7 +130,8 @@ export class RecordingService {
       region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
       credentials: {
         accessKeyId: (process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY)!,
-        secretAccessKey: (process.env.S3_SECRET_KEY || process.env.AWS_SECRET_KEY)!,
+        secretAccessKey: (process.env.S3_SECRET_KEY ||
+          process.env.AWS_SECRET_KEY)!,
       },
       ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
     });
@@ -133,7 +145,8 @@ export class RecordingService {
     const bucket = this.bucketName();
     const endpoint = process.env.S3_ENDPOINT;
     if (endpoint) return `${endpoint.replace(/\/+$/, '')}/${bucket}/${key}`;
-    const region = process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1';
+    const region =
+      process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1';
     return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
   }
 
@@ -163,22 +176,33 @@ export class RecordingService {
     return null;
   }
 
-  private async writeMirror(room: string, recordingStatus: RecordingStatus): Promise<void> {
+  private async writeMirror(
+    room: string,
+    recordingStatus: RecordingStatus,
+  ): Promise<void> {
     if (room === DEMO_ROOM_NAME) {
       this.demoMirror = { recordingStatus };
       return;
     }
     const ref = getRoomRef(room);
     if (ref.kind === 'lesson') {
-      await this.prisma.scheduledLesson.update({ where: { id: ref.scheduledLessonId }, data: { recordingStatus } });
+      await this.prisma.scheduledLesson.update({
+        where: { id: ref.scheduledLessonId },
+        data: { recordingStatus },
+      });
     } else if (ref.kind === 'booking') {
-      await this.prisma.booking.update({ where: { id: ref.bookingId }, data: { recordingStatus } });
+      await this.prisma.booking.update({
+        where: { id: ref.bookingId },
+        data: { recordingStatus },
+      });
     }
   }
 
   // ─── Segment start / stop (teacher clicks Record) ────────────────────────
 
-  async startSegment(room: string): Promise<{ recordingStatus: RecordingStatus }> {
+  async startSegment(
+    room: string,
+  ): Promise<{ recordingStatus: RecordingStatus }> {
     const missing = this.missingEgressEnvVars();
     if (missing.length > 0) {
       this.logger.error(
@@ -194,14 +218,20 @@ export class RecordingService {
       // A start/stop for this room is already in flight — treat a duplicate
       // click as a no-op rather than racing a second egress job.
       const mirror = await this.readMirror(room);
-      return { recordingStatus: mirror?.recordingStatus ?? RecordingStatus.RECORDING };
+      return {
+        recordingStatus: mirror?.recordingStatus ?? RecordingStatus.RECORDING,
+      };
     }
     this.roomLocks.add(room);
     try {
       const activeCount =
         room === DEMO_ROOM_NAME
-          ? this.demoSegments.filter((s) => s.status === RecordingSegmentStatus.RECORDING).length
-          : await this.prisma.recordingSegment.count({ where: { room, status: RecordingSegmentStatus.RECORDING } });
+          ? this.demoSegments.filter(
+              (s) => s.status === RecordingSegmentStatus.RECORDING,
+            ).length
+          : await this.prisma.recordingSegment.count({
+              where: { room, status: RecordingSegmentStatus.RECORDING },
+            });
       if (activeCount > 0) {
         return { recordingStatus: RecordingStatus.RECORDING };
       }
@@ -219,11 +249,17 @@ export class RecordingService {
       let info: { egressId: string };
       try {
         info = await egress.startRoomCompositeEgress(room, {
-          file: { fileType: 3, filepath: objectKey, s3: this.buildEgressS3Config() },
+          file: {
+            fileType: 3,
+            filepath: objectKey,
+            s3: this.buildEgressS3Config(),
+          },
         } as any);
       } catch (err) {
         this.logger.error(`Egress start error for ${room}: ${err}`);
-        throw new BadRequestException('Could not start recording. Please try again.');
+        throw new BadRequestException(
+          'Could not start recording. Please try again.',
+        );
       }
 
       const startedAt = new Date();
@@ -241,7 +277,8 @@ export class RecordingService {
           data: {
             room,
             bookingId: ref.kind === 'booking' ? ref.bookingId : undefined,
-            scheduledLessonId: ref.kind === 'lesson' ? ref.scheduledLessonId : undefined,
+            scheduledLessonId:
+              ref.kind === 'lesson' ? ref.scheduledLessonId : undefined,
             egressId: info.egressId,
             status: RecordingSegmentStatus.RECORDING,
             storagePath: objectKey,
@@ -251,7 +288,9 @@ export class RecordingService {
       }
 
       await this.writeMirror(room, RecordingStatus.RECORDING);
-      this.logger.log(`Recording segment started for room ${room} (egress ${info.egressId})`);
+      this.logger.log(
+        `Recording segment started for room ${room} (egress ${info.egressId})`,
+      );
       return { recordingStatus: RecordingStatus.RECORDING };
     } finally {
       this.roomLocks.delete(room);
@@ -268,7 +307,9 @@ export class RecordingService {
     try {
       const active =
         room === DEMO_ROOM_NAME
-          ? this.demoSegments.find((s) => s.status === RecordingSegmentStatus.RECORDING)
+          ? this.demoSegments.find(
+              (s) => s.status === RecordingSegmentStatus.RECORDING,
+            )
           : await this.prisma.recordingSegment.findFirst({
               where: { room, status: RecordingSegmentStatus.RECORDING },
               orderBy: { startedAt: 'desc' },
@@ -303,12 +344,17 @@ export class RecordingService {
     }
   }
 
-  async stopSegment(room: string): Promise<{ recordingStatus: RecordingStatus }> {
+  async stopSegment(
+    room: string,
+  ): Promise<{ recordingStatus: RecordingStatus }> {
     const active =
       room === DEMO_ROOM_NAME
-        ? this.demoSegments.some((s) => s.status === RecordingSegmentStatus.RECORDING)
-        : (await this.prisma.recordingSegment.count({ where: { room, status: RecordingSegmentStatus.RECORDING } })) >
-          0;
+        ? this.demoSegments.some(
+            (s) => s.status === RecordingSegmentStatus.RECORDING,
+          )
+        : (await this.prisma.recordingSegment.count({
+            where: { room, status: RecordingSegmentStatus.RECORDING },
+          })) > 0;
     if (!active) {
       throw new BadRequestException('There is no active recording to stop.');
     }
@@ -320,20 +366,30 @@ export class RecordingService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async enforceMaxSegmentDuration() {
-    const cutoff = new Date(Date.now() - RECORDING_MAX_DURATION_MINUTES * 60_000);
+    const cutoff = new Date(
+      Date.now() - RECORDING_MAX_DURATION_MINUTES * 60_000,
+    );
     const overrunning = await this.prisma.recordingSegment.findMany({
-      where: { status: RecordingSegmentStatus.RECORDING, startedAt: { lt: cutoff } },
+      where: {
+        status: RecordingSegmentStatus.RECORDING,
+        startedAt: { lt: cutoff },
+      },
       select: { room: true },
     });
     const demoOverrunning = this.demoSegments.some(
-      (s) => s.status === RecordingSegmentStatus.RECORDING && s.startedAt < cutoff,
+      (s) =>
+        s.status === RecordingSegmentStatus.RECORDING && s.startedAt < cutoff,
     );
     const rooms = new Set(overrunning.map((s) => s.room));
     if (demoOverrunning) rooms.add(DEMO_ROOM_NAME);
     for (const room of rooms) {
-      this.logger.warn(`Recording for room ${room} hit the ${RECORDING_MAX_DURATION_MINUTES}-minute cap — auto-stopping segment`);
+      this.logger.warn(
+        `Recording for room ${room} hit the ${RECORDING_MAX_DURATION_MINUTES}-minute cap — auto-stopping segment`,
+      );
       await this.stopActiveSegmentIfAny(room).catch((err) =>
-        this.logger.error(`Failed to auto-stop recording for room ${room}: ${err}`),
+        this.logger.error(
+          `Failed to auto-stop recording for room ${room}: ${err}`,
+        ),
       );
     }
   }
@@ -349,28 +405,47 @@ export class RecordingService {
     const egressId = egressInfo.egressId;
     if (!egressId) return;
     // EgressStatus.EGRESS_COMPLETE === 3 in livekit-server-sdk's proto enum.
-    const succeeded = egressInfo.status === 3 || egressInfo.status === 'EGRESS_COMPLETE';
-    const fileSizeBytes = egressInfo.file?.size !== undefined ? Number(egressInfo.file.size) : undefined;
+    const succeeded =
+      egressInfo.status === 3 || egressInfo.status === 'EGRESS_COMPLETE';
+    const fileSizeBytes =
+      egressInfo.file?.size !== undefined
+        ? Number(egressInfo.file.size)
+        : undefined;
 
     if (egressInfo.roomName === DEMO_ROOM_NAME) {
       const seg = this.demoSegments.find((s) => s.egressId === egressId);
-      if (seg) seg.status = succeeded ? RecordingSegmentStatus.AVAILABLE : RecordingSegmentStatus.FAILED;
+      if (seg)
+        seg.status = succeeded
+          ? RecordingSegmentStatus.AVAILABLE
+          : RecordingSegmentStatus.FAILED;
       return;
     }
 
-    const segment = await this.prisma.recordingSegment.findFirst({ where: { egressId } });
+    const segment = await this.prisma.recordingSegment.findFirst({
+      where: { egressId },
+    });
     if (!segment) {
-      this.logger.warn(`egress_ended for unknown egress ${egressId} (room ${egressInfo.roomName})`);
+      this.logger.warn(
+        `egress_ended for unknown egress ${egressId} (room ${egressInfo.roomName})`,
+      );
       return;
     }
     await this.prisma.recordingSegment.update({
       where: { id: segment.id },
       data: succeeded
-        ? { status: RecordingSegmentStatus.AVAILABLE, fileSizeBytes: fileSizeBytes ?? null }
-        : { status: RecordingSegmentStatus.FAILED, failureReason: `Egress status ${egressInfo.status}` },
+        ? {
+            status: RecordingSegmentStatus.AVAILABLE,
+            fileSizeBytes: fileSizeBytes ?? null,
+          }
+        : {
+            status: RecordingSegmentStatus.FAILED,
+            failureReason: `Egress status ${egressInfo.status}`,
+          },
     });
     if (!succeeded) {
-      this.logger.warn(`Recording segment failed for room ${segment.room} (egress status ${egressInfo.status})`);
+      this.logger.warn(
+        `Recording segment failed for room ${segment.room} (egress status ${egressInfo.status})`,
+      );
     }
   }
 
@@ -394,25 +469,41 @@ export class RecordingService {
   async processMergeSweep() {
     const [bookings, lessons] = await Promise.all([
       this.prisma.booking.findMany({
-        where: { recordingStatus: RecordingStatus.PROCESSING, recordingMergedAt: null },
+        where: {
+          recordingStatus: RecordingStatus.PROCESSING,
+          recordingMergedAt: null,
+        },
         select: { id: true },
         take: 20,
       }),
       this.prisma.scheduledLesson.findMany({
-        where: { recordingStatus: RecordingStatus.PROCESSING, recordingMergedAt: null },
+        where: {
+          recordingStatus: RecordingStatus.PROCESSING,
+          recordingMergedAt: null,
+        },
         select: { id: true },
         take: 20,
       }),
     ]);
-    for (const b of bookings) await this.tryMerge('booking', b.id).catch((e) => this.logger.error(String(e)));
-    for (const l of lessons) await this.tryMerge('lesson', l.id).catch((e) => this.logger.error(String(e)));
+    for (const b of bookings)
+      await this.tryMerge('booking', b.id).catch((e) =>
+        this.logger.error(String(e)),
+      );
+    for (const l of lessons)
+      await this.tryMerge('lesson', l.id).catch((e) =>
+        this.logger.error(String(e)),
+      );
   }
 
   private async tryMerge(kind: EntityKind, id: string): Promise<void> {
     const room = kind === 'lesson' ? roomForLesson(id) : id;
-    const segments = await this.prisma.recordingSegment.findMany({ where: { room } });
+    const segments = await this.prisma.recordingSegment.findMany({
+      where: { room },
+    });
     const stillSettling = segments.some(
-      (s) => s.status === RecordingSegmentStatus.RECORDING || s.status === RecordingSegmentStatus.UPLOADING,
+      (s) =>
+        s.status === RecordingSegmentStatus.RECORDING ||
+        s.status === RecordingSegmentStatus.UPLOADING,
     );
     if (stillSettling) return; // wait for the Egress webhook (or the next sweep tick)
     await this.mergeEntity(kind, id, room, segments);
@@ -422,14 +513,25 @@ export class RecordingService {
   async retryMerge(kind: EntityKind, id: string): Promise<{ ok: true }> {
     const current =
       kind === 'lesson'
-        ? await this.prisma.scheduledLesson.findUnique({ where: { id }, select: { recordingStatus: true } })
-        : await this.prisma.booking.findUnique({ where: { id }, select: { recordingStatus: true } });
+        ? await this.prisma.scheduledLesson.findUnique({
+            where: { id },
+            select: { recordingStatus: true },
+          })
+        : await this.prisma.booking.findUnique({
+            where: { id },
+            select: { recordingStatus: true },
+          });
     if (!current) throw new BadRequestException('Class not found.');
     if (current.recordingStatus !== RecordingStatus.FAILED) {
       throw new BadRequestException('Only a failed recording can be retried.');
     }
-    const data = { recordingStatus: RecordingStatus.PROCESSING, recordingMergedAt: null, recordingMergeError: null };
-    if (kind === 'lesson') await this.prisma.scheduledLesson.update({ where: { id }, data });
+    const data = {
+      recordingStatus: RecordingStatus.PROCESSING,
+      recordingMergedAt: null,
+      recordingMergeError: null,
+    };
+    if (kind === 'lesson')
+      await this.prisma.scheduledLesson.update({ where: { id }, data });
     else await this.prisma.booking.update({ where: { id }, data });
     return { ok: true };
   }
@@ -446,28 +548,39 @@ export class RecordingService {
     }>,
   ): Promise<void> {
     const available = segments
-      .filter((s) => s.status === RecordingSegmentStatus.AVAILABLE && s.storagePath)
+      .filter(
+        (s) => s.status === RecordingSegmentStatus.AVAILABLE && s.storagePath,
+      )
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
     const fail = async (message: string) => {
       const attempts =
         (kind === 'lesson'
-          ? await this.prisma.scheduledLesson.findUnique({ where: { id }, select: { recordingMergeAttempts: true } })
-          : await this.prisma.booking.findUnique({ where: { id }, select: { recordingMergeAttempts: true } })
+          ? await this.prisma.scheduledLesson.findUnique({
+              where: { id },
+              select: { recordingMergeAttempts: true },
+            })
+          : await this.prisma.booking.findUnique({
+              where: { id },
+              select: { recordingMergeAttempts: true },
+            })
         )?.recordingMergeAttempts ?? 0;
       const data = {
         recordingStatus: RecordingStatus.FAILED,
         recordingMergeError: message,
         recordingMergeAttempts: attempts + 1,
       };
-      if (kind === 'lesson') await this.prisma.scheduledLesson.update({ where: { id }, data });
+      if (kind === 'lesson')
+        await this.prisma.scheduledLesson.update({ where: { id }, data });
       else await this.prisma.booking.update({ where: { id }, data });
       this.logger.error(`Recording merge failed for ${kind} ${id}: ${message}`);
       await this.notifyMergeFailure(kind, id, message).catch(() => {});
     };
 
     if (available.length === 0) {
-      await fail('No recording segments were successfully uploaded — nothing to merge.');
+      await fail(
+        'No recording segments were successfully uploaded — nothing to merge.',
+      );
       return;
     }
 
@@ -481,8 +594,13 @@ export class RecordingService {
       for (let i = 0; i < available.length; i++) {
         const key = available[i].storagePath!;
         const localPath = join(workDir, `seg-${i}.mp4`);
-        const obj = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-        await pipeline(obj.Body as NodeJS.ReadableStream, createWriteStream(localPath));
+        const obj = await s3.send(
+          new GetObjectCommand({ Bucket: bucket, Key: key }),
+        );
+        await pipeline(
+          obj.Body as NodeJS.ReadableStream,
+          createWriteStream(localPath),
+        );
         localFiles.push(localPath);
       }
 
@@ -492,16 +610,44 @@ export class RecordingService {
         await this.copyFile(localFiles[0], outputPath);
       } else {
         const listPath = join(workDir, 'concat.txt');
-        await writeFile(listPath, localFiles.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
+        await writeFile(
+          listPath,
+          localFiles
+            .map((f) => `file '${f.replace(/'/g, "'\\''")}'`)
+            .join('\n'),
+        );
         try {
-          await this.runFfmpeg(['-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', '-y', outputPath]);
+          await this.runFfmpeg([
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            listPath,
+            '-c',
+            'copy',
+            '-y',
+            outputPath,
+          ]);
         } catch {
           // Segments came from separately-started RoomCompositeEgress jobs and
           // should share codec/resolution, but fall back to a re-encode if a
           // stream copy ever refuses to concatenate them cleanly.
           await this.runFfmpeg([
-            '-f', 'concat', '-safe', '0', '-i', listPath,
-            '-c:v', 'libx264', '-preset', 'veryfast', '-c:a', 'aac', '-y', outputPath,
+            '-f',
+            'concat',
+            '-safe',
+            '0',
+            '-i',
+            listPath,
+            '-c:v',
+            'libx264',
+            '-preset',
+            'veryfast',
+            '-c:a',
+            'aac',
+            '-y',
+            outputPath,
           ]);
         }
       }
@@ -526,22 +672,37 @@ export class RecordingService {
         recordingMergedAt: new Date(),
         recordingMergeError: null,
       };
-      if (kind === 'lesson') await this.prisma.scheduledLesson.update({ where: { id }, data });
+      if (kind === 'lesson')
+        await this.prisma.scheduledLesson.update({ where: { id }, data });
       else await this.prisma.booking.update({ where: { id }, data });
-      this.logger.log(`Recording merged for ${kind} ${id} (${available.length} segment(s), ${size} bytes)`);
+      this.logger.log(
+        `Recording merged for ${kind} ${id} (${available.length} segment(s), ${size} bytes)`,
+      );
 
       // Raw per-segment files are no longer needed once folded into the
       // final recording — best-effort cleanup, never blocks success.
       for (const seg of available) {
         await s3
-          .send(new DeleteObjectCommand({ Bucket: bucket, Key: seg.storagePath! }))
-          .then(() => this.prisma.recordingSegment.update({ where: { id: seg.id }, data: { status: RecordingSegmentStatus.EXPIRED } }))
-          .catch((err) => this.logger.warn(`Could not clean up raw segment ${seg.id}: ${err}`));
+          .send(
+            new DeleteObjectCommand({ Bucket: bucket, Key: seg.storagePath! }),
+          )
+          .then(() =>
+            this.prisma.recordingSegment.update({
+              where: { id: seg.id },
+              data: { status: RecordingSegmentStatus.EXPIRED },
+            }),
+          )
+          .catch((err) =>
+            this.logger.warn(
+              `Could not clean up raw segment ${seg.id}: ${err}`,
+            ),
+          );
       }
     } catch (err) {
       await fail(err instanceof Error ? err.message : String(err));
     } finally {
-      if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      if (workDir)
+        await rm(workDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
@@ -557,12 +718,19 @@ export class RecordingService {
       proc.on('error', reject);
       proc.on('close', (code) => {
         if (code === 0) resolve();
-        else reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-800)}`));
+        else
+          reject(
+            new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-800)}`),
+          );
       });
     });
   }
 
-  private async notifyMergeFailure(kind: EntityKind, id: string, message: string): Promise<void> {
+  private async notifyMergeFailure(
+    kind: EntityKind,
+    id: string,
+    message: string,
+  ): Promise<void> {
     const teacherUserId =
       kind === 'lesson'
         ? (
@@ -574,7 +742,9 @@ export class RecordingService {
         : (
             await this.prisma.booking.findUnique({
               where: { id },
-              select: { shift: { select: { teacher: { select: { userId: true } } } } },
+              select: {
+                shift: { select: { teacher: { select: { userId: true } } } },
+              },
             })
           )?.shift.teacher.userId;
     if (!teacherUserId) return;
@@ -583,11 +753,15 @@ export class RecordingService {
       role: Role.TEACHER,
       type: 'RECORDING_FAILED',
       title: 'Recording failed',
-      message: "This class's recording could not be finalized. Lumexa Ops has been notified and can retry it.",
+      message:
+        "This class's recording could not be finalized. Lumexa Ops has been notified and can retry it.",
       metadata: { kind, id, error: message },
     });
 
-    const admins = await this.prisma.user.findMany({ where: { role: Role.ADMIN }, select: { id: true } });
+    const admins = await this.prisma.user.findMany({
+      where: { role: Role.ADMIN },
+      select: { id: true },
+    });
     await Promise.all(
       admins.map((a) =>
         this.alerts.create({
@@ -611,9 +785,14 @@ export class RecordingService {
     const usage = await this.currentStorageUsageBytes();
     const ratio = usage / RECORDING_STORAGE_LIMIT_BYTES;
 
-    if (ratio >= STORAGE_WARNING_RATIO && Date.now() - this.lastStorageWarningAt > 6 * 60 * 60 * 1000) {
+    if (
+      ratio >= STORAGE_WARNING_RATIO &&
+      Date.now() - this.lastStorageWarningAt > 6 * 60 * 60 * 1000
+    ) {
       this.lastStorageWarningAt = Date.now();
-      await this.warnAdminsOfStorage(usage, ratio).catch((err) => this.logger.error(String(err)));
+      await this.warnAdminsOfStorage(usage, ratio).catch((err) =>
+        this.logger.error(String(err)),
+      );
     }
 
     if (ratio < 1) return;
@@ -628,16 +807,28 @@ export class RecordingService {
       if (remaining <= 0) break;
       const key = this.keyFromUrl(rec.recordingUrl);
       try {
-        if (key) await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-        const data = { recordingStatus: RecordingStatus.EXPIRED, recordingUrl: null };
-        if (rec.kind === 'lesson') await this.prisma.scheduledLesson.update({ where: { id: rec.id }, data });
+        if (key)
+          await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+        const data = {
+          recordingStatus: RecordingStatus.EXPIRED,
+          recordingUrl: null,
+        };
+        if (rec.kind === 'lesson')
+          await this.prisma.scheduledLesson.update({
+            where: { id: rec.id },
+            data,
+          });
         else await this.prisma.booking.update({ where: { id: rec.id }, data });
         remaining -= rec.size;
-        this.logger.log(`Retention: expired ${rec.kind} ${rec.id} recording (${rec.size} bytes) to stay under the storage cap`);
+        this.logger.log(
+          `Retention: expired ${rec.kind} ${rec.id} recording (${rec.size} bytes) to stay under the storage cap`,
+        );
       } catch (err) {
         // Retry-safe: leave the row AVAILABLE so the next hourly sweep tries
         // again rather than losing track of it half-deleted.
-        this.logger.error(`Retention delete failed for ${rec.kind} ${rec.id}: ${err}`);
+        this.logger.error(
+          `Retention delete failed for ${rec.kind} ${rec.id}: ${err}`,
+        );
       }
     }
   }
@@ -675,14 +866,27 @@ export class RecordingService {
     );
   }
 
-  private async oldestCompletedRecordings(
-    limit: number,
-  ): Promise<Array<{ kind: EntityKind; id: string; recordingUrl: string | null; size: number }>> {
+  private async oldestCompletedRecordings(limit: number): Promise<
+    Array<{
+      kind: EntityKind;
+      id: string;
+      recordingUrl: string | null;
+      size: number;
+    }>
+  > {
     const [bookings, lessons] = await Promise.all([
       this.prisma.booking.findMany({
-        where: { recordingStatus: RecordingStatus.AVAILABLE, paymentStatus: 'CAPTURED' },
+        where: {
+          recordingStatus: RecordingStatus.AVAILABLE,
+          paymentStatus: 'CAPTURED',
+        },
         orderBy: { recordingMergedAt: 'asc' },
-        select: { id: true, recordingUrl: true, recordingFileSizeBytes: true, recordingMergedAt: true },
+        select: {
+          id: true,
+          recordingUrl: true,
+          recordingFileSizeBytes: true,
+          recordingMergedAt: true,
+        },
         take: limit,
       }),
       this.prisma.scheduledLesson.findMany({
@@ -691,7 +895,12 @@ export class RecordingService {
           status: { in: ['COMPLETED', 'PARTIALLY_COMPLETED'] },
         },
         orderBy: { recordingMergedAt: 'asc' },
-        select: { id: true, recordingUrl: true, recordingFileSizeBytes: true, recordingMergedAt: true },
+        select: {
+          id: true,
+          recordingUrl: true,
+          recordingFileSizeBytes: true,
+          recordingMergedAt: true,
+        },
         take: limit,
       }),
     ]);
@@ -713,10 +922,19 @@ export class RecordingService {
     ].sort((a, b) => a.mergedAt.getTime() - b.mergedAt.getTime());
   }
 
-  private async warnAdminsOfStorage(usage: number, ratio: number): Promise<void> {
-    const admins = await this.prisma.user.findMany({ where: { role: Role.ADMIN }, select: { id: true } });
+  private async warnAdminsOfStorage(
+    usage: number,
+    ratio: number,
+  ): Promise<void> {
+    const admins = await this.prisma.user.findMany({
+      where: { role: Role.ADMIN },
+      select: { id: true },
+    });
     const usageGb = (usage / (1024 * 1024 * 1024)).toFixed(1);
-    const limitGb = (RECORDING_STORAGE_LIMIT_BYTES / (1024 * 1024 * 1024)).toFixed(1);
+    const limitGb = (
+      RECORDING_STORAGE_LIMIT_BYTES /
+      (1024 * 1024 * 1024)
+    ).toFixed(1);
     await Promise.all(
       admins.map((a) =>
         this.alerts.create({
@@ -725,7 +943,10 @@ export class RecordingService {
           type: 'RECORDING_STORAGE_WARNING',
           title: 'Recording storage nearing capacity',
           message: `Classroom recordings are using ${usageGb} GB of the ${limitGb} GB limit (${Math.round(ratio * 100)}%). The oldest completed recordings will be auto-deleted once the limit is reached.`,
-          metadata: { usageBytes: usage, limitBytes: RECORDING_STORAGE_LIMIT_BYTES },
+          metadata: {
+            usageBytes: usage,
+            limitBytes: RECORDING_STORAGE_LIMIT_BYTES,
+          },
         }),
       ),
     );

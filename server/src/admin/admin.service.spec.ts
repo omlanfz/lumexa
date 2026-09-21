@@ -9,6 +9,7 @@ import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ClassroomService } from '../classroom/classroom.service';
 
 describe('AdminService - assignTeacherToStudent', () => {
   let service: AdminService;
@@ -45,6 +46,7 @@ describe('AdminService - assignTeacherToStudent', () => {
           },
         },
         { provide: JwtService, useValue: { sign: jest.fn() } },
+        { provide: ClassroomService, useValue: {} },
       ],
     }).compile();
 

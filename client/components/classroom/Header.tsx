@@ -1,29 +1,39 @@
 // FILE PATH: client/components/classroom/Header.tsx
 //
-// Top bar: Lumexa branding, current lesson/session title and LIVE status.
-// Kept subtle — this is a video call, not a marketing page.
+// Top bar: Lumexa branding, current lesson/session title, LIVE status, the
+// server-anchored class timer, and the classroom's own light/dark toggle.
+// Kept subtle — this is a video call, not a marketing page. Hidden entirely
+// in presentation mode (see ClassroomRoom) so the shared content gets the
+// full vertical space.
 
 'use client';
 
-import { Maximize2, Minimize2 } from 'lucide-react';
-import IconButton from './IconButton';
+import ClassTimer from './ClassTimer';
+import ThemeToggle from './ThemeToggle';
+import type { ClassroomTheme } from '@/lib/classroom/useClassroomTheme';
 
 interface HeaderProps {
   sessionTitle: string;
   sessionSubtitle?: string;
   isLive: boolean;
-  presentationMode: boolean;
-  onTogglePresentation: () => void;
   recording?: boolean;
+  scheduledStart?: string;
+  expectedDurationMinutes?: number;
+  onTimerMilestone?: () => void;
+  theme: ClassroomTheme;
+  onToggleTheme: () => void;
 }
 
 export default function Header({
   sessionTitle,
   sessionSubtitle,
   isLive,
-  presentationMode,
-  onTogglePresentation,
   recording,
+  scheduledStart,
+  expectedDurationMinutes,
+  onTimerMilestone,
+  theme,
+  onToggleTheme,
 }: HeaderProps) {
   return (
     <header className="flex items-center justify-between gap-3 px-3 sm:px-5 h-14 flex-shrink-0 border-b border-[var(--cr-border)]">
@@ -42,6 +52,13 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
+        {scheduledStart && expectedDurationMinutes && (
+          <ClassTimer
+            scheduledStart={scheduledStart}
+            expectedDurationMinutes={expectedDurationMinutes}
+            onMilestone={onTimerMilestone}
+          />
+        )}
         {recording && (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] font-bold uppercase tracking-wide">
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Rec
@@ -52,13 +69,7 @@ export default function Header({
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Live
           </span>
         )}
-        <IconButton
-          icon={presentationMode ? Minimize2 : Maximize2}
-          label={presentationMode ? 'Exit presentation mode' : 'Presentation mode'}
-          onClick={onTogglePresentation}
-          size="sm"
-          tooltipPos="bottom"
-        />
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </div>
     </header>
   );
