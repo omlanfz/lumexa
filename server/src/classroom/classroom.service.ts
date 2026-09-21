@@ -113,7 +113,30 @@ export class ClassroomService {
       where: { id: userId },
       select: { fullName: true },
     });
-    const participantName = `${user?.fullName ?? (isTeacher ? 'Teacher Demo' : 'Demo Student')} (${isTeacher ? 'Teacher' : 'Student'})`;
+    const displayName =
+      user?.fullName ?? (isTeacher ? 'Teacher Demo' : 'Demo Student');
+    const participantName = `${displayName} (${isTeacher ? 'Teacher' : 'Student'})`;
+
+    // A student the teacher removed must knock and be re-admitted rather
+    // than silently rejoining — see AdmissionService. Without this, LiveKit
+    // itself rejects the reconnect ("invalid token: revoked") because the
+    // identity is still banned from the room after removeParticipant, even
+    // though this is a brand-new JWT.
+    if (isStudent) {
+      const admission = await this.admissionService.checkJoin(
+        DEMO_ROOM_NAME,
+        userId,
+        displayName,
+        'STUDENT',
+      );
+      if (!admission.ok) {
+        return {
+          waitingForAdmission: true as const,
+          admissionId: admission.admissionId,
+          roomName: DEMO_ROOM_NAME,
+        };
+      }
+    }
 
     const at = new AccessToken(apiKey, apiSecret, {
       identity: userId,
