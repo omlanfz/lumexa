@@ -68,8 +68,35 @@ class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
   private currentCrop: CropRect | null = null;
   private targetCrop: CropRect | null = null;
 
-  async init(opts: Parameters<VideoTransformer<AppearanceOptions>['init']>[0]) {
-    await super.init(opts);
+  // Deliberately NOT calling super.init()/super.restart(): the base
+  // VideoTransformer always calls setupWebGL(canvas), which binds a WebGL2
+  // context to the output canvas. A <canvas>/OffscreenCanvas can only ever
+  // be bound to one context type — once WebGL2 claims it, the getContext
+  // ('2d') call below permanently returns null, so `this.ctx` stayed
+  // undefined and transform() below hit its `!this.ctx` guard and dropped
+  // every frame without ever enqueuing one, which is what made the local
+  // video go solid black the moment any Appearance option (lighting,
+  // touch-up, auto-framing) was turned on. This transformer only ever
+  // draws with Canvas2D, so it sets up its own minimal init/restart
+  // instead of reusing the WebGL-oriented base implementation.
+  async init({ outputCanvas, inputElement: inputVideo }: Parameters<VideoTransformer<AppearanceOptions>['init']>[0]) {
+    if (!(inputVideo instanceof HTMLVideoElement)) {
+      throw TypeError('Video transformer needs a HTMLVideoElement as input');
+    }
+    this.transformer = new TransformStream({
+      transform: (frame, controller) => this.transform(frame, controller),
+    });
+    this.canvas = outputCanvas;
+    this.inputVideo = inputVideo;
+    this.ctx = this.canvas?.getContext('2d') as
+      | OffscreenCanvasRenderingContext2D
+      | CanvasRenderingContext2D
+      | null;
+  }
+
+  async restart({ outputCanvas, inputElement: inputVideo }: Parameters<VideoTransformer<AppearanceOptions>['restart']>[0]) {
+    this.canvas = outputCanvas;
+    this.inputVideo = inputVideo;
     this.ctx = this.canvas?.getContext('2d') as
       | OffscreenCanvasRenderingContext2D
       | CanvasRenderingContext2D
@@ -79,7 +106,7 @@ class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
   async destroy() {
     this.faceDetector?.close();
     this.faceDetector = undefined;
-    await super.destroy();
+    this.canvas = undefined;
   }
 
   update(options: AppearanceOptions) {
