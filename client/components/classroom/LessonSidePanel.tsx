@@ -27,9 +27,14 @@ interface LessonSidePanelProps {
   onClose: () => void;
   focused: boolean;
   onToggleFocused: () => void;
+  /** Docked mode normally sizes via flex (a sibling of the main stage).
+   * While a screen share is fullscreen (see ClassroomRoom), that flex row
+   * is visually covered by the fullscreen video layer, so this instead
+   * renders as a fixed right-side overlay above it. */
+  overlay?: boolean;
 }
 
-export default function LessonSidePanel({ data, onClose, focused, onToggleFocused }: LessonSidePanelProps) {
+export default function LessonSidePanel({ data, onClose, focused, onToggleFocused, overlay }: LessonSidePanelProps) {
   const header = (
     <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--cr-border)] flex-shrink-0">
       <p className="text-sm font-semibold text-[var(--cr-text)] flex items-center gap-2">
@@ -64,6 +69,15 @@ export default function LessonSidePanel({ data, onClose, focused, onToggleFocuse
   if (focused) {
     return (
       <div className="fixed inset-4 sm:inset-8 md:inset-12 z-[80] flex flex-col rounded-2xl border border-[var(--cr-border)] bg-[var(--cr-surface)] shadow-2xl cr-fade-in">
+        {header}
+        {body}
+      </div>
+    );
+  }
+
+  if (overlay) {
+    return (
+      <div className="fixed top-14 bottom-0 right-0 z-40 w-[380px] xl:w-[440px] flex flex-col border-l border-[var(--cr-border)] bg-[var(--cr-surface)] shadow-2xl cr-fade-in">
         {header}
         {body}
       </div>

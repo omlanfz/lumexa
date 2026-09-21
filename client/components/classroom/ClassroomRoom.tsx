@@ -11,11 +11,18 @@
 // no room for a side column, so it keeps the bottom FilmStrip instead.
 //
 // "Presentation Mode" is simply "is anyone currently screen-sharing" (see
-// `presentationMode` below) — it hides the header to give the shared
-// content more room. Per-tile screen-share fullscreen (the ⛶ button) is
-// handled entirely inside Stage/ScreenShareFullscreenChrome via the native
-// Fullscreen API — no page-level state needed here, since the browser
-// itself hides everything outside the fullscreened element.
+// `presentationMode` below) — it only tightens the stage's padding a bit;
+// it never hides the header or bottom control bar, and screen sharing
+// never auto-enters fullscreen. Shared screens sit in Stage's own equal-
+// priority grid instead.
+//
+// Fullscreen (the ⛶ button on a shared-screen tile) is `fullscreenIdentity`
+// state owned here, NOT the browser's per-element Fullscreen API — that
+// API would hide the header/control bar along with everything else, and
+// this classroom wants them to keep working (as an auto-hiding glass
+// overlay) while a shared screen fills the viewport. See the render below:
+// a fixed full-viewport video layer plus the Header/ControlBar re-rendered
+// in their `floating` variant on top, faded in/out by mouse activity.
 
 'use client';
 
@@ -30,8 +37,9 @@ import {
   useTracks,
   isTrackReference,
   RoomAudioRenderer,
+  VideoTrack,
 } from '@livekit/components-react';
-import { AlertTriangle, Hand, PhoneOff } from 'lucide-react';
+import { AlertTriangle, Hand, PhoneOff, Minimize2, Monitor } from 'lucide-react';
 import Header from './Header';
 import Stage from './Stage';
 import FilmStrip from './FilmStrip';
@@ -71,6 +79,11 @@ interface ClassroomRoomProps {
   sessionSubtitle?: string;
   isLive: boolean;
   lessonData: LessonDetailsResponse | null;
+  /** QA-only: a fixed example lesson shown in the View Lesson panel on the
+   * demo room (which has no real ScheduledLesson of its own) — see
+   * getDemoExampleLessonDetails. Deliberately separate from `lessonData`
+   * above so it only affects that panel, not Stage's default content. */
+  demoExampleLesson?: LessonDetailsResponse | null;
   initialBackgroundEffect: BackgroundEffect;
   initialLighting: AppearanceOptions;
   scheduledStart?: string;
@@ -98,6 +111,7 @@ export default function ClassroomRoom({
   sessionSubtitle,
   isLive,
   lessonData,
+  demoExampleLesson,
   initialBackgroundEffect,
   initialLighting,
   scheduledStart,
@@ -111,7 +125,8 @@ export default function ClassroomRoom({
   const participants = useParticipants();
   const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
-  const screenShare = screenTracks.find((t) => isTrackReference(t));
+  const screenShareRefs = screenTracks.filter(isTrackReference);
+  const screenShare = screenShareRefs[0];
   const { chatMessages, send: sendChat } = useChat();
   const { theme, toggle: toggleTheme } = useClassroomTheme();
 
@@ -148,6 +163,12 @@ export default function ClassroomRoom({
   const [timerMilestoneVisible, setTimerMilestoneVisible] = useState(false);
   const [pendingAdmissions, setPendingAdmissions] = useState<PendingAdmission[]>([]);
   const [lessonFocused, setLessonFocused] = useState(false);
+  const [fullscreenIdentity, setFullscreenIdentity] = useState<string | null>(null);
+  const fullscreenTrack = fullscreenIdentity
+    ? screenShareRefs.find((t) => t.participant.identity === fullscreenIdentity)
+    : undefined;
+  const [chromeVisible, setChromeVisible] = useState(true);
+  const chromeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expiredFiredRef = useRef(false);
   const seededEffectsRef = useRef(false);
   const prevRaisedRef = useRef<Record<string, boolean>>({});
@@ -160,13 +181,18 @@ export default function ClassroomRoom({
   // material behind them (see roomForLesson/isLessonRoom on the server).
   // The QA demo room has none — lessonData is simply null for it — but it
   // still gets the full Completed/Incomplete outcome flow (see
-  // EndClassModal) AND the "View Lesson" panel (showing LessonPanel's empty
-  // state) so both can actually be exercised end-to-end while testing,
-  // even though the server ignores the end-class outcome for this room
-  // (no real economics) and there's no lesson content to show. Legacy
-  // marketplace bookings get neither — they're a different flow entirely.
+  // EndClassModal) AND the "View Lesson" panel (showing a fixed example —
+  // see demoExampleLesson) so both can actually be exercised end-to-end
+  // while testing, even though the server ignores the end-class outcome
+  // for this room (no real economics) and the lesson content shown there
+  // isn't tied to any real progress. Legacy marketplace bookings get
+  // neither — they're a different flow entirely.
   const isCurriculumLesson = roomName.startsWith('lesson-');
   const isLessonFlow = isCurriculumLesson || !!demo;
+  // Stage's own default content (priority #3, see Stage.tsx) always uses
+  // `lessonData` untouched — only the View Lesson panel falls back to the
+  // demo example, so demo's main stage keeps showing the camera by default.
+  const lessonPanelData = lessonData ?? (demo ? demoExampleLesson ?? null : null);
   const isRecordingLive = !!classroomState.recording;
   const presentationMode = !!screenShare;
   const expectedDurationMinutes = classType === 'BATCH' ? 60 : 45;
@@ -336,8 +362,50 @@ export default function ClassroomRoom({
     if (activePanel !== 'lesson') setLessonFocused(false);
   }, [activePanel]);
 
+  // Auto-hide the floating header/control bar a few seconds after the last
+  // pointer/keyboard activity while a screen share is fullscreen; any
+  // activity brings them back immediately.
+  const bumpChrome = () => {
+    setChromeVisible(true);
+    if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
+    chromeHideTimerRef.current = setTimeout(() => setChromeVisible(false), 3000);
+  };
+
+  useEffect(() => {
+    if (!fullscreenIdentity) {
+      if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
+      setChromeVisible(true);
+      return;
+    }
+    bumpChrome();
+    return () => {
+      if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
+    };
+  }, [fullscreenIdentity]);
+
+  // Drop out of fullscreen automatically the moment its share ends.
+  useEffect(() => {
+    if (fullscreenIdentity && !screenShareRefs.some((t) => t.participant.identity === fullscreenIdentity)) {
+      setFullscreenIdentity(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullscreenIdentity, screenShareRefs.map((t) => t.participant.identity).join(',')]);
+
+  useEffect(() => {
+    if (!fullscreenIdentity) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFullscreenIdentity(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreenIdentity]);
+
   const handleTogglePin = (identity: string) => {
     setPinnedIdentity((prev) => (prev === identity ? null : identity));
+  };
+
+  const handleToggleFullscreen = (identity: string) => {
+    setFullscreenIdentity((prev) => (prev === identity ? null : identity));
   };
 
   const handStripExcludeIdentity =
@@ -385,25 +453,72 @@ export default function ClassroomRoom({
     return null;
   })();
 
+  const headerEl = (
+    <Header
+      sessionTitle={sessionTitle}
+      sessionSubtitle={sessionSubtitle}
+      isLive={isLive}
+      recording={isRecordingLive}
+      scheduledStart={scheduledStart}
+      expectedDurationMinutes={expectedDurationMinutes}
+      onTimerMilestone={() => {
+        setTimerMilestoneVisible(true);
+        setTimeout(() => setTimerMilestoneVisible(false), 8000);
+      }}
+      theme={theme}
+      onToggleTheme={toggleTheme}
+      floating={!!fullscreenTrack}
+    />
+  );
+
   return (
-    <div ref={rootRef} className="cr-root h-screen w-full flex flex-col overflow-hidden" data-theme={theme}>
+    <div
+      ref={rootRef}
+      className="cr-root h-screen w-full flex flex-col overflow-hidden relative"
+      data-theme={theme}
+      onMouseMove={fullscreenTrack ? bumpChrome : undefined}
+      onPointerDown={fullscreenTrack ? bumpChrome : undefined}
+      onTouchStart={fullscreenTrack ? bumpChrome : undefined}
+    >
       <RoomAudioRenderer />
 
-      {!presentationMode && (
-        <Header
-          sessionTitle={sessionTitle}
-          sessionSubtitle={sessionSubtitle}
-          isLive={isLive}
-          recording={isRecordingLive}
-          scheduledStart={scheduledStart}
-          expectedDurationMinutes={expectedDurationMinutes}
-          onTimerMilestone={() => {
-            setTimerMilestoneVisible(true);
-            setTimeout(() => setTimerMilestoneVisible(false), 8000);
-          }}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-        />
+      {fullscreenTrack && (
+        <div className="fixed inset-0 z-30 bg-black">
+          <VideoTrack trackRef={fullscreenTrack} className="w-full h-full object-contain bg-black" />
+          <div
+            className={`absolute top-[72px] right-4 flex items-center gap-2 transition-opacity duration-300 ${
+              chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
+              <Monitor size={12} />
+              {fullscreenTrack.participant.isLocal
+                ? 'You are presenting'
+                : `${parseParticipantMeta(fullscreenTrack.participant.identity, fullscreenTrack.participant.name || '').displayName} is presenting`}
+            </div>
+            <button
+              onClick={() => setFullscreenIdentity(null)}
+              data-tooltip="Exit fullscreen"
+              data-tooltip-align="end"
+              className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 border border-white/15 backdrop-blur flex items-center justify-center text-white transition-colors"
+            >
+              <Minimize2 size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {fullscreenTrack ? (
+        <div
+          className={`cr-root fixed top-0 inset-x-0 z-40 transition-opacity duration-300 ${
+            chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          }`}
+          data-theme="dark"
+        >
+          {headerEl}
+        </div>
+      ) : (
+        headerEl
       )}
 
       <div className="flex-1 flex overflow-hidden min-h-0">
@@ -477,15 +592,8 @@ export default function ClassroomRoom({
               onStopShare={() => void localParticipant.setScreenShareEnabled(false)}
               isTeacher={isTeacher}
               onForceStopShare={isTeacher ? handleForceStopShare : undefined}
-              micEnabled={isMicrophoneEnabled}
-              camEnabled={isCameraEnabled}
-              screenShareEnabled={isScreenShareEnabled}
-              micDisabledByTeacher={micDisabledByTeacher}
-              onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-              onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
-              onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
-              recordingState={recordingState}
-              onToggleRecording={() => void handleToggleRecording()}
+              fullscreenIdentity={fullscreenIdentity}
+              onToggleFullscreen={handleToggleFullscreen}
             />
             <ReactionsOverlay reactions={reactions} />
           </div>
@@ -515,15 +623,22 @@ export default function ClassroomRoom({
 
         {activePanel === 'lesson' && !observerMode && (
           <LessonSidePanel
-            data={lessonData}
+            data={lessonPanelData}
             onClose={() => setActivePanel(null)}
             focused={lessonFocused}
             onToggleFocused={() => setLessonFocused((v) => !v)}
+            overlay={!!fullscreenTrack}
           />
         )}
 
         {activePanel && activePanel !== 'lesson' && !observerMode && (
-          <div className="w-[320px] flex-shrink-0 border-l border-[var(--cr-border)] cr-fade-in">
+          <div
+            className={
+              fullscreenTrack
+                ? 'fixed top-14 bottom-0 right-0 z-40 w-[320px] border-l border-[var(--cr-border)] bg-[var(--cr-surface)] shadow-2xl cr-fade-in'
+                : 'w-[320px] flex-shrink-0 border-l border-[var(--cr-border)] cr-fade-in'
+            }
+          >
             {activePanel === 'chat' ? (
               <ChatPanel
                 messages={chatMessages}
@@ -555,53 +670,75 @@ export default function ClassroomRoom({
         )}
       </div>
 
-      {observerMode ? (
-        <div className="flex items-center justify-center h-[60px] flex-shrink-0 border-t border-[var(--cr-border)] bg-[var(--cr-bg)]">
-          <button
-            onClick={() => room.disconnect()}
-            className="flex items-center gap-1.5 px-4 h-9 rounded-full bg-[var(--cr-danger)] hover:bg-[var(--cr-danger-hover)] text-white text-sm font-semibold transition-colors"
+      {(() => {
+        const bottomBarEl = observerMode ? (
+          <div
+            className={`flex items-center justify-center h-[60px] flex-shrink-0 ${
+              fullscreenTrack
+                ? 'bg-black/40 backdrop-blur-xl border-t border-white/10'
+                : 'border-t border-[var(--cr-border)] bg-[var(--cr-bg)]'
+            }`}
           >
-            <PhoneOff size={15} />
-            Leave observation
-          </button>
-        </div>
-      ) : (
-        <ControlBar
-          isTeacher={isTeacher}
-          micEnabled={isMicrophoneEnabled}
-          camEnabled={isCameraEnabled}
-          screenShareEnabled={isScreenShareEnabled}
-          onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-          onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
-          onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
-          micDisabledByTeacher={micDisabledByTeacher}
-          handRaised={!!raisedHands[localParticipant.identity]}
-          onToggleHand={() => setOwnHandRaised(!raisedHands[localParticipant.identity])}
-          activePanel={activePanel}
-          onSetPanel={setActivePanel}
-          unreadChat={unreadChat}
-          participantCount={participants.length}
-          classroomState={classroomState}
-          onPatchState={patchState}
-          onMuteAll={() => void muteAllParticipants(roomName)}
-          recordingState={recordingState}
-          onToggleRecording={() => void handleToggleRecording()}
-          backgroundEffect={effects.backgroundEffect}
-          onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
-          lighting={effects.lighting}
-          onLightingChange={(l) => void effects.setLighting(localVideoTrack, l)}
-          effectsSupported={effects.supported}
-          effectsPending={effects.pending}
-          onUploadImage={(file) => {
-            const url = URL.createObjectURL(file);
-            void effects.setBackground(localVideoTrack, { mode: 'image', imagePath: url, label: 'Custom' });
-          }}
-          onLeave={() => room.disconnect()}
-          onOpenEndClass={() => setShowEndClassModal(true)}
-          endClassDisabledReason={endClassGate}
-          onViewLesson={isLessonFlow ? () => setActivePanel('lesson') : undefined}
-        />
-      )}
+            <button
+              onClick={() => room.disconnect()}
+              className="flex items-center gap-1.5 px-4 h-9 rounded-full bg-[var(--cr-danger)] hover:bg-[var(--cr-danger-hover)] text-white text-sm font-semibold transition-colors"
+            >
+              <PhoneOff size={15} />
+              Leave observation
+            </button>
+          </div>
+        ) : (
+          <ControlBar
+            isTeacher={isTeacher}
+            micEnabled={isMicrophoneEnabled}
+            camEnabled={isCameraEnabled}
+            screenShareEnabled={isScreenShareEnabled}
+            onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+            onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
+            onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
+            micDisabledByTeacher={micDisabledByTeacher}
+            handRaised={!!raisedHands[localParticipant.identity]}
+            onToggleHand={() => setOwnHandRaised(!raisedHands[localParticipant.identity])}
+            activePanel={activePanel}
+            onSetPanel={setActivePanel}
+            unreadChat={unreadChat}
+            participantCount={participants.length}
+            classroomState={classroomState}
+            onPatchState={patchState}
+            onMuteAll={() => void muteAllParticipants(roomName)}
+            recordingState={recordingState}
+            onToggleRecording={() => void handleToggleRecording()}
+            backgroundEffect={effects.backgroundEffect}
+            onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
+            lighting={effects.lighting}
+            onLightingChange={(l) => void effects.setLighting(localVideoTrack, l)}
+            effectsSupported={effects.supported}
+            effectsPending={effects.pending}
+            onUploadImage={(file) => {
+              const url = URL.createObjectURL(file);
+              void effects.setBackground(localVideoTrack, { mode: 'image', imagePath: url, label: 'Custom' });
+            }}
+            onLeave={() => room.disconnect()}
+            onOpenEndClass={() => setShowEndClassModal(true)}
+            endClassDisabledReason={endClassGate}
+            onViewLesson={isLessonFlow ? () => setActivePanel('lesson') : undefined}
+            floating={!!fullscreenTrack}
+          />
+        );
+
+        return fullscreenTrack ? (
+          <div
+            className={`cr-root fixed bottom-0 inset-x-0 z-40 transition-opacity duration-300 ${
+              chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+            data-theme="dark"
+          >
+            {bottomBarEl}
+          </div>
+        ) : (
+          bottomBarEl
+        );
+      })()}
 
       {showEndClassModal && (
         <EndClassModal

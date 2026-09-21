@@ -83,6 +83,11 @@ interface ControlBarProps {
    * demo room or a legacy marketplace booking) — hides the "View Lesson"
    * item entirely rather than showing it disabled. */
   onViewLesson?: () => void;
+
+  /** Translucent glassmorphism variant, forced to a dark palette regardless
+   * of the room's own theme — used only when floating over a fullscreened
+   * shared screen (see ClassroomRoom). */
+  floating?: boolean;
 }
 
 export default function ControlBar({
@@ -116,6 +121,7 @@ export default function ControlBar({
   onOpenEndClass,
   endClassDisabledReason,
   onViewLesson,
+  floating,
 }: ControlBarProps) {
   const [openPopover, setOpenPopover] = useState<PopoverKind>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -277,7 +283,9 @@ export default function ControlBar({
   return (
     <div
       ref={containerRef}
-      className="flex items-center justify-between gap-2 px-3 sm:px-5 h-[76px] flex-shrink-0 border-t border-[var(--cr-border)] bg-[var(--cr-bg)]"
+      className={`flex items-center justify-between gap-2 px-3 sm:px-5 h-[76px] flex-shrink-0 ${
+        floating ? 'bg-black/40 backdrop-blur-xl border-t border-white/10' : 'border-t border-[var(--cr-border)] bg-[var(--cr-bg)]'
+      }`}
     >
       {isTeacher ? (
         <>

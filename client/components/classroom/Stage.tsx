@@ -5,12 +5,15 @@
 //      lets everyone share without asking the teacher first, including
 //      several people at once (a full batch can all share at the same
 //      time), and EVERY participant sees EVERY currently-shared screen at
-//      once — a responsive grid, not a single "featured" tile with the
-//      rest hidden behind a switcher. Each remote tile gets its own ⛶
-//      fullscreen toggle (native Fullscreen API, scoped to that one tile);
-//      while a tile is fullscreen, a floating draggable "PIP" participants
-//      window and a small auto-hiding control bar ride along inside it —
-//      see ScreenShareFullscreenChrome.
+//      once, all equal size/priority in a responsive grid — never a single
+//      "featured" tile with the rest hidden. The header and bottom control
+//      bar stay visible as normal; sharing never auto-hides them or auto-
+//      enters fullscreen. Each tile gets its own ⛶ fullscreen toggle —
+//      clicking it hands the chosen identity up to ClassroomRoom, which
+//      renders that one tile covering the whole viewport with the header/
+//      control bar turned into an auto-hiding glass overlay on top (see
+//      ClassroomRoom's `fullscreenIdentity` state) — never real per-
+//      element Fullscreen API, so the header/bar can float above it.
 //   2. A teacher spotlight, or a locally pinned participant
 //   3. The lesson material for this session, if any
 //   4. The teacher's camera, prominent, as the calm default
@@ -29,15 +32,12 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
 import { Monitor, MonitorOff, Maximize2, Minimize2, MonitorX } from 'lucide-react';
 import { Track } from 'livekit-client';
 import { isTrackReference, VideoTrack, useTracks } from '@livekit/components-react';
 import type { TrackReferenceOrPlaceholder, TrackReference } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
 import LessonPanel from './LessonPanel';
-import ScreenShareFullscreenChrome from './ScreenShareFullscreenChrome';
-import type { RecordingUiState } from './ControlBar';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 import { parseParticipantMeta } from '@/lib/classroom/types';
 
@@ -54,64 +54,35 @@ function MainFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface FullscreenChromeProps {
-  cameraTracks: TrackReferenceOrPlaceholder[];
-  raisedHands: Record<string, boolean>;
-  isTeacher: boolean;
-  micEnabled: boolean;
-  camEnabled: boolean;
-  screenShareEnabled: boolean;
-  micDisabledByTeacher?: boolean;
-  onToggleMic: () => void;
-  onToggleCam: () => void;
-  onToggleScreenShare: () => void;
-  recordingState: RecordingUiState;
-  onToggleRecording: () => void;
-}
-
 /** One tile per active screen share, remote or local — every tile shows
  * the real video and gets its own fullscreen toggle. The button lives in
  * a dedicated always-rendered layer so it can never silently disappear
  * (explicit fallback icon + high-contrast chip, not just a bare icon on
- * transparent black — visible over both light and dark shared content). */
+ * transparent black — visible over both light and dark shared content).
+ * Fullscreen itself is NOT the browser's per-element Fullscreen API — see
+ * the file header comment — so toggling it is just reporting the choice
+ * up to the caller. */
 function ScreenShareTile({
   trackRef,
   isTeacher,
   isLocal,
+  isFullscreen,
+  onToggleFullscreen,
   onForceStopShare,
   onStopOwnShare,
-  fullscreenChromeProps,
 }: {
   trackRef: TrackReference;
   isTeacher: boolean;
   isLocal: boolean;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
   onForceStopShare?: (identity: string) => void;
   onStopOwnShare?: () => void;
-  fullscreenChromeProps: FullscreenChromeProps;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const meta = parseParticipantMeta(trackRef.participant.identity, trackRef.participant.name || '');
 
-  useEffect(() => {
-    const onChange = () => setIsFullscreen(document.fullscreenElement === containerRef.current);
-    document.addEventListener('fullscreenchange', onChange);
-    return () => document.removeEventListener('fullscreenchange', onChange);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (document.fullscreenElement === containerRef.current) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      containerRef.current?.requestFullscreen?.().catch(() => {});
-    }
-  };
-
   return (
-    <div
-      ref={containerRef}
-      className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
-    >
+    <div className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative">
       <VideoTrack trackRef={trackRef} className="w-full h-full object-contain bg-black" />
       <div className="absolute top-3 left-3 flex items-center gap-2">
         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
@@ -138,14 +109,12 @@ function ScreenShareTile({
         )}
       </div>
       <button
-        onClick={toggleFullscreen}
+        onClick={onToggleFullscreen}
         data-tooltip={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 border border-white/15 backdrop-blur flex items-center justify-center text-white transition-colors"
       >
         {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
       </button>
-
-      {isFullscreen && <ScreenShareFullscreenChrome {...fullscreenChromeProps} onExit={toggleFullscreen} />}
     </div>
   );
 }
@@ -166,17 +135,10 @@ interface StageProps {
   onStopShare: () => void;
   isTeacher: boolean;
   onForceStopShare?: (identity: string) => void;
-  // Passed straight through to whichever tile is currently fullscreen, for
-  // its embedded PIP participants window + floating control bar.
-  micEnabled: boolean;
-  camEnabled: boolean;
-  screenShareEnabled: boolean;
-  micDisabledByTeacher?: boolean;
-  onToggleMic: () => void;
-  onToggleCam: () => void;
-  onToggleScreenShare: () => void;
-  recordingState: RecordingUiState;
-  onToggleRecording: () => void;
+  /** Identity of the screen share ClassroomRoom is currently rendering
+   * fullscreen (or null) — see the file header comment. */
+  fullscreenIdentity: string | null;
+  onToggleFullscreen: (identity: string) => void;
 }
 
 export default function Stage({
@@ -189,15 +151,8 @@ export default function Stage({
   onStopShare,
   isTeacher,
   onForceStopShare,
-  micEnabled,
-  camEnabled,
-  screenShareEnabled,
-  micDisabledByTeacher,
-  onToggleMic,
-  onToggleCam,
-  onToggleScreenShare,
-  recordingState,
-  onToggleRecording,
+  fullscreenIdentity,
+  onToggleFullscreen,
 }: StageProps) {
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenShareRefs = screenTracks.filter(isTrackReference);
@@ -205,20 +160,6 @@ export default function Stage({
   // ── 1. Screen share(s) ─────────────────────────────────────────────────
   if (screenShareRefs.length > 0) {
     const cols = gridColumns(screenShareRefs.length);
-    const fullscreenChromeProps: FullscreenChromeProps = {
-      cameraTracks,
-      raisedHands,
-      isTeacher,
-      micEnabled,
-      camEnabled,
-      screenShareEnabled,
-      micDisabledByTeacher,
-      onToggleMic,
-      onToggleCam,
-      onToggleScreenShare,
-      recordingState,
-      onToggleRecording,
-    };
 
     return (
       <div
@@ -231,9 +172,10 @@ export default function Stage({
             trackRef={t}
             isTeacher={isTeacher}
             isLocal={t.participant.isLocal}
+            isFullscreen={fullscreenIdentity === t.participant.identity}
+            onToggleFullscreen={() => onToggleFullscreen(t.participant.identity)}
             onForceStopShare={onForceStopShare}
             onStopOwnShare={onStopShare}
-            fullscreenChromeProps={fullscreenChromeProps}
           />
         ))}
       </div>

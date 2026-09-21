@@ -2,9 +2,11 @@
 //
 // Top bar: Lumexa branding, current lesson/session title, LIVE status, the
 // server-anchored class timer, and the classroom's own light/dark toggle.
-// Kept subtle — this is a video call, not a marketing page. Hidden entirely
-// in presentation mode (see ClassroomRoom) so the shared content gets the
-// full vertical space.
+// Kept subtle — this is a video call, not a marketing page. Stays visible
+// during normal screen sharing (shared screens sit in the equal-priority
+// grid, not a special cropped "presentation" layout) — it only becomes the
+// `floating` glassmorphism variant while a screen-share tile is in focus
+// mode (see ClassroomRoom), auto-hiding on inactivity there.
 
 'use client';
 
@@ -22,6 +24,10 @@ interface HeaderProps {
   onTimerMilestone?: () => void;
   theme: ClassroomTheme;
   onToggleTheme: () => void;
+  /** Translucent glassmorphism variant, forced to a dark palette regardless
+   * of the room's own theme — used only when floating over a fullscreened
+   * shared screen (see ClassroomRoom). */
+  floating?: boolean;
 }
 
 export default function Header({
@@ -34,9 +40,16 @@ export default function Header({
   onTimerMilestone,
   theme,
   onToggleTheme,
+  floating,
 }: HeaderProps) {
   return (
-    <header className="flex items-center justify-between gap-3 px-3 sm:px-5 h-14 flex-shrink-0 border-b border-[var(--cr-border)]">
+    <header
+      className={`flex items-center justify-between gap-3 px-3 sm:px-5 h-14 flex-shrink-0 ${
+        floating
+          ? 'bg-black/40 backdrop-blur-xl border-b border-white/10'
+          : 'border-b border-[var(--cr-border)]'
+      }`}
+    >
       <div className="flex items-center gap-2.5 min-w-0">
         <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg flex-shrink-0" />
         <div className="min-w-0 hidden sm:block">
