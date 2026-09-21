@@ -21,6 +21,9 @@ export interface ClassRow {
   paymentStatus: string | null;
   amountCents: number | null;
   recordingUrl: string | null;
+  recordingStatus: string;
+  recordingMergeError: string | null;
+  isLive: boolean;
   displayStatus: string;
 }
 
@@ -70,8 +73,17 @@ export default function ClassRowActions({
                 Refund
               </DropdownItem>
             )}
-            {row.kind === "BOOKING" && (
-              <DropdownItem onClick={() => { setModal("recording"); close(); }}>View recording</DropdownItem>
+            <DropdownItem onClick={() => { setModal("recording"); close(); }}>View recording</DropdownItem>
+            {row.recordingStatus === "FAILED" && (
+              <DropdownItem
+                onClick={async () => {
+                  close();
+                  await api.post(`/admin/classes/${row.kind}/${row.id}/recording-retry`);
+                  onChanged();
+                }}
+              >
+                Retry recording
+              </DropdownItem>
             )}
             {row.kind === "BOOKING" && (
               <DropdownItem onClick={() => { setModal("history"); close(); }}>Reschedule history</DropdownItem>
@@ -419,32 +431,37 @@ function RefundModal({
 }
 
 function RecordingModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
-  const [url, setUrl] = useState<string | null | undefined>(row.recordingUrl);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .get(`/admin/bookings/${row.id}/recording`)
-      .then((res) => setUrl(res.data.recordingUrl))
-      .finally(() => setLoading(false));
-  }, [row.id]);
-
   return (
     <Modal title="Class recording" onClose={onClose}>
-      {loading && <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>}
-      {!loading && url && (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-medium text-[var(--a-accent)] hover:underline break-all"
-        >
-          {url}
-        </a>
-      )}
-      {!loading && !url && (
-        <p className="text-sm text-[var(--a-text-muted)]">No recording available for this class.</p>
-      )}
+      <div className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+          Status: {row.recordingStatus}
+        </p>
+        {row.recordingStatus === "PROCESSING" && (
+          <p className="text-sm text-[var(--a-text-muted)]">Processing recording… check back shortly.</p>
+        )}
+        {row.recordingStatus === "FAILED" && (
+          <p className="text-sm text-[var(--a-danger)]">
+            {row.recordingMergeError || "Merging this recording failed."} Use &ldquo;Retry recording&rdquo; from the
+            Actions menu.
+          </p>
+        )}
+        {row.recordingUrl ? (
+          <a
+            href={row.recordingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-[var(--a-accent)] hover:underline break-all"
+          >
+            {row.recordingUrl}
+          </a>
+        ) : (
+          row.recordingStatus !== "PROCESSING" &&
+          row.recordingStatus !== "FAILED" && (
+            <p className="text-sm text-[var(--a-text-muted)]">No recording available for this class.</p>
+          )
+        )}
+      </div>
     </Modal>
   );
 }

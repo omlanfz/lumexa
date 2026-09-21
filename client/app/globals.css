@@ -691,11 +691,32 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   LUMEXA CLASSROOM — dark, Zoom/Meet-inspired video experience.
-   Deliberately theme-independent (always dark) like other pro conferencing
-   apps, regardless of the site's light/dark mode setting.
+   LUMEXA CLASSROOM — Zoom/Meet-inspired video experience with its OWN
+   light/dark toggle, independent of the rest of the site's theme and never
+   synced between participants (see Header's ThemeToggle + useClassroomTheme
+   — localStorage only, per browser). Light is the default.
    ══════════════════════════════════════════════════════════════════════════════ */
 :root {
+  /* Light (default) */
+  --cr-bg:            #F5F6FA;
+  --cr-surface:       #FFFFFF;
+  --cr-surface-2:     #F0F1F7;
+  --cr-surface-3:     #E4E6F1;
+  --cr-border:        rgba(20, 21, 43, 0.09);
+  --cr-border-strong: rgba(20, 21, 43, 0.18);
+  --cr-text:          #14152B;
+  --cr-text-muted:    #5B5E78;
+  --cr-text-faint:    #8B8EA6;
+  --cr-accent:        #0F9C8D;
+  --cr-accent-2:      #6552E0;
+  --cr-accent-glow:   rgba(15, 156, 141, 0.22);
+  --cr-danger:        #E0313F;
+  --cr-danger-hover:  #C42733;
+  --cr-warning:       #B9790A;
+  --cr-live:          #E0313F;
+}
+
+.cr-root[data-theme='dark'] {
   --cr-bg:            #08090F;
   --cr-surface:       #12141F;
   --cr-surface-2:     #191C2B;
@@ -717,8 +738,25 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
 .cr-root {
   background: var(--cr-bg);
   color: var(--cr-text);
-  color-scheme: dark;
+  color-scheme: light;
 }
+.cr-root[data-theme='dark'] { color-scheme: dark; }
+
+/* Subtle Lumexa watermark for the classroom's main stage area — never in a
+   corner and never overlapping the header, controls, participant tiles or
+   shared content, which all paint their own opaque backgrounds above it. */
+.cr-watermark {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('/logo-mark.png');
+  background-repeat: no-repeat;
+  background-position: 38% 62%;
+  background-size: 120px;
+  opacity: 0.05;
+}
+.cr-root[data-theme='dark'] .cr-watermark { opacity: 0.08; }
 
 .cr-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
 .cr-scroll::-webkit-scrollbar-track { background: transparent; }

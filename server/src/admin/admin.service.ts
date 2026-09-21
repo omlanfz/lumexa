@@ -13,6 +13,7 @@ import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ClassroomService } from '../classroom/classroom.service';
 import { signedDocumentUrl } from '../lib/cloudinary';
 
 // Friendly labels for verification document types — keep in sync with
@@ -87,8 +88,17 @@ export class AdminService {
     private studentLedger: StudentLedgerService,
     private scheduling: SchedulingService,
     private notifications: NotificationsService,
+    private classroom: ClassroomService,
     private jwt: JwtService,
   ) {}
+
+  async joinLiveClass(kind: 'BOOKING' | 'LESSON', id: string) {
+    return this.classroom.adminJoinLiveClass(kind, id);
+  }
+
+  async retryRecording(kind: 'BOOKING' | 'LESSON', id: string) {
+    return this.classroom.retryRecordingMerge(kind, id);
+  }
 
   // ═══════════════════════════════════════════════════════════════════════
   // Dashboard
@@ -382,6 +392,8 @@ export class AdminService {
           ),
     ]);
 
+    const now = new Date();
+
     const bookingRows = bookings.map((b) => ({
       id: b.id,
       kind: 'BOOKING' as const,
@@ -399,6 +411,13 @@ export class AdminService {
       paymentStatus: b.paymentStatus as string | null,
       amountCents: b.amountCents,
       recordingUrl: b.recordingUrl,
+      recordingStatus: b.recordingStatus as string,
+      recordingMergeError: b.recordingMergeError,
+      // Booking has no join-attendance tracking, so "live" is approximated
+      // by the scheduled time window plus payment not yet captured (which
+      // only happens once the class is confirmed over — see
+      // ClassroomService.finalizeBookingIfDue).
+      isLive: b.paymentStatus === 'PENDING' && now >= b.shift.start && now <= b.shift.end,
       displayStatus: this.computeDisplayStatus(b as any),
       raw: b,
     }));
@@ -419,7 +438,10 @@ export class AdminService {
       lessonNumber: l.lessonNumber as number | null,
       paymentStatus: null as string | null,
       amountCents: null as number | null,
-      recordingUrl: null as string | null,
+      recordingUrl: l.recordingUrl,
+      recordingStatus: l.recordingStatus as string,
+      recordingMergeError: l.recordingMergeError,
+      isLive: l.status === 'UPCOMING' && !!l.teacherJoinedAt,
       displayStatus: l.status === 'UPCOMING' ? 'SCHEDULED' : l.status,
       raw: l,
     }));

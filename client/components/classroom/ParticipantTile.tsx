@@ -9,7 +9,7 @@
 import { Mic, MicOff, Hand, Pin, PinOff, Wifi, WifiOff, GraduationCap } from 'lucide-react';
 import type { Participant } from 'livekit-client';
 import { ConnectionQuality } from 'livekit-client';
-import { isTrackReference, VideoTrack, useConnectionQualityIndicator } from '@livekit/components-react';
+import { isTrackReference, VideoTrack, useConnectionQualityIndicator, useIsSpeaking } from '@livekit/components-react';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import { parseParticipantMeta } from '@/lib/classroom/types';
 
@@ -55,14 +55,19 @@ export default function ParticipantTile({
   const hasVideo = isTrackReference(trackRef) && !trackRef.publication.isMuted;
   const micEnabled = participant.isMicrophoneEnabled;
   const isTeacher = meta.role === 'TEACHER';
+  const isSpeaking = useIsSpeaking(participant);
 
   const nameTextSize = size === 'main' ? 'text-sm' : 'text-xs';
   const avatarTextSize = size === 'main' ? 'text-3xl' : size === 'strip' ? 'text-lg' : 'text-xl';
 
   return (
     <div
-      className={`relative w-full h-full rounded-xl overflow-hidden bg-[var(--cr-surface)] border transition-colors ${
-        spotlighted ? 'border-[var(--cr-accent)]' : 'border-[var(--cr-border)]'
+      className={`relative w-full h-full rounded-xl overflow-hidden bg-[var(--cr-surface)] border-2 transition-colors ${
+        isSpeaking && micEnabled
+          ? 'border-[var(--cr-accent)]'
+          : spotlighted
+            ? 'border-[var(--cr-accent)]/60'
+            : 'border-[var(--cr-border)]'
       } ${raised ? 'cr-hand-pulse' : ''}`}
     >
       {hasVideo ? (

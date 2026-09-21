@@ -11,7 +11,10 @@ export type ClassroomToneEvent =
   | 'student-join'
   | 'teacher-leave'
   | 'student-leave'
-  | 'class-expired';
+  | 'class-expired'
+  | 'hand-raised'
+  | 'admission-request'
+  | 'timer-milestone';
 
 let sharedContext: AudioContext | null = null;
 
@@ -43,6 +46,15 @@ const PROFILES: Record<ClassroomToneEvent, ToneProfile> = {
   'teacher-leave': { freqs: [660, 440], duration: 0.22, gain: 0.045 },
   'student-leave': { freqs: [520, 380], duration: 0.2, gain: 0.04 },
   'class-expired': { freqs: [520, 440, 360], duration: 0.55, gain: 0.05 },
+  // A single bright, brief "ping" — distinct from the two-note join/leave
+  // chimes so a raised hand never gets mistaken for someone arriving.
+  'hand-raised': { freqs: [980], duration: 0.14, gain: 0.045 },
+  // A soft rising three-note knock, longer than hand-raised so it reads as
+  // "someone at the door" rather than a quick alert.
+  'admission-request': { freqs: [440, 600, 760], duration: 0.4, gain: 0.045 },
+  // A single low, short tick — meant to be barely noticeable, just enough
+  // to accompany the timer turning red.
+  'timer-milestone': { freqs: [300], duration: 0.18, gain: 0.035 },
 };
 
 export function playClassroomTone(event: ClassroomToneEvent): void {

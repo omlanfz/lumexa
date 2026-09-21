@@ -5,6 +5,7 @@ import { RescheduleModule } from '../reschedule/reschedule.module';
 import { StudentsModule } from '../students/students.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { DisputesModule } from '../disputes/disputes.module';
+import { ClassroomModule } from '../classroom/classroom.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
 
@@ -15,6 +16,7 @@ import { AdminService } from './admin.service';
     StudentsModule,
     SchedulingModule,
     DisputesModule,
+    ClassroomModule,
     // Same signing config as AuthModule — needed so AdminService can issue
     // ordinary login JWTs for the "view dashboard as" impersonation flow.
     JwtModule.register({

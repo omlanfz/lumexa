@@ -16,7 +16,8 @@
 
 'use client';
 
-import { Monitor, MonitorOff, ScreenShareOff } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Monitor, MonitorOff, ScreenShareOff, Maximize2, Minimize2 } from 'lucide-react';
 import { Track } from 'livekit-client';
 import { isTrackReference, VideoTrack, useTracks } from '@livekit/components-react';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
@@ -24,6 +25,38 @@ import ParticipantTile from './ParticipantTile';
 import LessonPanel from './LessonPanel';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 import { parseParticipantMeta } from '@/lib/classroom/types';
+
+/** Fullscreens ONLY the shared-content element itself (via the per-element
+ * Fullscreen API, not the whole page) — no participant tiles exist inside
+ * that subtree, so they can't show up, and only a minimal exit control is
+ * rendered alongside the video. */
+function ScreenShareFullscreenButton({ targetRef }: { targetRef: React.RefObject<HTMLDivElement | null> }) {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === targetRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, [targetRef]);
+
+  const toggle = () => {
+    if (document.fullscreenElement === targetRef.current) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      targetRef.current?.requestFullscreen?.().catch(() => {});
+    }
+  };
+
+  return (
+    <button
+      onClick={toggle}
+      data-tooltip={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+      className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-black/50 hover:bg-black/70 backdrop-blur flex items-center justify-center text-white transition-colors"
+    >
+      {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+    </button>
+  );
+}
 
 interface StageProps {
   cameraTracks: TrackReferenceOrPlaceholder[];
@@ -44,6 +77,7 @@ export default function Stage({
   lessonData,
   onStopShare,
 }: StageProps) {
+  const fullscreenTargetRef = useRef<HTMLDivElement>(null);
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenShare = screenTracks.find((t) => isTrackReference(t));
   const isLocalSharing = screenShare && screenShare.participant.isLocal;
@@ -81,11 +115,15 @@ export default function Stage({
 
     const meta = parseParticipantMeta(screenShare.participant.identity, screenShare.participant.name || '');
     return (
-      <div className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative">
+      <div
+        ref={fullscreenTargetRef}
+        className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
+      >
         <VideoTrack trackRef={screenShare} className="w-full h-full object-contain bg-black" />
         <div className="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
           <Monitor size={12} /> {meta.displayName} is presenting
         </div>
+        <ScreenShareFullscreenButton targetRef={fullscreenTargetRef} />
       </div>
     );
   }
