@@ -15,6 +15,7 @@ interface Recording {
   classDate: string;
   teacherName: string;
   recordingUrl?: string | null;
+  recordingStatus?: string;
   duration?: number;
 }
 
@@ -57,6 +58,7 @@ function RecordingsContent() {
             classDate: b.shift?.start,
             teacherName: b.shift?.teacher?.user?.fullName ?? "Unknown",
             recordingUrl: b.recordingUrl ?? null,
+            recordingStatus: b.recordingStatus,
             duration: b.durationMinutes,
           })),
         );
@@ -140,6 +142,13 @@ function RecordingsContent() {
                   >
                     ▶ Watch
                   </a>
+                ) : r.recordingStatus === "PROCESSING" || r.recordingStatus === "RECORDING" ? (
+                  <span className="text-xs text-amber-500 flex items-center gap-1.5 flex-shrink-0">
+                    <span className="w-3 h-3 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+                    Processing recording…
+                  </span>
+                ) : r.recordingStatus === "FAILED" ? (
+                  <span className="text-xs text-red-500 flex-shrink-0">Recording unavailable</span>
                 ) : (
                   <span className="text-xs dark:text-blue-500 text-blue-400 flex-shrink-0">
                     No recording

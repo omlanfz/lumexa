@@ -49,3 +49,40 @@ export async function updateClassroomState(
   const res = await api.patch(`/classroom/${room}/state`, patch);
   return res.data.state;
 }
+
+export type ClassEndReason = 'STUDENT_NO_SHOW' | 'STUDENT_LEFT_EARLY' | 'TECHNICAL_ISSUE' | 'OTHER';
+
+export async function endClassRequest(
+  room: string,
+  params: { outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED'; reason?: ClassEndReason; note?: string },
+): Promise<void> {
+  await api.post(`/classroom/${room}/end`, params);
+}
+
+export async function sendHeartbeat(room: string): Promise<void> {
+  await api.post(`/classroom/${room}/heartbeat`);
+}
+
+export async function setParticipantMicLocked(room: string, identity: string, locked: boolean): Promise<void> {
+  await api.post(`/classroom/${room}/participant-mic-lock`, { identity, locked });
+}
+
+export interface PendingAdmission {
+  id: string;
+  displayName: string;
+  role: string;
+  requestedAt: string;
+}
+
+export async function listPendingAdmissions(room: string): Promise<PendingAdmission[]> {
+  const res = await api.get(`/classroom/${room}/admissions`);
+  return res.data;
+}
+
+export async function decideAdmission(
+  room: string,
+  admissionId: string,
+  decision: 'APPROVE' | 'DENY',
+): Promise<void> {
+  await api.post(`/classroom/${room}/admissions/${admissionId}/decide`, { decision });
+}

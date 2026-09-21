@@ -74,6 +74,34 @@ function MicTestMeter() {
   );
 }
 
+/** Speaker (audiooutput) selection — nested inside the microphone popover
+ * rather than its own bottom-bar button, matching how most conferencing
+ * apps group "audio" settings together. Silently renders nothing if the
+ * browser doesn't support output-device selection (Safari/Firefox). */
+function SpeakerSection() {
+  const room = useRoomContext();
+  const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({ kind: 'audiooutput', room });
+  if (devices.length === 0) return null;
+
+  return (
+    <div className="border-t border-[var(--cr-border)]">
+      <p className="px-3 pt-2 text-[10px] uppercase tracking-wide text-[var(--cr-text-faint)]">Speaker</p>
+      <div className="py-1 max-h-32 overflow-y-auto cr-scroll">
+        {devices.map((d) => (
+          <button
+            key={d.deviceId}
+            onClick={() => void setActiveMediaDevice(d.deviceId)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-[var(--cr-text)] hover:bg-[var(--cr-surface-2)] transition-colors text-left"
+          >
+            <span className="truncate">{d.label || 'Speaker'}</span>
+            {d.deviceId === activeDeviceId && <Check size={14} className="text-[var(--cr-accent)] flex-shrink-0" />}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DeviceMenu({ kind, onClose }: DeviceMenuProps) {
   const room = useRoomContext();
   const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({ kind, room });
@@ -105,10 +133,13 @@ export default function DeviceMenu({ kind, onClose }: DeviceMenuProps) {
         )}
       </div>
       {kind === 'audioinput' && (
-        <div className="border-t border-[var(--cr-border)]">
-          <p className="px-3 pt-2 text-[10px] uppercase tracking-wide text-[var(--cr-text-faint)]">Test microphone</p>
-          <MicTestMeter />
-        </div>
+        <>
+          <SpeakerSection />
+          <div className="border-t border-[var(--cr-border)]">
+            <p className="px-3 pt-2 text-[10px] uppercase tracking-wide text-[var(--cr-text-faint)]">Test microphone</p>
+            <MicTestMeter />
+          </div>
+        </>
       )}
     </div>
   );

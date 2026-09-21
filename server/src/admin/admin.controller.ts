@@ -174,6 +174,26 @@ export class AdminController {
     return this.adminService.getBookingRecordingUrl(bookingId);
   }
 
+  /** Admin joins an already-live class as a silent, non-disruptive
+   * observer — see ClassroomService.adminJoinLiveClass. `kind` mirrors the
+   * ClassRow.kind the classes list already returns ('BOOKING' | 'LESSON'). */
+  @Post('classes/:kind/:id/join')
+  joinLiveClass(
+    @Param('kind') kind: 'BOOKING' | 'LESSON',
+    @Param('id') id: string,
+  ) {
+    return this.adminService.joinLiveClass(kind, id);
+  }
+
+  /** Retries a FAILED recording merge — see RecordingService.retryMerge. */
+  @Post('classes/:kind/:id/recording-retry')
+  retryRecording(
+    @Param('kind') kind: 'BOOKING' | 'LESSON',
+    @Param('id') id: string,
+  ) {
+    return this.adminService.retryRecording(kind, id);
+  }
+
   @Get('bookings/:bookingId/reschedule-history')
   getBookingRescheduleHistory(@Param('bookingId') bookingId: string) {
     return this.rescheduleService.getHistoryForBooking(bookingId);

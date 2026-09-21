@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import {
   Card,
@@ -40,6 +40,7 @@ const STATUS_OPTIONS = [
 
 export default function ClassesPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [rows, setRows] = useState<ClassRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -265,7 +266,14 @@ export default function ClassesPage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusBadge status={r.displayStatus} />
+                      <div className="flex items-center gap-1.5">
+                        <StatusBadge status={r.displayStatus} />
+                        {r.isLive && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-500 text-[10px] font-bold uppercase tracking-wide">
+                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Live
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {r.paymentStatus ? <StatusBadge status={r.paymentStatus} /> : <span className="text-[var(--a-text-faint)]">—</span>}
@@ -274,7 +282,17 @@ export default function ClassesPage() {
                       {r.amountCents != null ? formatBDT(r.amountCents) : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <ClassRowActions row={r} onChanged={load} />
+                      <div className="flex items-center justify-end gap-1.5">
+                        {r.isLive && (
+                          <button
+                            onClick={() => router.push(`/admin/classroom/${r.kind}/${r.id}`)}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-500 hover:bg-red-400 text-white transition-colors"
+                          >
+                            Join Class
+                          </button>
+                        )}
+                        <ClassRowActions row={r} onChanged={load} />
+                      </div>
                     </td>
                   </tr>
                 ))}

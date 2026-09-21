@@ -187,9 +187,18 @@ model Booking {
   egressId             String?
   paymentIntentId      String?
   paymentStatus        PaymentStatus        @default(PENDING)
-  recordingUrl         String?
-  recordingStatus      RecordingStatus      @default(NONE)
-  recordingStartedAt   DateTime?
+  // Final merged recording (see RecordingSegment) — never set directly by
+  // the Egress webhook anymore, only by RecordingMergeService once every
+  // segment has settled and been concatenated.
+  recordingUrl            String?
+  recordingStatus         RecordingStatus @default(NONE)
+  recordingStartedAt      DateTime?
+  recordingFileSizeBytes  Int?
+  recordingMergedAt       DateTime?
+  recordingMergeAttempts  Int             @default(0)
+  recordingMergeError     String?
+  endReason               ClassEndReason?
+  endNote                 String?
   shift                Shift                @relation(fields: [shiftId], references: [id])
   student              Student?             @relation(fields: [studentId], references: [id])
   studentUser          User?                @relation("StudentBookings", fields: [studentUserId], references: [id])
@@ -197,6 +206,7 @@ model Booking {
   payoutEntries        PayoutEntry[]
   review               Review?
   studentLedgerEntries StudentLedgerEntry[]
+  recordingSegments    RecordingSegment[]
 
   @@index([studentId])
   @@index([studentUserId])
@@ -493,16 +503,116 @@ enum LessonStatus {
   CANCELLED
 }
 
-// Lifecycle of a LiveKit Egress recording of a ScheduledLesson's room.
-// AVAILABLE is only reached once the Egress webhook confirms the MP4
-// actually finished uploading to S3/MinIO — never optimistically set when
-// the teacher clicks Stop (see ClassroomService.stopTeacherRecording).
+// Lifecycle of a class's FINAL recording (the merge of every RecordingSegment
+// started/stopped during the class). AVAILABLE is only reached once
+// RecordingMergeService has actually concatenated and uploaded the merged
+// file — never optimistically set when the teacher clicks Stop or when a
+// single segment's egress completes (see RecordingSegmentStatus for that).
 enum RecordingStatus {
   NONE
-  RECORDING
-  PROCESSING
+  RECORDING // at least one segment is currently recording
+  PROCESSING // class ended / cap hit; segments settling or merge in progress
   AVAILABLE
+  FAILED // merge failed — see recordingMergeError; retryable by admin
+  EXPIRED // deleted by the storage retention policy
+}
+
+// One row per Record start→stop click. A class's final recording is these,
+// concatenated in start-time order once every segment has settled (see
+// RecordingMergeService). Never deleted on failure — a FAILED segment is
+// simply excluded from the merge and left for admins to see why.
+enum RecordingSegmentStatus {
+  RECORDING // egress actively running
+  UPLOADING // teacher stopped it / cap hit; waiting on the Egress webhook
+  AVAILABLE // Egress webhook confirmed the raw file landed in S3/MinIO
   FAILED
+  EXPIRED // raw file removed from storage after being folded into the final recording
+}
+
+model RecordingSegment {
+  id                String                 @id @default(uuid())
+  room              String
+  bookingId         String?
+  scheduledLessonId String?
+  egressId          String?
+  status            RecordingSegmentStatus @default(RECORDING)
+  storagePath       String?
+  fileSizeBytes     Int?
+  startedAt         DateTime               @default(now())
+  endedAt           DateTime?
+  failureReason     String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  booking         Booking?         @relation(fields: [bookingId], references: [id])
+  scheduledLesson ScheduledLesson? @relation(fields: [scheduledLessonId], references: [id])
+
+  @@index([room])
+  @@index([bookingId])
+  @@index([scheduledLessonId])
+  @@index([status])
+  @@index([egressId])
+}
+
+// Why a class ended without being cleanly COMPLETED (or, for STUDENT_NO_SHOW/
+// TECHNICAL_ISSUE/OTHER, alongside a COMPLETED end too, for audit context).
+// TEACHER_DISCONNECTED is only ever set by the server-side presence sweep,
+// never chosen by a teacher.
+enum ClassEndReason {
+  STUDENT_NO_SHOW
+  STUDENT_LEFT_EARLY
+  TECHNICAL_ISSUE
+  TEACHER_DISCONNECTED
+  OTHER
+}
+
+// Heartbeat presence, keyed by (room, userId) — the LiveKit participant
+// identity is always the userId (see ClassroomService.join*). Used to detect
+// a teacher who has dropped off the call without formally ending it, so the
+// class can be auto-ended after a grace period rather than left "live"
+// forever (see ClassroomPresenceService).
+model ClassroomPresence {
+  id             String    @id @default(uuid())
+  room           String
+  userId         String
+  role           String // 'TEACHER' | 'STUDENT'
+  lastSeenAt     DateTime  @default(now())
+  disconnectedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([room, userId])
+  @@index([room])
+  @@index([disconnectedAt])
+}
+
+enum ClassroomAdmissionStatus {
+  PENDING
+  APPROVED
+  DENIED
+  REMOVED // teacher removed this participant; they must be re-admitted
+}
+
+// Google-Meet-style "knock to rejoin" after a teacher removes a participant.
+// A plain join always succeeds unless the most recent row for (room, userId)
+// is REMOVED — in that case join instead creates/reuses a PENDING row here
+// and the student waits for the teacher to Admit/Deny (see
+// ClassroomAdmissionService).
+model ClassroomAdmission {
+  id          String                   @id @default(uuid())
+  room        String
+  userId      String
+  displayName String
+  role        String
+  status      ClassroomAdmissionStatus @default(PENDING)
+  requestedAt DateTime                 @default(now())
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([room, userId, createdAt])
+  @@index([room, status])
 }
 
 model RecurringSlot {
@@ -553,17 +663,26 @@ model ScheduledLesson {
   studentJoinedAt DateTime?
 
   // ─── Recording (self-hosted LiveKit Egress → MinIO/S3) ──────────────────
-  // Set only when the teacher explicitly clicks Record — never on room
-  // creation/join (see ClassroomService.startTeacherRecording).
-  egressId           String?
-  recordingStatus    RecordingStatus @default(NONE)
-  recordingUrl       String?
-  recordingStartedAt DateTime?
+  // Legacy single-egress fields kept for the Booking flow's field parity;
+  // for the curriculum flow these now represent the FINAL merged recording
+  // (see RecordingSegment — one row per Record start/stop, concatenated by
+  // RecordingMergeService once the class ends).
+  egressId               String?
+  recordingStatus        RecordingStatus @default(NONE)
+  recordingUrl           String?
+  recordingStartedAt     DateTime?
+  recordingFileSizeBytes Int?
+  recordingMergedAt      DateTime?
+  recordingMergeAttempts Int             @default(0)
+  recordingMergeError    String?
 
-  // Set when the teacher manually ends the class (COMPLETED or
-  // PARTIALLY_COMPLETED) — never set by any automatic/scheduled process.
+  // Set when the teacher manually ends the class (or the server auto-ends
+  // it after a teacher-disconnect timeout) — never set by any other
+  // automatic/scheduled process.
   endedAt      DateTime?
   endedByRole  String?
+  endReason    ClassEndReason?
+  endNote      String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -571,6 +690,7 @@ model ScheduledLesson {
   assessmentAttempt AssessmentAttempt?
   submission        Submission?
   ledgerEntries     StudentLedgerEntry[]
+  recordingSegments RecordingSegment[]
 
   // NOTE: uniqueness of (studentUserId, courseId, lessonNumber) is enforced
   // by a PARTIAL unique index created in migration SQL — scoped to
