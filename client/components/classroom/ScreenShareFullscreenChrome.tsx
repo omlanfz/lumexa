@@ -1,21 +1,20 @@
-// FILE PATH: client/components/classroom/FocusMode.tsx
+// FILE PATH: client/components/classroom/ScreenShareFullscreenChrome.tsx
 //
-// "Focus mode" — entered from the ⛶ button on a shared screen (see Stage).
-// The shared screen becomes the entire viewport; everything else (header,
-// side rail, bottom control bar) is replaced by two small floating pieces:
+// Rendered as CHILDREN of a screen-share tile's own fullscreen target (see
+// the per-tile ⛶ button in Stage.tsx) — never as a separate page-level
+// overlay. The browser's Fullscreen API only paints the fullscreened
+// element and its descendants, so mounting these here is what makes them
+// show up while everything else (header, rail, bottom bar) is naturally
+// hidden by the browser, with zero extra layout-hiding logic needed.
 //
-//   - FloatingParticipants: a draggable little window with participant
-//     camera tiles, resizable between three preset sizes, collapsible down
-//     to a single "Show participants" pill. Deliberately NOT a full PiP
-//     system (no per-tile windows, no freeform resize) — just enough to see
-//     faces without losing the shared screen.
-//   - FloatingControlBar: Mic / Camera / Share / Record / Participants /
-//     Exit — appears on mouse movement, auto-hides after a few seconds of
-//     stillness so it never competes with the content for attention.
-//
-// A multi-share tab strip (when more than one person is presenting) rides
-// along with the control bar's visibility so it doesn't clutter the view
-// either.
+//   - FloatingParticipants: a small draggable window with participant
+//     camera tiles ("PIP"), resizable between three preset sizes,
+//     collapsible down to a single "Show participants" pill. Deliberately
+//     NOT a full per-tile PiP system — just enough to see faces without
+//     losing the shared screen.
+//   - FloatingControlBar: Mic / Camera / Share / Record / Exit fullscreen —
+//     appears on mouse movement, auto-hides after a few seconds of
+//     stillness so it never competes with the shared content.
 
 'use client';
 
@@ -32,16 +31,12 @@ import {
   Loader2,
   Users,
   Minimize2,
-  Monitor,
-  MonitorX,
   GripHorizontal,
   ChevronDown,
 } from 'lucide-react';
-import { VideoTrack } from '@livekit/components-react';
-import type { TrackReferenceOrPlaceholder, TrackReference } from '@livekit/components-core';
+import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
 import IconButton from './IconButton';
-import { parseParticipantMeta } from '@/lib/classroom/types';
 import type { RecordingUiState } from './ControlBar';
 
 type PresetSize = 'sm' | 'md' | 'lg';
@@ -246,15 +241,12 @@ function FloatingControlBar({
         />
       )}
       <div className="w-px h-6 bg-white/15 mx-0.5" />
-      <IconButton icon={Minimize2} label="Exit fullscreen" onClick={onExit} size="sm" />
+      <IconButton icon={Minimize2} label="Exit fullscreen" onClick={onExit} size="sm" tooltipPos="top" />
     </div>
   );
 }
 
-interface FocusModeProps {
-  featured: TrackReference;
-  otherShares: TrackReferenceOrPlaceholder[];
-  onSelectShare: (identity: string) => void;
+interface ScreenShareFullscreenChromeProps {
   cameraTracks: TrackReferenceOrPlaceholder[];
   raisedHands: Record<string, boolean>;
   isTeacher: boolean;
@@ -273,10 +265,7 @@ interface FocusModeProps {
   onExit: () => void;
 }
 
-export default function FocusMode({
-  featured,
-  otherShares,
-  onSelectShare,
+export default function ScreenShareFullscreenChrome({
   cameraTracks,
   raisedHands,
   isTeacher,
@@ -290,7 +279,7 @@ export default function FocusMode({
   recordingState,
   onToggleRecording,
   onExit,
-}: FocusModeProps) {
+}: ScreenShareFullscreenChromeProps) {
   const [chromeVisible, setChromeVisible] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -309,47 +298,16 @@ export default function FocusMode({
     };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onExit();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onExit]);
-
-  const meta = parseParticipantMeta(featured.participant.identity, featured.participant.name || '');
-
   return (
+    // Covers the fullscreened tile so mouse movement anywhere over the
+    // shared screen counts as activity, without intercepting clicks (the
+    // video itself is a sibling underneath, not inside this layer).
     <div
-      className="fixed inset-0 z-[60] bg-black"
+      className="absolute inset-0 z-[65]"
       onMouseMove={bumpChrome}
       onPointerDown={bumpChrome}
       onTouchStart={bumpChrome}
     >
-      <VideoTrack trackRef={featured} className="w-full h-full object-contain bg-black" />
-
-      <div
-        className={`absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 transition-opacity duration-300 ${
-          chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-      >
-        <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
-          <Monitor size={12} /> {meta.displayName} is presenting
-        </div>
-        {otherShares.map((t) => {
-          const m = parseParticipantMeta(t.participant.identity, t.participant.name || '');
-          return (
-            <button
-              key={t.participant.identity}
-              onClick={() => onSelectShare(t.participant.identity)}
-              className="px-3 py-1.5 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur text-white/80 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-colors"
-            >
-              <MonitorX size={12} /> Switch to {m.displayName}
-            </button>
-          );
-        })}
-      </div>
-
       <FloatingParticipants tracks={cameraTracks} raisedHands={raisedHands} />
 
       <FloatingControlBar

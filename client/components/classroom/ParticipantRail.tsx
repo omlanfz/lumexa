@@ -36,22 +36,26 @@ export default function ParticipantRail({
 }: ParticipantRailProps) {
   if (tracks.length === 0) return null;
 
+  // The toggle button lives in this OUTER wrapper, which never collapses or
+  // clips — only the inner content box does. Previously the button was
+  // inside the width-0/overflow-hidden box it controlled, so collapsing the
+  // rail also hid the only way to bring it back.
   return (
-    <div
-      className={`hidden lg:flex flex-col flex-shrink-0 border-l border-[var(--cr-border)] bg-[var(--cr-bg)] transition-all duration-200 relative ${
-        collapsed ? 'w-0 overflow-hidden' : 'w-[220px] xl:w-[260px]'
-      }`}
-    >
+    <div className="hidden lg:flex flex-shrink-0 relative">
       <button
         onClick={onToggleCollapsed}
         data-tooltip={collapsed ? 'Show participants' : 'Collapse panel'}
-        className="absolute top-1/2 -left-3 -translate-y-1/2 z-10 w-6 h-12 rounded-md bg-[var(--cr-surface-2)] border border-[var(--cr-border)] flex items-center justify-center text-[var(--cr-text-muted)] hover:text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] transition-colors"
+        className="absolute top-1/2 -left-3 -translate-y-1/2 z-20 w-6 h-12 rounded-md bg-[var(--cr-surface-2)] border border-[var(--cr-border)] flex items-center justify-center text-[var(--cr-text-muted)] hover:text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] transition-colors"
       >
         {collapsed ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
       </button>
 
-      {!collapsed && (
-        <div className="flex-1 overflow-y-auto cr-scroll p-2 flex flex-col gap-2">
+      <div
+        className={`flex flex-col border-l border-[var(--cr-border)] bg-[var(--cr-bg)] transition-all duration-200 overflow-hidden ${
+          collapsed ? 'w-0' : 'w-[220px] xl:w-[260px]'
+        }`}
+      >
+        <div className="flex-1 overflow-y-auto cr-scroll p-2 flex flex-col gap-2 w-[220px] xl:w-[260px]">
           {tracks.map((t) => (
             <div key={t.participant.identity} className="aspect-video flex-shrink-0">
               <ParticipantTile
@@ -64,7 +68,7 @@ export default function ParticipantRail({
             </div>
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

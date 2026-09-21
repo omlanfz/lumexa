@@ -1,12 +1,16 @@
 // FILE PATH: client/components/classroom/Stage.tsx
 //
 // The classroom's main content area. Priority order for what appears here:
-//   1. An active screen share (becomes the stage automatically). Lumexa lets
-//      everyone share without asking the teacher first, including several
-//      people at once (a full batch can all share at the same time) — so
-//      this handles zero, one, or many concurrent shares. With more than
-//      one, a small tab strip lets anyone switch which one is "featured"
-//      here; the rest stay reachable from the tabs, not hidden.
+//   1. Active screen share(s) — becomes the stage automatically. Lumexa
+//      lets everyone share without asking the teacher first, including
+//      several people at once (a full batch can all share at the same
+//      time), and EVERY participant sees EVERY currently-shared screen at
+//      once — a responsive grid, not a single "featured" tile with the
+//      rest hidden behind a switcher. Each remote tile gets its own ⛶
+//      fullscreen toggle (native Fullscreen API, scoped to that one tile);
+//      while a tile is fullscreen, a floating draggable "PIP" participants
+//      window and a small auto-hiding control bar ride along inside it —
+//      see ScreenShareFullscreenChrome.
 //   2. A teacher spotlight, or a locally pinned participant
 //   3. The lesson material for this session, if any
 //   4. The teacher's camera, prominent, as the calm default
@@ -20,18 +24,20 @@
 // of their own screen-share track — if they're capturing their whole
 // monitor, that track's content already includes this very page, so
 // rendering it back would create a hall-of-mirrors effect. Everyone else
-// sees the presenter's screen normally; the presenter sees a "You are
-// presenting" placeholder plus their own camera as a small self tile.
+// sees the presenter's screen normally; the presenter's own tile in the
+// grid is a small "You are presenting" placeholder instead.
 
 'use client';
 
-import { useEffect } from 'react';
-import { Monitor, MonitorOff, ScreenShareOff, Maximize2, MonitorX } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Monitor, MonitorOff, Maximize2, Minimize2, MonitorX } from 'lucide-react';
 import { Track } from 'livekit-client';
 import { isTrackReference, VideoTrack, useTracks } from '@livekit/components-react';
 import type { TrackReferenceOrPlaceholder, TrackReference } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
 import LessonPanel from './LessonPanel';
+import ScreenShareFullscreenChrome from './ScreenShareFullscreenChrome';
+import type { RecordingUiState } from './ControlBar';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 import { parseParticipantMeta } from '@/lib/classroom/types';
 
@@ -48,21 +54,55 @@ function MainFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ScreenShareTile({
+interface FullscreenChromeProps {
+  cameraTracks: TrackReferenceOrPlaceholder[];
+  raisedHands: Record<string, boolean>;
+  isTeacher: boolean;
+  micEnabled: boolean;
+  camEnabled: boolean;
+  screenShareEnabled: boolean;
+  micDisabledByTeacher?: boolean;
+  onToggleMic: () => void;
+  onToggleCam: () => void;
+  onToggleScreenShare: () => void;
+  recordingState: RecordingUiState;
+  onToggleRecording: () => void;
+}
+
+function RemoteScreenShareTile({
   trackRef,
   isTeacher,
   onForceStopShare,
-  onEnterFocusMode,
+  fullscreenChromeProps,
 }: {
   trackRef: TrackReference;
   isTeacher: boolean;
   onForceStopShare?: (identity: string) => void;
-  onEnterFocusMode: () => void;
+  fullscreenChromeProps: FullscreenChromeProps;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const meta = parseParticipantMeta(trackRef.participant.identity, trackRef.participant.name || '');
 
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === containerRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement === containerRef.current) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      containerRef.current?.requestFullscreen?.().catch(() => {});
+    }
+  };
+
   return (
-    <div className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative">
+    <div
+      ref={containerRef}
+      className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative [&:fullscreen]:rounded-none [&:fullscreen]:border-0"
+    >
       <VideoTrack trackRef={trackRef} className="w-full h-full object-contain bg-black" />
       <div className="absolute top-3 left-3 flex items-center gap-2">
         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
@@ -79,14 +119,37 @@ function ScreenShareTile({
         )}
       </div>
       <button
-        onClick={onEnterFocusMode}
-        data-tooltip="Focus mode"
+        onClick={toggleFullscreen}
+        data-tooltip={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         className="absolute top-3 right-3 z-10 w-8 h-8 rounded-lg bg-black/50 hover:bg-black/70 backdrop-blur flex items-center justify-center text-white transition-colors"
       >
-        <Maximize2 size={14} />
+        {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+      </button>
+
+      {isFullscreen && <ScreenShareFullscreenChrome {...fullscreenChromeProps} onExit={toggleFullscreen} />}
+    </div>
+  );
+}
+
+function OwnScreenSharePlaceholder({ onStopShare }: { onStopShare: () => void }) {
+  return (
+    <div className="w-full h-full rounded-2xl bg-[var(--cr-surface)] border border-[var(--cr-border)] flex flex-col items-center justify-center gap-2 p-4 text-center">
+      <Monitor size={22} className="text-[var(--cr-accent)]" />
+      <p className="text-[var(--cr-text)] text-xs font-semibold">You are presenting</p>
+      <button
+        onClick={onStopShare}
+        className="text-[11px] font-medium text-red-400 hover:text-red-300 underline underline-offset-2"
+      >
+        Stop sharing
       </button>
     </div>
   );
+}
+
+/** Roughly-square grid column count for N tiles — good enough for Lumexa's
+ * real class sizes (1 teacher + up to 4 students, so at most 5 shares). */
+function gridColumns(count: number): number {
+  return Math.max(1, Math.ceil(Math.sqrt(count)));
 }
 
 interface StageProps {
@@ -98,10 +161,18 @@ interface StageProps {
   lessonData: LessonDetailsResponse | null;
   onStopShare: () => void;
   isTeacher: boolean;
-  featuredShareIdentity: string | null;
-  onSelectShare: (identity: string) => void;
   onForceStopShare?: (identity: string) => void;
-  onEnterFocusMode: () => void;
+  // Passed straight through to whichever tile is currently fullscreen, for
+  // its embedded PIP participants window + floating control bar.
+  micEnabled: boolean;
+  camEnabled: boolean;
+  screenShareEnabled: boolean;
+  micDisabledByTeacher?: boolean;
+  onToggleMic: () => void;
+  onToggleCam: () => void;
+  onToggleScreenShare: () => void;
+  recordingState: RecordingUiState;
+  onToggleRecording: () => void;
 }
 
 export default function Stage({
@@ -113,104 +184,56 @@ export default function Stage({
   lessonData,
   onStopShare,
   isTeacher,
-  featuredShareIdentity,
-  onSelectShare,
   onForceStopShare,
-  onEnterFocusMode,
+  micEnabled,
+  camEnabled,
+  screenShareEnabled,
+  micDisabledByTeacher,
+  onToggleMic,
+  onToggleCam,
+  onToggleScreenShare,
+  recordingState,
+  onToggleRecording,
 }: StageProps) {
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenShareRefs = screenTracks.filter(isTrackReference);
   const remoteShares = screenShareRefs.filter((t) => !t.participant.isLocal);
   const localShare = screenShareRefs.find((t) => t.participant.isLocal);
 
-  // Keep the caller's featured selection valid — default to the first
-  // active remote share whenever the current pick disappears (or nothing's
-  // picked yet).
-  useEffect(() => {
-    if (remoteShares.length === 0) return;
-    if (!remoteShares.some((t) => t.participant.identity === featuredShareIdentity)) {
-      onSelectShare(remoteShares[0].participant.identity);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remoteShares.map((t) => t.participant.identity).join(',')]);
-
   // ── 1. Screen share(s) ─────────────────────────────────────────────────
-  if (remoteShares.length > 0) {
-    const featured = remoteShares.find((t) => t.participant.identity === featuredShareIdentity) ?? remoteShares[0];
+  if (remoteShares.length > 0 || localShare) {
+    const tileCount = remoteShares.length + (localShare ? 1 : 0);
+    const cols = gridColumns(tileCount);
+    const fullscreenChromeProps: FullscreenChromeProps = {
+      cameraTracks,
+      raisedHands,
+      isTeacher,
+      micEnabled,
+      camEnabled,
+      screenShareEnabled,
+      micDisabledByTeacher,
+      onToggleMic,
+      onToggleCam,
+      onToggleScreenShare,
+      recordingState,
+      onToggleRecording,
+    };
 
     return (
-      <div className="w-full h-full flex flex-col gap-2 min-h-0">
-        {remoteShares.length > 1 && (
-          <div className="flex-shrink-0 flex items-center gap-1.5 overflow-x-auto cr-scroll">
-            {remoteShares.map((t) => {
-              const meta = parseParticipantMeta(t.participant.identity, t.participant.name || '');
-              const active = t === featured;
-              return (
-                <button
-                  key={t.participant.identity}
-                  onClick={() => onSelectShare(t.participant.identity)}
-                  className={`flex-shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    active
-                      ? 'bg-[var(--cr-accent)]/15 border border-[var(--cr-accent)]/40 text-[var(--cr-accent)]'
-                      : 'bg-[var(--cr-surface-2)] border border-[var(--cr-border)] text-[var(--cr-text-muted)] hover:text-[var(--cr-text)]'
-                  }`}
-                >
-                  <Monitor size={12} /> {meta.displayName}
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="flex-1 min-h-0 relative">
-          <ScreenShareTile
-            trackRef={featured}
+      <div
+        className="w-full h-full grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridAutoRows: '1fr' }}
+      >
+        {remoteShares.map((t) => (
+          <RemoteScreenShareTile
+            key={t.participant.identity}
+            trackRef={t}
             isTeacher={isTeacher}
             onForceStopShare={onForceStopShare}
-            onEnterFocusMode={onEnterFocusMode}
+            fullscreenChromeProps={fullscreenChromeProps}
           />
-
-          {localShare && (
-            <div className="absolute bottom-4 left-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium">
-              <Monitor size={13} /> You&apos;re also sharing your screen
-              <button
-                onClick={onStopShare}
-                className="ml-1 text-red-300 hover:text-red-200 font-semibold"
-              >
-                Stop
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (localShare) {
-    const localCam = cameraTracks.find((t) => t.participant.isLocal);
-    return (
-      <div className="w-full h-full rounded-2xl bg-[var(--cr-surface)] border border-[var(--cr-border)] flex flex-col items-center justify-center gap-4 relative">
-        <div className="w-16 h-16 rounded-2xl bg-[var(--cr-accent)]/15 flex items-center justify-center">
-          <Monitor size={28} className="text-[var(--cr-accent)]" />
-        </div>
-        <div className="text-center">
-          <p className="text-[var(--cr-text)] font-semibold">You are sharing your screen</p>
-          <p className="text-[var(--cr-text-muted)] text-sm mt-1">
-            Everyone in class can see your shared screen.
-          </p>
-        </div>
-        <button
-          onClick={onStopShare}
-          className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-sm font-medium transition-colors"
-        >
-          <ScreenShareOff size={16} /> Stop sharing
-        </button>
-
-        {localCam && (
-          <div className="absolute bottom-4 right-4 w-32 sm:w-40 aspect-video rounded-lg overflow-hidden shadow-xl">
-            <ParticipantTile trackRef={localCam} size="strip" />
-          </div>
-        )}
+        ))}
+        {localShare && <OwnScreenSharePlaceholder onStopShare={onStopShare} />}
       </div>
     );
   }
