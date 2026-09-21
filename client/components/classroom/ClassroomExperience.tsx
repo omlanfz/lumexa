@@ -65,6 +65,7 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
   const [waiting, setWaiting] = useState<WaitingResponse | null>(null);
   const [denied, setDenied] = useState(false);
   const [lessonData, setLessonData] = useState<LessonDetailsResponse | null>(null);
+  const [demoExampleLesson, setDemoExampleLesson] = useState<LessonDetailsResponse | null>(null);
   const [error, setError] = useState('');
   const [choices, setChoices] = useState<JoinChoices | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -104,6 +105,18 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         .get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${id}/details`)
         .then((res) => setLessonData(res.data))
         .catch(() => setLessonData(null));
+    }
+
+    // The demo room has no real ScheduledLesson, so "View Lesson" there
+    // shows this fixed example instead — see getDemoExampleLessonDetails.
+    // Deliberately kept separate from `lessonData` above (which also
+    // drives the main stage's default content) so it only affects the
+    // View Lesson panel, not what the demo classroom shows by default.
+    if (demo && !adminObserve) {
+      api
+        .get<LessonDetailsResponse>('/curriculum/demo-example-lesson')
+        .then((res) => setDemoExampleLesson(res.data))
+        .catch(() => setDemoExampleLesson(null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isLesson, demo, adminObserve, router]);
@@ -251,6 +264,7 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         sessionSubtitle={sessionSubtitle}
         isLive
         lessonData={lessonData}
+        demoExampleLesson={demoExampleLesson}
         initialBackgroundEffect={choices?.backgroundEffect ?? { mode: 'none' }}
         initialLighting={choices?.lighting ?? DEFAULT_LIGHTING}
         scheduledStart={join.scheduledStart}

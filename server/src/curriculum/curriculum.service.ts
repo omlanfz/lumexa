@@ -49,6 +49,93 @@ function dhakaDateStrOf(date: Date): string {
 export class CurriculumService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ── QA demo classroom (see DEMO_ROOM_NAME in classroom.service.ts) ───────
+
+  /** The demo classroom has no real ScheduledLesson behind it, so "View
+   * Lesson" there shows this one fixed, always-unlocked example instead of
+   * an empty state — the first lesson of the seeded AI Builder Path
+   * ("How Language Models Work"), looked up by its stable course/module
+   * slug + in-module order rather than a raw id (which would differ per
+   * seed run). Any authenticated user may call this — it's public catalog
+   * content, not tied to any student's actual progress. */
+  async getDemoExampleLessonDetails() {
+    const emptySession = {
+      scheduledLessonId: null,
+      lessonNumber: 0,
+      start: null,
+      end: null,
+      status: null,
+      courseId: '',
+      courseTitle: '',
+    };
+
+    const course = await this.prisma.course.findUnique({
+      where: { slug: 'ai-builder-path' },
+    });
+    const module = course
+      ? await this.prisma.courseModule.findUnique({
+          where: { courseId_slug: { courseId: course.id, slug: 'language-models' } },
+        })
+      : null;
+    const lesson = module
+      ? await this.prisma.lesson.findFirst({
+          where: { moduleId: module.id, order: 1 },
+          include: {
+            module: true,
+            project: true,
+            assessment: {
+              select: { id: true, type: true, title: true, isPublished: true },
+            },
+          },
+        })
+      : null;
+
+    if (!course || !lesson) {
+      return {
+        available: false,
+        reason: 'NO_CATALOG_LESSON',
+        session: emptySession,
+      };
+    }
+
+    return {
+      available: true,
+      isTest: lesson.type !== SessionType.LEARNING,
+      session: {
+        ...emptySession,
+        lessonNumber: lesson.order,
+        courseId: course.id,
+        courseTitle: course.title,
+      },
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        type: lesson.type,
+        objectives: lesson.objectives,
+        contentMarkdown: lesson.contentMarkdown,
+        reviewNotes: lesson.reviewNotes,
+        homework: lesson.homework,
+        checkpoint: lesson.checkpoint,
+        codeSnippets: lesson.codeSnippets,
+        module: lesson.module
+          ? {
+              id: lesson.module.id,
+              title: lesson.module.title,
+              stageNumber: lesson.module.stageNumber,
+            }
+          : null,
+        project: lesson.project
+          ? {
+              id: lesson.project.id,
+              title: lesson.project.title,
+              description: lesson.project.description,
+            }
+          : null,
+      },
+      assessment: lesson.assessment ?? null,
+    };
+  }
+
   // ── Lesson Details (student/teacher read path) ───────────────────────────
 
   // Catalog-based lesson details — for a teacher/admin browsing the

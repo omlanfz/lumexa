@@ -44,6 +44,14 @@ export class CurriculumController {
     return this.curriculum.getScheduledLessonDetails(id, req.user);
   }
 
+  /** QA demo classroom only — a fixed, always-unlocked example lesson
+   * (see CurriculumService.getDemoExampleLessonDetails) shown in "View
+   * Lesson" there since the demo room has no real ScheduledLesson. */
+  @Get('demo-example-lesson')
+  getDemoExampleLesson() {
+    return this.curriculum.getDemoExampleLessonDetails();
+  }
+
   // Teacher/admin curriculum browsing — a catalog Lesson, not tied to one
   // specific scheduled class. Always unlocked for the assigned teacher.
   @Get('lessons/:id/details')
