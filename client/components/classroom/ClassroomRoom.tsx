@@ -1,14 +1,22 @@
 // FILE PATH: client/components/classroom/ClassroomRoom.tsx
 //
 // The in-call classroom experience — mounted inside <LiveKitRoom>. Owns all
-// the room-level UI state (panels, pin/spotlight, video effects) and wires
-// LiveKit hooks into the presentational components.
+// the room-level UI state (panels, pin/spotlight, video effects, screen-
+// share focus mode) and wires LiveKit hooks into the presentational
+// components.
 //
-// Presentation Mode is no longer a manual toggle — it's simply "is anyone
-// currently screen-sharing" (see `presentationMode` below). Desktop gets a
-// collapsible right-side participant strip (PresentationPanel); mobile/
-// tablet keeps the normal bottom FilmStrip so the shared content stays
-// dominant without squeezing the desktop layout into a small screen.
+// Layout hierarchy: main Stage (teaching content) + a persistent
+// collapsible right-side ParticipantRail on desktop, always — not just
+// while screen-sharing, and never doubled up with the bottom FilmStrip
+// (that duplication was the old layout's core problem). Mobile/tablet has
+// no room for a side column, so it keeps the bottom FilmStrip instead.
+//
+// "Presentation Mode" is simply "is anyone currently screen-sharing" (see
+// `presentationMode` below) — it hides the header to give the shared
+// content more room. "Focus mode" is a further, deliberate step a viewer
+// takes (the ⛶ button on a shared screen) that replaces the whole layout
+// with the FocusMode overlay: shared screen fullscreen, a small draggable
+// floating participants window, and an auto-hiding floating control bar.
 
 'use client';
 
@@ -28,7 +36,8 @@ import { AlertTriangle, Hand, PhoneOff } from 'lucide-react';
 import Header from './Header';
 import Stage from './Stage';
 import FilmStrip from './FilmStrip';
-import PresentationPanel from './PresentationPanel';
+import ParticipantRail from './ParticipantRail';
+import FocusMode from './FocusMode';
 import ControlBar, { PanelKind, RecordingUiState } from './ControlBar';
 import ParticipantsPanel from './ParticipantsPanel';
 import ChatPanel from './ChatPanel';
@@ -48,6 +57,7 @@ import {
   sendHeartbeat,
   listPendingAdmissions,
   decideAdmission,
+  stopParticipantScreenShare,
   type PendingAdmission,
   type ClassEndReason,
 } from '@/lib/classroom/api';
@@ -68,6 +78,11 @@ interface ClassroomRoomProps {
   classType?: 'ONE_TO_ONE' | 'BATCH';
   /** Admin silently observing — no controls, no heartbeat, no recording. */
   observerMode?: boolean;
+  /** QA-only shared demo room (see client/lib/demoClassroom.ts) — gets the
+   * same full Completed/Incomplete end-class flow as a real lesson so it
+   * can actually be used to test/QA that flow, even though the server
+   * intentionally ignores the outcome for this room (no real economics). */
+  demo?: boolean;
 }
 
 interface HandToast {
@@ -89,6 +104,7 @@ export default function ClassroomRoom({
   scheduledStart,
   classType,
   observerMode,
+  demo,
 }: ClassroomRoomProps) {
   const room = useRoomContext();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled, cameraTrack } =
@@ -104,8 +120,21 @@ export default function ClassroomRoom({
   const isTeacher = !observerMode && meta.role === 'TEACHER';
 
   const { state: classroomState, patch: patchState } = useClassroomState(roomName, isTeacher);
-  const { raisedHands, reactions, spotlightIdentity, setOwnHandRaised, lowerHand, sendReaction, setSpotlight } =
-    useClassroomControls();
+  const {
+    raisedHands,
+    reactions,
+    spotlightIdentity,
+    setOwnHandRaised,
+    lowerHand,
+    sendReaction,
+    setSpotlight,
+    notifyStopScreenShare,
+  } = useClassroomControls(() => {
+    // The teacher forcibly stopped OUR screen share — stop the capture and
+    // flip our own UI back off. The server already muted the track for
+    // everyone else; this is what makes it look right locally too.
+    void localParticipant.setScreenShareEnabled(false);
+  });
   const effects = useVideoEffects();
 
   const [activePanel, setActivePanel] = useState<PanelKind>(null);
@@ -119,6 +148,8 @@ export default function ClassroomRoom({
   const [expiredNoticeVisible, setExpiredNoticeVisible] = useState(false);
   const [timerMilestoneVisible, setTimerMilestoneVisible] = useState(false);
   const [pendingAdmissions, setPendingAdmissions] = useState<PendingAdmission[]>([]);
+  const [featuredShareIdentity, setFeaturedShareIdentity] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
   const expiredFiredRef = useRef(false);
   const seededEffectsRef = useRef(false);
   const prevRaisedRef = useRef<Record<string, boolean>>({});
@@ -127,9 +158,14 @@ export default function ClassroomRoom({
   const prevAdmissionIdsRef = useRef<Set<string> | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const isLessonFlow = roomName.startsWith('lesson-');
+  // The full Completed/Incomplete outcome flow (see EndClassModal) is a
+  // curriculum (ScheduledLesson) concept — but the QA demo room gets it too
+  // so that flow can actually be tested end-to-end, even though the server
+  // deliberately ignores the outcome params for it (no real economics).
+  const isLessonFlow = roomName.startsWith('lesson-') || !!demo;
   const isRecordingLive = !!classroomState.recording;
   const presentationMode = !!screenShare;
+  const remoteScreenShares = screenTracks.filter(isTrackReference).filter((t) => !t.participant.isLocal);
   const expectedDurationMinutes = classType === 'BATCH' ? 60 : 45;
 
   useEffect(() => {
@@ -285,6 +321,20 @@ export default function ClassroomRoom({
 
   const micDisabledByTeacher = !isTeacher && !!classroomState.studentsMuted;
 
+  // Focus mode only makes sense while its featured share is still live —
+  // drop out automatically the moment it (or all shares) ends.
+  useEffect(() => {
+    if (!focusMode) return;
+    const stillPresent = remoteScreenShares.some((t) => t.participant.identity === featuredShareIdentity);
+    if (!stillPresent) setFocusMode(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMode, remoteScreenShares.map((t) => t.participant.identity).join(',')]);
+
+  const handleForceStopShare = (identity: string) => {
+    notifyStopScreenShare(identity);
+    void stopParticipantScreenShare(roomName, identity).catch(() => {});
+  };
+
   const handleToggleRecording = async () => {
     if (recordingState === 'starting' || recordingState === 'stopping') return;
     const wasActive = recordingState === 'active';
@@ -319,116 +369,145 @@ export default function ClassroomRoom({
     return null;
   })();
 
+  const focusModeShare = focusMode
+    ? remoteScreenShares.find((t) => t.participant.identity === featuredShareIdentity)
+    : undefined;
+
   return (
     <div ref={rootRef} className="cr-root h-screen w-full flex flex-col overflow-hidden" data-theme={theme}>
       <RoomAudioRenderer />
 
-      {!presentationMode && (
-        <Header
-          sessionTitle={sessionTitle}
-          sessionSubtitle={sessionSubtitle}
-          isLive={isLive}
-          recording={isRecordingLive}
-          scheduledStart={scheduledStart}
-          expectedDurationMinutes={expectedDurationMinutes}
-          onTimerMilestone={() => {
-            setTimerMilestoneVisible(true);
-            setTimeout(() => setTimerMilestoneVisible(false), 8000);
-          }}
-          theme={theme}
-          onToggleTheme={toggleTheme}
+      {focusModeShare ? (
+        <FocusMode
+          featured={focusModeShare}
+          otherShares={remoteScreenShares.filter((t) => t.participant.identity !== focusModeShare.participant.identity)}
+          onSelectShare={setFeaturedShareIdentity}
+          cameraTracks={filmstripTracks}
+          raisedHands={raisedHands}
+          isTeacher={isTeacher}
+          micEnabled={isMicrophoneEnabled}
+          camEnabled={isCameraEnabled}
+          screenShareEnabled={isScreenShareEnabled}
+          micDisabledByTeacher={micDisabledByTeacher}
+          onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+          onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
+          onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
+          recordingState={recordingState}
+          onToggleRecording={() => void handleToggleRecording()}
+          onExit={() => setFocusMode(false)}
         />
-      )}
+      ) : (
+        <>
+        {!presentationMode && (
+          <Header
+            sessionTitle={sessionTitle}
+            sessionSubtitle={sessionSubtitle}
+            isLive={isLive}
+            recording={isRecordingLive}
+            scheduledStart={scheduledStart}
+            expectedDurationMinutes={expectedDurationMinutes}
+            onTimerMilestone={() => {
+              setTimerMilestoneVisible(true);
+              setTimeout(() => setTimerMilestoneVisible(false), 8000);
+            }}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        )}
 
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        <div
-          className={`flex-1 flex flex-col min-w-0 relative ${
-            presentationMode ? 'p-0 lg:p-2 gap-2' : 'p-3 sm:p-4 gap-3'
-          }`}
-        >
-          <div className="cr-watermark" />
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          <div
+            className={`flex-1 flex flex-col min-w-0 relative ${
+              presentationMode ? 'p-0 lg:p-2 gap-2' : 'p-3 sm:p-4 gap-3'
+            }`}
+          >
+            <div className="cr-watermark" />
 
-          <ConnectionBanner />
+            <ConnectionBanner />
 
-          {/* Scheduled time expired — teacher-only, advisory. The class
-              never ends on its own; this just nudges the teacher to wrap up
-              whenever they're ready. */}
-          {isTeacher && expiredNoticeVisible && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 backdrop-blur text-amber-300 text-xs font-medium shadow-lg cr-fade-in">
-              <AlertTriangle size={15} className="flex-shrink-0" />
-              Your scheduled class time is over. Please end the class when you&apos;re ready.
-              <button
-                onClick={() => setExpiredNoticeVisible(false)}
-                className="ml-1 text-amber-300/70 hover:text-amber-200"
-                aria-label="Dismiss"
-              >
-                ×
-              </button>
-            </div>
-          )}
-
-          {timerMilestoneVisible && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[var(--cr-surface-2)] border border-[var(--cr-border-strong)] backdrop-blur text-[var(--cr-text)] text-xs font-medium shadow-lg cr-fade-in">
-              This class has reached its expected {expectedDurationMinutes}-minute duration.
-              <button
-                onClick={() => setTimerMilestoneVisible(false)}
-                className="ml-1 text-[var(--cr-text-faint)] hover:text-[var(--cr-text)]"
-                aria-label="Dismiss"
-              >
-                ×
-              </button>
-            </div>
-          )}
-
-          {recordingError && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 backdrop-blur text-red-400 text-xs font-medium shadow-lg cr-fade-in">
-              {recordingError}
-            </div>
-          )}
-
-          {/* Hand-raise toasts (teacher only) */}
-          {handToasts.length > 0 && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-col gap-1.5 items-center">
-              {handToasts.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500/15 border border-amber-500/30 backdrop-blur text-amber-300 text-xs font-medium shadow-lg cr-fade-in"
+            {/* Scheduled time expired — teacher-only, advisory. The class
+                never ends on its own; this just nudges the teacher to wrap up
+                whenever they're ready. */}
+            {isTeacher && expiredNoticeVisible && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 backdrop-blur text-amber-300 text-xs font-medium shadow-lg cr-fade-in">
+                <AlertTriangle size={15} className="flex-shrink-0" />
+                Your scheduled class time is over. Please end the class when you&apos;re ready.
+                <button
+                  onClick={() => setExpiredNoticeVisible(false)}
+                  className="ml-1 text-amber-300/70 hover:text-amber-200"
+                  aria-label="Dismiss"
                 >
-                  <Hand size={13} /> {t.name} raised their hand
-                </div>
-              ))}
-            </div>
-          )}
+                  ×
+                </button>
+              </div>
+            )}
 
-          <div className="flex-1 min-h-0 relative">
-            <Stage
-              cameraTracks={cameraTracks}
-              pinnedIdentity={pinnedIdentity}
-              spotlightIdentity={spotlightIdentity}
+            {timerMilestoneVisible && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[var(--cr-surface-2)] border border-[var(--cr-border-strong)] backdrop-blur text-[var(--cr-text)] text-xs font-medium shadow-lg cr-fade-in">
+                This class has reached its expected {expectedDurationMinutes}-minute duration.
+                <button
+                  onClick={() => setTimerMilestoneVisible(false)}
+                  className="ml-1 text-[var(--cr-text-faint)] hover:text-[var(--cr-text)]"
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {recordingError && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 backdrop-blur text-red-400 text-xs font-medium shadow-lg cr-fade-in">
+                {recordingError}
+              </div>
+            )}
+
+            {/* Hand-raise toasts (teacher only) */}
+            {handToasts.length > 0 && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 flex flex-col gap-1.5 items-center">
+                {handToasts.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-amber-500/15 border border-amber-500/30 backdrop-blur text-amber-300 text-xs font-medium shadow-lg cr-fade-in"
+                  >
+                    <Hand size={13} /> {t.name} raised their hand
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex-1 min-h-0 relative">
+              <Stage
+                cameraTracks={cameraTracks}
+                pinnedIdentity={pinnedIdentity}
+                spotlightIdentity={spotlightIdentity}
+                raisedHands={raisedHands}
+                onTogglePin={handleTogglePin}
+                lessonData={lessonData}
+                onStopShare={() => void localParticipant.setScreenShareEnabled(false)}
+                isTeacher={isTeacher}
+                featuredShareIdentity={featuredShareIdentity}
+                onSelectShare={setFeaturedShareIdentity}
+                onForceStopShare={isTeacher ? handleForceStopShare : undefined}
+                onEnterFocusMode={() => setFocusMode(true)}
+              />
+              <ReactionsOverlay reactions={reactions} />
+            </div>
+
+            {/* Mobile/tablet keeps the bottom strip, since there's no room
+                for a side column there; desktop always uses ParticipantRail
+                instead (see below) — never both at once, that duplication
+                was the classroom's old layout-hierarchy problem. */}
+            <FilmStrip
+              tracks={filmstripTracks}
               raisedHands={raisedHands}
+              pinnedIdentity={pinnedIdentity}
               onTogglePin={handleTogglePin}
-              lessonData={lessonData}
-              onStopShare={() => void localParticipant.setScreenShareEnabled(false)}
+              compact={presentationMode}
+              className="lg:hidden"
             />
-            <ReactionsOverlay reactions={reactions} />
           </div>
 
-          {/* Mobile/tablet presentation mode keeps the bottom strip so the
-              shared content stays dominant; desktop presentation mode uses
-              PresentationPanel instead (see below) and hides this strip via
-              lg:hidden so they're never both visible at once. */}
-          <FilmStrip
-            tracks={filmstripTracks}
-            raisedHands={raisedHands}
-            pinnedIdentity={pinnedIdentity}
-            onTogglePin={handleTogglePin}
-            compact={presentationMode}
-            className={presentationMode ? 'lg:hidden' : undefined}
-          />
-        </div>
-
-        {presentationMode && (
-          <PresentationPanel
+          <ParticipantRail
             tracks={filmstripTracks}
             raisedHands={raisedHands}
             pinnedIdentity={pinnedIdentity}
@@ -436,85 +515,87 @@ export default function ClassroomRoom({
             collapsed={panelCollapsed}
             onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
           />
-        )}
 
-        {activePanel && !observerMode && (
-          <div className="w-[320px] flex-shrink-0 border-l border-[var(--cr-border)] cr-fade-in">
-            {activePanel === 'chat' ? (
-              <ChatPanel
-                messages={chatMessages}
-                onSend={(text) => void sendChat(text)}
-                onClose={() => setActivePanel(null)}
-                locked={!!classroomState.chatLocked}
-                isTeacher={isTeacher}
-                onToggleLock={() => patchState({ chatLocked: !classroomState.chatLocked })}
-                onReact={sendReaction}
-                localIdentity={localParticipant.identity}
-              />
-            ) : (
-              <ParticipantsPanel
-                participants={participants}
-                isTeacher={isTeacher}
-                roomName={roomName}
-                raisedHands={raisedHands}
-                onLowerHand={lowerHand}
-                onClose={() => setActivePanel(null)}
-                localIdentity={localParticipant.identity}
-                spotlightIdentity={spotlightIdentity}
-                onSetSpotlight={setSpotlight}
-                pendingAdmissions={pendingAdmissions}
-                onDecideAdmission={handleDecideAdmission}
-              />
-            )}
-          </div>
-        )}
-      </div>
-
-      {observerMode ? (
-        <div className="flex items-center justify-center h-[60px] flex-shrink-0 border-t border-[var(--cr-border)] bg-[var(--cr-bg)]">
-          <button
-            onClick={() => room.disconnect()}
-            className="flex items-center gap-1.5 px-4 h-9 rounded-full bg-[var(--cr-danger)] hover:bg-[var(--cr-danger-hover)] text-white text-sm font-semibold transition-colors"
-          >
-            <PhoneOff size={15} />
-            Leave observation
-          </button>
+          {activePanel && !observerMode && (
+            <div className="w-[320px] flex-shrink-0 border-l border-[var(--cr-border)] cr-fade-in">
+              {activePanel === 'chat' ? (
+                <ChatPanel
+                  messages={chatMessages}
+                  onSend={(text) => void sendChat(text)}
+                  onClose={() => setActivePanel(null)}
+                  locked={!!classroomState.chatLocked}
+                  isTeacher={isTeacher}
+                  onToggleLock={() => patchState({ chatLocked: !classroomState.chatLocked })}
+                  onReact={sendReaction}
+                  localIdentity={localParticipant.identity}
+                />
+              ) : (
+                <ParticipantsPanel
+                  participants={participants}
+                  isTeacher={isTeacher}
+                  roomName={roomName}
+                  raisedHands={raisedHands}
+                  onLowerHand={lowerHand}
+                  onClose={() => setActivePanel(null)}
+                  localIdentity={localParticipant.identity}
+                  spotlightIdentity={spotlightIdentity}
+                  onSetSpotlight={setSpotlight}
+                  pendingAdmissions={pendingAdmissions}
+                  onDecideAdmission={handleDecideAdmission}
+                  onNotifyStopScreenShare={isTeacher ? handleForceStopShare : undefined}
+                />
+              )}
+            </div>
+          )}
         </div>
-      ) : (
-        <ControlBar
-          isTeacher={isTeacher}
-          micEnabled={isMicrophoneEnabled}
-          camEnabled={isCameraEnabled}
-          screenShareEnabled={isScreenShareEnabled}
-          onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-          onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
-          onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
-          micDisabledByTeacher={micDisabledByTeacher}
-          handRaised={!!raisedHands[localParticipant.identity]}
-          onToggleHand={() => setOwnHandRaised(!raisedHands[localParticipant.identity])}
-          activePanel={activePanel}
-          onSetPanel={setActivePanel}
-          unreadChat={unreadChat}
-          participantCount={participants.length}
-          classroomState={classroomState}
-          onPatchState={patchState}
-          onMuteAll={() => void muteAllParticipants(roomName)}
-          recordingState={recordingState}
-          onToggleRecording={() => void handleToggleRecording()}
-          backgroundEffect={effects.backgroundEffect}
-          onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
-          lighting={effects.lighting}
-          onLightingChange={(l) => void effects.setLighting(localVideoTrack, l)}
-          effectsSupported={effects.supported}
-          effectsPending={effects.pending}
-          onUploadImage={(file) => {
-            const url = URL.createObjectURL(file);
-            void effects.setBackground(localVideoTrack, { mode: 'image', imagePath: url, label: 'Custom' });
-          }}
-          onLeave={() => room.disconnect()}
-          onOpenEndClass={() => setShowEndClassModal(true)}
-          endClassDisabledReason={endClassGate}
-        />
+
+        {observerMode ? (
+          <div className="flex items-center justify-center h-[60px] flex-shrink-0 border-t border-[var(--cr-border)] bg-[var(--cr-bg)]">
+            <button
+              onClick={() => room.disconnect()}
+              className="flex items-center gap-1.5 px-4 h-9 rounded-full bg-[var(--cr-danger)] hover:bg-[var(--cr-danger-hover)] text-white text-sm font-semibold transition-colors"
+            >
+              <PhoneOff size={15} />
+              Leave observation
+            </button>
+          </div>
+        ) : (
+          <ControlBar
+            isTeacher={isTeacher}
+            micEnabled={isMicrophoneEnabled}
+            camEnabled={isCameraEnabled}
+            screenShareEnabled={isScreenShareEnabled}
+            onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+            onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
+            onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
+            micDisabledByTeacher={micDisabledByTeacher}
+            handRaised={!!raisedHands[localParticipant.identity]}
+            onToggleHand={() => setOwnHandRaised(!raisedHands[localParticipant.identity])}
+            activePanel={activePanel}
+            onSetPanel={setActivePanel}
+            unreadChat={unreadChat}
+            participantCount={participants.length}
+            classroomState={classroomState}
+            onPatchState={patchState}
+            onMuteAll={() => void muteAllParticipants(roomName)}
+            recordingState={recordingState}
+            onToggleRecording={() => void handleToggleRecording()}
+            backgroundEffect={effects.backgroundEffect}
+            onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
+            lighting={effects.lighting}
+            onLightingChange={(l) => void effects.setLighting(localVideoTrack, l)}
+            effectsSupported={effects.supported}
+            effectsPending={effects.pending}
+            onUploadImage={(file) => {
+              const url = URL.createObjectURL(file);
+              void effects.setBackground(localVideoTrack, { mode: 'image', imagePath: url, label: 'Custom' });
+            }}
+            onLeave={() => room.disconnect()}
+            onOpenEndClass={() => setShowEndClassModal(true)}
+            endClassDisabledReason={endClassGate}
+          />
+        )}
+        </>
       )}
 
       {showEndClassModal && (

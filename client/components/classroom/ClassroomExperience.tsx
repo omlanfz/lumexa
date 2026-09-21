@@ -255,6 +255,7 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         scheduledStart={join.scheduledStart}
         classType={join.classType}
         observerMode={adminObserve}
+        demo={demo}
       />
     </LiveKitRoom>
   );

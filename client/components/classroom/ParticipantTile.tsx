@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Mic, MicOff, Hand, Pin, PinOff, Wifi, WifiOff, GraduationCap } from 'lucide-react';
+import { Mic, MicOff, Hand, Pin, PinOff, Wifi, WifiOff, GraduationCap, MonitorUp } from 'lucide-react';
 import type { Participant } from 'livekit-client';
 import { ConnectionQuality } from 'livekit-client';
 import { isTrackReference, VideoTrack, useConnectionQualityIndicator, useIsSpeaking } from '@livekit/components-react';
@@ -122,8 +122,13 @@ export default function ParticipantTile({
 
       {/* Bottom row: name + mic state */}
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent">
-        <span className={`${nameTextSize} font-medium text-white truncate drop-shadow`}>
-          {participant.isLocal ? 'You' : meta.displayName}
+        <span className={`${nameTextSize} font-medium text-white truncate drop-shadow flex items-center gap-1.5 min-w-0`}>
+          {participant.isScreenShareEnabled && (
+            <span data-tooltip="Sharing screen" className="flex-shrink-0 text-[var(--cr-accent)]">
+              <MonitorUp size={12} />
+            </span>
+          )}
+          <span className="truncate">{participant.isLocal ? 'You' : meta.displayName}</span>
         </span>
         <span className={`flex-shrink-0 ${micEnabled ? 'text-white/80' : 'text-red-400'}`}>
           {micEnabled ? <Mic size={13} /> : <MicOff size={13} />}

@@ -52,6 +52,7 @@ export type ControlMessage =
   | { type: 'raise-hand'; raised: boolean; identity: string }
   | { type: 'lower-hand'; identity: string } // teacher lowering someone else's hand
   | { type: 'reaction'; emoji: string; identity: string }
-  | { type: 'spotlight'; identity: string | null }; // null clears spotlight
+  | { type: 'spotlight'; identity: string | null } // null clears spotlight
+  | { type: 'stop-screen-share'; identity: string }; // teacher forcing this identity's share off
 
 export const CLASSROOM_CONTROL_TOPIC = 'lumexa-classroom-control';
