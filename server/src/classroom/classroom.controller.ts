@@ -121,6 +121,22 @@ export class ClassroomController {
     return this.classroomService.muteAllParticipants(req.user.userId, room);
   }
 
+  /** Teacher-only: forcibly stop a participant's screen share. Everyone can
+   * start sharing without permission — this is the teacher's brake on it. */
+  @Post(':room/stop-screen-share')
+  @UseGuards(AuthGuard('jwt'))
+  stopParticipantScreenShare(
+    @Request() req,
+    @Param('room') room: string,
+    @Body() body: { identity: string },
+  ) {
+    return this.classroomService.stopParticipantScreenShare(
+      req.user.userId,
+      room,
+      body.identity,
+    );
+  }
+
   /** Allow/unallow a participant to unmute — revokes their LiveKit
    * publish permission for the microphone source server-side, not just a
    * client-side toggle. */

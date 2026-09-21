@@ -1,11 +1,15 @@
-// FILE PATH: client/components/classroom/PresentationPanel.tsx
+// FILE PATH: client/components/classroom/ParticipantRail.tsx
 //
-// Desktop-only right-side vertical participant strip shown while someone is
-// screen-sharing (see ClassroomRoom — presentation mode is entirely driven
-// by whether a screen-share track exists, never a manual toggle). Never
-// rendered below the lg breakpoint — FilmStrip's bottom-strip layout
-// already covers mobile/tablet presentation mode, so this and FilmStrip are
-// mutually exclusive by breakpoint, not by extra state.
+// Desktop-only compact vertical rail of participant video tiles, shown on
+// the right of the main stage at all times (not just while screen-sharing)
+// — this is the fix for the classroom's old layout-hierarchy problem: a
+// huge, awkwardly-cropped main camera plus a duplicated bottom filmstrip
+// AND a separate participant list. Now there's one clear hierarchy: main
+// stage (teaching content) + this rail (who's here) + FilmStrip taking over
+// only below the lg breakpoint, where there's no room for a side column.
+//
+// Sized for Lumexa's real class shapes — 1:1 (teacher + student) or a batch
+// of up to ~4 students — never a large gallery grid.
 
 'use client';
 
@@ -13,7 +17,7 @@ import { ChevronRight, ChevronLeft } from 'lucide-react';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
 
-interface PresentationPanelProps {
+interface ParticipantRailProps {
   tracks: TrackReferenceOrPlaceholder[];
   raisedHands: Record<string, boolean>;
   pinnedIdentity: string | null;
@@ -22,14 +26,16 @@ interface PresentationPanelProps {
   onToggleCollapsed: () => void;
 }
 
-export default function PresentationPanel({
+export default function ParticipantRail({
   tracks,
   raisedHands,
   pinnedIdentity,
   onTogglePin,
   collapsed,
   onToggleCollapsed,
-}: PresentationPanelProps) {
+}: ParticipantRailProps) {
+  if (tracks.length === 0) return null;
+
   return (
     <div
       className={`hidden lg:flex flex-col flex-shrink-0 border-l border-[var(--cr-border)] bg-[var(--cr-bg)] transition-all duration-200 relative ${

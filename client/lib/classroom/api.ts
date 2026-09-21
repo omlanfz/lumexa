@@ -25,6 +25,10 @@ export async function removeParticipant(room: string, identity: string): Promise
   await api.post(`/classroom/${room}/remove-participant`, { identity });
 }
 
+export async function stopParticipantScreenShare(room: string, identity: string): Promise<void> {
+  await api.post(`/classroom/${room}/stop-screen-share`, { identity });
+}
+
 export async function endClass(
   room: string,
   outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED',

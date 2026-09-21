@@ -763,6 +763,32 @@ export class ClassroomService {
     return { ok: true, mutedCount };
   }
 
+  /** Teacher-only: forcibly stop a participant's screen share. Lumexa lets
+   * every participant share their screen freely, with no permission gate —
+   * this is the one-way brake on that: mute whatever SCREEN_SHARE(+AUDIO)
+   * track they currently have published. The client also gets a data-
+   * channel notice (see ClassroomController → useClassroomControls) so the
+   * presenter's own UI/capture stream stops cleanly instead of just going
+   * dark for everyone else. */
+  async stopParticipantScreenShare(
+    userId: string,
+    room: string,
+    identity: string,
+  ): Promise<{ ok: true }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const client = this.getRoomServiceClient();
+    const participant = await client.getParticipant(room, identity);
+    const shareTracks = participant.tracks.filter(
+      (t) =>
+        t.source === TrackSource.SCREEN_SHARE ||
+        t.source === TrackSource.SCREEN_SHARE_AUDIO,
+    );
+    for (const track of shareTracks) {
+      await client.mutePublishedTrack(room, identity, track.sid, true);
+    }
+    return { ok: true };
+  }
+
   /** Teacher-only: revoke or restore a participant's ability to publish a
    * microphone track (LiveKit enforces this server-side via the
    * participant's own permission grant — the client SDK can't work around

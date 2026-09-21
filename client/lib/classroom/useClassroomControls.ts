@@ -21,12 +21,23 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const REACTION_TTL_MS = 4000;
 
-export function useClassroomControls() {
+/** Optional callback fired when THIS participant is told (over the data
+ * channel) that the teacher has forcibly stopped their screen share — see
+ * ClassroomService.stopParticipantScreenShare. Server-side mute already
+ * cuts the stream to everyone else; this is what lets the presenter's own
+ * client stop the capture and flip their local UI back off cleanly. */
+export function useClassroomControls(onForceStopScreenShare?: () => void) {
   const { localParticipant } = useLocalParticipant();
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({});
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [spotlightIdentity, setSpotlightIdentityState] = useState<string | null>(null);
   const reactionCounter = useRef(0);
+  const localIdentityRef = useRef(localParticipant.identity);
+  const onForceStopScreenShareRef = useRef(onForceStopScreenShare);
+  useEffect(() => {
+    localIdentityRef.current = localParticipant.identity;
+    onForceStopScreenShareRef.current = onForceStopScreenShare;
+  });
 
   const handleIncoming = useCallback((raw: Uint8Array) => {
     let msg: ControlMessage;
@@ -50,6 +61,9 @@ export function useClassroomControls() {
       }
       case 'spotlight':
         setSpotlightIdentityState(msg.identity);
+        break;
+      case 'stop-screen-share':
+        if (msg.identity === localIdentityRef.current) onForceStopScreenShareRef.current?.();
         break;
     }
   }, []);
@@ -109,6 +123,13 @@ export function useClassroomControls() {
     [broadcast],
   );
 
+  const notifyStopScreenShare = useCallback(
+    (identity: string) => {
+      broadcast({ type: 'stop-screen-share', identity });
+    },
+    [broadcast],
+  );
+
   return {
     raisedHands,
     reactions,
@@ -117,5 +138,6 @@ export function useClassroomControls() {
     lowerHand,
     sendReaction,
     setSpotlight,
+    notifyStopScreenShare,
   };
 }

@@ -28,6 +28,8 @@ import {
   GraduationCap,
   UserPlus,
   Check,
+  MonitorUp,
+  MonitorOff,
 } from 'lucide-react';
 import { parseParticipantMeta } from '@/lib/classroom/types';
 import { muteParticipant, removeParticipant, setParticipantMicLocked } from '@/lib/classroom/api';
@@ -46,6 +48,10 @@ interface ParticipantsPanelProps {
   onSetSpotlight: (identity: string | null) => void;
   pendingAdmissions?: PendingAdmission[];
   onDecideAdmission?: (admissionId: string, decision: 'APPROVE' | 'DENY') => void;
+  /** Teacher-only: notifies the target's own client over the data channel
+   * so their capture stream stops cleanly (see useClassroomControls). The
+   * server-side mute (stopParticipantScreenShare) is fired alongside it. */
+  onNotifyStopScreenShare?: (identity: string) => void;
 }
 
 function QualityBadge({ participant }: { participant: Participant }) {
@@ -79,6 +85,7 @@ function ParticipantRow({
   menuOpen,
   onOpenMenu,
   onCloseMenu,
+  onNotifyStopScreenShare,
 }: {
   participant: Participant;
   isTeacher: boolean;
@@ -91,6 +98,7 @@ function ParticipantRow({
   menuOpen: boolean;
   onOpenMenu: () => void;
   onCloseMenu: () => void;
+  onNotifyStopScreenShare?: (identity: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -140,6 +148,14 @@ function ParticipantRow({
     onCloseMenu();
   };
 
+  const handleStopScreenShare = () => {
+    // The caller (ClassroomRoom.handleForceStopShare) does both the data-
+    // channel notice and the server-side mute — kept as one call here so
+    // there's a single source of truth instead of two independent ones.
+    onNotifyStopScreenShare?.(participant.identity);
+    onCloseMenu();
+  };
+
   return (
     <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[var(--cr-surface-2)] transition-colors group">
       <div
@@ -169,6 +185,11 @@ function ParticipantRow({
           >
             <Hand size={12} />
           </button>
+        )}
+        {participant.isScreenShareEnabled && (
+          <span data-tooltip="Sharing screen" className="text-[var(--cr-accent)]">
+            <MonitorUp size={14} />
+          </span>
         )}
         <QualityBadge participant={participant} />
         <span className={micOn ? 'text-[var(--cr-text-muted)]' : 'text-red-400'}>
@@ -220,6 +241,14 @@ function ParticipantRow({
                 >
                   <VideoOff size={13} /> Turn off camera
                 </button>
+                {participant.isScreenShareEnabled && (
+                  <button
+                    onClick={handleStopScreenShare}
+                    className="w-full text-left px-3 py-2 text-xs text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] flex items-center gap-2"
+                  >
+                    <MonitorOff size={13} /> Stop screen share
+                  </button>
+                )}
                 <div className="border-t border-[var(--cr-border)]" />
                 <button
                   onClick={handleRemove}
@@ -248,6 +277,7 @@ export default function ParticipantsPanel({
   onSetSpotlight,
   pendingAdmissions = [],
   onDecideAdmission,
+  onNotifyStopScreenShare,
 }: ParticipantsPanelProps) {
   const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
 
@@ -323,6 +353,7 @@ export default function ParticipantsPanel({
             menuOpen={openMenuIdentity === p.identity}
             onOpenMenu={() => setOpenMenuIdentity(p.identity)}
             onCloseMenu={() => setOpenMenuIdentity(null)}
+            onNotifyStopScreenShare={onNotifyStopScreenShare}
           />
         ))}
       </div>

@@ -5,7 +5,10 @@
 // Incomplete) a reason, then a final confirmation for Completed that spells
 // out exactly what happens financially. Only the curriculum (ScheduledLesson)
 // flow has this economics; the legacy marketplace Booking flow just gets a
-// plain confirm.
+// plain confirm. The QA demo classroom also gets the full flow (isLessonFlow
+// is true for it too — see ClassroomRoom) purely so it can be tested, even
+// though the server ignores the outcome for that room and applies no
+// economics either way.
 
 'use client';
 
