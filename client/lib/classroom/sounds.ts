@@ -14,7 +14,8 @@ export type ClassroomToneEvent =
   | 'class-expired'
   | 'hand-raised'
   | 'admission-request'
-  | 'timer-milestone';
+  | 'timer-milestone'
+  | 'chat-message';
 
 let sharedContext: AudioContext | null = null;
 
@@ -55,6 +56,10 @@ const PROFILES: Record<ClassroomToneEvent, ToneProfile> = {
   // A single low, short tick — meant to be barely noticeable, just enough
   // to accompany the timer turning red.
   'timer-milestone': { freqs: [300], duration: 0.18, gain: 0.035 },
+  // A quick, soft two-note "blip" — distinct from every presence/alert tone
+  // above (none of them share this pitch pair) so a new chat message never
+  // gets mistaken for someone joining or a raised hand.
+  'chat-message': { freqs: [700, 900], duration: 0.12, gain: 0.035 },
 };
 
 export function playClassroomTone(event: ClassroomToneEvent): void {

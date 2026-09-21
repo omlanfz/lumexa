@@ -6,17 +6,17 @@
 
 'use client';
 
-import { Ban, Sparkles, Sun, Wand2, ScanFace, Upload } from 'lucide-react';
+import { Ban, Sparkles, Sun, Wand2, ScanFace, Upload, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useRef } from 'react';
 import { LUMEXA_BACKGROUNDS } from '@/lib/classroom/backgrounds';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
-import type { LightingOptions } from '@/lib/classroom/lightingProcessor';
+import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 
 interface VideoEffectsPanelProps {
   backgroundEffect: BackgroundEffect;
   onBackgroundChange: (effect: BackgroundEffect) => void;
-  lighting: LightingOptions;
-  onLightingChange: (lighting: LightingOptions) => void;
+  lighting: AppearanceOptions;
+  onLightingChange: (lighting: AppearanceOptions) => void;
   supported: boolean;
   pending?: boolean;
   onUploadImage?: (file: File) => void;
@@ -70,6 +70,7 @@ export default function VideoEffectsPanel({
 }: VideoEffectsPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isLightingActive = lighting.brightness !== 1 || lighting.contrast !== 1;
+  const lightingPercent = Math.round(lighting.brightness * 100);
 
   return (
     <div className="w-[320px] max-w-full">
@@ -157,36 +158,55 @@ export default function VideoEffectsPanel({
               <Sun size={14} /> Lighting adjustment
             </span>
             <span className="text-xs text-[var(--cr-text-muted)] tabular-nums">
-              {isLightingActive ? 'On' : 'Off'}
+              {isLightingActive ? `${lightingPercent}%` : 'Off'}
             </span>
           </div>
           <input
             type="range"
-            min={90}
-            max={130}
+            min={80}
+            max={140}
             step={1}
             disabled={!supported || pending}
-            value={Math.round(lighting.brightness * 100)}
+            value={lightingPercent}
             onChange={(e) => {
               const brightness = Number(e.target.value) / 100;
-              onLightingChange({ brightness, contrast: 1 + (brightness - 1) * 0.4 });
+              onLightingChange({ ...lighting, brightness, contrast: 1 + (brightness - 1) * 0.5 });
             }}
             className="w-full accent-[var(--cr-accent)] disabled:opacity-40"
           />
         </div>
 
-        <div className="flex items-center justify-between py-2 opacity-50">
+        <button
+          type="button"
+          onClick={() => onLightingChange({ ...lighting, touchUp: !lighting.touchUp })}
+          disabled={!supported || pending}
+          className="w-full flex items-center justify-between py-2 disabled:opacity-40"
+        >
           <span className="text-sm text-[var(--cr-text)] flex items-center gap-1.5">
             <Wand2 size={14} /> Touch-up
           </span>
-          <span className="text-[11px] text-[var(--cr-text-faint)]">Coming soon</span>
-        </div>
-        <div className="flex items-center justify-between py-2 opacity-50">
+          {lighting.touchUp ? (
+            <ToggleRight size={22} className="text-[var(--cr-accent)]" />
+          ) : (
+            <ToggleLeft size={22} className="text-[var(--cr-text-faint)]" />
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => onLightingChange({ ...lighting, autoFraming: !lighting.autoFraming })}
+          disabled={!supported || pending}
+          className="w-full flex items-center justify-between py-2 disabled:opacity-40"
+        >
           <span className="text-sm text-[var(--cr-text)] flex items-center gap-1.5">
             <ScanFace size={14} /> Auto-framing
           </span>
-          <span className="text-[11px] text-[var(--cr-text-faint)]">Coming soon</span>
-        </div>
+          {lighting.autoFraming ? (
+            <ToggleRight size={22} className="text-[var(--cr-accent)]" />
+          ) : (
+            <ToggleLeft size={22} className="text-[var(--cr-text-faint)]" />
+          )}
+        </button>
       </div>
     </div>
   );
