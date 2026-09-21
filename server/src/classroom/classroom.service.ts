@@ -155,10 +155,35 @@ export class ClassroomService {
       token: await at.toJwt(),
       url: process.env.LIVEKIT_URL,
       roomName: DEMO_ROOM_NAME,
-      // No real schedule for the QA demo room — the timer just starts now.
-      scheduledStart: new Date().toISOString(),
+      scheduledStart: await this.getDemoRoomStart(),
       classType: 'ONE_TO_ONE' as const,
     };
+  }
+
+  /** The demo room has no real ScheduledLesson/Booking to anchor its class
+   * timer to, so every participant needs to agree on the same "class
+   * started at" moment regardless of when each of them personally called
+   * this join endpoint — otherwise the teacher and student each see a
+   * timer counting from their own join time instead of one shared clock.
+   * LiveKit already tracks that moment for free: `creationTimeMs` is set
+   * once, the instant the room's first participant actually connects, and
+   * every later join sees that same value back. Only the very first
+   * joiner (who is about to create the room) has no existing room to read
+   * yet — for them "now" effectively IS that anchor, since LiveKit creates
+   * the room within moments of this same connection. */
+  private async getDemoRoomStart(): Promise<string> {
+    try {
+      const client = this.getRoomServiceClient();
+      const [room] = await client.listRooms([DEMO_ROOM_NAME]);
+      if (room?.creationTimeMs) {
+        return new Date(Number(room.creationTimeMs)).toISOString();
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Could not look up the demo room's creation time, falling back to now: ${err}`,
+      );
+    }
+    return new Date().toISOString();
   }
 
   /** Admin-only: join an already-live class as a silent observer. `hidden:

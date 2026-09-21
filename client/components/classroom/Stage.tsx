@@ -55,13 +55,13 @@ function MainFrame({ children }: { children: React.ReactNode }) {
 }
 
 /** One tile per active screen share, remote or local — every tile shows
- * the real video and gets its own fullscreen toggle. The button lives in
- * a dedicated always-rendered layer so it can never silently disappear
- * (explicit fallback icon + high-contrast chip, not just a bare icon on
- * transparent black — visible over both light and dark shared content).
- * Fullscreen itself is NOT the browser's per-element Fullscreen API — see
- * the file header comment — so toggling it is just reporting the choice
- * up to the caller. */
+ * the real video and gets its own fullscreen toggle: the ⛶/⤢ button in its
+ * top-right corner (always rendered, high-contrast chip, never a bare icon
+ * on transparent black so it can't silently blend into shared content), or
+ * a double-click anywhere on the tile for the same effect. Fullscreen
+ * itself is NOT the browser's per-element Fullscreen API — see the file
+ * header comment — so toggling it is just reporting the choice up to the
+ * caller. */
 function ScreenShareTile({
   trackRef,
   isTeacher,
@@ -82,7 +82,10 @@ function ScreenShareTile({
   const meta = parseParticipantMeta(trackRef.participant.identity, trackRef.participant.name || '');
 
   return (
-    <div className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative">
+    <div
+      className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative cursor-pointer"
+      onDoubleClick={onToggleFullscreen}
+    >
       <VideoTrack trackRef={trackRef} className="w-full h-full object-contain bg-black" />
       <div className="absolute top-3 left-3 flex items-center gap-2">
         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
