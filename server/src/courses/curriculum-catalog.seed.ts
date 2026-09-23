@@ -907,21 +907,24 @@ export async function seedCurriculumContent(
     logger.log(`[curriculum-seed] ${course.slug} seeded: ${total} sessions.`);
   }
 
-  await backfillAiBuilderProjectLinks(prisma, logger);
+  await backfillProjectLinks(prisma, logger, 'ai-builder-path');
+  await backfillProjectLinks(prisma, logger, 'data-scientist-path');
+  await backfillDataScientistKeyTerminologyTables(prisma, logger);
 }
 
-// ── AI Builder Path: portfolio-project links ────────────────────────────────
+// ── Portfolio-project links (per pathway) ───────────────────────────────────
 //
 // The lesson page shows a "💻 Project" section (Open Project / Copy Link
 // buttons) in place of the plain Code section whenever Lesson.projectLinks
-// is set — see LessonDetailsView on the client. Keyed by the lesson's
-// absolute `order` within the ai-builder-path course (1-28, matching
-// python-ai-foundations 1-8 + Course Test 9, computer-vision 10-17 + Course
-// Test 18, language-models 19-26 + Course Test 27, Final Test 28 — see
-// createModuleRows/seedPathwayCurriculum above). Lessons not listed here
-// (the first lesson of each module, and every assessment session) keep
-// showing the plain Code section instead. The 3 "polish/recap" lessons (8,
-// 17, 26) link back to all 3 projects finished in that module so far.
+// is set — see LessonDetailsView on the client. Each map below is keyed by
+// the lesson's absolute `order` within its 28-session pathway course (1-8 +
+// Course Test 9, 10-17 + Course Test 18, 19-26 + Course Test 27, Final Test
+// 28 — see createModuleRows/seedPathwayCurriculum above). Lessons not
+// listed (the first lesson of each module, and every assessment session)
+// keep showing the plain Code section instead. The 3 "polish/recap"
+// lessons (8, 17, 26) link back to all 3 projects finished in that module.
+
+// ── AI Builder Path ──────────────────────────────────────────────────────
 const NUMBER_PREDICTION_MODEL = {
   title: 'Number Prediction Model',
   url: 'https://colab.research.google.com/drive/1t_GfYWRaBp8tHM9py5DPzqk_aMMIaPwy?usp=sharing',
@@ -986,43 +989,119 @@ const AI_BUILDER_PROJECT_LINKS: Record<number, { title: string; url: string }[]>
   26: [RECIPE_CHATBOT_WITH_MEMORY, STUDY_ASSISTANT_ORBIT, CREATIVE_STORY_GENERATOR_NOVA],
 };
 
-/** Read-time fallback for ai-builder-path's project links, used by
+// ── Data Scientist Path: portfolio-project links ────────────────────────────
+const SPORTS_PERFORMANCE_ANALYSIS = {
+  title: 'Sports Performance Analysis',
+  url: 'https://colab.research.google.com/drive/1FC67JYgeDDAxJn0A5yAUSIufEO6drkci?usp=sharing',
+};
+const SCHOOL_GRADE_ANALYSIS = {
+  title: 'School Grade Analysis',
+  url: 'https://colab.research.google.com/drive/1ZyV_SXwN0fsxD8akkCvjlP-3sd41H5zy?usp=sharing',
+};
+const CITY_POPULATION_TRENDS = {
+  title: 'City Population Trends',
+  url: 'https://colab.research.google.com/drive/1nt79FsuO4onQuRYxbAufewcCLcR292cq?usp=sharing',
+};
+const CLIMATE_CHANGE_DASHBOARD = {
+  title: 'Climate Change Dashboard',
+  url: 'https://colab.research.google.com/drive/1GwWw1G0D5vCWN--m9tGET2L_eVFv-uii?usp=sharing',
+};
+const MARKET_TRENDS_CHART = {
+  title: 'Market Trends Chart',
+  url: 'https://colab.research.google.com/drive/1ZwnsQ1Be_VPs1Z086kwvzFflIxZY46R9?usp=sharing',
+};
+const SPORTS_COMPARISON_VISUALISER = {
+  title: 'Sports Comparison Visualiser',
+  url: 'https://colab.research.google.com/drive/1RcCBuPXHfMyJ_hoWpBdHmTAXL2XPDPcC?usp=sharing',
+};
+const HOUSE_PRICE_PREDICTOR = {
+  title: 'House Price Predictor',
+  url: 'https://colab.research.google.com/drive/1SPMH9HTmmYOHhlORUdJedz5GyOwbuPmp?usp=sharing',
+};
+const CUSTOMER_CHURN_PREDICTOR = {
+  title: 'Customer Churn Predictor',
+  url: 'https://colab.research.google.com/drive/1pItOS98TOpAKh74aVr3fbGRQOCCYNcgq?usp=sharing',
+};
+const MOVIE_RECOMMENDATION_ENGINE = {
+  title: 'Movie Recommendation Engine',
+  url: 'https://colab.research.google.com/drive/1JaYTWH4jMEOVQPfG0Te0wq_XX5LzviQU?usp=sharing',
+};
+
+const DATA_SCIENTIST_PROJECT_LINKS: Record<number, { title: string; url: string }[]> = {
+  // python-for-data (lessons 1-8; 9 = Course Test)
+  2: [SPORTS_PERFORMANCE_ANALYSIS],
+  3: [SPORTS_PERFORMANCE_ANALYSIS],
+  4: [SCHOOL_GRADE_ANALYSIS],
+  5: [SCHOOL_GRADE_ANALYSIS],
+  6: [CITY_POPULATION_TRENDS],
+  7: [CITY_POPULATION_TRENDS],
+  8: [SPORTS_PERFORMANCE_ANALYSIS, SCHOOL_GRADE_ANALYSIS, CITY_POPULATION_TRENDS],
+  // data-visualisation (lessons 10-17; 18 = Course Test)
+  11: [CLIMATE_CHANGE_DASHBOARD],
+  12: [CLIMATE_CHANGE_DASHBOARD],
+  13: [MARKET_TRENDS_CHART],
+  14: [MARKET_TRENDS_CHART],
+  15: [SPORTS_COMPARISON_VISUALISER],
+  16: [SPORTS_COMPARISON_VISUALISER],
+  17: [CLIMATE_CHANGE_DASHBOARD, MARKET_TRENDS_CHART, SPORTS_COMPARISON_VISUALISER],
+  // machine-learning-projects (lessons 19-26; 27 = Course Test, 28 = Final Test)
+  20: [HOUSE_PRICE_PREDICTOR],
+  21: [HOUSE_PRICE_PREDICTOR],
+  22: [CUSTOMER_CHURN_PREDICTOR],
+  23: [CUSTOMER_CHURN_PREDICTOR],
+  24: [MOVIE_RECOMMENDATION_ENGINE],
+  25: [MOVIE_RECOMMENDATION_ENGINE],
+  26: [HOUSE_PRICE_PREDICTOR, CUSTOMER_CHURN_PREDICTOR, MOVIE_RECOMMENDATION_ENGINE],
+};
+
+const PROJECT_LINKS_BY_COURSE_SLUG: Record<string, Record<number, { title: string; url: string }[]>> = {
+  'ai-builder-path': AI_BUILDER_PROJECT_LINKS,
+  'data-scientist-path': DATA_SCIENTIST_PROJECT_LINKS,
+};
+
+/** Read-time fallback for a pathway's project links, used by
  * CurriculumService wherever a Lesson is returned to the client
  * (getCatalogLessonDetails/getScheduledLessonDetails/
  * getDemoExampleLessonDetails) — so the correct project always shows up
  * immediately even on an environment whose backend hasn't rebooted (and
- * hence hasn't run backfillAiBuilderProjectLinks below) since this feature
- * shipped, without waiting on a restart. Only ever consulted when the
- * lesson's own stored projectLinks is null/undefined (see call sites) — an
- * admin-set value, including an intentionally-cleared `[]`, always wins. */
-export function getAiBuilderProjectLinksFallback(order: number): { title: string; url: string }[] | null {
-  return AI_BUILDER_PROJECT_LINKS[order] ?? null;
+ * hence hasn't run backfillProjectLinks below) since this feature shipped,
+ * without waiting on a restart. Only ever consulted when the lesson's own
+ * stored projectLinks is null/undefined (see call sites) — an admin-set
+ * value, including an intentionally-cleared `[]`, always wins. Returns null
+ * for any course slug with no known mapping (every course besides the ones
+ * explicitly listed above). */
+export function getProjectLinksFallback(courseSlug: string, order: number): { title: string; url: string }[] | null {
+  return PROJECT_LINKS_BY_COURSE_SLUG[courseSlug]?.[order] ?? null;
 }
 
 /** Idempotent, admin-safe: only ever fills in a lesson whose projectLinks is
  * still unset (null) — an admin who has since edited or cleared it (an
  * empty array, `[]`, counts as "set") is never overwritten on a later boot.
  * Runs unconditionally (unlike buildFreshStructure above) so it also
- * back-fills an already-seeded ai-builder-path course, not just a fresh one. */
-async function backfillAiBuilderProjectLinks(
+ * back-fills an already-seeded course, not just a fresh one. */
+async function backfillProjectLinks(
   prisma: PrismaClient,
   logger: { log: (msg: string) => void; warn: (msg: string) => void },
+  courseSlug: string,
 ) {
+  const map = PROJECT_LINKS_BY_COURSE_SLUG[courseSlug];
+  if (!map) return;
+
   const course = await prisma.course.findUnique({
-    where: { slug: 'ai-builder-path' },
+    where: { slug: courseSlug },
     select: { id: true },
   });
   if (!course) return;
 
   const lessons = await prisma.lesson.findMany({
-    where: { courseId: course.id, order: { in: Object.keys(AI_BUILDER_PROJECT_LINKS).map(Number) } },
+    where: { courseId: course.id, order: { in: Object.keys(map).map(Number) } },
     select: { id: true, order: true, projectLinks: true },
   });
 
   let updated = 0;
   for (const lesson of lessons) {
     if (lesson.projectLinks !== null) continue;
-    const links = getAiBuilderProjectLinksFallback(lesson.order);
+    const links = map[lesson.order];
     if (!links) continue;
     await prisma.lesson.update({
       where: { id: lesson.id },
@@ -1031,6 +1110,108 @@ async function backfillAiBuilderProjectLinks(
     updated++;
   }
   if (updated > 0) {
-    logger.log(`[curriculum-seed] ai-builder-path: backfilled projectLinks on ${updated} lesson(s).`);
+    logger.log(`[curriculum-seed] ${courseSlug}: backfilled projectLinks on ${updated} lesson(s).`);
+  }
+}
+
+// ── Data Scientist Path: "Key Terminology" bullets -> table ─────────────────
+//
+// The source content renders a "## Key Terminology"/"### Key Terminology"
+// section as a `- **Term**: definition` bullet list on 16 of this pathway's
+// 24 learning lessons (the other 8, in data-visualisation, already use a
+// table). Converts that bullet block into a real GFM table so it reads the
+// same way the "Key Vocabulary" table does elsewhere — see
+// SimpleMarkdown.tsx's table renderer on the client. Pure and idempotent: a
+// no-op wherever the pattern isn't found (already a table, section missing,
+// or an admin rewrote it into something else entirely), so it's safe to run
+// on every read (see CurriculumService.tableizeContent) and as a one-time DB
+// backfill (below) alike.
+export function tableizeKeyTerminology(markdown: string): string {
+  const lines = markdown.split('\n');
+  const headingIdx = lines.findIndex((l) => /^#{2,3}\s+Key Terminology\s*$/.test(l.trim()));
+  if (headingIdx === -1) return markdown;
+
+  let i = headingIdx + 1;
+  while (i < lines.length && lines[i].trim() === '') i++;
+
+  // A short non-bullet line directly under the heading (e.g. a lesson-8
+  // recap's "(Review from Lessons 1–7)") is kept as-is, ahead of the table,
+  // rather than mistaken for the start of a definition list.
+  let subtitle: string | null = null;
+  if (i < lines.length && lines[i].trim() !== '' && !lines[i].trim().startsWith('-')) {
+    subtitle = lines[i];
+    i++;
+  }
+
+  // Greedy up to the LAST "**:" on the line — handles both a single bolded
+  // term ("- **Term**: def") and a multi-term bullet ("- **A**, **B**: def",
+  // used by one lesson-8 recap) the same way, keeping the term's own bold
+  // markup intact for the table cell instead of re-wrapping it.
+  const bulletRe = /^-\s+(.+)\*\*:\s*(.+)$/;
+  const rows: { term: string; def: string }[] = [];
+  while (i < lines.length) {
+    const bulletMatch = lines[i].match(bulletRe);
+    if (bulletMatch) {
+      rows.push({ term: `${bulletMatch[1]}**`, def: bulletMatch[2] });
+      i++;
+    } else if (rows.length > 0 && lines[i].trim() !== '') {
+      // Continuation of the previous bullet's definition, wrapped onto its
+      // own line (source markdown wraps long definitions at ~80 columns).
+      rows[rows.length - 1].def += ` ${lines[i].trim()}`;
+      i++;
+    } else {
+      break;
+    }
+  }
+  if (rows.length === 0) return markdown; // nothing to convert (already a table, or no bullets)
+
+  const escapeCell = (s: string) => s.replace(/\|/g, '\\|');
+  const table = [
+    '| Term | Definition |',
+    '|---|---|',
+    ...rows.map((r) => `| ${escapeCell(r.term)} | ${escapeCell(r.def)} |`),
+  ];
+
+  return [
+    ...lines.slice(0, headingIdx + 1),
+    ...(subtitle !== null ? [subtitle] : []),
+    '',
+    ...table,
+    ...lines.slice(i),
+  ].join('\n');
+}
+
+/** One-time DB backfill counterpart to the read-time tableizeKeyTerminology
+ * fallback (see CurriculumService.tableizeContent) — persists the converted
+ * markdown for real so the admin editor's textarea shows (and future saves
+ * keep) the table form rather than silently diverging from what's stored. */
+async function backfillDataScientistKeyTerminologyTables(
+  prisma: PrismaClient,
+  logger: { log: (msg: string) => void; warn: (msg: string) => void },
+) {
+  const course = await prisma.course.findUnique({
+    where: { slug: 'data-scientist-path' },
+    select: { id: true },
+  });
+  if (!course) return;
+
+  const lessons = await prisma.lesson.findMany({
+    where: { courseId: course.id, type: SessionType.LEARNING },
+    select: { id: true, contentMarkdown: true },
+  });
+
+  let updated = 0;
+  for (const lesson of lessons) {
+    if (!lesson.contentMarkdown) continue;
+    const converted = tableizeKeyTerminology(lesson.contentMarkdown);
+    if (converted === lesson.contentMarkdown) continue;
+    await prisma.lesson.update({
+      where: { id: lesson.id },
+      data: { contentMarkdown: converted },
+    });
+    updated++;
+  }
+  if (updated > 0) {
+    logger.log(`[curriculum-seed] data-scientist-path: tableized Key Terminology on ${updated} lesson(s).`);
   }
 }
