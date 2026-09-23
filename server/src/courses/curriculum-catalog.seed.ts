@@ -986,6 +986,19 @@ const AI_BUILDER_PROJECT_LINKS: Record<number, { title: string; url: string }[]>
   26: [RECIPE_CHATBOT_WITH_MEMORY, STUDY_ASSISTANT_ORBIT, CREATIVE_STORY_GENERATOR_NOVA],
 };
 
+/** Read-time fallback for ai-builder-path's project links, used by
+ * CurriculumService wherever a Lesson is returned to the client
+ * (getCatalogLessonDetails/getScheduledLessonDetails/
+ * getDemoExampleLessonDetails) — so the correct project always shows up
+ * immediately even on an environment whose backend hasn't rebooted (and
+ * hence hasn't run backfillAiBuilderProjectLinks below) since this feature
+ * shipped, without waiting on a restart. Only ever consulted when the
+ * lesson's own stored projectLinks is null/undefined (see call sites) — an
+ * admin-set value, including an intentionally-cleared `[]`, always wins. */
+export function getAiBuilderProjectLinksFallback(order: number): { title: string; url: string }[] | null {
+  return AI_BUILDER_PROJECT_LINKS[order] ?? null;
+}
+
 /** Idempotent, admin-safe: only ever fills in a lesson whose projectLinks is
  * still unset (null) — an admin who has since edited or cleared it (an
  * empty array, `[]`, counts as "set") is never overwritten on a later boot.
@@ -1009,7 +1022,7 @@ async function backfillAiBuilderProjectLinks(
   let updated = 0;
   for (const lesson of lessons) {
     if (lesson.projectLinks !== null) continue;
-    const links = AI_BUILDER_PROJECT_LINKS[lesson.order];
+    const links = getAiBuilderProjectLinksFallback(lesson.order);
     if (!links) continue;
     await prisma.lesson.update({
       where: { id: lesson.id },

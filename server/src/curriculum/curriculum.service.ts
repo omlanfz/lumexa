@@ -26,6 +26,7 @@ import {
   todayDhakaDateStr,
   utcToDhakaParts,
 } from '../scheduling/dhaka-time.util';
+import { getAiBuilderProjectLinksFallback } from '../courses/curriculum-catalog.seed';
 import {
   CreateModuleDto,
   CreateProjectDto,
@@ -117,7 +118,7 @@ export class CurriculumService {
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
-        projectLinks: lesson.projectLinks,
+        projectLinks: this.resolveProjectLinks('ai-builder-path', lesson.order, lesson.projectLinks),
         module: lesson.module
           ? {
               id: lesson.module.id,
@@ -154,7 +155,7 @@ export class CurriculumService {
         assessment: {
           select: { id: true, type: true, title: true, isPublished: true },
         },
-        course: { select: { id: true, title: true } },
+        course: { select: { id: true, title: true, slug: true } },
       },
     });
     if (!lesson) throw new NotFoundException('Lesson not found');
@@ -198,7 +199,7 @@ export class CurriculumService {
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
-        projectLinks: lesson.projectLinks,
+        projectLinks: this.resolveProjectLinks(lesson.course.slug, lesson.order, lesson.projectLinks),
         module: lesson.module
           ? {
               id: lesson.module.id,
@@ -235,7 +236,7 @@ export class CurriculumService {
           },
         },
         teacher: { select: { userId: true } },
-        course: { select: { id: true, title: true } },
+        course: { select: { id: true, title: true, slug: true } },
         submission: {
           select: {
             id: true,
@@ -317,7 +318,7 @@ export class CurriculumService {
         homework: sl.lesson.homework,
         checkpoint: sl.lesson.checkpoint,
         codeSnippets: sl.lesson.codeSnippets,
-        projectLinks: sl.lesson.projectLinks,
+        projectLinks: this.resolveProjectLinks(sl.course.slug, sl.lesson.order, sl.lesson.projectLinks),
         module: sl.lesson.module
           ? {
               id: sl.lesson.module.id,
@@ -355,6 +356,25 @@ export class CurriculumService {
       courseId: sl.course.id,
       courseTitle: sl.course.title,
     };
+  }
+
+  /** The lesson's own stored projectLinks always wins (including an
+   * intentionally-cleared `[]`) — only when it's null/undefined do we fall
+   * back to the known ai-builder-path mapping, so the "💻 Project" section
+   * (admin editor and live lesson pages alike) is always correct even on an
+   * environment whose backend hasn't rebooted since this feature shipped
+   * (see backfillAiBuilderProjectLinks in curriculum-catalog.seed.ts, which
+   * this fallback makes non-essential for correctness, only for making the
+   * value permanent/editable). Never applies outside ai-builder-path, since
+   * every pathway course reuses the same 1-28 lesson `order` numbering. */
+  private resolveProjectLinks(
+    courseSlug: string,
+    order: number,
+    stored: unknown,
+  ): unknown {
+    if (stored !== null && stored !== undefined) return stored;
+    if (courseSlug !== 'ai-builder-path') return stored;
+    return getAiBuilderProjectLinksFallback(order);
   }
 
   // ── Admin/teacher browsing: full course structure ────────────────────────
