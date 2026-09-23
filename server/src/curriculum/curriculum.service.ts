@@ -117,6 +117,7 @@ export class CurriculumService {
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
+        projectLinks: lesson.projectLinks,
         module: lesson.module
           ? {
               id: lesson.module.id,
@@ -197,6 +198,7 @@ export class CurriculumService {
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
+        projectLinks: lesson.projectLinks,
         module: lesson.module
           ? {
               id: lesson.module.id,
@@ -315,6 +317,7 @@ export class CurriculumService {
         homework: sl.lesson.homework,
         checkpoint: sl.lesson.checkpoint,
         codeSnippets: sl.lesson.codeSnippets,
+        projectLinks: sl.lesson.projectLinks,
         module: sl.lesson.module
           ? {
               id: sl.lesson.module.id,
@@ -580,6 +583,7 @@ export class CurriculumService {
       reviewNotes: string | null;
       checkpoint: string | null;
       codeSnippets: unknown;
+      projectLinks: unknown;
       homework: string | null;
     },
   ) {
@@ -594,6 +598,7 @@ export class CurriculumService {
       reviewNotes: source.reviewNotes,
       checkpoint: source.checkpoint,
       codeSnippets: source.codeSnippets as object | undefined,
+      projectLinks: source.projectLinks as object | undefined,
       homework: source.homework,
       sourceRefs: { importedFromLessonId: source.id } as object,
     };
@@ -641,7 +646,7 @@ export class CurriculumService {
 
   async updateLessonContent(lessonId: string, dto: UpdateLessonContentDto) {
     await this.ensure(this.prisma.lesson, lessonId, 'Lesson');
-    const { codeSnippets, type, ...rest } = dto;
+    const { codeSnippets, projectLinks, type, ...rest } = dto;
     return this.prisma.lesson.update({
       where: { id: lessonId },
       data: {
@@ -649,6 +654,9 @@ export class CurriculumService {
         ...(type ? { type: type as SessionType } : {}),
         ...(codeSnippets
           ? { codeSnippets: codeSnippets as unknown as object }
+          : {}),
+        ...(projectLinks
+          ? { projectLinks: projectLinks as unknown as object }
           : {}),
       },
     });

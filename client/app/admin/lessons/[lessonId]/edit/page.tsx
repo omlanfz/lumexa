@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import { Card } from '@/components/admin/AdminUI';
 import SimpleMarkdown from '@/components/curriculum/SimpleMarkdown';
+import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/ProjectLinksSection';
 
 interface LessonDetails {
   lesson: {
@@ -16,6 +17,7 @@ interface LessonDetails {
     homework: string | null;
     checkpoint: string | null;
     codeSnippets: { label: string; language: string; code: string; part?: string }[];
+    projectLinks: ProjectLink[] | null;
   };
   session: { courseTitle: string };
 }
@@ -36,6 +38,7 @@ export default function AdminLessonEditPage() {
   const [contentMarkdown, setContentMarkdown] = useState('');
   const [homework, setHomework] = useState('');
   const [codeSnippetCount, setCodeSnippetCount] = useState(0);
+  const [projectLinks, setProjectLinks] = useState<ProjectLink[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -52,6 +55,7 @@ export default function AdminLessonEditPage() {
       setContentMarkdown(l.contentMarkdown ?? '');
       setHomework(l.homework ?? '');
       setCodeSnippetCount(l.codeSnippets?.length ?? 0);
+      setProjectLinks(l.projectLinks ?? []);
       setLoading(false);
     });
     return () => {
@@ -70,6 +74,9 @@ export default function AdminLessonEditPage() {
         contentMarkdown,
         homework,
         checkpoint,
+        projectLinks: projectLinks
+          .map((p) => ({ title: p.title.trim(), url: p.url.trim() }))
+          .filter((p) => p.title && p.url),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -179,9 +186,68 @@ export default function AdminLessonEditPage() {
         </div>
       </Section>
 
+      <Section
+        title="💻 Project"
+        hint='Buttons ("Open Project" / "Copy Link") shown on the lesson page in place of the Code section. Leave empty to keep showing the Code section below instead. Add more than one entry (e.g. a recap session) to show each project under its own heading.'
+      >
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-3">
+            {projectLinks.map((link, i) => (
+              <div key={i} className="flex flex-col sm:flex-row gap-2 items-start sm:items-center p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)]">
+                <input
+                  value={link.title}
+                  onChange={(e) => {
+                    const next = [...projectLinks];
+                    next[i] = { ...next[i], title: e.target.value };
+                    setProjectLinks(next);
+                  }}
+                  placeholder="Project name"
+                  className="w-full sm:w-2/5 px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] text-[var(--a-text)] text-sm a-focus"
+                />
+                <input
+                  value={link.url}
+                  onChange={(e) => {
+                    const next = [...projectLinks];
+                    next[i] = { ...next[i], url: e.target.value };
+                    setProjectLinks(next);
+                  }}
+                  placeholder="https://colab.research.google.com/..."
+                  className="w-full flex-1 px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] text-[var(--a-text)] text-sm a-focus"
+                />
+                <button
+                  onClick={() => setProjectLinks(projectLinks.filter((_, idx) => idx !== i))}
+                  className="text-sm text-[var(--a-danger)] hover:underline px-1 self-start sm:self-center"
+                  type="button"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setProjectLinks([...projectLinks, { title: '', url: '' }])}
+              className="text-sm text-[var(--a-accent)] hover:underline"
+              type="button"
+            >
+              + Add project
+            </button>
+          </div>
+          <div className="rounded-lg border border-[var(--a-border)] p-4 bg-[var(--a-surface)]">
+            {projectLinks.filter((p) => p.title.trim() && p.url.trim()).length > 0 ? (
+              <ProjectLinksSection projectLinks={projectLinks.filter((p) => p.title.trim() && p.url.trim())} />
+            ) : (
+              <p className="text-sm text-[var(--a-text-faint)] italic">
+                Nothing to preview yet — the Code section below will show instead.
+              </p>
+            )}
+          </div>
+        </div>
+      </Section>
+
       {codeSnippetCount > 0 && (
         <p className="text-xs text-[var(--a-text-faint)]">
           {codeSnippetCount} code snippet(s) attached to this lesson — imported from source content; not editable from this page yet.
+          {projectLinks.filter((p) => p.title.trim() && p.url.trim()).length > 0 &&
+            ' Currently hidden on the lesson page because a Project section above is set.'}
         </p>
       )}
 

@@ -77,6 +77,11 @@ class CodeSnippetDto {
   @IsOptional() @IsString() part?: string;
 }
 
+class ProjectLinkDto {
+  @IsString() @MaxLength(150) title: string;
+  @IsString() @MaxLength(2000) url: string;
+}
+
 export class UpdateLessonContentDto {
   @IsOptional() @IsString() @MaxLength(200) title?: string;
   @IsOptional() @IsInt() @Min(1) order?: number;
@@ -92,6 +97,9 @@ export class UpdateLessonContentDto {
   @IsOptional() @IsString() homework?: string;
   @IsOptional() @IsString() checkpoint?: string;
   @IsOptional() @IsArray() codeSnippets?: CodeSnippetDto[];
+  // Buttons shown in the lesson page's "Project" section, replacing the
+  // Code section when non-empty — see Lesson.projectLinks in schema.prisma.
+  @IsOptional() @IsArray() projectLinks?: ProjectLinkDto[];
 }
 
 export class CreateMCQQuestionDto {

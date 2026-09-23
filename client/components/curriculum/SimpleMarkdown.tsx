@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
+import CopyCodeButton from './CopyCodeButton';
 
 // A minimal, dependency-free Markdown renderer covering exactly what
 // Lumexa's lesson material uses: #/##/### headings, **bold**, `inline code`,
-// ```fenced code blocks```, and "- " bullet lists. Not a general-purpose
-// Markdown engine — keeps the client bundle free of a new dependency for a
-// small, well-known content shape.
+// ```fenced code blocks```, "- " bullet lists, and GFM-style `| a | b |`
+// tables. Not a general-purpose Markdown engine — keeps the client bundle
+// free of a new dependency for a small, well-known content shape.
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   const parts: ReactNode[] = [];
@@ -59,11 +60,17 @@ export default function SimpleMarkdown({ content }: { content: string }) {
       }
       i++; // skip closing fence
       flushList(`list-${i}`);
+      const codeText = codeLines.join('\n');
       blocks.push(
-        <pre key={`code-${i}`} className="my-3 rounded-lg bg-gray-900 text-gray-100 p-3 overflow-x-auto text-sm">
-          {lang && <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-1">{lang}</div>}
-          <code>{codeLines.join('\n')}</code>
-        </pre>,
+        <div key={`code-${i}`} className="my-3 rounded-lg bg-gray-900 overflow-hidden">
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-black/30 border-b border-gray-700/70">
+            <span className="text-[10px] uppercase tracking-wide text-gray-400">{lang || 'code'}</span>
+            <CopyCodeButton code={codeText} />
+          </div>
+          <pre className="text-gray-100 p-3 overflow-x-auto text-sm">
+            <code>{codeText}</code>
+          </pre>
+        </div>,
       );
       continue;
     }
@@ -93,14 +100,61 @@ export default function SimpleMarkdown({ content }: { content: string }) {
       listBuffer.push(line.replace(/^[-*]\s+/, ''));
     } else if (line.trim() === '') {
       flushList(`list-${i}`);
-    } else if (/^\|.*\|$/.test(line.trim())) {
-      // skip markdown table separator/rows: render as plain text row for simplicity
+    } else if (
+      /^\|.*\|\s*$/.test(line.trim()) &&
+      i + 1 < lines.length &&
+      /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[i + 1].trim())
+    ) {
+      // GFM table: header row, then a "|---|---|" separator, then data rows.
       flushList(`list-${i}`);
+      const parseRow = (row: string) =>
+        row
+          .trim()
+          .replace(/^\|/, '')
+          .replace(/\|$/, '')
+          .split('|')
+          .map((cell) => cell.trim());
+      const header = parseRow(line);
+      const tableKey = i;
+      i += 2; // header + separator
+      const rows: string[][] = [];
+      while (i < lines.length && /^\|.*\|\s*$/.test(lines[i].trim())) {
+        rows.push(parseRow(lines[i]));
+        i++;
+      }
       blocks.push(
-        <p key={i} className="text-sm font-mono text-gray-600 dark:text-gray-400">
-          {line}
-        </p>,
+        <div key={`table-${tableKey}`} className="my-4 overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="bg-gray-100 dark:bg-gray-800">
+                {header.map((h, hi) => (
+                  <th
+                    key={hi}
+                    className="text-left font-semibold text-gray-900 dark:text-white px-3 py-2 border-b border-gray-200 dark:border-gray-700 whitespace-nowrap"
+                  >
+                    {renderInline(h, `th-${tableKey}-${hi}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, ri) => (
+                <tr key={ri} className="odd:bg-white even:bg-gray-50 dark:odd:bg-gray-900/40 dark:even:bg-gray-800/40">
+                  {row.map((cell, ci) => (
+                    <td
+                      key={ci}
+                      className="px-3 py-2 align-top text-gray-700 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800/60"
+                    >
+                      {renderInline(cell, `td-${tableKey}-${ri}-${ci}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>,
       );
+      continue;
     } else {
       flushList(`list-${i}`);
       blocks.push(

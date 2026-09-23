@@ -906,4 +906,118 @@ export async function seedCurriculumContent(
     const total = await buildFreshStructure(prisma, course);
     logger.log(`[curriculum-seed] ${course.slug} seeded: ${total} sessions.`);
   }
+
+  await backfillAiBuilderProjectLinks(prisma, logger);
+}
+
+// ── AI Builder Path: portfolio-project links ────────────────────────────────
+//
+// The lesson page shows a "💻 Project" section (Open Project / Copy Link
+// buttons) in place of the plain Code section whenever Lesson.projectLinks
+// is set — see LessonDetailsView on the client. Keyed by the lesson's
+// absolute `order` within the ai-builder-path course (1-28, matching
+// python-ai-foundations 1-8 + Course Test 9, computer-vision 10-17 + Course
+// Test 18, language-models 19-26 + Course Test 27, Final Test 28 — see
+// createModuleRows/seedPathwayCurriculum above). Lessons not listed here
+// (the first lesson of each module, and every assessment session) keep
+// showing the plain Code section instead. The 3 "polish/recap" lessons (8,
+// 17, 26) link back to all 3 projects finished in that module so far.
+const NUMBER_PREDICTION_MODEL = {
+  title: 'Number Prediction Model',
+  url: 'https://colab.research.google.com/drive/1t_GfYWRaBp8tHM9py5DPzqk_aMMIaPwy?usp=sharing',
+};
+const SIMPLE_IMAGE_CLASSIFIER = {
+  title: 'Simple Image Classifier',
+  url: 'https://colab.research.google.com/drive/1oJkbUz5HbehVtkpOG3e6lVCH4xHidcJv?usp=sharing',
+};
+const DATA_PATTERN_FINDER = {
+  title: 'Data Pattern Finder',
+  url: 'https://colab.research.google.com/drive/1X94pQT5P4kYaQKYJN8C8DrmRcrq7A4ZY?usp=sharing',
+};
+const REALTIME_EMOTION_DETECTOR = {
+  title: 'Real-Time Emotion Detector',
+  url: 'https://colab.research.google.com/drive/1ZuSs3-MPXQw2MWS05tfW4MSsjEPFOY51?usp=sharing',
+};
+const OBJECT_RECOGNITION_YOLOV8 = {
+  title: 'Object Recognition with YOLOv8',
+  url: 'https://colab.research.google.com/drive/1zAf46thbfCJHHcTR7D_5vPZt9D0KsSFl?usp=sharing',
+};
+const MOTION_ACTIVATED_SECURITY_CAM = {
+  title: 'Motion-Activated Security Cam',
+  url: 'https://colab.research.google.com/drive/15blXXC1wVOZIPQXYTRNLDZESl7Cx_ZGG?usp=sharing',
+};
+const RECIPE_CHATBOT_WITH_MEMORY = {
+  title: 'Recipe Chatbot with Memory',
+  url: 'https://colab.research.google.com/drive/1l41gSrZspbKCQNgWOwak-YSelgWLM117?usp=sharing',
+};
+const STUDY_ASSISTANT_ORBIT = {
+  title: 'Study Assistant — Orbit',
+  url: 'https://colab.research.google.com/drive/1gxA9s1KhEXkRA3cQ_4mjfRsJWJ0IB2ta?usp=sharing',
+};
+const CREATIVE_STORY_GENERATOR_NOVA = {
+  title: 'Creative Story Generator — Nova',
+  url: 'https://colab.research.google.com/drive/1pbP6LEAufmfv9_Rb86LmHlaVvuzjNvxu?usp=sharing',
+};
+
+const AI_BUILDER_PROJECT_LINKS: Record<number, { title: string; url: string }[]> = {
+  // python-ai-foundations (lessons 1-8; 9 = Course Test)
+  2: [NUMBER_PREDICTION_MODEL],
+  3: [NUMBER_PREDICTION_MODEL],
+  4: [SIMPLE_IMAGE_CLASSIFIER],
+  5: [SIMPLE_IMAGE_CLASSIFIER],
+  6: [DATA_PATTERN_FINDER],
+  7: [DATA_PATTERN_FINDER],
+  8: [NUMBER_PREDICTION_MODEL, SIMPLE_IMAGE_CLASSIFIER, DATA_PATTERN_FINDER],
+  // computer-vision (lessons 10-17; 18 = Course Test)
+  11: [REALTIME_EMOTION_DETECTOR],
+  12: [REALTIME_EMOTION_DETECTOR],
+  13: [OBJECT_RECOGNITION_YOLOV8],
+  14: [OBJECT_RECOGNITION_YOLOV8],
+  15: [MOTION_ACTIVATED_SECURITY_CAM],
+  16: [MOTION_ACTIVATED_SECURITY_CAM],
+  17: [REALTIME_EMOTION_DETECTOR, OBJECT_RECOGNITION_YOLOV8, MOTION_ACTIVATED_SECURITY_CAM],
+  // language-models (lessons 19-26; 27 = Course Test, 28 = Final Test)
+  20: [RECIPE_CHATBOT_WITH_MEMORY],
+  21: [RECIPE_CHATBOT_WITH_MEMORY],
+  22: [STUDY_ASSISTANT_ORBIT],
+  23: [STUDY_ASSISTANT_ORBIT],
+  24: [CREATIVE_STORY_GENERATOR_NOVA],
+  25: [CREATIVE_STORY_GENERATOR_NOVA],
+  26: [RECIPE_CHATBOT_WITH_MEMORY, STUDY_ASSISTANT_ORBIT, CREATIVE_STORY_GENERATOR_NOVA],
+};
+
+/** Idempotent, admin-safe: only ever fills in a lesson whose projectLinks is
+ * still unset (null) — an admin who has since edited or cleared it (an
+ * empty array, `[]`, counts as "set") is never overwritten on a later boot.
+ * Runs unconditionally (unlike buildFreshStructure above) so it also
+ * back-fills an already-seeded ai-builder-path course, not just a fresh one. */
+async function backfillAiBuilderProjectLinks(
+  prisma: PrismaClient,
+  logger: { log: (msg: string) => void; warn: (msg: string) => void },
+) {
+  const course = await prisma.course.findUnique({
+    where: { slug: 'ai-builder-path' },
+    select: { id: true },
+  });
+  if (!course) return;
+
+  const lessons = await prisma.lesson.findMany({
+    where: { courseId: course.id, order: { in: Object.keys(AI_BUILDER_PROJECT_LINKS).map(Number) } },
+    select: { id: true, order: true, projectLinks: true },
+  });
+
+  let updated = 0;
+  for (const lesson of lessons) {
+    if (lesson.projectLinks !== null) continue;
+    const links = AI_BUILDER_PROJECT_LINKS[lesson.order];
+    if (!links) continue;
+    await prisma.lesson.update({
+      where: { id: lesson.id },
+      data: { projectLinks: links as unknown as object },
+    });
+    updated++;
+  }
+  if (updated > 0) {
+    logger.log(`[curriculum-seed] ai-builder-path: backfilled projectLinks on ${updated} lesson(s).`);
+  }
 }
