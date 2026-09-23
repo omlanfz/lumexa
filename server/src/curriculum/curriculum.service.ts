@@ -551,6 +551,7 @@ export class CurriculumService {
     const target = await this.requireCustomCourse(targetCourseId);
     const source = await this.prisma.lesson.findUnique({
       where: { id: dto.sourceLessonId },
+      include: { course: { select: { slug: true } } },
     });
     if (!source) throw new NotFoundException('Source lesson not found');
 
@@ -568,6 +569,7 @@ export class CurriculumService {
     const target = await this.requireCustomCourse(targetCourseId);
     const sources = await this.prisma.lesson.findMany({
       where: { id: { in: dto.sourceLessonIds } },
+      include: { course: { select: { slug: true } } },
     });
     if (sources.length === 0) {
       throw new NotFoundException('No matching source lessons found');
@@ -610,6 +612,7 @@ export class CurriculumService {
     order: number,
     source: {
       id: string;
+      order: number;
       title: string;
       duration: number;
       type: SessionType;
@@ -620,8 +623,17 @@ export class CurriculumService {
       codeSnippets: unknown;
       projectLinks: unknown;
       homework: string | null;
+      course: { slug: string };
     },
   ) {
+    // Resolve the same read-time fallbacks the lesson-details endpoints
+    // apply (see resolveProjectLinks/tableizeContent) before copying, so an
+    // imported lesson gets the real "💻 Project" buttons and a tableized
+    // Key Terminology section even when the *source* row's own stored
+    // values are still null/un-converted (e.g. an environment that hasn't
+    // rebooted since those features shipped) — otherwise a custom
+    // curriculum would freeze in a stale copy forever, since importing
+    // never re-reads the default lesson afterwards.
     return {
       courseId: targetCourseId,
       title: source.title,
@@ -629,11 +641,13 @@ export class CurriculumService {
       duration: source.duration,
       type: source.type,
       objectives: source.objectives,
-      contentMarkdown: source.contentMarkdown,
+      contentMarkdown: this.tableizeContent(source.course.slug, source.contentMarkdown),
       reviewNotes: source.reviewNotes,
       checkpoint: source.checkpoint,
       codeSnippets: source.codeSnippets as object | undefined,
-      projectLinks: source.projectLinks as object | undefined,
+      projectLinks: this.resolveProjectLinks(source.course.slug, source.order, source.projectLinks) as
+        | object
+        | undefined,
       homework: source.homework,
       sourceRefs: { importedFromLessonId: source.id } as object,
     };
