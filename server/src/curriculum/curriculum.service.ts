@@ -26,7 +26,7 @@ import {
   todayDhakaDateStr,
   utcToDhakaParts,
 } from '../scheduling/dhaka-time.util';
-import { getAiBuilderProjectLinksFallback } from '../courses/curriculum-catalog.seed';
+import { getProjectLinksFallback, tableizeKeyTerminology } from '../courses/curriculum-catalog.seed';
 import {
   CreateModuleDto,
   CreateProjectDto,
@@ -194,7 +194,7 @@ export class CurriculumService {
         title: lesson.title,
         type: lesson.type,
         objectives: lesson.objectives,
-        contentMarkdown: lesson.contentMarkdown,
+        contentMarkdown: this.tableizeContent(lesson.course.slug, lesson.contentMarkdown),
         reviewNotes: lesson.reviewNotes,
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
@@ -313,7 +313,7 @@ export class CurriculumService {
         title: sl.lesson.title,
         type: sl.lesson.type,
         objectives: sl.lesson.objectives,
-        contentMarkdown: sl.lesson.contentMarkdown,
+        contentMarkdown: this.tableizeContent(sl.course.slug, sl.lesson.contentMarkdown),
         reviewNotes: sl.lesson.reviewNotes,
         homework: sl.lesson.homework,
         checkpoint: sl.lesson.checkpoint,
@@ -360,21 +360,36 @@ export class CurriculumService {
 
   /** The lesson's own stored projectLinks always wins (including an
    * intentionally-cleared `[]`) — only when it's null/undefined do we fall
-   * back to the known ai-builder-path mapping, so the "💻 Project" section
+   * back to the known per-pathway mapping, so the "💻 Project" section
    * (admin editor and live lesson pages alike) is always correct even on an
    * environment whose backend hasn't rebooted since this feature shipped
-   * (see backfillAiBuilderProjectLinks in curriculum-catalog.seed.ts, which
-   * this fallback makes non-essential for correctness, only for making the
-   * value permanent/editable). Never applies outside ai-builder-path, since
-   * every pathway course reuses the same 1-28 lesson `order` numbering. */
+   * (see backfillProjectLinks in curriculum-catalog.seed.ts, which this
+   * fallback makes non-essential for correctness, only for making the
+   * value permanent/editable). getProjectLinksFallback itself returns null
+   * for any course slug with no known mapping, so every other course is
+   * unaffected without needing a check here. */
   private resolveProjectLinks(
     courseSlug: string,
     order: number,
     stored: unknown,
   ): unknown {
     if (stored !== null && stored !== undefined) return stored;
-    if (courseSlug !== 'ai-builder-path') return stored;
-    return getAiBuilderProjectLinksFallback(order);
+    return getProjectLinksFallback(courseSlug, order);
+  }
+
+  /** Converts data-scientist-path's "## Key Terminology" bullet lists into a
+   * real table on read (see tableizeKeyTerminology) — the same read-time
+   * safety net as resolveProjectLinks above, for the same reason: an
+   * environment that hasn't rebooted since this shipped would otherwise
+   * still serve the un-converted markdown. A no-op for every other course,
+   * and a no-op wherever the bullet pattern isn't found (already converted,
+   * or an admin rewrote the section). */
+  private tableizeContent(
+    courseSlug: string,
+    markdown: string | null,
+  ): string | null {
+    if (!markdown || courseSlug !== 'data-scientist-path') return markdown;
+    return tableizeKeyTerminology(markdown);
   }
 
   // ── Admin/teacher browsing: full course structure ────────────────────────
