@@ -794,6 +794,12 @@ model Lesson {
   project         Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   checkpoint      String? // exact project checkpoint due THIS session, e.g. "Finish sections 1-2"
   codeSnippets    Json? // [{ label, language, code, part }] — cumulative code for this checkpoint
+  // [{ title, url }] — external project links (e.g. a Colab notebook) shown
+  // as "Open Project" / "Copy Link" buttons in a dedicated section that
+  // REPLACES the codeSnippets-driven "Code" section on the lesson page when
+  // set (see LessonDetailsView). Null/empty leaves the old Code section as
+  // the fallback, so this is opt-in per lesson.
+  projectLinks    Json?
   homework        String?
   sourceRefs      Json? // traceability: source repo file paths this content was imported from
 

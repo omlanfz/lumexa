@@ -4,6 +4,7 @@ import { useState } from 'react';
 import api from '@/lib/axios';
 import CopyCodeButton from '@/components/curriculum/CopyCodeButton';
 import SimpleMarkdown from '@/components/curriculum/SimpleMarkdown';
+import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/ProjectLinksSection';
 
 interface CodeSnippet {
   label: string;
@@ -46,6 +47,7 @@ export interface LessonDetailsResponse {
     homework: string | null;
     checkpoint: string | null;
     codeSnippets: CodeSnippet[];
+    projectLinks: ProjectLink[] | null;
     module: { id: string; title: string; stageNumber: number | null } | null;
     project: { id: string; title: string; description: string | null } | null;
   };
@@ -182,25 +184,30 @@ export default function LessonDetailsView({
             </section>
           )}
 
-          {data.lesson?.codeSnippets && data.lesson.codeSnippets.length > 0 && (
-            <section className={SECTION}>
-              <h2 className="font-bold text-gray-900 dark:text-white mb-3">💻 Code</h2>
-              <div className="space-y-4">
-                {data.lesson.codeSnippets.map((snip, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                        {snip.label} {snip.part ? `· ${snip.part}` : ''}
-                      </span>
-                      <CopyCodeButton code={snip.code} />
+          {data.lesson?.projectLinks && data.lesson.projectLinks.length > 0 ? (
+            <ProjectLinksSection projectLinks={data.lesson.projectLinks} />
+          ) : (
+            data.lesson?.codeSnippets &&
+            data.lesson.codeSnippets.length > 0 && (
+              <section className={SECTION}>
+                <h2 className="font-bold text-gray-900 dark:text-white mb-3">💻 Code</h2>
+                <div className="space-y-4">
+                  {data.lesson.codeSnippets.map((snip, i) => (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          {snip.label} {snip.part ? `· ${snip.part}` : ''}
+                        </span>
+                        <CopyCodeButton code={snip.code} />
+                      </div>
+                      <pre className="rounded-lg bg-gray-900 text-gray-100 p-3 overflow-x-auto text-sm">
+                        <code>{snip.code}</code>
+                      </pre>
                     </div>
-                    <pre className="rounded-lg bg-gray-900 text-gray-100 p-3 overflow-x-auto text-sm">
-                      <code>{snip.code}</code>
-                    </pre>
-                  </div>
-                ))}
-              </div>
-            </section>
+                  ))}
+                </div>
+              </section>
+            )
           )}
 
           {data.lesson?.homework && (
