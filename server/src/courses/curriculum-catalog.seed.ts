@@ -910,6 +910,7 @@ export async function seedCurriculumContent(
   await backfillProjectLinks(prisma, logger, 'ai-builder-path');
   await backfillProjectLinks(prisma, logger, 'data-scientist-path');
   await backfillDataScientistKeyTerminologyTables(prisma, logger);
+  await backfillWebDeveloperLessonContent(prisma, logger);
 }
 
 // ── Portfolio-project links (per pathway) ───────────────────────────────────
@@ -1213,5 +1214,70 @@ async function backfillDataScientistKeyTerminologyTables(
   }
   if (updated > 0) {
     logger.log(`[curriculum-seed] data-scientist-path: tableized Key Terminology on ${updated} lesson(s).`);
+  }
+}
+
+// ── Web Developer Path: real lesson material backfill ──────────────────────
+//
+// web-developer-path.json originally shipped with placeholder contentMarkdown
+// stubs (a single short "## Learn" paragraph, ~250-750 chars) instead of real
+// lesson material, unlike every other pathway (several thousand chars each).
+// The JSON was later filled in with the full lesson content extracted from
+// lumexa-all-lessons/web-developer, but seedCurriculumContent above leaves
+// any course that already has its full module/lesson count alone — exactly
+// the state every already-deployed environment is in — so updating the JSON
+// alone never reaches an already-seeded DB. This mirrors backfillProjectLinks:
+// runs unconditionally on every boot, and only ever replaces a lesson's
+// contentMarkdown while it still looks like the old short stub (under
+// WEB_DEVELOPER_STUB_MAX_LEN chars) — a lesson an admin has since hand-edited
+// into something longer is left untouched. Also covers Lumexa Odyssey, which
+// reuses this pathway's html-css-mastery and javascript-interactivity modules
+// (see ODYSSEY_STAGES) as its own separate Lesson rows.
+const WEB_DEVELOPER_STUB_MAX_LEN = 2000;
+
+async function backfillWebDeveloperLessonContent(
+  prisma: PrismaClient,
+  logger: { log: (msg: string) => void; warn: (msg: string) => void },
+) {
+  const raw = loadPathway('web-developer-path');
+  const moduleSlugs = raw.modules.map((m) => m.slug);
+  const contentByModuleAndTitle = new Map<string, string>();
+  for (const mod of raw.modules) {
+    for (const lesson of mod.lessons) {
+      contentByModuleAndTitle.set(`${mod.slug}::${lesson.title}`, lesson.contentMarkdown);
+    }
+  }
+
+  const courses = await prisma.course.findMany({
+    where: { slug: { in: ['web-developer-path', 'lumexa-odyssey'] } },
+    select: { id: true, slug: true },
+  });
+
+  for (const course of courses) {
+    const lessons = await prisma.lesson.findMany({
+      where: {
+        courseId: course.id,
+        type: SessionType.LEARNING,
+        module: { slug: { in: moduleSlugs } },
+      },
+      select: { id: true, title: true, contentMarkdown: true, module: { select: { slug: true } } },
+    });
+
+    let updated = 0;
+    for (const lesson of lessons) {
+      if (!lesson.module) continue;
+      const newContent = contentByModuleAndTitle.get(`${lesson.module.slug}::${lesson.title}`);
+      if (!newContent) continue;
+      const current = lesson.contentMarkdown ?? '';
+      if (current.length >= WEB_DEVELOPER_STUB_MAX_LEN || current === newContent) continue;
+      await prisma.lesson.update({
+        where: { id: lesson.id },
+        data: { contentMarkdown: newContent },
+      });
+      updated++;
+    }
+    if (updated > 0) {
+      logger.log(`[curriculum-seed] ${course.slug}: backfilled full lesson material on ${updated} lesson(s).`);
+    }
   }
 }
