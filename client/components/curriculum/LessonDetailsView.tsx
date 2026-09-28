@@ -404,12 +404,17 @@ function HomeworkSubmission({
           </div>
         )}
 
-        {isNeedsChanges && (
+        {/* Editable any time before the teacher approves it — a student who
+            submitted the wrong file shouldn't have to wait for a review to
+            fix it. Once APPROVED, the submission is final. */}
+        {!isApproved && (
           <button
             onClick={() => setResubmitting(true)}
-            className="mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-500 hover:bg-red-400 transition-colors"
+            className={`mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors ${
+              isNeedsChanges ? 'bg-red-500 hover:bg-red-400' : 'bg-gray-500 hover:bg-gray-400'
+            }`}
           >
-            Resubmit Work
+            {isNeedsChanges ? 'Resubmit Work' : 'Edit Submission'}
           </button>
         )}
       </div>
