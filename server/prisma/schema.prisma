@@ -841,9 +841,17 @@ model Submission {
   links             String[]         @default([])
   note              String? // optional message the student attaches
   status            SubmissionStatus @default(PENDING)
+  // Teacher's 1–5 star rating for this submission, set when reviewed.
+  rating            Int?
+  // Selected predefined feedback phrases (see SUBMISSION_FEEDBACK_TAGS) —
+  // shown to the student alongside any free-text `feedback`.
+  feedbackTags      String[]         @default([])
+  // How many times the student has resubmitted after a NEEDS_CHANGES
+  // review — 0 for a first-time submission.
+  resubmissionCount Int              @default(0)
   submittedAt       DateTime         @default(now())
   reviewedAt        DateTime?
-  feedback          String? // optional teacher note left when reviewing
+  feedback          String? // optional free-text teacher note left when reviewing
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
@@ -853,8 +861,9 @@ model Submission {
 }
 
 enum SubmissionStatus {
-  PENDING
-  REVIEWED
+  PENDING // Submitted — awaiting teacher review (covers first submits and resubmits)
+  APPROVED
+  NEEDS_CHANGES
 }
 
 model GemWallet {

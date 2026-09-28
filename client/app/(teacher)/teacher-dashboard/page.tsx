@@ -458,25 +458,28 @@ function TeacherDashboardContent() {
           </section>
         </div>
 
-        {/* ── Pending homework submissions ────────────────────────────── */}
+        {/* ── Needs Review: homework awaiting the teacher ─────────────── */}
         {pendingSubmissions > 0 && (
           <section className="mb-8">
             <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
-              Pending Submissions
+              Needs Review
             </p>
-            <div className={`${card} p-5 flex items-center justify-between flex-wrap gap-3`}>
-              <div>
+            <button
+              onClick={() => router.push("/teacher-submissions")}
+              className={`${card} p-5 flex items-center justify-between flex-wrap gap-3 w-full text-left`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 font-bold flex items-center justify-center flex-shrink-0">
+                  {pendingSubmissions}
+                </span>
                 <p className="text-lg font-semibold text-[var(--t-text)]">
-                  {pendingSubmissions} student submission{pendingSubmissions !== 1 ? "s" : ""} need{pendingSubmissions === 1 ? "s" : ""} your review
+                  homework submission{pendingSubmissions !== 1 ? "s" : ""} need{pendingSubmissions === 1 ? "s" : ""} your review
                 </p>
               </div>
-              <button
-                onClick={() => router.push("/teacher-submissions")}
-                className="text-sm px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] transition-colors duration-150"
-              >
-                Review Submissions →
-              </button>
-            </div>
+              <span className="text-sm px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)]">
+                Review Now →
+              </span>
+            </button>
           </section>
         )}
 
