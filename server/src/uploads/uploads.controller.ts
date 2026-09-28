@@ -6,11 +6,12 @@ import {
   Request,
   UseInterceptors,
   UploadedFile,
+  UploadedFiles,
   BadRequestException,
   Body,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import { cloudinary } from '../lib/cloudinary';
 import { PrismaService } from '../prisma.service';
@@ -66,37 +67,94 @@ const documentStorage = new CloudinaryStorage({
   })) as any,
 });
 
-// Homework submissions: PDFs, photos of written work, and common document/
-// archive formats a student might turn in (a zipped code project, a Word
-// doc). Same raw-vs-image resource_type split as documentStorage above —
-// PDFs and non-image files need 'raw' delivery or Cloudinary's restricted-
-// media-types setting 401s the download link the teacher clicks to review it.
+// Homework submissions: PDFs, photos of written work, common document/
+// archive formats, and coding/programming project files (both text-based —
+// Python, web, Java, etc. — and block-based — Scratch .sb3, Roblox .rbxl).
+// Same raw-vs-image resource_type split as documentStorage above — PDFs and
+// non-image files need 'raw' delivery or Cloudinary's restricted-media-types
+// setting 401s the download link the teacher clicks to review it.
+//
+// Validation is extension-based (see HOMEWORK_ALLOWED_EXTENSIONS below)
+// rather than MIME-based: browsers/OSes report wildly inconsistent (or
+// generic "application/octet-stream") mimetypes for code files, so a
+// mimetype allowlist would reject legitimate submissions.
+const HOMEWORK_ALLOWED_EXTENSIONS = new Set([
+  // Documents & archives
+  'pdf',
+  'doc',
+  'docx',
+  'txt',
+  'rtf',
+  'odt',
+  'zip',
+  'rar',
+  '7z',
+  // Images
+  'jpg',
+  'jpeg',
+  'png',
+  'heic',
+  'heif',
+  'gif',
+  'webp',
+  // Text-based programming, markup, and data files
+  'py',
+  'ipynb',
+  'html',
+  'htm',
+  'css',
+  'scss',
+  'js',
+  'jsx',
+  'ts',
+  'tsx',
+  'java',
+  'c',
+  'cpp',
+  'h',
+  'hpp',
+  'cs',
+  'php',
+  'rb',
+  'go',
+  'rs',
+  'swift',
+  'kt',
+  'kts',
+  'json',
+  'xml',
+  'sql',
+  'sh',
+  'yml',
+  'yaml',
+  'md',
+  'csv',
+  'lua',
+  'r',
+  'pl',
+  'scala',
+  'dart',
+  'vue',
+  'svelte',
+  // Block-based coding project files
+  'sb3',
+  'sb2',
+  'rbxl',
+  'rbxlx',
+]);
+
 const homeworkStorage = new CloudinaryStorage({
   cloudinary,
   params: (async (_req: any, file: Express.Multer.File) => ({
     folder: 'lumexa/homework',
     resource_type: file.mimetype.startsWith('image/') ? 'image' : 'raw',
-    allowed_formats: [
-      'pdf',
-      'jpg',
-      'jpeg',
-      'png',
-      'heic',
-      'heif',
-      'doc',
-      'docx',
-      'txt',
-      'zip',
-    ],
+    allowed_formats: Array.from(HOMEWORK_ALLOWED_EXTENSIONS),
     // Same phone-camera HEIC/HEIF problem as avatars/documents above.
     ...((file.mimetype === 'image/heic' || file.mimetype === 'image/heif') && {
       format: 'jpg',
     }),
   })) as any,
 });
-
-const HOMEWORK_MIME_PATTERN =
-  /\/(pdf|jpg|jpeg|png|heic|heif|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|zip|x-zip-compressed|plain)$/;
 
 const REQUIRED_DOC_TYPES = new Set([
   'nid',
@@ -285,34 +343,38 @@ export class UploadsController {
 
   /**
    * POST /uploads/homework
-   * Multer field name: "homework"
-   * Uploads a student's homework file for a completed lesson. Just returns
-   * the stored URL — SubmissionsController.submit is what actually records
-   * it against the scheduled lesson.
+   * Multer field name: "homework" (up to 10 files per request)
+   * Uploads a student's homework file(s) for a completed lesson. Just
+   * returns the stored URLs — SubmissionsController.submit is what actually
+   * records them (plus any links) against the scheduled lesson.
    */
   @Post('homework')
   @UseGuards(RolesGuard)
   @Roles(Role.STUDENT)
   @UseInterceptors(
-    FileInterceptor('homework', {
+    FilesInterceptor('homework', 10, {
       storage: homeworkStorage,
       fileFilter: (_req, file, cb) => {
-        if (!HOMEWORK_MIME_PATTERN.test(file.mimetype)) {
+        const ext = (file.originalname.split('.').pop() || '').toLowerCase();
+        if (!HOMEWORK_ALLOWED_EXTENSIONS.has(ext)) {
           return cb(
             new BadRequestException(
-              'Only PDF, Word, TXT, ZIP, JPG, and PNG files are allowed.',
+              `".${ext || 'unknown'}" files are not allowed. You can submit documents (PDF, Word, TXT), archives (ZIP), images (JPG, PNG), and coding/programming project files (e.g. .py, .ipynb, .html, .css, .js, .java, .sb3, .rbxl).`,
             ) as unknown as Error,
             false,
           );
         }
         cb(null, true);
       },
-      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB — a zipped mini-project can be bigger than a single doc
+      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB per file — a zipped mini-project can be bigger than a single doc
     }),
   )
-  uploadHomework(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException('No file provided.');
-    const url = (file as any).path ?? (file as any).secure_url;
-    return { url, name: file.originalname };
+  uploadHomework(@UploadedFiles() files: Express.Multer.File[]) {
+    if (!files || files.length === 0)
+      throw new BadRequestException('No file provided.');
+    return files.map((file) => ({
+      url: (file as any).path ?? (file as any).secure_url,
+      name: file.originalname,
+    }));
   }
 }
