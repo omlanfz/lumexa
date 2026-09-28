@@ -255,9 +255,9 @@ function HomeworkSubmission({
   const [error, setError] = useState<string | null>(null);
   const [resubmitting, setResubmitting] = useState(false);
 
-  const addFiles = (list: FileList | null) => {
-    if (!list || list.length === 0) return;
-    setFiles((prev) => [...prev, ...Array.from(list)]);
+  const addFiles = (newFiles: File[]) => {
+    if (newFiles.length === 0) return;
+    setFiles((prev) => [...prev, ...newFiles]);
   };
 
   const removeFile = (index: number) => {
@@ -431,7 +431,14 @@ function HomeworkSubmission({
         type="file"
         multiple
         onChange={(e) => {
-          addFiles(e.target.files);
+          // Materialize the FileList into a plain array *before* clearing
+          // the input's value below. `input.files` is a live FileList in
+          // Chromium/Firefox — resetting `value` mutates that same object
+          // to length 0 immediately, and since setFiles' functional updater
+          // doesn't run until after this handler returns, passing the live
+          // FileList straight through silently drops every selected file.
+          const selected = e.target.files ? Array.from(e.target.files) : [];
+          addFiles(selected);
           e.target.value = '';
         }}
         className="block w-full text-sm text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-500/10 file:text-teal-700 dark:file:text-teal-400 hover:file:bg-teal-500/20"
