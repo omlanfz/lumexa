@@ -241,8 +241,8 @@ export class CurriculumService {
           select: {
             id: true,
             status: true,
-            fileUrl: true,
-            fileName: true,
+            files: true,
+            links: true,
             note: true,
             submittedAt: true,
             reviewedAt: true,

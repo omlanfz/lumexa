@@ -13,11 +13,16 @@ interface CodeSnippet {
   part?: string;
 }
 
+export interface SubmissionFile {
+  url: string;
+  name: string | null;
+}
+
 export interface SubmissionInfo {
   id: string;
   status: 'PENDING' | 'REVIEWED';
-  fileUrl: string;
-  fileName: string | null;
+  files: SubmissionFile[];
+  links: string[];
   note: string | null;
   submittedAt: string;
   reviewedAt: string | null;
@@ -240,33 +245,57 @@ function HomeworkSubmission({
   submission: SubmissionInfo | null;
   onSubmitted: (submission: SubmissionInfo) => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [links, setLinks] = useState<string[]>(['']);
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resubmitting, setResubmitting] = useState(false);
 
+  const addFiles = (list: FileList | null) => {
+    if (!list || list.length === 0) return;
+    setFiles((prev) => [...prev, ...Array.from(list)]);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const setLink = (index: number, value: string) => {
+    setLinks((prev) => prev.map((l, i) => (i === index ? value : l)));
+  };
+
+  const addLinkField = () => setLinks((prev) => [...prev, '']);
+  const removeLink = (index: number) =>
+    setLinks((prev) => prev.filter((_, i) => i !== index));
+
   const submit = async () => {
-    if (!file) {
-      setError('Choose a file to upload.');
+    const cleanLinks = links.map((l) => l.trim()).filter(Boolean);
+    if (files.length === 0 && cleanLinks.length === 0) {
+      setError('Attach at least one file or link.');
       return;
     }
     setUploading(true);
     setError(null);
     try {
-      const form = new FormData();
-      form.append('homework', file);
-      const uploadRes = await api.post('/uploads/homework', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      let uploadedFiles: { url: string; name: string }[] = [];
+      if (files.length > 0) {
+        const form = new FormData();
+        files.forEach((f) => form.append('homework', f));
+        const uploadRes = await api.post('/uploads/homework', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        uploadedFiles = uploadRes.data;
+      }
       const res = await api.post('/submissions', {
         scheduledLessonId,
-        fileUrl: uploadRes.data.url,
-        fileName: uploadRes.data.name,
+        files: uploadedFiles,
+        links: cleanLinks,
         note: note.trim() || undefined,
       });
       onSubmitted(res.data);
-      setFile(null);
+      setFiles([]);
+      setLinks(['']);
       setNote('');
       setResubmitting(false);
     } catch (err: unknown) {
@@ -290,8 +319,39 @@ function HomeworkSubmission({
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
           Submitted {new Date(submission.submittedAt).toLocaleDateString('en-US', { dateStyle: 'medium' } as any)}
-          {submission.fileName ? ` · ${submission.fileName}` : ''}
+          {submission.files.length > 0
+            ? ` · ${submission.files.length} file${submission.files.length > 1 ? 's' : ''}`
+            : ''}
+          {submission.links.length > 0
+            ? ` · ${submission.links.length} link${submission.links.length > 1 ? 's' : ''}`
+            : ''}
         </p>
+        {(submission.files.length > 0 || submission.links.length > 0) && (
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {submission.files.map((f, i) => (
+              <a
+                key={`f-${i}`}
+                href={f.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-2 py-1 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400 hover:bg-teal-500/20 truncate max-w-[180px]"
+              >
+                📎 {f.name || `File ${i + 1}`}
+              </a>
+            ))}
+            {submission.links.map((l, i) => (
+              <a
+                key={`l-${i}`}
+                href={l}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-2 py-1 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400 hover:bg-teal-500/20 truncate max-w-[180px]"
+              >
+                🔗 {l}
+              </a>
+            ))}
+          </div>
+        )}
         {submission.feedback && (
           <div className="mt-2 text-sm bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/40 rounded-lg p-3">
             <p className="text-xs font-semibold text-teal-700 dark:text-teal-400 mb-1">Teacher feedback</p>
@@ -311,11 +371,64 @@ function HomeworkSubmission({
   return (
     <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50 space-y-2">
       <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Complete the task and upload your work.</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Documents, images, ZIP archives, or coding project files (.py, .ipynb, .html, .css, .js, .java, .sb3, .rbxl, and more) — you can attach multiple files.
+      </p>
       <input
         type="file"
-        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        multiple
+        onChange={(e) => {
+          addFiles(e.target.files);
+          e.target.value = '';
+        }}
         className="block w-full text-sm text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-500/10 file:text-teal-700 dark:file:text-teal-400 hover:file:bg-teal-500/20"
       />
+      {files.length > 0 && (
+        <ul className="space-y-1">
+          {files.map((f, i) => (
+            <li
+              key={`${f.name}-${i}`}
+              className="flex items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 rounded-lg px-2.5 py-1.5"
+            >
+              <span className="truncate">📎 {f.name}</span>
+              <button
+                onClick={() => removeFile(i)}
+                className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                aria-label={`Remove ${f.name}`}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="space-y-1.5 pt-1">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Or share a link (Scratch, GitHub, Replit, etc.)</p>
+        {links.map((link, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={link}
+              onChange={(e) => setLink(i, e.target.value)}
+              placeholder="https://scratch.mit.edu/projects/..."
+              className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400"
+            />
+            {links.length > 1 && (
+              <button
+                onClick={() => removeLink(i)}
+                className="text-gray-400 hover:text-red-500 flex-shrink-0"
+                aria-label="Remove link"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+        <button onClick={addLinkField} className="text-xs text-teal-600 dark:text-teal-400 hover:underline">
+          + Add another link
+        </button>
+      </div>
+
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}

@@ -833,8 +833,12 @@ model Submission {
   student           User             @relation("StudentSubmissions", fields: [studentUserId], references: [id])
   teacherId         String
   teacher           TeacherProfile   @relation(fields: [teacherId], references: [id])
-  fileUrl           String
-  fileName          String?
+  // Array of { url: string; name: string | null } — a submission can attach
+  // multiple files (e.g. several source files or a project + a screenshot).
+  files             Json             @default("[]")
+  // External links the student wants to share instead of/alongside files
+  // (e.g. a Scratch project page, a GitHub repo, a Replit).
+  links             String[]         @default([])
   note              String? // optional message the student attaches
   status            SubmissionStatus @default(PENDING)
   submittedAt       DateTime         @default(now())

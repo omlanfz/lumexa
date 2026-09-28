@@ -24,8 +24,8 @@ export class SubmissionsService {
     studentUserId: string,
     params: {
       scheduledLessonId: string;
-      fileUrl: string;
-      fileName?: string;
+      files?: { url: string; name?: string }[];
+      links?: string[];
       note?: string;
     },
   ) {
@@ -53,6 +53,14 @@ export class SubmissionsService {
       throw new BadRequestException('This lesson has no homework to submit.');
     }
 
+    const files = params.files ?? [];
+    const links = (params.links ?? []).filter((l) => l.trim().length > 0);
+    if (files.length === 0 && links.length === 0) {
+      throw new BadRequestException(
+        'Attach at least one file or link before submitting.',
+      );
+    }
+
     return this.prisma.submission.upsert({
       where: { scheduledLessonId: sl.id },
       create: {
@@ -60,13 +68,13 @@ export class SubmissionsService {
         lessonId: sl.lesson.id,
         studentUserId,
         teacherId: sl.teacherId,
-        fileUrl: params.fileUrl,
-        fileName: params.fileName,
+        files,
+        links,
         note: params.note,
       },
       update: {
-        fileUrl: params.fileUrl,
-        fileName: params.fileName,
+        files,
+        links,
         note: params.note,
         status: SubmissionStatus.PENDING,
         submittedAt: new Date(),
@@ -188,8 +196,8 @@ export class SubmissionsService {
 
   private mapSubmission(row: {
     id: string;
-    fileUrl: string;
-    fileName: string | null;
+    files: unknown;
+    links: string[];
     note: string | null;
     status: SubmissionStatus;
     submittedAt: Date;
@@ -202,8 +210,8 @@ export class SubmissionsService {
     return {
       id: row.id,
       status: row.status,
-      fileUrl: row.fileUrl,
-      fileName: row.fileName,
+      files: (row.files as { url: string; name: string | null }[]) ?? [],
+      links: row.links ?? [],
       note: row.note,
       submittedAt: row.submittedAt,
       reviewedAt: row.reviewedAt,

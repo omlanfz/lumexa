@@ -3,11 +3,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import api from '@/lib/axios';
 
+interface SubmissionFile {
+  url: string;
+  name: string | null;
+}
+
 interface Submission {
   id: string;
   status: 'PENDING' | 'REVIEWED';
-  fileUrl: string;
-  fileName: string | null;
+  files: SubmissionFile[];
+  links: string[];
   note: string | null;
   submittedAt: string;
   reviewedAt: string | null;
@@ -120,14 +125,28 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
                 >
                   {s.status === 'PENDING' ? 'Pending' : 'Reviewed'}
                 </span>
-                <a
-                  href={s.fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs px-3 py-1.5 rounded-lg border border-[var(--t-border)] text-[var(--t-text)] hover:bg-[var(--t-nav-hover)]"
-                >
-                  Open file
-                </a>
+                {s.files.map((f, i) => (
+                  <a
+                    key={`f-${i}`}
+                    href={f.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-[var(--t-border)] text-[var(--t-text)] hover:bg-[var(--t-nav-hover)] truncate max-w-[160px]"
+                  >
+                    📎 {f.name || `File ${i + 1}`}
+                  </a>
+                ))}
+                {s.links.map((l, i) => (
+                  <a
+                    key={`l-${i}`}
+                    href={l}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-[var(--t-border)] text-[var(--t-text)] hover:bg-[var(--t-nav-hover)] truncate max-w-[160px]"
+                  >
+                    🔗 Link
+                  </a>
+                ))}
                 {s.status === 'PENDING' && reviewing !== s.id && (
                   <button
                     onClick={() => startReview(s)}
