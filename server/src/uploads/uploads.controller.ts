@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
+import { CloudinaryUploadErrorInterceptor } from './cloudinary-upload-error.interceptor';
 
 // Avatars: images only, cropped to a square face-centered thumbnail.
 //
@@ -148,7 +149,15 @@ const homeworkStorage = new CloudinaryStorage({
   params: (async (_req: any, file: Express.Multer.File) => ({
     folder: 'lumexa/homework',
     resource_type: file.mimetype.startsWith('image/') ? 'image' : 'raw',
-    allowed_formats: Array.from(HOMEWORK_ALLOWED_EXTENSIONS),
+    // No `allowed_formats` here (unlike avatarStorage/documentStorage
+    // above): Cloudinary's own format allowlist only recognizes a fixed,
+    // conservative set of "known" extensions, and rejecting the upload
+    // outright with a raw API error for anything outside it (e.g. .py,
+    // .ipynb, .sb3, .rbxl) — which multer-storage-cloudinary then surfaces
+    // as an unhandled 500, not a clean 400. The fileFilter below (extension
+    // against HOMEWORK_ALLOWED_EXTENSIONS) already gates what's accepted
+    // before a file ever reaches Cloudinary, so a second, less permissive
+    // allowlist here only breaks legitimate submissions.
     // Same phone-camera HEIC/HEIF problem as avatars/documents above.
     ...((file.mimetype === 'image/heic' || file.mimetype === 'image/heif') && {
       format: 'jpg',
@@ -171,6 +180,7 @@ const REQUIRED_DOC_TYPES = new Set([
 
 @Controller('uploads')
 @UseGuards(AuthGuard('jwt'))
+@UseInterceptors(CloudinaryUploadErrorInterceptor)
 export class UploadsController {
   constructor(private readonly prisma: PrismaService) {}
 
