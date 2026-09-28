@@ -40,13 +40,16 @@ export class SubmissionsController {
     return this.submissionsService.getPendingCountForTeacher(req.user.userId);
   }
 
-  /** GET /submissions?status=PENDING|REVIEWED — teacher's own review queue. */
+  /** GET /submissions?status=PENDING|APPROVED|NEEDS_CHANGES — teacher's own
+   * review queue. */
   @Get()
   @UseGuards(RolesGuard)
   @Roles(Role.TEACHER)
   list(@Request() req: any, @Query('status') status?: string) {
     const parsed =
-      status === 'PENDING' || status === 'REVIEWED'
+      status === 'PENDING' ||
+      status === 'APPROVED' ||
+      status === 'NEEDS_CHANGES'
         ? (status as SubmissionStatus)
         : undefined;
     return this.submissionsService.listForTeacher(req.user.userId, parsed);
@@ -67,7 +70,8 @@ export class SubmissionsController {
     );
   }
 
-  /** PATCH /submissions/:id/review — teacher marks reviewed, optional feedback. */
+  /** PATCH /submissions/:id/review — teacher approves or requests changes,
+   * with an optional rating and feedback (required for NEEDS_CHANGES). */
   @Patch(':id/review')
   @UseGuards(RolesGuard)
   @Roles(Role.TEACHER)

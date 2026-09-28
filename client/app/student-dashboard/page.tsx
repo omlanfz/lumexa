@@ -10,6 +10,9 @@ import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
 import CertificatesCard from '@/components/student/CertificatesCard';
 import HomeworkDueCard, { PendingHomeworkItem } from '@/components/student/HomeworkDueCard';
+import HomeworkNeedsChangesCard, {
+  NeedsChangesHomeworkItem,
+} from '@/components/student/HomeworkNeedsChangesCard';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -71,6 +74,7 @@ interface DashboardData {
   metrics: Metrics;
   pendingReview: PendingReview | null;
   pendingHomework: PendingHomeworkItem[];
+  homeworkNeedsChanges: NeedsChangesHomeworkItem[];
 }
 
 const RANK_ORDER = [
@@ -338,6 +342,10 @@ export default function StudentDashboardPage() {
                 fetchDashboard();
               }}
             />
+          )}
+
+          {data && data.homeworkNeedsChanges.length > 0 && (
+            <HomeworkNeedsChangesCard items={data.homeworkNeedsChanges} />
           )}
 
           {data && data.pendingHomework.length > 0 && <HomeworkDueCard items={data.pendingHomework} />}

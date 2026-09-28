@@ -20,10 +20,13 @@ export interface SubmissionFile {
 
 export interface SubmissionInfo {
   id: string;
-  status: 'PENDING' | 'REVIEWED';
+  status: 'PENDING' | 'APPROVED' | 'NEEDS_CHANGES';
   files: SubmissionFile[];
   links: string[];
   note: string | null;
+  rating: number | null;
+  feedbackTags: string[];
+  resubmissionCount: number;
   submittedAt: string;
   reviewedAt: string | null;
   feedback: string | null;
@@ -307,18 +310,33 @@ function HomeworkSubmission({
   };
 
   if (submission && !resubmitting) {
+    const isPending = submission.status === 'PENDING';
+    const isApproved = submission.status === 'APPROVED';
+    const isNeedsChanges = submission.status === 'NEEDS_CHANGES';
+
     return (
       <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50">
-        <div className="flex items-center gap-2 text-teal-700 dark:text-teal-400 font-semibold text-sm">
-          <span>✓ Work Submitted</span>
-          {submission.status === 'REVIEWED' && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-teal-500/10 border border-teal-500/20">
-              Reviewed
+        <div
+          className={`flex items-center gap-2 font-semibold text-sm ${
+            isNeedsChanges
+              ? 'text-red-600 dark:text-red-400'
+              : isApproved
+                ? 'text-teal-700 dark:text-teal-400'
+                : 'text-amber-600 dark:text-amber-400'
+          }`}
+        >
+          <span>
+            {isNeedsChanges ? '🔄 Needs Changes' : isApproved ? '✅ Approved' : '✓ Work Submitted'}
+          </span>
+          {isPending && (
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
+              Needs Review
             </span>
           )}
         </div>
         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          Submitted {new Date(submission.submittedAt).toLocaleDateString('en-US', { dateStyle: 'medium' } as any)}
+          {submission.resubmissionCount > 0 ? 'Resubmitted' : 'Submitted'}{' '}
+          {new Date(submission.submittedAt).toLocaleDateString('en-US', { dateStyle: 'medium' } as any)}
           {submission.files.length > 0
             ? ` · ${submission.files.length} file${submission.files.length > 1 ? 's' : ''}`
             : ''}
@@ -352,18 +370,48 @@ function HomeworkSubmission({
             ))}
           </div>
         )}
-        {submission.feedback && (
-          <div className="mt-2 text-sm bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-800/40 rounded-lg p-3">
-            <p className="text-xs font-semibold text-teal-700 dark:text-teal-400 mb-1">Teacher feedback</p>
-            <p className="text-gray-700 dark:text-gray-300">{submission.feedback}</p>
+
+        {isApproved && submission.rating && (
+          <p className="mt-2 text-amber-400 text-sm">
+            {'★'.repeat(submission.rating)}
+            <span className="text-gray-300 dark:text-gray-600">{'★'.repeat(5 - submission.rating)}</span>
+          </p>
+        )}
+
+        {(submission.feedback || submission.feedbackTags.length > 0) && (
+          <div
+            className={`mt-2 text-sm rounded-lg p-3 border ${
+              isNeedsChanges
+                ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/40'
+                : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800/40'
+            }`}
+          >
+            <p
+              className={`text-xs font-semibold mb-1 ${
+                isNeedsChanges ? 'text-red-700 dark:text-red-400' : 'text-teal-700 dark:text-teal-400'
+              }`}
+            >
+              Teacher feedback
+            </p>
+            {submission.feedbackTags.length > 0 && (
+              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300 mb-1">
+                {submission.feedbackTags.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            )}
+            {submission.feedback && <p className="text-gray-700 dark:text-gray-300">{submission.feedback}</p>}
           </div>
         )}
-        <button
-          onClick={() => setResubmitting(true)}
-          className="mt-2 text-xs text-teal-600 dark:text-teal-400 hover:underline"
-        >
-          Submit different work
-        </button>
+
+        {isNeedsChanges && (
+          <button
+            onClick={() => setResubmitting(true)}
+            className="mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-500 hover:bg-red-400 transition-colors"
+          >
+            Resubmit Work
+          </button>
+        )}
       </div>
     );
   }

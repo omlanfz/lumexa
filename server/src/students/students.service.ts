@@ -310,6 +310,7 @@ export class StudentsService {
       nextScheduledLesson,
       completedLessonCount,
       pendingHomeworkLessons,
+      homeworkNeedsChangesRows,
     ] = await Promise.all([
       this.prisma.booking.findMany({
         where: {
@@ -356,6 +357,25 @@ export class StudentsService {
           id: true,
           lessonNumber: true,
           course: { select: { title: true } },
+          lesson: { select: { title: true } },
+        },
+      }),
+      // Homework the teacher sent back for changes — the student needs to
+      // see this even more prominently than never-submitted homework.
+      this.prisma.submission.findMany({
+        where: { studentUserId: userId, status: 'NEEDS_CHANGES' },
+        orderBy: { reviewedAt: 'desc' },
+        take: 5,
+        select: {
+          scheduledLessonId: true,
+          feedback: true,
+          feedbackTags: true,
+          scheduledLesson: {
+            select: {
+              lessonNumber: true,
+              course: { select: { title: true } },
+            },
+          },
           lesson: { select: { title: true } },
         },
       }),
@@ -483,6 +503,15 @@ export class StudentsService {
         lessonNumber: l.lessonNumber,
         courseTitle: l.course.title,
         lessonTitle: l.lesson?.title ?? `Session ${l.lessonNumber}`,
+      })),
+      homeworkNeedsChanges: homeworkNeedsChangesRows.map((r) => ({
+        scheduledLessonId: r.scheduledLessonId,
+        lessonNumber: r.scheduledLesson.lessonNumber,
+        courseTitle: r.scheduledLesson.course.title,
+        lessonTitle:
+          r.lesson?.title ?? `Session ${r.scheduledLesson.lessonNumber}`,
+        feedback: r.feedback,
+        feedbackTags: r.feedbackTags,
       })),
       stats: {
         totalSessions: user.totalSessions,
