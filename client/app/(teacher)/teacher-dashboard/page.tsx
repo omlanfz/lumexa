@@ -237,10 +237,19 @@ function TeacherDashboardContent() {
                 className={`p-3.5 rounded-xl flex items-start justify-between gap-3 text-sm ${
                   a.type === "LATE_JOIN_PENALTY"
                     ? "bg-[var(--t-danger-bg)] text-[var(--t-danger)]"
-                    : "bg-[var(--t-success-bg,rgba(16,185,129,0.1))] text-[var(--t-success,#10b981)]"
+                    : a.type === "CLASS_AUTO_ENDED"
+                      ? "bg-[var(--t-warning-bg)] text-[var(--t-warning)]"
+                      : "bg-[var(--t-success-bg,rgba(16,185,129,0.1))] text-[var(--t-success,#10b981)]"
                 }`}
               >
-                <p className="font-medium">{a.message}</p>
+                {a.type === "CLASS_AUTO_ENDED" ? (
+                  <div>
+                    <p className="font-semibold mb-1">{a.title}</p>
+                    <p className="font-medium whitespace-pre-line">{a.message}</p>
+                  </div>
+                ) : (
+                  <p className="font-medium">{a.message}</p>
+                )}
                 <button
                   onClick={() => dismissAlert(a.id)}
                   className="text-xs opacity-60 hover:opacity-100 flex-shrink-0"

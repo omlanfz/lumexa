@@ -2,15 +2,20 @@
 //
 // Append-only BDT credit ledger for students — the source of truth for the
 // admin Payments tab. Every write goes through one of the methods below;
-// StudentLedgerEntry rows are never updated or deleted (a correction is a
-// new offsetting entry, see recordAdjustment/recordRefund). The current
+// StudentLedgerEntry rows are append-only (a correction is a new offsetting
+// entry, see recordAdjustment/recordRefund). The one exception is an admin
+// explicitly deleting a payment-history row (see deleteEntry), which removes
+// the row and rebuilds the running balance of the rows after it so the chain
+// stays consistent. The current
 // balance and effective per-lesson rate are never stored on the student —
 // they are always the latest ledger row's balanceAfterCents/rateCents (see
 // the doc comment on the StudentLedgerEntry model), so the displayed
 // balance always reconciles exactly with the ledger by construction.
 //
-// Automatic LESSON_COMPLETED consumption mirrors
-// PayoutsService.syncCompletedClasses: a idempotent cron scan over
+// LESSON_COMPLETED consumption: for curriculum classes it is written inside
+// ClassFinalizationService's finalize transaction (see
+// consumeLessonForScheduledLessonInTx); for legacy marketplace bookings it
+// mirrors PayoutsService.syncCompletedClasses — an idempotent cron scan over
 // CAPTURED + ended bookings, guarded by the DB-level
 // @@unique([bookingId, type]) constraint.
 
@@ -23,6 +28,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma, StudentLedgerEntryType } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { BDT } from '../payouts/payout.constants';
 
 const LOW_BALANCE_LESSON_THRESHOLD = 3;
@@ -56,7 +62,10 @@ function round1(n: number): number {
 export class StudentLedgerService {
   private readonly logger = new Logger(StudentLedgerService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   private latestEntry(
     studentUserId: string,
@@ -318,6 +327,94 @@ export class StudentLedgerService {
   }
 
   /**
+   * Admin-only: permanently removes one payment-history row.
+   *
+   * The ledger is a running-balance chain — every row stores the balance (and
+   * effective per-lesson rate) *after* it, and the latest row IS the student's
+   * balance — so simply deleting a row would leave every later row's snapshot
+   * wrong and silently change the balance. Instead the row is removed and the
+   * chain after it is rebuilt in the same transaction: balanceAfterCents is the
+   * running sum of the remaining rows' amounts, and the rate is carried forward
+   * exactly as it was originally (rows that set a price keep their own rate;
+   * everything else inherits the previous row's). Amounts of other rows are
+   * never edited, so completed classes, lesson consumption and teacher
+   * earnings are untouched.
+   *
+   * Lesson-consumption rows (LESSON_COMPLETED) are refused: they are the
+   * financial record of a finalized class and are created/owned by the class
+   * flow, so removing one would desynchronise the class from the ledger. A
+   * wrong deduction is corrected with an Admin adjustment instead.
+   */
+  async deleteEntry(
+    studentUserId: string,
+    entryId: string,
+    adminId: string,
+  ): Promise<{ success: true }> {
+    const deleted = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'student-ledger:' + studentUserId}))`;
+
+        const entry = await tx.studentLedgerEntry.findFirst({
+          where: { id: entryId, studentUserId },
+        });
+        if (!entry) throw new NotFoundException('Payment record not found.');
+        if (entry.type === StudentLedgerEntryType.LESSON_COMPLETED) {
+          throw new BadRequestException(
+            'Lesson-completed entries belong to a finalized class and cannot be deleted. Use an Admin adjustment to correct the balance.',
+          );
+        }
+
+        const all = await tx.studentLedgerEntry.findMany({
+          where: { studentUserId },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        });
+        const deletedIndex = all.findIndex((e) => e.id === entryId);
+        const remaining = all.filter((e) => e.id !== entryId);
+
+        await tx.studentLedgerEntry.delete({ where: { id: entryId } });
+
+        // Entries up to the deleted position are unchanged; recompute only
+        // those after it, seeded from the (unchanged) entry just before.
+        let balance = 0;
+        let rate = 0;
+        remaining.forEach((e, i) => {
+          if (i < deletedIndex) {
+            balance = e.balanceAfterCents;
+            rate = e.rateCents;
+          }
+        });
+        for (const e of remaining.slice(deletedIndex)) {
+          balance += e.amountCents;
+          const setsRate =
+            e.type === StudentLedgerEntryType.PAYMENT_RECEIVED ||
+            e.type === StudentLedgerEntryType.CURRICULUM_CHANGE ||
+            e.type === StudentLedgerEntryType.CREDIT_CARRIED_FORWARD;
+          if (setsRate) rate = e.rateCents;
+          if (e.balanceAfterCents !== balance || e.rateCents !== rate) {
+            await tx.studentLedgerEntry.update({
+              where: { id: e.id },
+              data: { balanceAfterCents: balance, rateCents: rate },
+            });
+          }
+        }
+        return entry;
+      },
+      { timeout: 20_000, maxWait: 10_000 },
+    );
+
+    await this.audit.log({
+      actorId: adminId,
+      actorRole: 'ADMIN',
+      action: 'STUDENT_LEDGER_ENTRY_DELETED',
+      entityType: 'User',
+      entityId: studentUserId,
+      reason: 'Payment record deleted from the student payment history.',
+      beforeData: deleted,
+    });
+    return { success: true };
+  }
+
+  /**
    * Called from AdminService.assignCourseToStudent right after the
    * assignment is persisted. Only writes ledger rows when the student
    * already has billing history — a plain course assignment for a
@@ -433,109 +530,62 @@ export class StudentLedgerService {
     }
   }
 
-  // ─── Automatic lesson consumption — curriculum (ScheduledLesson) flow ────
+  // ─── Lesson consumption — curriculum (ScheduledLesson) flow ──────────────
   //
-  // The ScheduledLesson counterpart to consumeLessonForBooking above (which
-  // is Booking/marketplace-only). Called exactly once, from
-  // ClassroomService.endClass, when a teacher marks a class COMPLETED.
-  // Idempotency is the DB-level @@unique([scheduledLessonId, type])
-  // constraint (see consumeLessonForScheduledLesson) — a retried/duplicated
-  // call, or a later cron sweep picking up the same lesson, is always a
-  // no-op, so callers don't need to pre-check.
-  async triggerScheduledLessonCompleted(
-    scheduledLessonId: string,
+  // The ScheduledLesson counterpart to consumeLessonForBooking below (which is
+  // Booking/marketplace-only). Runs inside the finalize transaction of
+  // ClassFinalizationService when a class is finalized as COMPLETED or
+  // PARTIALLY_COMPLETED — never for INCOMPLETE — so exactly one lesson is
+  // consumed per paid class, atomically with the status change. Idempotency is
+  // the DB-level @@unique([scheduledLessonId, type]) constraint plus an
+  // explicit existence check. The per-student advisory lock serialises
+  // concurrent writers to the same student's running balance (balanceAfterCents
+  // is read-modify-write), e.g. two of a student's classes finalizing at once.
+  async consumeLessonForScheduledLessonInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      scheduledLessonId: string;
+      studentUserId: string;
+      eventDate: Date;
+      note?: string;
+    },
   ): Promise<boolean> {
-    const lesson = await this.prisma.scheduledLesson.findUnique({
-      where: { id: scheduledLessonId },
-      select: { studentUserId: true, end: true },
-    });
-    if (!lesson) throw new NotFoundException('Scheduled lesson not found.');
+    const { scheduledLessonId, studentUserId, eventDate } = params;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'student-ledger:' + studentUserId}))`;
 
-    return this.consumeLessonForScheduledLesson(
-      scheduledLessonId,
-      lesson.studentUserId,
-      lesson.end,
-    );
-  }
-
-  // Scans for curriculum classes that are COMPLETED but have no
-  // LESSON_COMPLETED ledger entry yet (safety net alongside the synchronous
-  // call in ClassroomService.endClass — a missed or repeated run is
-  // harmless, same as syncCompletedLessons below).
-  @Cron(CronExpression.EVERY_10_MINUTES)
-  async syncCompletedScheduledLessons() {
-    const candidates = await this.prisma.scheduledLesson.findMany({
+    const existing = await tx.studentLedgerEntry.findUnique({
       where: {
-        status: 'COMPLETED',
-        ledgerEntries: {
-          none: { type: StudentLedgerEntryType.LESSON_COMPLETED },
+        scheduledLessonId_type: {
+          scheduledLessonId,
+          type: StudentLedgerEntryType.LESSON_COMPLETED,
         },
       },
-      select: { id: true, studentUserId: true, end: true },
-      take: 500,
+      select: { id: true },
     });
+    if (existing) return false;
 
-    let recorded = 0;
-    for (const lesson of candidates) {
-      try {
-        const created = await this.consumeLessonForScheduledLesson(
-          lesson.id,
-          lesson.studentUserId,
-          lesson.end,
-        );
-        if (created) recorded++;
-      } catch (err) {
-        this.logger.error(
-          `Failed to record LESSON_COMPLETED for scheduled lesson ${lesson.id}`,
-          err as Error,
-        );
-      }
-    }
+    const prev = await this.latestEntry(studentUserId, tx);
+    // Never billed on this system (no PAYMENT_RECEIVED/curriculum-change
+    // history) — nothing to consume, so no entry is created.
+    if (!prev || prev.rateCents <= 0) return false;
 
-    if (recorded > 0) {
-      this.logger.log(
-        `Recorded ${recorded} curriculum lesson-completed ledger entries.`,
-      );
-    }
-  }
-
-  private async consumeLessonForScheduledLesson(
-    scheduledLessonId: string,
-    studentUserId: string,
-    eventDate: Date,
-  ): Promise<boolean> {
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const prev = await this.latestEntry(studentUserId, tx);
-        // Never billed on this system (no PAYMENT_RECEIVED/curriculum-change
-        // history) — nothing to consume, so no entry is created.
-        if (!prev || prev.rateCents <= 0) return false;
-
-        const amountCents = -prev.rateCents;
-        const balanceAfterCents = prev.balanceAfterCents + amountCents;
-
-        await tx.studentLedgerEntry.create({
-          data: {
-            studentUserId,
-            type: StudentLedgerEntryType.LESSON_COMPLETED,
-            amountCents,
-            balanceAfterCents,
-            rateCents: prev.rateCents,
-            courseId: prev.courseId,
-            courseName: prev.courseName,
-            description: `Lesson completed on ${eventDate.toDateString()}`,
-            scheduledLessonId,
-          },
-        });
-        return true;
-      });
-    } catch (err: any) {
-      // P2002 = unique constraint violation on (scheduledLessonId, type) —
-      // this scheduled lesson already has a LESSON_COMPLETED entry.
-      // Idempotent no-op.
-      if (err?.code === 'P2002') return false;
-      throw err;
-    }
+    const amountCents = -prev.rateCents;
+    await tx.studentLedgerEntry.create({
+      data: {
+        studentUserId,
+        type: StudentLedgerEntryType.LESSON_COMPLETED,
+        amountCents,
+        balanceAfterCents: prev.balanceAfterCents + amountCents,
+        rateCents: prev.rateCents,
+        courseId: prev.courseId,
+        courseName: prev.courseName,
+        description:
+          `Lesson completed on ${eventDate.toDateString()}` +
+          (params.note ? ` (${params.note})` : ''),
+        scheduledLessonId,
+      },
+    });
+    return true;
   }
 
   private async consumeLessonForBooking(

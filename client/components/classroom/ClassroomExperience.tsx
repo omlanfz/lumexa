@@ -45,6 +45,7 @@ interface JoinResponse {
   roomName: string;
   scheduledStart?: string;
   classType?: 'ONE_TO_ONE' | 'BATCH';
+  partialCompletionAvailable?: boolean;
 }
 
 interface WaitingResponse {
@@ -269,6 +270,7 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         initialLighting={choices?.lighting ?? DEFAULT_LIGHTING}
         scheduledStart={join.scheduledStart}
         classType={join.classType}
+        partialCompletionAvailable={join.partialCompletionAvailable}
         observerMode={adminObserve}
         demo={demo}
       />

@@ -236,6 +236,11 @@ export class AdminService {
         where.paymentStatus = 'CAPTURED';
         where.shift = { ...(where.shift ?? {}), end: { lte: now } };
         break;
+      case 'PARTIALLY_COMPLETED':
+      case 'INCOMPLETE':
+        // Curriculum-lesson-only outcomes — legacy bookings never have them.
+        where.id = { in: [] };
+        break;
       case 'CANCELLED':
         where.paymentStatus = 'REFUNDED';
         where.rescheduleRequests = { some: { action: 'CANCEL' } };
@@ -316,6 +321,12 @@ export class AdminService {
         break;
       case 'COMPLETED':
         where.status = 'COMPLETED';
+        break;
+      case 'PARTIALLY_COMPLETED':
+        where.status = 'PARTIALLY_COMPLETED';
+        break;
+      case 'INCOMPLETE':
+        where.status = 'INCOMPLETE';
         break;
       case 'CANCELLED':
         where.status = 'CANCELLED';
@@ -1066,6 +1077,9 @@ export class AdminService {
       courseTitle: l.course?.title ?? null,
       paymentStatus: null as string | null,
       displayStatus: l.status === 'UPCOMING' ? 'SCHEDULED' : l.status,
+      endedByRole: l.endedByRole,
+      endReason: l.endReason,
+      endNote: l.endNote,
       review: null as { rating: number; comment: string | null } | null,
     }));
 

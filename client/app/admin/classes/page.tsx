@@ -31,6 +31,8 @@ const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "SCHEDULED", label: "Scheduled" },
   { value: "COMPLETED", label: "Completed" },
+  { value: "PARTIALLY_COMPLETED", label: "Partially Completed" },
+  { value: "INCOMPLETE", label: "Incomplete" },
   { value: "CANCELLED", label: "Cancelled" },
   { value: "REFUNDED", label: "Refunded" },
   { value: "PENDING", label: "Pending" },

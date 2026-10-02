@@ -176,52 +176,41 @@ export class PayoutsService {
   // ─── Trigger: curriculum class completed (+BDT 200) ───────────────────────
   //
   // The curriculum (ScheduledLesson) counterpart to triggerClassCompleted
-  // above (which is Booking/marketplace-only). Called exactly once, from
-  // ClassroomService.endClass, when a teacher marks a class COMPLETED — never
-  // automatically, and never if the student never joined (enforced by the
-  // caller before this is reached). Idempotency key is the scheduledLessonId
-  // itself, so a retried/duplicated call is always a no-op.
-  async triggerScheduledLessonCompleted(scheduledLessonId: string) {
-    const existing = await this.prisma.payoutEntry.findUnique({
+  // above (which is Booking/marketplace-only). Runs inside the finalize
+  // transaction of ClassFinalizationService — the same transaction that moves
+  // the lesson out of UPCOMING — so the earning exists if and only if the
+  // class was finalized as COMPLETED / PARTIALLY_COMPLETED, and a crash can
+  // never leave one without the other. Idempotency key is the
+  // scheduledLessonId itself (DB-level unique constraint), so a retried or
+  // duplicated call is always a no-op. Dashboard alerts are the caller's job,
+  // after commit.
+  async recordScheduledLessonEarningInTx(
+    tx: Prisma.TransactionClient,
+    lesson: { id: string; teacherId: string; studentName: string; end: Date },
+  ) {
+    const existing = await tx.payoutEntry.findUnique({
       where: {
         referenceType_referenceId_type: {
           referenceType: 'SCHEDULED_LESSON',
-          referenceId: scheduledLessonId,
+          referenceId: lesson.id,
           type: PayoutEntryType.CLASS_COMPLETED,
         },
       },
     });
     if (existing) return existing;
 
-    const lesson = await this.prisma.scheduledLesson.findUnique({
-      where: { id: scheduledLessonId },
-      include: {
-        teacher: { select: { id: true, userId: true } },
-        student: { select: { fullName: true } },
+    return tx.payoutEntry.create({
+      data: {
+        teacherId: lesson.teacherId,
+        type: PayoutEntryType.CLASS_COMPLETED,
+        amountCents: CLASS_COMPLETED_AMOUNT_CENTS,
+        description: `Completed class with ${lesson.studentName}`,
+        month: lesson.end.getMonth() + 1,
+        year: lesson.end.getFullYear(),
+        referenceType: 'SCHEDULED_LESSON',
+        referenceId: lesson.id,
       },
     });
-    if (!lesson) throw new NotFoundException('Scheduled lesson not found.');
-
-    const entry = await this.createLedgerEntry({
-      teacherId: lesson.teacher.id,
-      type: PayoutEntryType.CLASS_COMPLETED,
-      amountCents: CLASS_COMPLETED_AMOUNT_CENTS,
-      description: `Completed class with ${lesson.student.fullName}`,
-      eventDate: lesson.end,
-      referenceType: 'SCHEDULED_LESSON',
-      referenceId: scheduledLessonId,
-    });
-
-    await this.alerts.create({
-      userId: lesson.teacher.userId,
-      role: Role.TEACHER,
-      type: 'CLASS_COMPLETED_EARNING',
-      title: 'Class completed',
-      message: `You earned ৳${(CLASS_COMPLETED_AMOUNT_CENTS / 100).toFixed(0)} for successfully completing this class. Great work!`,
-      metadata: { scheduledLessonId },
-    });
-
-    return entry;
   }
 
   // ─── Trigger: teacher late-join penalty (-BDT 50, automatic) ──────────────

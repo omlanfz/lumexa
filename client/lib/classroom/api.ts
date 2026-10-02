@@ -29,13 +29,6 @@ export async function stopParticipantScreenShare(room: string, identity: string)
   await api.post(`/classroom/${room}/stop-screen-share`, { identity });
 }
 
-export async function endClass(
-  room: string,
-  outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED',
-): Promise<void> {
-  await api.post(`/classroom/${room}/end`, outcome ? { outcome } : {});
-}
-
 export async function startRecording(room: string): Promise<{ recordingStatus: string }> {
   const res = await api.post(`/classroom/${room}/recording/start`);
   return res.data;
@@ -54,17 +47,19 @@ export async function updateClassroomState(
   return res.data.state;
 }
 
-export type ClassEndReason = 'STUDENT_NO_SHOW' | 'STUDENT_LEFT_EARLY' | 'TECHNICAL_ISSUE' | 'OTHER';
+export type ClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED' | 'INCOMPLETE';
 
-export async function endClassRequest(
-  room: string,
-  params: { outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED'; reason?: ClassEndReason; note?: string },
-): Promise<void> {
-  await api.post(`/classroom/${room}/end`, params);
+/** The only reasons offered when a class is ended Incomplete. */
+export type ClassEndReason = 'STUDENT_NO_SHOW' | 'TECHNICAL_ISSUE' | 'OTHER';
+
+export interface EndClassParams {
+  outcome?: ClassOutcome;
+  reason?: ClassEndReason;
+  note?: string;
 }
 
-export async function sendHeartbeat(room: string): Promise<void> {
-  await api.post(`/classroom/${room}/heartbeat`);
+export async function endClassRequest(room: string, params: EndClassParams): Promise<void> {
+  await api.post(`/classroom/${room}/end`, params);
 }
 
 export async function setParticipantMicLocked(room: string, identity: string, locked: boolean): Promise<void> {

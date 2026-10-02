@@ -27,9 +27,15 @@ import { RescheduleService } from '../reschedule/reschedule.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { DisputesService } from '../disputes/disputes.service';
+import {
+  ClassFinalizationService,
+  CLASS_OUTCOMES,
+  INCOMPLETE_REASONS,
+  type ClassOutcome,
+} from '../classroom/class-finalization.service';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role } from '@prisma/client';
+import { ClassEndReason, Role } from '@prisma/client';
 import { IsNumber, IsPositive, MinLength } from 'class-validator';
 
 // ── Ledger trigger DTOs (Operations only — see PayoutsService doc comment) ──
@@ -113,6 +119,12 @@ class SetPasswordDto {
   @IsString() @MinLength(8) @MaxLength(72) newPassword: string;
 }
 
+class FinalizeLessonDto {
+  @IsIn(CLASS_OUTCOMES) outcome: ClassOutcome;
+  @IsOptional() @IsIn(INCOMPLETE_REASONS) reason?: ClassEndReason;
+  @IsOptional() @IsString() @MaxLength(1000) note?: string;
+}
+
 class LessonRescheduleDto {
   @IsISO8601() newStart: string;
   @IsISO8601() newEnd: string;
@@ -129,6 +141,7 @@ export class AdminController {
     private readonly studentLedgerService: StudentLedgerService,
     private readonly schedulingService: SchedulingService,
     private readonly disputesService: DisputesService,
+    private readonly classFinalization: ClassFinalizationService,
   ) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
@@ -274,17 +287,21 @@ export class AdminController {
     );
   }
 
-  @Post('lessons/:lessonId/mark-completed')
-  adminMarkLessonCompleted(
+  /** Admin sets a class's final status — the same business rules as the
+   * teacher's End Class (see ClassFinalizationService), so an accidental
+   * teacher status can be corrected from the Students → Schedule tab. */
+  @Post('lessons/:lessonId/finalize')
+  adminFinalizeLesson(
     @Param('lessonId') lessonId: string,
-    @Body() dto: ReasonDto,
+    @Body() dto: FinalizeLessonDto,
     @Request() req: any,
   ) {
-    return this.schedulingService.adminMarkLessonCompleted(
-      lessonId,
-      dto.reason,
-      req.user.userId,
-    );
+    return this.classFinalization.finalizeLesson(lessonId, {
+      outcome: dto.outcome,
+      reason: dto.reason,
+      note: dto.note,
+      actor: { role: 'ADMIN', userId: req.user.userId },
+    });
   }
 
   @Delete('lessons/:lessonId')
@@ -572,6 +589,19 @@ export class AdminController {
       studentUserId,
       req.user.userId,
       dto,
+    );
+  }
+
+  @Delete('students/:studentUserId/ledger/:entryId')
+  deleteStudentLedgerEntry(
+    @Param('studentUserId') studentUserId: string,
+    @Param('entryId') entryId: string,
+    @Request() req: any,
+  ) {
+    return this.studentLedgerService.deleteEntry(
+      studentUserId,
+      entryId,
+      req.user.userId,
     );
   }
 

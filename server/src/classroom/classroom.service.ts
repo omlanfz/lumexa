@@ -7,12 +7,10 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { StudentsService } from '../students/students.service';
-import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { AlertsService } from '../alerts/alerts.service';
 import { StripeService } from '../payments/stripe.service';
-import { NotificationsService } from '../notifications/notifications.service';
 import {
   getClassWindow,
   computeLateMinutes,
@@ -32,15 +30,17 @@ import {
 import { RecordingService } from './recording.service';
 import { AdmissionService } from './admission.service';
 import {
+  ClassFinalizationService,
+  type ClassOutcome,
+} from './class-finalization.service';
+import {
   DEMO_ROOM_NAME,
   isLessonRoom,
   lessonIdFromRoom,
 } from './room-ref.util';
 
-type EndClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED';
-
 export interface EndClassParams {
-  outcome?: EndClassOutcome;
+  outcome?: ClassOutcome;
   reason?: ClassEndReason;
   note?: string;
 }
@@ -72,14 +72,13 @@ export class ClassroomService {
   constructor(
     private prisma: PrismaService,
     private studentsService: StudentsService,
-    private studentLedgerService: StudentLedgerService,
     private schedulingService: SchedulingService,
     private payoutsService: PayoutsService,
     private alertsService: AlertsService,
     private stripeService: StripeService,
     private recordingService: RecordingService,
     private admissionService: AdmissionService,
-    private notifications: NotificationsService,
+    private classFinalization: ClassFinalizationService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -392,6 +391,14 @@ export class ClassroomService {
       roomName,
       scheduledStart: lesson.start.toISOString(),
       classType: lesson.classType,
+      // The teacher's Partially Completed option is only offered once per
+      // lesson — disabled on the extra class that option itself creates.
+      partialCompletionAvailable:
+        !(await this.schedulingService.hasPartialCompletion(
+          lesson.studentUserId,
+          lesson.courseId,
+          lesson.lessonNumber,
+        )),
     };
   }
 
@@ -724,16 +731,6 @@ export class ClassroomService {
     await this.assertTeacherOfRoom(userId, roomName);
   }
 
-  /** Used by the heartbeat endpoint — trusts the room's own teacher
-   * assignment rather than whatever role the client claims to be. */
-  async resolveParticipantRole(
-    userId: string,
-    roomName: string,
-  ): Promise<'TEACHER' | 'STUDENT'> {
-    const teacherUserId = await this.getRoomTeacherUserId(roomName);
-    return teacherUserId === userId ? 'TEACHER' : 'STUDENT';
-  }
-
   private async findPublishedTrackSid(
     client: RoomServiceClient,
     room: string,
@@ -931,43 +928,26 @@ export class ClassroomService {
   }
 
   /**
-   * Teacher manually ends the class — the ONLY way a curriculum
-   * (ScheduledLesson) class ever leaves UPCOMING under a teacher's own
-   * action (see autoEndClassForServerReason for the server-initiated
-   * teacher-disconnect path). For the curriculum flow the teacher must
-   * choose an outcome:
-   *   - COMPLETED: requires the student to have actually joined (see
-   *     studentJoinedAt) — otherwise rejected — then awards the teacher's
-   *     +BDT 200 completed-class earning exactly once and deducts exactly
-   *     one lesson from the student's balance.
-   *   - PARTIALLY_COMPLETED ("Incomplete" in the UI): requires a reason;
-   *     shifts the remaining schedule so the student gets a make-up
-   *     occurrence for the SAME lesson number (see SchedulingService.
-   *     handlePartialCompletion) — lesson progression only ever happens on
-   *     COMPLETED. No earning, no deduction.
-   * Any in-progress recording is stopped first either way, then handed to
-   * RecordingService to merge asynchronously (see finalizeAtClassEnd).
-   * The legacy Booking (marketplace) flow has no outcome/earning workflow —
-   * it just closes the room, recording an end reason if one was given.
+   * Teacher ends the class. For a curriculum (ScheduledLesson) class they must
+   * choose one of exactly three outcomes — Completed, Partially Completed or
+   * Incomplete — and everything that follows (teacher earning, student
+   * balance, schedule, recording, notifications) is done by
+   * ClassFinalizationService, the same code an admin correction and the
+   * 75-minute failsafe use. This method only authorises the caller and
+   * enforces the "10 minutes after start" window.
+   *
+   * The legacy Booking (marketplace) flow has no outcome/earning workflow — it
+   * just closes the room, recording an end reason if one was given.
    */
   async endClass(
     userId: string,
     room: string,
     params: EndClassParams = {},
-  ): Promise<{ ok: true }> {
+  ): Promise<{ ok: true; status?: LessonStatus }> {
     const { outcome, reason, note } = params;
     await this.assertTeacherOfRoom(userId, room);
 
-    if (outcome === 'PARTIALLY_COMPLETED') {
-      if (!reason) {
-        throw new BadRequestException(
-          'Choose a reason for marking this class incomplete.',
-        );
-      }
-      if (reason === ClassEndReason.OTHER && !note?.trim()) {
-        throw new BadRequestException('Add a short note explaining why.');
-      }
-    }
+    let status: LessonStatus | undefined;
 
     if (isLessonRoom(room)) {
       const lessonId = lessonIdFromRoom(room);
@@ -975,95 +955,22 @@ export class ClassroomService {
         where: { id: lessonId },
       });
       if (!lesson) throw new BadRequestException('Classroom not found.');
-      if (lesson.status !== LessonStatus.UPCOMING) {
-        throw new BadRequestException('This class has already been ended.');
-      }
       if (!outcome) {
         throw new BadRequestException(
-          'Choose Completed or Incomplete to end this class.',
+          'Choose Completed, Partially Completed or Incomplete to end this class.',
         );
       }
-      this.assertEndClassWindowOpen(lesson.start);
-
-      await this.recordingService.stopActiveSegmentIfAny(room);
-      await this.recordingService.finalizeAtClassEnd(room);
-
-      if (outcome === 'COMPLETED') {
-        if (!lesson.studentJoinedAt) {
-          throw new BadRequestException(
-            'This class cannot be marked as completed because the student did not join.',
-          );
-        }
-        // Deduct-one-lesson and award-teacher-earning happen together, each
-        // idempotent and independently retry-safe (see PayoutsService/
-        // StudentLedgerService's unique-constraint guards) — but the status
-        // flip itself is the one write that must never be split from them,
-        // so a crash between "marked COMPLETED" and "earning recorded"
-        // can't leave the class completed with no payout. The two triggers
-        // below are safety-netted by their own cron sweeps either way.
-        await this.prisma.scheduledLesson.update({
-          where: { id: lessonId },
-          data: {
-            status: LessonStatus.COMPLETED,
-            endedAt: new Date(),
-            endedByRole: 'TEACHER',
-          },
-        });
-        await this.payoutsService
-          .triggerScheduledLessonCompleted(lessonId)
-          .catch((err) => {
-            this.logger.error(
-              `Failed to record completed-class earning for lesson ${lessonId}: ${err}`,
-            );
-          });
-        await this.studentLedgerService
-          .triggerScheduledLessonCompleted(lessonId)
-          .catch((err) => {
-            this.logger.error(
-              `Failed to record student lesson-completed deduction for lesson ${lessonId}: ${err}`,
-            );
-          });
-      } else {
-        await this.prisma.scheduledLesson.update({
-          where: { id: lessonId },
-          data: {
-            endedAt: new Date(),
-            endedByRole: 'TEACHER',
-            endReason: reason,
-            endNote: note?.trim() || null,
-          },
-        });
-        // Keeps the SAME lessonNumber for the next occurrence, shifting only
-        // that redo + later occurrences — it never touches lesson content
-        // for occurrences the student hasn't reached yet.
-        await this.schedulingService.handlePartialCompletion(lessonId, userId);
-
-        // A genuine no-show: the teacher ended the class and the student
-        // never joined at all (vs. a partial-completion that ran long with
-        // both sides present — that case has studentJoinedAt set).
-        if (!lesson.studentJoinedAt) {
-          const [student, teacherProfile] = await Promise.all([
-            this.prisma.user.findUnique({
-              where: { id: lesson.studentUserId },
-              select: { email: true, fullName: true },
-            }),
-            this.prisma.teacherProfile.findUnique({
-              where: { id: lesson.teacherId },
-              select: { user: { select: { fullName: true } } },
-            }),
-          ]);
-          if (student && teacherProfile) {
-            this.notifications
-              .sendMissedClassNotice(student.email, {
-                lessonId,
-                studentName: student.fullName,
-                teacherName: teacherProfile.user.fullName,
-                classStart: lesson.start,
-              })
-              .catch(() => {});
-          }
-        }
+      // A repeat of an already-applied request (double click / retry) must
+      // stay a harmless success, so only gate classes that are still open.
+      if (lesson.status === LessonStatus.UPCOMING) {
+        this.assertEndClassWindowOpen(lesson.start);
       }
+      ({ status } = await this.classFinalization.finalizeLesson(lessonId, {
+        outcome,
+        reason,
+        note,
+        actor: { role: 'TEACHER', userId },
+      }));
     } else if (room !== DEMO_ROOM_NAME) {
       const booking = await this.prisma.booking.findUnique({
         where: { id: room },
@@ -1078,68 +985,22 @@ export class ClassroomService {
           data: { endReason: reason, endNote: note?.trim() || null },
         });
       }
+      await this.deleteLiveKitRoom(room);
     } else {
       await this.recordingService.stopActiveSegmentIfAny(room);
+      await this.deleteLiveKitRoom(room);
     }
 
-    const client = this.getRoomServiceClient();
-    await client.deleteRoom(room).catch(() => {
-      // Room may already be empty/gone — ending the class record still
-      // succeeded above, which is what matters.
-    });
-    return { ok: true };
+    return { ok: true, status };
   }
 
-  /** Server-initiated equivalent of endClass's "Incomplete" path, used only
-   * by PresenceService when a teacher hasn't sent a heartbeat in 20+
-   * minutes. No auth check (there's no acting user) and no 10-minute
-   * window gate (a human didn't fat-finger this). Returns false if the
-   * room already isn't live — nothing to do, so the caller doesn't log a
-   * spurious "auto-ended" line. */
-  async autoEndClassForServerReason(
-    room: string,
-    reason: ClassEndReason,
-  ): Promise<boolean> {
-    await this.recordingService.stopActiveSegmentIfAny(room);
-
-    if (isLessonRoom(room)) {
-      const lessonId = lessonIdFromRoom(room);
-      const lesson = await this.prisma.scheduledLesson.findUnique({
-        where: { id: lessonId },
-        include: { teacher: true },
+  private async deleteLiveKitRoom(room: string): Promise<void> {
+    await this.getRoomServiceClient()
+      .deleteRoom(room)
+      .catch(() => {
+        // Room may already be empty/gone — ending the class record still
+        // succeeded above, which is what matters.
       });
-      if (!lesson || lesson.status !== LessonStatus.UPCOMING) return false;
-
-      await this.recordingService.finalizeAtClassEnd(room);
-      await this.prisma.scheduledLesson.update({
-        where: { id: lessonId },
-        data: { endedAt: new Date(), endedByRole: 'SYSTEM', endReason: reason },
-      });
-      await this.schedulingService
-        .handlePartialCompletion(lessonId, lesson.teacher.userId)
-        .catch((err) =>
-          this.logger.error(`Could not auto-end lesson ${lessonId}: ${err}`),
-        );
-
-      const client = this.getRoomServiceClient();
-      await client.deleteRoom(room).catch(() => {});
-      return true;
-    }
-
-    if (room === DEMO_ROOM_NAME) return false;
-
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: room },
-    });
-    if (!booking) return false;
-    await this.recordingService.finalizeAtClassEnd(room);
-    await this.prisma.booking.update({
-      where: { id: room },
-      data: { endReason: reason },
-    });
-    const client = this.getRoomServiceClient();
-    await client.deleteRoom(room).catch(() => {});
-    return true;
   }
 
   /** Merges into the room's JSON metadata — the shared source of truth for

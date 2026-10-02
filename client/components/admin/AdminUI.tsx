@@ -15,6 +15,8 @@ import { createPortal } from "react-dom";
 const STATUS_STYLES: Record<string, string> = {
   SCHEDULED: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
   COMPLETED: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
+  PARTIALLY_COMPLETED: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
+  INCOMPLETE: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",
   CANCELLED: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
   REFUNDED: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
   PENDING: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",

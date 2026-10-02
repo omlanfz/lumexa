@@ -892,7 +892,7 @@ export class RecordingService {
       this.prisma.scheduledLesson.findMany({
         where: {
           recordingStatus: RecordingStatus.AVAILABLE,
-          status: { in: ['COMPLETED', 'PARTIALLY_COMPLETED'] },
+          status: { in: ['COMPLETED', 'PARTIALLY_COMPLETED', 'INCOMPLETE'] },
         },
         orderBy: { recordingMergedAt: 'asc' },
         select: {
