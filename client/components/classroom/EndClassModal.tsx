@@ -128,8 +128,24 @@ export default function EndClassModal({
           </div>
         ) : step === 'choose' ? (
           <div className="p-5">
-            <p className="text-[var(--cr-text)] font-semibold mb-1">End class for everyone?</p>
-            <p className="text-sm text-[var(--cr-text-muted)] mb-4">This can&apos;t be undone.</p>
+            <p className="text-[var(--cr-text)] font-semibold mb-3">How should you end this class?</p>
+            <ul className="text-sm text-[var(--cr-text-muted)] space-y-2 mb-3">
+              <li>
+                <span className="font-semibold text-[var(--cr-text)]">Completed:</span> Lesson finished → 1 lesson
+                deducted + ৳200 earned
+              </li>
+              <li>
+                <span className="font-semibold text-[var(--cr-text)]">Partially Completed:</span> Lesson needs 1 more
+                class → 1 lesson deducted + ৳200 earned
+              </li>
+              <li>
+                <span className="font-semibold text-[var(--cr-text)]">Incomplete:</span> Class could not be completed →
+                no deduction + no earning
+              </li>
+            </ul>
+            <p className="text-sm text-[var(--cr-text-muted)] mb-4">
+              Choose the status that best matches what happened in this class.
+            </p>
             {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
             <div className="flex flex-col gap-2">
               <button
@@ -165,7 +181,8 @@ export default function EndClassModal({
           </div>
         ) : step === 'completed-confirm' ? (
           <div className="p-5">
-            <p className="text-[var(--cr-text)] font-semibold mb-2">Mark this class as completed?</p>
+            <p className="text-[var(--cr-text)] font-semibold mb-1">Mark this class as completed?</p>
+            <p className="text-sm text-[var(--cr-text-muted)] mb-3">The lesson was completed successfully.</p>
             <ul className="text-sm text-[var(--cr-text-muted)] space-y-1.5 mb-4 list-disc list-inside">
               <li>1 lesson will be deducted from the student&apos;s balance.</li>
               <li>You&apos;ll earn ৳200.</li>
@@ -175,16 +192,18 @@ export default function EndClassModal({
           </div>
         ) : step === 'partial-confirm' ? (
           <div className="p-5">
-            <p className="text-[var(--cr-text)] font-semibold mb-2">Mark this class as partially completed?</p>
-            <div className="flex items-start gap-2 mb-3 px-3 py-2 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-300 text-xs">
-              <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-              Choose Partially Completed only when you need one additional class to finish this lesson&rsquo;s content.
-              Use Completed when the lesson is finished, and Incomplete when the class could not be completed.
-            </div>
+            <p className="text-[var(--cr-text)] font-semibold mb-1">Mark this class as partially completed?</p>
+            <p className="text-sm text-[var(--cr-text-muted)] mb-3">
+              Choose Partially Completed only if the lesson was not fully finished and needs 1 additional class to
+              complete the same content.
+            </p>
             <ul className="text-sm text-[var(--cr-text-muted)] space-y-1.5 mb-4 list-disc list-inside">
               <li>1 lesson will be deducted from the student&apos;s balance.</li>
               <li>You&apos;ll earn ৳200.</li>
-              <li>One extra class for this lesson will be scheduled.</li>
+              <li className="list-none -ml-1 mt-2 px-3 py-2 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-300 font-medium flex items-start gap-2">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                You can use this option only once for this lesson.
+              </li>
             </ul>
             {error && <p className="text-xs text-red-400 mb-3">{error}</p>}
             {confirmButtons('PARTIALLY_COMPLETED', 'choose', 'bg-sky-500 hover:bg-sky-400', 'Finishing…')}
