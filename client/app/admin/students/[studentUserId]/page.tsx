@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import api from "@/lib/axios";
 import {
   Card,
@@ -34,6 +35,20 @@ const LEDGER_EVENT_LABELS: Record<string, string> = {
   ADMIN_ADJUSTMENT: "Admin adjustment",
 };
 
+const INCOMPLETE_REASON_OPTIONS = [
+  { value: "STUDENT_NO_SHOW", label: "Student did not attend" },
+  { value: "TECHNICAL_ISSUE", label: "Technical problem" },
+  { value: "OTHER", label: "Other" },
+];
+
+const INCOMPLETE_REASON_LABELS: Record<string, string> = {
+  STUDENT_NO_SHOW: "Student did not attend",
+  STUDENT_LEFT_EARLY: "Student left early",
+  TECHNICAL_ISSUE: "Technical problem",
+  TEACHER_DISCONNECTED: "Teacher disconnected",
+  OTHER: "Other",
+};
+
 function formatLessons(n: number | null): string {
   if (n === null) return "—";
   return (Math.round(n * 10) / 10).toString();
@@ -45,6 +60,7 @@ export default function StudentDetailPage() {
   const [student, setStudent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("Overview");
+  const [deletingEntry, setDeletingEntry] = useState<any>(null);
   const [togglingPause, setTogglingPause] = useState(false);
   const [pauseToggleError, setPauseToggleError] = useState<string | null>(null);
   const [resumeNotice, setResumeNotice] = useState<string | null>(null);
@@ -241,7 +257,21 @@ export default function StudentDetailPage() {
                   <td className="px-4 py-3 text-[var(--a-text)]">{formatDateTime(c.start)}</td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.teacherName ?? "—"}</td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.courseTitle ?? "—"}</td>
-                  <td className="px-4 py-3"><StatusBadge status={c.paymentStatus ?? c.displayStatus} /></td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={c.paymentStatus ?? c.displayStatus} />
+                    {c.endReason && (
+                      <p className="text-xs text-[var(--a-text-faint)] mt-1">
+                        {INCOMPLETE_REASON_LABELS[c.endReason] ?? c.endReason}
+                        {c.endNote ? ` — ${c.endNote}` : ""}
+                      </p>
+                    )}
+                    {c.endedByRole === "SYSTEM" && (
+                      <p className="text-xs text-[var(--a-text-faint)] mt-1">Ended automatically</p>
+                    )}
+                    {c.endedByRole === "ADMIN" && (
+                      <p className="text-xs text-[var(--a-text-faint)] mt-1">Set by admin</p>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.review ? `${c.review.rating}★` : "—"}</td>
                 </tr>
               ))}
@@ -328,11 +358,12 @@ export default function StudentDetailPage() {
                     <th className="px-4 py-3">Curriculum</th>
                     <th className="px-4 py-3 text-right">Amount</th>
                     <th className="px-4 py-3 text-right">Balance after</th>
+                    <th className="px-4 py-3 w-12"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
                   {student.ledger.length === 0 && (
-                    <tr><td colSpan={5} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No payment history yet.</td></tr>
+                    <tr><td colSpan={6} className="px-4 py-6 text-center text-[var(--a-text-faint)]">No payment history yet.</td></tr>
                   )}
                   {student.ledger.map((entry: any) => (
                     <tr key={entry.id} className="border-b border-[var(--a-border)] last:border-0 align-top">
@@ -363,6 +394,25 @@ export default function StudentDetailPage() {
                         {entry.amountCents === 0 ? "—" : `${entry.amountCents > 0 ? "+" : ""}${formatBDT(entry.amountCents)}`}
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--a-text)] whitespace-nowrap">{formatBDT(entry.balanceAfterCents)}</td>
+                      <td className="px-4 py-3 text-right">
+                        {entry.type === "LESSON_COMPLETED" ? (
+                          <span
+                            className="inline-flex p-1.5 text-[var(--a-text-faint)] opacity-40 cursor-not-allowed"
+                            title="Lesson-completed entries belong to a finalized class and can't be deleted. Use an Admin adjustment to correct the balance."
+                          >
+                            <Trash2 size={16} />
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setDeletingEntry(entry)}
+                            className="inline-flex p-1.5 rounded-md text-[var(--a-text-faint)] hover:text-[var(--a-danger)] hover:bg-[var(--a-danger-bg)] transition-colors"
+                            aria-label="Delete payment record"
+                            title="Delete payment record"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -449,6 +499,16 @@ export default function StudentDetailPage() {
           onClose={() => setModal(null)}
         />
       )}
+      {deletingEntry && (
+        <DeleteLedgerEntryModal
+          entry={deletingEntry}
+          onClose={() => setDeletingEntry(null)}
+          onConfirm={async () => {
+            await api.delete(`/admin/students/${studentUserId}/ledger/${deletingEntry.id}`);
+            await load();
+          }}
+        />
+      )}
       {modal === "contact" && (
         <ContactModal
           initialValue={student.whatsappNumber ?? ""}
@@ -471,6 +531,72 @@ export default function StudentDetailPage() {
   );
 }
 
+// Confirmation for removing one payment-history row. The server re-computes
+// the running balance of the rows after it, so the balance stays consistent;
+// lesson-completed rows are refused there (and the icon is disabled here).
+function DeleteLedgerEntryModal({
+  entry,
+  onClose,
+  onConfirm,
+}: {
+  entry: any;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const confirm = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await onConfirm();
+      onClose();
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? "Could not delete this payment record.");
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <Modal title="Delete payment record?" onClose={deleting ? () => {} : onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--a-text-muted)]">
+          This will permanently remove this payment record from the student&apos;s payment history. Continue?
+        </p>
+        <div className="p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm">
+          <p className="text-[var(--a-text)] font-medium">{LEDGER_EVENT_LABELS[entry.type] ?? entry.type}</p>
+          <p className="text-xs text-[var(--a-text-faint)] mt-0.5">
+            {formatDateTime(entry.createdAt)}
+            {entry.amountCents !== 0 ? ` · ${entry.amountCents > 0 ? "+" : ""}${formatBDT(entry.amountCents)}` : ""}
+          </p>
+        </div>
+        <p className="text-xs text-[var(--a-text-faint)]">
+          The student&apos;s balance is recalculated from the remaining records. Completed classes and teacher earnings are not affected.
+        </p>
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            disabled={deleting}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={confirm}
+            disabled={deleting}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-danger)] hover:opacity-90 transition-colors disabled:opacity-60"
+          >
+            {deleting ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -481,6 +607,147 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 // ─── Schedule tab: recurring weekly slots + generated lessons ───────────────
+
+type LessonOutcome = "COMPLETED" | "PARTIALLY_COMPLETED" | "INCOMPLETE";
+
+const OUTCOME_COPY: Record<LessonOutcome, { title: string; effects: string[]; button: string; tone: string }> = {
+  COMPLETED: {
+    title: "Mark class as Completed",
+    effects: [
+      "The teacher receives the full class payment (৳200).",
+      "One lesson is deducted from the student's balance.",
+      "The student moves on to the next lesson.",
+    ],
+    button: "Mark Completed",
+    tone: "bg-[var(--a-success)] hover:opacity-90",
+  },
+  PARTIALLY_COMPLETED: {
+    title: "Mark class as Partially Completed",
+    effects: [
+      "The teacher receives the full class payment (৳200).",
+      "One lesson is deducted from the student's balance.",
+      "One extra class for the same lesson is scheduled next; later lessons shift by one class.",
+      "This can only be used once per lesson.",
+    ],
+    button: "Mark Partially Completed",
+    tone: "bg-[var(--a-info)] hover:opacity-90",
+  },
+  INCOMPLETE: {
+    title: "Mark class as Incomplete",
+    effects: [
+      "No teacher payment and no balance deduction.",
+      "The student does not advance — the same lesson is scheduled again.",
+    ],
+    button: "Mark Incomplete",
+    tone: "bg-[var(--a-warning)] hover:opacity-90",
+  },
+};
+
+// Admin correction of a class's final status. Goes through the exact same
+// server-side finalize path as the teacher's End Class (and the 75-minute
+// failsafe), so payment, balance, schedule and recording effects are identical.
+function FinalizeLessonModal({
+  lesson,
+  outcome,
+  onClose,
+  onSubmit,
+}: {
+  lesson: any;
+  outcome: LessonOutcome;
+  onClose: () => void;
+  onSubmit: (body: { outcome: LessonOutcome; reason?: string; note?: string }) => Promise<void>;
+}) {
+  const [reason, setReason] = useState("STUDENT_NO_SHOW");
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const copy = OUTCOME_COPY[outcome];
+
+  const submit = async () => {
+    if (submitting) return;
+    if (outcome === "INCOMPLETE" && reason === "OTHER" && !note.trim()) {
+      setError("Add a short note explaining why.");
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit(
+        outcome === "INCOMPLETE"
+          ? { outcome, reason, note: note.trim() || undefined }
+          : { outcome },
+      );
+      onClose();
+    } catch (err: any) {
+      const m = err?.response?.data?.message;
+      setError(Array.isArray(m) ? m.join(", ") : (m ?? "Something went wrong."));
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title={copy.title} onClose={submitting ? () => {} : onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--a-text-muted)]">
+          Lesson {lesson.lessonNumber} · {formatDhakaDate(lesson.start)} {formatDhakaTime(lesson.start)}
+        </p>
+        <ul className="text-sm text-[var(--a-text)] space-y-1.5 list-disc list-inside">
+          {copy.effects.map((e) => (
+            <li key={e}>{e}</li>
+          ))}
+        </ul>
+        {outcome === "INCOMPLETE" && (
+          <div className="space-y-2">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+              Reason
+            </label>
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+            >
+              {INCOMPLETE_REASON_OPTIONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            {reason === "OTHER" && (
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                maxLength={500}
+                placeholder="What happened?"
+                className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+              />
+            )}
+          </div>
+        )}
+        <p className="text-xs text-[var(--a-text-faint)]">
+          This is final and recorded in the audit trail. A class that has already been ended can&apos;t be changed.
+        </p>
+        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] transition-colors disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            disabled={submitting}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-60 ${copy.tone}`}
+          >
+            {submitting ? "Working…" : copy.button}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 interface ScheduleSlotDraft {
   weekday: number;
@@ -504,7 +771,7 @@ function ScheduleTab({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [markCompletingLessonId, setMarkCompletingLessonId] = useState<string | null>(null);
+  const [finalizing, setFinalizing] = useState<{ lesson: any; outcome: LessonOutcome } | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -589,6 +856,15 @@ function ScheduleTab({
       setSaving(false);
     }
   };
+
+  // Lessons that already used their one Partially Completed — either way the
+  // lesson then has an extra upcoming class, and Partially Completed can't be
+  // chosen again for it (the server enforces this too).
+  const partialUsedLessons = new Set<number>(
+    (data?.lessons?.completed ?? [])
+      .filter((l: any) => l.status === "PARTIALLY_COMPLETED")
+      .map((l: any) => l.lessonNumber),
+  );
 
   return (
     <div className="space-y-4">
@@ -730,7 +1006,14 @@ function ScheduleTab({
               <tbody>
                 {data.lessons.upcoming.map((l: any) => (
                   <tr key={l.id} className="border-b border-[var(--a-border)] last:border-0">
-                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{l.lessonNumber}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)] whitespace-nowrap">
+                      {l.lessonNumber}
+                      {partialUsedLessons.has(l.lessonNumber) && (
+                        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--a-info)]">
+                          Extra class
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-[var(--a-text)]">{formatDhakaDate(l.start)}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">
                       {formatDhakaTime(l.start)} – {formatDhakaTime(l.end)}
@@ -739,13 +1022,26 @@ function ScheduleTab({
                       {CLASS_TYPE_LABELS[l.classType] ?? l.classType}
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => setMarkCompletingLessonId(l.id)}
-                        className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:underline"
-                        title="Admin-only correction — the student is not notified"
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          const outcome = e.target.value as LessonOutcome;
+                          if (outcome) setFinalizing({ lesson: l, outcome });
+                        }}
+                        className="px-2 py-1.5 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-xs font-semibold text-[var(--a-text)] a-focus"
+                        title="Set this class's final status — same rules as the teacher's End Class"
+                        aria-label={`Set status for lesson ${l.lessonNumber}`}
                       >
-                        Mark Completed
-                      </button>
+                        <option value="">Set status…</option>
+                        <option value="COMPLETED">Completed</option>
+                        <option
+                          value="PARTIALLY_COMPLETED"
+                          disabled={partialUsedLessons.has(l.lessonNumber)}
+                        >
+                          Partially Completed{partialUsedLessons.has(l.lessonNumber) ? " (already used)" : ""}
+                        </option>
+                        <option value="INCOMPLETE">Incomplete</option>
+                      </select>
                     </td>
                   </tr>
                 ))}
@@ -755,21 +1051,15 @@ function ScheduleTab({
         </Card>
       )}
 
-      {markCompletingLessonId && (
-        <ReasonActionModal
-          title="Mark lesson as completed"
-          actionLabel="Mark Completed"
-          onClose={() => setMarkCompletingLessonId(null)}
-          onSubmit={async (reason) => {
-            await api.post(`/admin/lessons/${markCompletingLessonId}/mark-completed`, { reason });
+      {finalizing && (
+        <FinalizeLessonModal
+          lesson={finalizing.lesson}
+          outcome={finalizing.outcome}
+          onClose={() => setFinalizing(null)}
+          onSubmit={async (body) => {
+            await api.post(`/admin/lessons/${finalizing.lesson.id}/finalize`, body);
             load();
           }}
-          extraFields={
-            <p className="text-xs text-[var(--a-text-muted)]">
-              This is a silent Operations correction — it updates the student's recorded progress but does{" "}
-              <strong>not</strong> notify the student or teacher, and does not affect payouts or billing.
-            </p>
-          }
         />
       )}
     </div>

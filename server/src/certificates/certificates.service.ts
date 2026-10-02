@@ -19,6 +19,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma.service';
+import { COUNTS_AS_COMPLETED } from '../scheduling/lesson-state.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { cloudinary, signedDocumentUrl } from '../lib/cloudinary';
 import {
@@ -92,9 +93,15 @@ export class CertificatesService {
     });
     if (!student) return;
 
-    const completedLessons = await this.prisma.scheduledLesson.count({
-      where: { studentUserId, courseId, status: 'COMPLETED' },
-    });
+    // Distinct lessons (a partially completed lesson and its extra class are
+    // one lesson).
+    const completedLessons = (
+      await this.prisma.scheduledLesson.findMany({
+        where: { studentUserId, courseId, status: { in: COUNTS_AS_COMPLETED } },
+        distinct: ['lessonNumber'],
+        select: { lessonNumber: true },
+      })
+    ).length;
 
     const priorCertificates = await this.prisma.certificate.findMany({
       where: { studentUserId },

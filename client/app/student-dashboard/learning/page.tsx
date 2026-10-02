@@ -197,7 +197,6 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
   const end = new Date(lesson.end);
   const initial = lesson.teacher.user.fullName ? lesson.teacher.user.fullName.charAt(0).toUpperCase() : 'T';
   const isUpcoming = lesson.status === 'UPCOMING';
-  const isPartial = lesson.status === 'PARTIALLY_COMPLETED';
 
   return (
     <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden card-hover">
@@ -246,12 +245,10 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
             className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
               isUpcoming
                 ? 'bg-teal-500/20 text-teal-600 dark:text-teal-400 border-teal-500/20'
-                : isPartial
-                  ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                  : 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/20'
+                : 'bg-green-500/20 text-green-600 dark:text-green-400 border-green-500/20'
             }`}
           >
-            {isUpcoming ? 'Upcoming' : isPartial ? 'Partially completed' : 'Completed'}
+            {isUpcoming ? 'Upcoming' : 'Completed'}
           </span>
         </div>
       </div>

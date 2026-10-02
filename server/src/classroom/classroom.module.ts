@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ClassroomService } from './classroom.service';
 import { ClassroomController } from './classroom.controller';
 import { RecordingService } from './recording.service';
-import { PresenceService } from './presence.service';
+import { ClassFinalizationService } from './class-finalization.service';
 import { AdmissionService } from './admission.service';
 import { StudentsModule } from '../students/students.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
@@ -15,9 +15,9 @@ import { AlertsModule } from '../alerts/alerts.module';
   providers: [
     ClassroomService,
     RecordingService,
-    PresenceService,
+    ClassFinalizationService,
     AdmissionService,
   ],
-  exports: [RecordingService, ClassroomService],
+  exports: [RecordingService, ClassroomService, ClassFinalizationService],
 })
 export class ClassroomModule {}

@@ -10,6 +10,10 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import {
+  COUNTS_AS_COMPLETED,
+  keepCanonicalRows,
+} from '../scheduling/lesson-state.util';
 import { getClassWindow } from '../scheduling/lesson-window.util';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { RegisterStudentDto } from './dto/register-student.dto';
@@ -332,34 +336,47 @@ export class StudentsService {
         orderBy: { shift: { start: 'asc' } },
       }),
       this.scheduling.getStudentLiveOrNextLesson(userId),
+      // Lessons the student has had — distinct lesson numbers, so a partially
+      // completed lesson and its extra class count once.
       user.assignedCourse
-        ? this.prisma.scheduledLesson.count({
-            where: {
-              studentUserId: userId,
-              courseId: user.assignedCourse.id,
-              status: 'COMPLETED',
-            },
-          })
+        ? this.prisma.scheduledLesson
+            .findMany({
+              where: {
+                studentUserId: userId,
+                courseId: user.assignedCourse.id,
+                status: { in: COUNTS_AS_COMPLETED },
+              },
+              distinct: ['lessonNumber'],
+              select: { lessonNumber: true },
+            })
+            .then((rows) => rows.length)
         : Promise.resolve(0),
       // Homework the student has genuinely not acted on yet: the class is
       // done, the lesson has an assignment, and nothing's been submitted
       // for it (see Submission model). Surfaced on Student Home.
-      this.prisma.scheduledLesson.findMany({
-        where: {
-          studentUserId: userId,
-          status: 'COMPLETED',
-          lesson: { homework: { not: null } },
-          submission: null,
-        },
-        orderBy: { end: 'desc' },
-        take: 5,
-        select: {
-          id: true,
-          lessonNumber: true,
-          course: { select: { title: true } },
-          lesson: { select: { title: true } },
-        },
-      }),
+      this.prisma.scheduledLesson
+        .findMany({
+          where: {
+            studentUserId: userId,
+            status: { in: COUNTS_AS_COMPLETED },
+            lesson: { homework: { not: null } },
+            submission: null,
+          },
+          orderBy: { end: 'desc' },
+          take: 10,
+          select: {
+            id: true,
+            studentUserId: true,
+            courseId: true,
+            lessonNumber: true,
+            course: { select: { title: true } },
+            lesson: { select: { title: true } },
+          },
+        })
+        // One homework slot per lesson, owned by its earliest finalized class.
+        .then(async (rows) =>
+          (await keepCanonicalRows(this.prisma, rows)).slice(0, 5),
+        ),
       // Homework the teacher sent back for changes — the student needs to
       // see this even more prominently than never-submitted homework.
       this.prisma.submission.findMany({
@@ -439,8 +456,12 @@ export class StudentsService {
     ).length;
 
     const totalLessons = user.assignedCourse?.sessions ?? null;
+    // The lesson of the next scheduled class when there is one (so a lesson
+    // with an extra class scheduled shows that lesson, matching the teacher's
+    // dashboard); otherwise the one after the last completed lesson.
     const currentLessonNumber = totalLessons
-      ? Math.min(completedLessonCount + 1, totalLessons)
+      ? (nextScheduledLesson?.lessonNumber ??
+        Math.min(completedLessonCount + 1, totalLessons))
       : null;
     const continueLearning = user.assignedCourse
       ? {
@@ -669,12 +690,12 @@ export class StudentsService {
     const [totalLessonsCompleted, lessonsCompletedThisMonth] =
       await Promise.all([
         this.prisma.scheduledLesson.count({
-          where: { studentUserId: userId, status: 'COMPLETED' },
+          where: { studentUserId: userId, status: { in: COUNTS_AS_COMPLETED } },
         }),
         this.prisma.scheduledLesson.count({
           where: {
             studentUserId: userId,
-            status: 'COMPLETED',
+            status: { in: COUNTS_AS_COMPLETED },
             end: { gte: monthStart },
           },
         }),

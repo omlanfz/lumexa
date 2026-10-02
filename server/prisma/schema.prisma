@@ -489,17 +489,32 @@ enum ClassType {
   BATCH
 }
 
+// Authoritative state of one class occurrence (ScheduledLesson). Every other
+// system (student/teacher/admin dashboards, lesson access, the ledger, the
+// schedule, notifications) derives from this one column. A row only ever
+// leaves UPCOMING once, through ClassFinalizationService.finalize — either by
+// the teacher, an admin correction, or the 75-minute platform failsafe — and
+// is final after that.
+//
+//   COMPLETED           lesson finished. Teacher paid, one student lesson
+//                       consumed, progression moves to the next lesson.
+//   PARTIALLY_COMPLETED lesson not fully covered, one extra class needed.
+//                       Same financial effect as COMPLETED (teacher paid, one
+//                       lesson consumed, lesson unlocked for the student) and
+//                       one extra UPCOMING occurrence is inserted at the same
+//                       lessonNumber (see SchedulingService.insertMakeupOccurrence).
+//                       Allowed at most once per student+course+lessonNumber.
+//   INCOMPLETE          the class could not take place (no-show, technical
+//                       problem, ...). No payment, no deduction, no
+//                       progression; a make-up occurrence is inserted at the
+//                       same lessonNumber so the student still gets the lesson.
+//   CANCELLED           admin override from the Classes page — never a class
+//                       outcome chosen at end-of-class.
 enum LessonStatus {
   UPCOMING
   COMPLETED
-  // Teacher ended the class before the lesson was finished (see
-  // ClassroomService.endClass). The student needs another occurrence to
-  // finish this same lesson — see SchedulingService.handlePartialCompletion,
-  // which inserts a redo occurrence at the same lessonNumber and shifts
-  // every later occurrence one calendar slot later. Flagged for admin
-  // review; never auto-selected, only a teacher's explicit choice when
-  // ending a class.
   PARTIALLY_COMPLETED
+  INCOMPLETE
   CANCELLED
 }
 
@@ -554,36 +569,16 @@ model RecordingSegment {
   @@index([egressId])
 }
 
-// Why a class ended without being cleanly COMPLETED (or, for STUDENT_NO_SHOW/
-// TECHNICAL_ISSUE/OTHER, alongside a COMPLETED end too, for audit context).
-// TEACHER_DISCONNECTED is only ever set by the server-side presence sweep,
-// never chosen by a teacher.
+// Why a class was ended INCOMPLETE. STUDENT_LEFT_EARLY and TEACHER_DISCONNECTED
+// are legacy values kept only so historical rows stay valid — they are no
+// longer offered anywhere (heartbeat-based teacher-disconnect auto-ending was
+// removed; the teacher UI offers STUDENT_NO_SHOW / TECHNICAL_ISSUE / OTHER).
 enum ClassEndReason {
   STUDENT_NO_SHOW
   STUDENT_LEFT_EARLY
   TECHNICAL_ISSUE
   TEACHER_DISCONNECTED
   OTHER
-}
-
-// Heartbeat presence, keyed by (room, userId) — the LiveKit participant
-// identity is always the userId (see ClassroomService.join*). Used to detect
-// a teacher who has dropped off the call without formally ending it, so the
-// class can be auto-ended after a grace period rather than left "live"
-// forever (see ClassroomPresenceService).
-model ClassroomPresence {
-  id             String    @id @default(uuid())
-  room           String
-  userId         String
-  role           String // 'TEACHER' | 'STUDENT'
-  lastSeenAt     DateTime  @default(now())
-  disconnectedAt DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  @@unique([room, userId])
-  @@index([room])
-  @@index([disconnectedAt])
 }
 
 enum ClassroomAdmissionStatus {
@@ -676,9 +671,10 @@ model ScheduledLesson {
   recordingMergeAttempts Int             @default(0)
   recordingMergeError    String?
 
-  // Set when the teacher manually ends the class (or the server auto-ends
-  // it after a teacher-disconnect timeout) — never set by any other
-  // automatic/scheduled process.
+  // Set exactly once, when the class is finalized (see LessonStatus):
+  // endedAt = finalized timestamp, endedByRole = 'TEACHER' | 'ADMIN' |
+  // 'SYSTEM' (the 75-minute failsafe). endReason/endNote only apply to
+  // INCOMPLETE.
   endedAt      DateTime?
   endedByRole  String?
   endReason    ClassEndReason?
@@ -695,9 +691,9 @@ model ScheduledLesson {
   // NOTE: uniqueness of (studentUserId, courseId, lessonNumber) is enforced
   // by a PARTIAL unique index created in migration SQL — scoped to
   // status IN ('UPCOMING', 'COMPLETED') — rather than a plain @@unique here,
-  // so a partial-completion redo occurrence can legitimately reuse the same
-  // lessonNumber as the PARTIALLY_COMPLETED row it's redoing (see
-  // SchedulingService.handlePartialCompletion). Prisma can't express a
+  // so a make-up occurrence can legitimately reuse the same lessonNumber as
+  // the PARTIALLY_COMPLETED / INCOMPLETE row it follows (see
+  // SchedulingService.insertMakeupOccurrence). Prisma can't express a
   // filtered unique index natively, so this stays a plain index for query
   // planning and the real constraint lives only in the migration.
   @@index([studentUserId, courseId, lessonNumber])
@@ -897,8 +893,10 @@ model GemPurchase {
 // ─── Student BDT credit ledger ───────────────────────────────────────────────
 //
 // Append-only source of truth for a student's tuition credit balance. Never
-// update or delete a row — a correction is a new offsetting entry (see
-// ADMIN_ADJUSTMENT / REFUND). amountCents is BDT minor-unit (poisha, see
+// update a row — a correction is a new offsetting entry (see
+// ADMIN_ADJUSTMENT / REFUND). The only deletion is an explicit admin delete of a
+// non-lesson row (StudentLedgerService.deleteEntry), which rebuilds the running
+// balanceAfterCents of the rows after it in the same transaction. amountCents is BDT minor-unit (poisha, see
 // BDT() helper in payout.constants.ts) and signed: positive credits the
 // balance (PAYMENT_RECEIVED), negative debits it (LESSON_COMPLETED, REFUND).
 // balanceAfterCents and rateCents are snapshots of the running balance and

@@ -21,6 +21,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { LessonStatus, Role, SessionType } from '@prisma/client';
+import {
+  COUNTS_AS_COMPLETED,
+  findCanonicalCompletedRow,
+} from '../scheduling/lesson-state.util';
 import { PrismaService } from '../prisma.service';
 import {
   todayDhakaDateStr,
@@ -275,13 +279,25 @@ export class CurriculumService {
     const isTest = sl.lesson.type !== SessionType.LEARNING;
     const teacherOrAdmin = isAssignedTeacher || isAdmin;
 
+    // A lesson the student has already had (COMPLETED, or PARTIALLY_COMPLETED —
+    // which unlocks it even though one extra class is still scheduled) is open
+    // for them regardless of which of its classes this id points at. The
+    // canonical row is the earliest such class; it also owns the homework
+    // submission, so the extra class shows the same submission, not a blank.
+    const canonical = await findCanonicalCompletedRow(this.prisma, {
+      studentUserId: sl.studentUserId,
+      courseId: sl.courseId,
+      lessonNumber: sl.lessonNumber,
+    });
+    const lessonUnlocked = COUNTS_AS_COMPLETED.includes(sl.status) || !!canonical;
+
     let available = false;
     let reason: string | null = null;
 
     if (teacherOrAdmin) {
       available = true;
     } else if (isTest) {
-      if (sl.status === LessonStatus.COMPLETED) {
+      if (lessonUnlocked) {
         available = true;
       } else if (
         sl.status === LessonStatus.UPCOMING &&
@@ -294,7 +310,7 @@ export class CurriculumService {
         reason = 'CANCELLED';
       }
     } else {
-      if (sl.status === LessonStatus.COMPLETED) {
+      if (lessonUnlocked) {
         available = true;
       } else if (sl.status === LessonStatus.UPCOMING) {
         reason = 'UPCOMING_LOCKED';
@@ -338,8 +354,31 @@ export class CurriculumService {
           : null,
       },
       assessment: sl.lesson.assessment ?? null,
-      submission: sl.lesson.homework ? sl.submission : null,
+      submission: sl.lesson.homework
+        ? canonical && canonical.id !== sl.id
+          ? await this.findSubmission(canonical.id)
+          : sl.submission
+        : null,
     };
+  }
+
+  private findSubmission(scheduledLessonId: string) {
+    return this.prisma.submission.findUnique({
+      where: { scheduledLessonId },
+      select: {
+        id: true,
+        status: true,
+        files: true,
+        links: true,
+        note: true,
+        rating: true,
+        feedbackTags: true,
+        resubmissionCount: true,
+        submittedAt: true,
+        reviewedAt: true,
+        feedback: true,
+      },
+    });
   }
 
   private baseSessionInfo(sl: {

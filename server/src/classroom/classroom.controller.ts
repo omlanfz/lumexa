@@ -13,15 +13,14 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ClassroomService } from './classroom.service';
-import { PresenceService } from './presence.service';
 import { AdmissionService } from './admission.service';
+import type { ClassOutcome } from './class-finalization.service';
 import { ClassEndReason } from '@prisma/client';
 
 @Controller('classroom')
 export class ClassroomController {
   constructor(
     private readonly classroomService: ClassroomService,
-    private readonly presenceService: PresenceService,
     private readonly admissionService: AdmissionService,
   ) {}
 
@@ -44,19 +43,6 @@ export class ClassroomController {
       req.user.userId,
       req.user.email,
     );
-  }
-
-  // ─── Presence heartbeat (server-side teacher-disconnect protection) ──────
-
-  @Post(':room/heartbeat')
-  @UseGuards(AuthGuard('jwt'))
-  async heartbeat(@Request() req, @Param('room') room: string) {
-    const role = await this.classroomService.resolveParticipantRole(
-      req.user.userId,
-      room,
-    );
-    await this.presenceService.touch(room, req.user.userId, role);
-    return { ok: true };
   }
 
   // ─── Remove → rejoin admission flow ───────────────────────────────────────
@@ -176,7 +162,7 @@ export class ClassroomController {
     @Param('room') room: string,
     @Body()
     body: {
-      outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED';
+      outcome?: ClassOutcome;
       reason?: ClassEndReason;
       note?: string;
     },

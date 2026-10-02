@@ -403,7 +403,7 @@ export class TeachersService {
         nextClassScheduledLessonId: null,
       };
       entry.totalClasses++;
-      if (l.status === 'COMPLETED') {
+      if (l.status === 'COMPLETED' || l.status === 'PARTIALLY_COMPLETED') {
         entry.completedClasses++;
         if (!entry.lastClassDate || l.start > entry.lastClassDate) {
           entry.lastClassDate = l.start;

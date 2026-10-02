@@ -61,12 +61,11 @@ import {
   endClassRequest,
   startRecording,
   stopRecording,
-  sendHeartbeat,
   listPendingAdmissions,
   decideAdmission,
   stopParticipantScreenShare,
   type PendingAdmission,
-  type ClassEndReason,
+  type EndClassParams,
 } from '@/lib/classroom/api';
 import { playClassroomTone } from '@/lib/classroom/sounds';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
@@ -88,7 +87,10 @@ interface ClassroomRoomProps {
   initialLighting: AppearanceOptions;
   scheduledStart?: string;
   classType?: 'ONE_TO_ONE' | 'BATCH';
-  /** Admin silently observing — no controls, no heartbeat, no recording. */
+  /** False on the extra class of a lesson that already used its one Partially
+   * Completed — the teacher's End Class flow then disables that option. */
+  partialCompletionAvailable?: boolean;
+  /** Admin silently observing — no controls, no recording. */
   observerMode?: boolean;
   /** QA-only shared demo room (see client/lib/demoClassroom.ts) — gets the
    * same full Completed/Incomplete end-class flow as a real lesson so it
@@ -102,7 +104,6 @@ interface HandToast {
   name: string;
 }
 
-const HEARTBEAT_INTERVAL_MS = 20_000;
 const ADMISSION_POLL_INTERVAL_MS = 4_000;
 
 export default function ClassroomRoom({
@@ -116,6 +117,7 @@ export default function ClassroomRoom({
   initialLighting,
   scheduledStart,
   classType,
+  partialCompletionAvailable,
   observerMode,
   demo,
 }: ClassroomRoomProps) {
@@ -201,16 +203,6 @@ export default function ClassroomRoom({
     if (isRecordingLive) setRecordingState('active');
     else setRecordingState((prev) => (prev === 'active' ? 'inactive' : prev));
   }, [isRecordingLive]);
-
-  // Server-side heartbeat — see PresenceService. Never the only signal for
-  // teacher-disconnect detection (the server's 20-minute grace cron enforces
-  // it regardless), but this is what feeds it.
-  useEffect(() => {
-    if (observerMode) return;
-    void sendHeartbeat(roomName).catch(() => {});
-    const id = setInterval(() => void sendHeartbeat(roomName).catch(() => {}), HEARTBEAT_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [roomName, observerMode]);
 
   // Teacher polls for "removed participant wants back in" requests.
   useEffect(() => {
@@ -743,10 +735,9 @@ export default function ClassroomRoom({
       {showEndClassModal && (
         <EndClassModal
           isLessonFlow={isLessonFlow}
+          partialCompletionAvailable={partialCompletionAvailable}
           onClose={() => setShowEndClassModal(false)}
-          onSubmit={(params) =>
-            endClassRequest(roomName, params as { outcome?: 'COMPLETED' | 'PARTIALLY_COMPLETED'; reason?: ClassEndReason; note?: string })
-          }
+          onSubmit={(params: EndClassParams) => endClassRequest(roomName, params)}
           onFinished={() => room.disconnect()}
         />
       )}

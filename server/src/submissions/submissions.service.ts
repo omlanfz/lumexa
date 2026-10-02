@@ -15,6 +15,11 @@ import {
 } from '@nestjs/common';
 import { SubmissionStatus } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import {
+  COUNTS_AS_COMPLETED,
+  findCanonicalCompletedRow,
+  keepCanonicalRows,
+} from '../scheduling/lesson-state.util';
 
 @Injectable()
 export class SubmissionsService {
@@ -36,6 +41,8 @@ export class SubmissionsService {
         studentUserId: true,
         teacherId: true,
         status: true,
+        courseId: true,
+        lessonNumber: true,
         lessonId: true,
         lesson: { select: { id: true, homework: true } },
       },
@@ -44,10 +51,22 @@ export class SubmissionsService {
     if (sl.studentUserId !== studentUserId) {
       throw new ForbiddenException('This is not your class.');
     }
-    if (sl.status !== 'COMPLETED') {
+    // Homework unlocks once the student has had the lesson — COMPLETED or
+    // PARTIALLY_COMPLETED, on this class or on the other class of the same
+    // lesson. A lesson has ONE homework slot, owned by its earliest finalized
+    // class, so submitting from the extra class of a partially completed
+    // lesson lands on (and updates) the same submission.
+    const canonical = await findCanonicalCompletedRow(this.prisma, sl);
+    if (!canonical) {
       throw new BadRequestException(
         'This lesson is not completed yet — homework unlocks once the class is finished.',
       );
+    }
+    if (canonical.id !== sl.id) {
+      return this.submitHomework(studentUserId, {
+        ...params,
+        scheduledLessonId: canonical.id,
+      });
     }
     if (!sl.lesson?.homework) {
       throw new BadRequestException('This lesson has no homework to submit.');
@@ -103,22 +122,28 @@ export class SubmissionsService {
   /** Homework a student has completed the class for but hasn't submitted
    * yet — the "needs attention" list for Student Home. */
   async getPendingForStudent(studentUserId: string, limit = 5) {
-    const rows = await this.prisma.scheduledLesson.findMany({
+    const candidates = await this.prisma.scheduledLesson.findMany({
       where: {
         studentUserId,
-        status: 'COMPLETED',
+        status: { in: COUNTS_AS_COMPLETED },
         lesson: { homework: { not: null } },
         submission: null,
       },
       orderBy: { end: 'desc' },
-      take: limit,
+      take: limit * 2,
       select: {
         id: true,
+        studentUserId: true,
+        courseId: true,
         lessonNumber: true,
         course: { select: { title: true } },
         lesson: { select: { title: true } },
       },
     });
+    const rows = (await keepCanonicalRows(this.prisma, candidates)).slice(
+      0,
+      limit,
+    );
     return rows.map((r) => ({
       scheduledLessonId: r.id,
       lessonNumber: r.lessonNumber,
