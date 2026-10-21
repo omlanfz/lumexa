@@ -119,7 +119,7 @@ export default function ProjectDemoModal({ project, onClose }: Props) {
   const pct = Math.round((shown / full.length) * 100);
 
   return (
-    <div className="fixed inset-0 z-[950] flex items-end sm:items-center justify-center sm:p-6">
+    <div className="fixed inset-0 z-[950] flex items-end sm:items-center short:items-center justify-center sm:p-6 short:p-2">
       <div
         className={`absolute inset-0 bg-[#030712]/80 backdrop-blur-sm ${closing ? "demo-backdrop-out" : "demo-backdrop-in"}`}
         onClick={requestClose}
@@ -130,23 +130,23 @@ export default function ProjectDemoModal({ project, onClose }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="demo-title"
-        className={`relative z-10 w-full sm:max-w-5xl max-h-[94dvh] sm:max-h-[88vh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl bg-white dark:bg-[#0B1224] border border-slate-200 dark:border-white/10 shadow-2xl shadow-purple-950/40 ${
+        className={`relative z-10 w-full sm:max-w-5xl max-h-[94dvh] sm:max-h-[88vh] short:max-h-[96dvh] flex flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl short:rounded-2xl bg-white dark:bg-[#0B1224] border border-slate-200 dark:border-white/10 shadow-2xl shadow-purple-950/40 ${
           closing ? "demo-sheet-out" : "demo-sheet-in"
         }`}
       >
         {/* Header */}
-        <div className="flex items-start gap-3 px-4 sm:px-6 py-3.5 border-b border-slate-200 dark:border-white/10">
+        <div className="flex items-start gap-3 px-4 sm:px-6 py-3.5 short:py-2 border-b border-slate-200 dark:border-white/10">
           <div className="w-11 h-11 flex-none rounded-2xl bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-500/20 dark:to-blue-500/20 grid place-items-center text-2xl">
             {project.emoji}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-300">
+            <p className="short:hidden text-[10px] font-bold uppercase tracking-widest text-purple-600 dark:text-purple-300">
               Build Something Real in 30 Seconds
             </p>
             <h2 id="demo-title" className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white leading-tight truncate">
               {project.title}
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+            <p className="short:hidden text-xs text-slate-500 dark:text-slate-400 truncate">
               by {project.student}, age {project.age} · {project.tech.join(" · ")}
             </p>
           </div>
@@ -163,8 +163,8 @@ export default function ProjectDemoModal({ project, onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-          <div className="grid md:grid-cols-2 md:min-h-[420px]">
-            <div className="order-2 md:order-1 md:border-r border-t md:border-t-0 border-slate-200 dark:border-white/10">
+          <div className="grid md:grid-cols-2 short:grid-cols-2 md:min-h-[420px] short:min-h-0">
+            <div className="order-2 md:order-1 short:order-1 md:border-r short:border-r border-t md:border-t-0 short:border-t-0 border-slate-200 dark:border-white/10">
               <CodePane
                 file={spec.file}
                 lang={spec.lang}
@@ -174,7 +174,7 @@ export default function ProjectDemoModal({ project, onClose }: Props) {
                 onSkip={() => setShown(full.length)}
               />
             </div>
-            <div className="order-1 md:order-2 p-4 sm:p-5 bg-slate-50 dark:bg-[#0F1A30]">
+            <div className="order-1 md:order-2 short:order-2 p-4 sm:p-5 short:p-3 bg-slate-50 dark:bg-[#0F1A30]">
               <div className="flex items-center justify-between gap-2 mb-3">
                 <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Output</p>
                 {!typing && (
@@ -208,10 +208,22 @@ export default function ProjectDemoModal({ project, onClose }: Props) {
               )}
             </div>
           </div>
+          {/* Short screens (phone held sideways): the CTA scrolls with the content instead of taking a fixed strip */}
+          <div className="hidden short:flex items-center gap-3 px-4 py-3 border-t border-slate-200 dark:border-white/10">
+            <p className="flex-1 text-xs text-slate-600 dark:text-slate-300">
+              🎯 <span className="font-bold">Skill demonstrated:</span> {project.skill}
+            </p>
+            <Link
+              href="/trial"
+              className="text-center px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-black"
+            >
+              Build this in a free lesson →
+            </Link>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 sm:px-6 py-3 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B1224]">
+        <div className="short:hidden flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-4 sm:px-6 py-3 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B1224]">
           <p className="flex-1 text-xs text-slate-600 dark:text-slate-300">
             🎯 <span className="font-bold">Skill demonstrated:</span> {project.skill}
           </p>

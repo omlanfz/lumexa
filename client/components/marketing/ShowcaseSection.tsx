@@ -106,7 +106,7 @@ export default function ShowcaseSection({ interest, onClear }: Props) {
                 </span>
                 <span className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/55 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
                 <span className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-full bg-white/95 text-purple-700 text-xs font-black px-3 py-1.5 shadow-lg group-hover:scale-105 transition-transform">
-                  ▶ Try it
+                  ▶︎ Try it
                 </span>
               </button>
 

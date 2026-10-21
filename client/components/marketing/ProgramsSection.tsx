@@ -125,7 +125,7 @@ export default function ProgramsSection() {
           {/* Lumexa Odyssey: the starting point for complete beginners */}
           <Link
             href="/programs?program=odyssey"
-            className="group relative lg:col-span-3 rounded-3xl p-[2px] bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 shadow-lg shadow-purple-200/60 dark:shadow-purple-900/30 hover:shadow-xl transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500"
+            className="group relative md:col-span-2 lg:col-span-3 rounded-3xl p-[2px] bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 shadow-lg shadow-purple-200/60 dark:shadow-purple-900/30 hover:shadow-xl transition-shadow focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500"
           >
             <div className="rounded-[22px] bg-white dark:bg-gray-900 p-6 sm:p-7 flex flex-col lg:flex-row lg:items-center gap-6">
               <div className="flex items-center gap-4 lg:w-[34%]">

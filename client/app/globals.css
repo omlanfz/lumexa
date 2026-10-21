@@ -10,6 +10,9 @@
 */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Phones held sideways (and other very short windows): used to compact popups. */
+@custom-variant short (@media (max-height: 520px) and (orientation: landscape));
+
 /* ── Base ──────────────────────────────────────────────────────────────────── */
 html {
   scroll-behavior: smooth;

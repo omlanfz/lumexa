@@ -627,7 +627,7 @@ function CoursesContent() {
               <div className="flex items-center gap-4 flex-1">
                 <div className="text-5xl">{program.emoji}</div>
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
                     <h2 className="text-2xl font-black text-[#0F172A] dark:text-white">{program.title}</h2>
                     <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${program.badge}`}>
                       {program.ages}
