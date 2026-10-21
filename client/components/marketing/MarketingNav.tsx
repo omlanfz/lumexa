@@ -25,10 +25,31 @@ function useNavTheme() {
   const toggle = () => {
     const next = !isDark;
     setIsDark(next);
-    localStorage.setItem("lumexa-theme", next ? "dark" : "light");
-    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("lumexa-theme", next ? "dark" : "light");
+    } catch {
+      // storage can be blocked (private mode); the theme still switches for this visit
+    }
+    const root = document.documentElement;
+    root.classList.toggle("dark", next);
+    root.classList.toggle("light", !next);
+    root.style.colorScheme = next ? "dark" : "light";
   };
   return { isDark, toggle };
+}
+
+function ThemeToggleButton({ isDark, toggle, className }: { isDark: boolean; toggle: () => void; className: string }) {
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className={className}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {isDark ? "☀️" : "🌙"}
+    </button>
+  );
 }
 
 export default function MarketingNav() {
@@ -71,7 +92,7 @@ export default function MarketingNav() {
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
+        scrolled || mobileOpen
           ? "bg-white/95 dark:bg-[#050D1A]/95 backdrop-blur-md border-b border-[#E2E8F0] dark:border-gray-800/60 shadow-sm shadow-slate-100/80 dark:shadow-black/20"
           : "bg-transparent"
       }`}
@@ -89,7 +110,7 @@ export default function MarketingNav() {
                 className="object-cover w-full h-full"
               />
             </div>
-            <span className="font-black text-lg tracking-tight leading-tight text-[#0F172A] dark:text-white">
+            <span className="font-black text-base min-[380px]:text-lg tracking-tight leading-tight text-[#0F172A] dark:text-white">
               Lumexa{" "}
               <span className="text-purple-600 dark:text-purple-400 font-bold">AI School</span>
             </span>
@@ -105,13 +126,11 @@ export default function MarketingNav() {
           {/* Desktop CTAs */}
           <div className="hidden lg:flex items-center gap-3">
             {/* Theme toggle */}
-            <button
-              onClick={toggle}
+            <ThemeToggleButton
+              isDark={isDark}
+              toggle={toggle}
               className="w-8 h-8 rounded-lg flex items-center justify-center border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 bg-white dark:bg-gray-800/60 hover:bg-purple-50 dark:hover:bg-gray-700/60 transition-all text-sm active:scale-90"
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? "☀️" : "🌙"}
-            </button>
+            />
             {authed ? (
               <button
                 onClick={handleDashboard}
@@ -137,22 +156,30 @@ export default function MarketingNav() {
             )}
           </div>
 
-          {/* Mobile hamburger */}
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="lg:hidden text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white p-2 transition-colors"
-            aria-label="Toggle menu"
-          >
-            {mobileOpen ? (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
-            )}
-          </button>
+          {/* Mobile: theme toggle + hamburger, always visible in the top bar */}
+          <div className="lg:hidden flex items-center gap-1.5">
+            <ThemeToggleButton
+              isDark={isDark}
+              toggle={toggle}
+              className="w-10 h-10 rounded-xl flex items-center justify-center border border-[#E2E8F0] dark:border-gray-700 bg-white/90 dark:bg-gray-800/70 text-base active:scale-90 transition-all"
+            />
+            <button
+              onClick={() => setMobileOpen(!mobileOpen)}
+              className="w-10 h-10 flex items-center justify-center text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white transition-colors"
+              aria-label="Toggle menu"
+              aria-expanded={mobileOpen}
+            >
+              {mobileOpen ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile menu */}

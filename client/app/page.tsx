@@ -72,13 +72,13 @@ export default function RootPage() {
 
         <ShowcaseSection interest={interest} onClear={() => setInterest(null)} />
 
-        <TrustSection />
-
         <HowItWorksSection />
 
         <ProgramsSection />
 
         <FormatsSection />
+
+        <TrustSection />
 
         <FinalCTASection />
       </main>

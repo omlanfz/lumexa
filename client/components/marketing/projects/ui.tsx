@@ -87,8 +87,8 @@ export function TouchPad({ onDir }: { onDir: (dir: -1 | 0 | 1) => void }) {
   );
   return (
     <div className="flex gap-2 mt-2">
-      {btn(-1, "◀ Left", "Move left")}
-      {btn(1, "Right ▶", "Move right")}
+      {btn(-1, "◀︎ Left", "Move left")}
+      {btn(1, "Right ▶︎", "Move right")}
     </div>
   );
 }

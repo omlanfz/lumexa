@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /*
   Two ways to receive the teaching. They are alternatives, not stages, and the
   section deliberately makes no price or "more attention" comparisons.
@@ -41,7 +43,8 @@ export default function FormatsSection() {
           </h2>
           <p className="text-[#334155] dark:text-gray-400 max-w-xl mx-auto">
             Every program is taught live by an expert teacher. Which option is right for your child? Compare the two
-            below and choose the setting that fits them best.
+            below and choose the setting that fits them best. Not sure? You can share your child&apos;s interests and
+            learning style during the free trial, and we&apos;ll help you decide.
           </p>
         </div>
 
@@ -78,9 +81,14 @@ export default function FormatsSection() {
           ))}
         </div>
 
-        <p className="mt-8 text-center text-sm text-[#64748B] dark:text-gray-400">
-          Not sure which suits your child? You can share their interests and learning style during the free trial, and
-          we&apos;ll help you decide.
+        {/* A quiet text link, not another button: it appears once parents understand the programs and formats. */}
+        <p className="mt-10 text-center">
+          <Link
+            href="/pricing"
+            className="inline-flex items-center gap-1.5 text-sm font-semibold text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 underline-offset-4 hover:underline transition-colors"
+          >
+            View Pricing <span aria-hidden>→</span>
+          </Link>
         </p>
       </div>
     </section>

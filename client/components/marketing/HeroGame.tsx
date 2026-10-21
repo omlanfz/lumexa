@@ -5,13 +5,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /*
   Hero "creation" visual: a tiny playable game next to the code that makes it.
   The ship and speed chips edit the code on screen AND change the game, so a
-  child sees "I changed a line, the world changed". Works with mouse, touch
-  (drag) and keyboard (← →), and idles in an autopilot demo until someone plays.
-*/
+  child sees "I changed a line, the world changed".
 
-const W = 360;
-const H = 232;
-const SHIP_Y = H - 34;
+  Built to work on phones as well as desktops:
+  - The canvas is measured and drawn in real CSS pixels, so icons keep a readable
+    size on every screen instead of shrinking with the card.
+  - While playing, the play area takes over touch gestures (no accidental page
+    scroll mid-drag); the rest of the time the page scrolls normally over it.
+  - Steering works by dragging, by the big Left/Right buttons, and by keyboard.
+  - It idles in an autopilot demo until someone presses Play.
+*/
 
 type Phase = "idle" | "playing" | "over";
 type Kind = "star" | "rock";
@@ -31,21 +34,27 @@ interface Pop {
   color: string;
 }
 
+// U+FE0F forces the colour emoji glyph (some Android fonts draw ⭐ as a flat text symbol).
+const STAR = "⭐️";
+const COMET = "☄️";
 const SHIPS = [
   { glyph: "🚀", tilt: -Math.PI / 4 },
   { glyph: "🛸", tilt: 0 },
   { glyph: "🦄", tilt: 0 },
 ];
 const SPEEDS = [1, 2, 3];
-const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+const EMOJI_FONT = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
+const ASPECT = 0.66; // height / width of the play area
 
-// Static starfield, generated once so SSR/CSR never disagree.
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+// Static starfield in 0-1 space, generated once so SSR/CSR never disagree.
 const STARFIELD = Array.from({ length: 46 }, (_, i) => ({
-  x: (i * 83.7) % W,
-  y: (i * 47.3) % H,
+  x: ((i * 83.7) % 360) / 360,
+  y: ((i * 47.3) % 232) / 232,
   r: 0.5 + ((i * 7) % 5) * 0.28,
   p: (i * 1.7) % 6.28,
-  v: 6 + ((i * 11) % 7) * 3,
+  v: 0.03 + ((i * 11) % 7) * 0.012,
 }));
 
 export default function HeroGame() {
@@ -64,11 +73,12 @@ export default function HeroGame() {
   const phaseRef = useRef<Phase>("idle");
   const shipRef = useRef(SHIPS[0]);
   const speedRef = useRef(2);
+  const dim = useRef({ w: 340, h: 224 });
   const g = useRef({
     items: [] as Item[],
     pops: [] as Pop[],
-    shipX: W / 2,
-    targetX: W / 2,
+    shipX: 170,
+    targetX: 170,
     score: 0,
     lives: 3,
     t: 0,
@@ -103,8 +113,9 @@ export default function HeroGame() {
     s.lives = 3;
     s.t = 0;
     s.spawn = 0.3;
-    s.shipX = W / 2;
-    s.targetX = W / 2;
+    s.shipX = dim.current.w / 2;
+    s.targetX = dim.current.w / 2;
+    s.dir = 0;
     setScore(0);
     setLives(3);
     phaseRef.current = "playing";
@@ -122,11 +133,14 @@ export default function HeroGame() {
 
     const s = g.current;
     s.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Sizes scale a little with the card but never get small enough to be hard to see.
+    const sizes = () => {
+      const { w } = dim.current;
+      return { ship: clamp(w * 0.11, 34, 46), star: clamp(w * 0.075, 26, 34), rock: clamp(w * 0.08, 28, 36) };
+    };
+    const shipY = () => dim.current.h - sizes().ship * 1.2; // leaves room for the engine flame
 
     let raf = 0;
     let last = 0;
@@ -138,50 +152,53 @@ export default function HeroGame() {
       (phaseRef.current === "playing" || (phaseRef.current === "idle" && !s.reduced));
 
     const spawn = (playing: boolean) => {
-      const rockChance = playing ? 0.3 + Math.min(0.15, s.t * 0.004) : 0.18;
+      const { w, h } = dim.current;
+      const rockChance = playing ? 0.2 + Math.min(0.15, s.t * 0.004) : 0.18; // gentle start, a bit harder over time
       s.items.push({
-        x: 18 + Math.random() * (W - 36),
-        y: -20,
-        vy: 62 + 34 * speedRef.current + Math.random() * 26,
+        x: 22 + Math.random() * (w - 44),
+        y: -24,
+        // fall speed is relative to the height so the game feels the same on every screen
+        vy: h * (0.27 + 0.147 * speedRef.current) + Math.random() * h * 0.11,
         kind: Math.random() < rockChance ? "rock" : "star",
         spin: Math.random() * 6.28,
       });
     };
 
     const step = (dt: number) => {
+      const { w, h } = dim.current;
+      const sz = sizes();
+      const sy = shipY();
       const playing = phaseRef.current === "playing";
       s.t += dt;
       s.shake = Math.max(0, s.shake - dt * 4);
 
-      // spawn
       s.spawn -= dt;
       if (s.spawn <= 0) {
         spawn(playing);
         s.spawn = Math.max(0.3, 0.95 - 0.18 * speedRef.current - (playing ? s.t * 0.004 : 0));
       }
 
-      // steering
       if (playing) {
         const d = (s.keys.right ? 1 : 0) - (s.keys.left ? 1 : 0) || s.dir;
-        if (d) s.targetX = Math.max(16, Math.min(W - 16, s.targetX + d * 300 * dt));
+        if (d) s.targetX = clamp(s.targetX + d * w * 0.9 * dt, sz.ship * 0.5, w - sz.ship * 0.5);
       } else {
         // autopilot: chase the lowest star, otherwise sway
         let pick: Item | null = null;
         for (const it of s.items) {
-          if (it.kind === "star" && it.y < SHIP_Y - 10 && (!pick || it.y > pick.y)) pick = it;
+          if (it.kind === "star" && it.y < sy - 10 && (!pick || it.y > pick.y)) pick = it;
         }
-        s.targetX = pick ? pick.x : W / 2 + Math.sin(s.t * 0.8) * 90;
+        s.targetX = pick ? pick.x : w / 2 + Math.sin(s.t * 0.8) * w * 0.26;
       }
       s.shipX += (s.targetX - s.shipX) * Math.min(1, dt * (playing ? 14 : 5));
 
-      // items
       for (const it of s.items) {
         it.y += it.vy * dt;
         it.spin += dt * 3;
       }
+      const reach = sz.ship * 0.5 + sz.star * 0.3;
       for (let i = s.items.length - 1; i >= 0; i--) {
         const it = s.items[i];
-        const hit = Math.abs(it.x - s.shipX) < 22 && Math.abs(it.y - SHIP_Y) < 22;
+        const hit = Math.abs(it.x - s.shipX) < reach && Math.abs(it.y - sy) < reach;
         if (hit) {
           s.items.splice(i, 1);
           if (it.kind === "star") {
@@ -205,7 +222,7 @@ export default function HeroGame() {
               }
             }
           }
-        } else if (it.y > H + 24) {
+        } else if (it.y > h + 28) {
           s.items.splice(i, 1);
         }
       }
@@ -214,84 +231,87 @@ export default function HeroGame() {
     };
 
     const draw = () => {
+      const { w, h } = dim.current;
+      const sz = sizes();
+      const sy = shipY();
       ctx.save();
       if (s.shake > 0) ctx.translate((Math.random() - 0.5) * 6 * s.shake, (Math.random() - 0.5) * 6 * s.shake);
 
-      // sky
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
+      const sky = ctx.createLinearGradient(0, 0, 0, h);
       sky.addColorStop(0, "#0A1030");
       sky.addColorStop(0.6, "#1E1565");
       sky.addColorStop(1, "#33207F");
       ctx.fillStyle = sky;
-      ctx.fillRect(-8, -8, W + 16, H + 16);
-      const neb = ctx.createRadialGradient(W * 0.78, H * 0.28, 4, W * 0.78, H * 0.28, 120);
+      ctx.fillRect(-8, -8, w + 16, h + 16);
+      const neb = ctx.createRadialGradient(w * 0.78, h * 0.28, 4, w * 0.78, h * 0.28, w * 0.34);
       neb.addColorStop(0, "rgba(96,165,250,0.35)");
       neb.addColorStop(1, "rgba(96,165,250,0)");
       ctx.fillStyle = neb;
-      ctx.fillRect(0, 0, W, H);
-      const neb2 = ctx.createRadialGradient(W * 0.18, H * 0.7, 4, W * 0.18, H * 0.7, 110);
+      ctx.fillRect(0, 0, w, h);
+      const neb2 = ctx.createRadialGradient(w * 0.18, h * 0.7, 4, w * 0.18, h * 0.7, w * 0.3);
       neb2.addColorStop(0, "rgba(168,85,247,0.32)");
       neb2.addColorStop(1, "rgba(168,85,247,0)");
       ctx.fillStyle = neb2;
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, w, h);
 
-      // starfield drifting down
       for (const st of STARFIELD) {
-        const y = (st.y + s.t * st.v) % H;
+        const y = (st.y * h + s.t * st.v * h) % h;
         const a = 0.35 + 0.35 * Math.sin(s.t * 2 + st.p);
         ctx.fillStyle = `rgba(255,255,255,${a.toFixed(2)})`;
         ctx.beginPath();
-        ctx.arc(st.x, y, st.r, 0, 6.283);
+        ctx.arc(st.x * w, y, st.r, 0, 6.283);
         ctx.fill();
       }
 
-      // planet horizon
-      const hz = ctx.createLinearGradient(0, H - 26, 0, H);
+      const hz = ctx.createLinearGradient(0, h - 26, 0, h);
       hz.addColorStop(0, "rgba(124,58,237,0)");
       hz.addColorStop(1, "rgba(124,58,237,0.45)");
       ctx.fillStyle = hz;
-      ctx.fillRect(0, H - 26, W, 26);
+      ctx.fillRect(0, h - 26, w, 26);
 
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      // items
       for (const it of s.items) {
         ctx.save();
         ctx.translate(it.x, it.y);
         if (it.kind === "star") {
-          ctx.shadowColor = "rgba(253,224,71,0.9)";
-          ctx.shadowBlur = 12;
-          ctx.scale(1 + Math.sin(it.spin) * 0.12, 1 + Math.sin(it.spin) * 0.12);
-          ctx.font = `22px ${EMOJI_FONT}`;
-          ctx.fillText("⭐", 0, 0);
+          // soft glow drawn as a gradient (much cheaper than shadowBlur on phones)
+          const gl = ctx.createRadialGradient(0, 0, 2, 0, 0, sz.star * 0.9);
+          gl.addColorStop(0, "rgba(253,224,71,0.55)");
+          gl.addColorStop(1, "rgba(253,224,71,0)");
+          ctx.fillStyle = gl;
+          ctx.fillRect(-sz.star, -sz.star, sz.star * 2, sz.star * 2);
+          const k = 1 + Math.sin(it.spin) * 0.1;
+          ctx.scale(k, k);
+          ctx.font = `${sz.star}px ${EMOJI_FONT}`;
+          ctx.fillText(STAR, 0, 0);
         } else {
           ctx.rotate(Math.sin(it.spin) * 0.3);
-          ctx.font = `24px ${EMOJI_FONT}`;
-          ctx.fillText("☄️", 0, 0);
+          ctx.font = `${sz.rock}px ${EMOJI_FONT}`;
+          ctx.fillText(COMET, 0, 0);
         }
         ctx.restore();
       }
 
-      // ship (+ engine glow)
       const ship = shipRef.current;
       const vx = s.targetX - s.shipX;
       ctx.save();
-      ctx.translate(s.shipX, SHIP_Y);
-      const flame = ctx.createRadialGradient(0, 20, 1, 0, 20, 16);
+      ctx.translate(s.shipX, sy);
+      const fl = sz.ship * 0.55;
+      const flame = ctx.createRadialGradient(0, sz.ship * 0.6, 1, 0, sz.ship * 0.6, fl);
       flame.addColorStop(0, "rgba(251,191,36,0.85)");
       flame.addColorStop(1, "rgba(251,146,60,0)");
       ctx.fillStyle = flame;
       ctx.beginPath();
-      ctx.ellipse(0, 20, 9, 14 + Math.sin(s.t * 30) * 2, 0, 0, 6.283);
+      ctx.ellipse(0, sz.ship * 0.6, fl * 0.6, fl + Math.sin(s.t * 30) * 2, 0, 0, 6.283);
       ctx.fill();
-      ctx.rotate(ship.tilt + Math.max(-0.35, Math.min(0.35, vx / 120)));
-      ctx.font = `34px ${EMOJI_FONT}`;
+      ctx.rotate(ship.tilt + clamp(vx / (w * 0.35), -0.35, 0.35));
+      ctx.font = `${sz.ship}px ${EMOJI_FONT}`;
       ctx.fillText(ship.glyph, 0, 0);
       ctx.restore();
 
-      // floating +1 pops
-      ctx.font = `bold 13px ${EMOJI_FONT}`;
+      ctx.font = `bold ${clamp(w * 0.04, 13, 16)}px ${EMOJI_FONT}`;
       for (const p of s.pops) {
         ctx.globalAlpha = 1 - p.age / 0.7;
         ctx.fillStyle = p.color;
@@ -299,6 +319,28 @@ export default function HeroGame() {
       }
       ctx.globalAlpha = 1;
       ctx.restore();
+    };
+
+    // Keep the bitmap in step with the on-screen size (rotation, resize, browser bars).
+    const resize = () => {
+      const r = wrap.getBoundingClientRect();
+      const w = Math.max(200, Math.round(r.width));
+      const h = Math.max(130, Math.round(r.height));
+      const o = dim.current;
+      if (w === o.w && h === o.h && canvas.width === Math.round(w * dpr)) return;
+      const fx = w / o.w;
+      const fy = h / o.h;
+      s.shipX *= fx;
+      s.targetX *= fx;
+      for (const it of s.items) {
+        it.x *= fx;
+        it.y *= fy;
+      }
+      dim.current = { w, h };
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      draw();
     };
 
     const frame = (now: number) => {
@@ -321,7 +363,15 @@ export default function HeroGame() {
       raf = requestAnimationFrame(frame);
     };
 
+    resize();
+    s.shipX = dim.current.w / 2;
+    s.targetX = dim.current.w / 2;
     draw(); // first frame is visible even before the loop starts / when motion is reduced
+    const ro = new ResizeObserver(() => {
+      resize();
+      kick();
+    });
+    ro.observe(wrap);
     const io = new IntersectionObserver(
       ([e]) => {
         s.visible = e.isIntersecting;
@@ -338,16 +388,18 @@ export default function HeroGame() {
     return () => {
       kickRef.current = null;
       cancelAnimationFrame(raf);
+      ro.disconnect();
       io.disconnect();
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [pulse]);
 
   /* ── input ────────────────────────────────────────────────────────────── */
-  const pointerTo = (e: React.PointerEvent) => {
+  const steer = (e: React.PointerEvent<HTMLDivElement>) => {
     if (phaseRef.current !== "playing") return;
     const r = e.currentTarget.getBoundingClientRect();
-    g.current.targetX = Math.max(16, Math.min(W - 16, ((e.clientX - r.left) / r.width) * W));
+    const { w } = dim.current;
+    g.current.targetX = clamp(e.clientX - r.left, 20, w - 20);
   };
 
   useEffect(() => {
@@ -375,24 +427,27 @@ export default function HeroGame() {
   }, []);
 
   const hold = (dir: -1 | 1) => ({
-    onPointerDown: (e: React.PointerEvent) => {
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
       e.preventDefault();
-      if (phaseRef.current === "idle") start();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      if (phaseRef.current !== "playing") start();
       g.current.dir = dir;
     },
     onPointerUp: () => (g.current.dir = 0),
-    onPointerLeave: () => (g.current.dir = 0),
     onPointerCancel: () => (g.current.dir = 0),
+    onLostPointerCapture: () => (g.current.dir = 0),
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
   });
 
   const ship = SHIPS[shipIdx];
+  const noSelect = "select-none [-webkit-touch-callout:none] [-webkit-tap-highlight-color:transparent]";
 
   return (
-    <div className="relative w-full max-w-[420px] mx-auto lg:mx-0 lg:ml-auto">
+    <div className="relative w-full max-w-[460px] mx-auto lg:mx-0 lg:ml-auto">
       {/* Atmosphere behind the window */}
       <div className="absolute -inset-5 bg-gradient-to-br from-purple-500/40 via-blue-500/25 to-cyan-400/25 dark:from-purple-600/35 dark:via-blue-600/25 dark:to-cyan-500/15 rounded-[2rem] blur-2xl pointer-events-none" />
 
-      <div className="relative rounded-2xl border border-white/10 bg-[#0A1128] shadow-2xl shadow-purple-900/40 overflow-hidden">
+      <div className={`relative rounded-2xl border border-white/10 bg-[#0A1128] shadow-2xl shadow-purple-900/40 overflow-hidden ${noSelect}`}>
         {/* Titlebar */}
         <div className="flex items-center gap-1.5 px-4 py-2.5 bg-white/[0.04] border-b border-white/10">
           <span className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
@@ -406,7 +461,7 @@ export default function HeroGame() {
         </div>
 
         {/* Code */}
-        <div className="px-4 pt-3 pb-2 font-mono text-[11.5px] leading-[1.35rem] text-slate-300 select-none">
+        <div className="px-4 pt-3 pb-2 font-mono text-[12px] sm:text-[11.5px] leading-[1.45rem] text-slate-300">
           <div className="text-slate-500"># change a line, change the game</div>
           <div>
             <span className="text-sky-300">ship</span> = <span className="text-emerald-300">&quot;{ship.glyph}&quot;</span>
@@ -422,7 +477,7 @@ export default function HeroGame() {
           </div>
         </div>
 
-        {/* Tweak chips */}
+        {/* Tweak chips (44px touch targets) */}
         <div className="px-4 pb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">ship</span>
@@ -433,7 +488,7 @@ export default function HeroGame() {
                 aria-label={`Use ${s.glyph} as the ship`}
                 aria-pressed={shipIdx === i}
                 onClick={() => setShipIdx(i)}
-                className={`w-8 h-8 rounded-lg text-base flex items-center justify-center border transition-all active:scale-90 ${
+                className={`w-10 h-10 rounded-xl text-xl flex items-center justify-center border transition-all active:scale-90 ${
                   shipIdx === i
                     ? "bg-purple-500/30 border-purple-300/60 shadow-[0_0_12px_rgba(168,85,247,0.5)]"
                     : "bg-white/5 border-white/10 hover:bg-white/10"
@@ -452,7 +507,7 @@ export default function HeroGame() {
                 aria-label={`Set speed to ${v}`}
                 aria-pressed={speed === v}
                 onClick={() => setSpeed(v)}
-                className={`w-8 h-8 rounded-lg text-xs font-bold font-mono flex items-center justify-center border transition-all active:scale-90 ${
+                className={`w-10 h-10 rounded-xl text-sm font-bold font-mono flex items-center justify-center border transition-all active:scale-90 ${
                   speed === v
                     ? "bg-blue-500/30 border-blue-300/60 text-blue-100 shadow-[0_0_12px_rgba(59,130,246,0.5)]"
                     : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
@@ -464,13 +519,18 @@ export default function HeroGame() {
           </div>
         </div>
 
-        {/* Game */}
+        {/* Game: takes over touch gestures only while a round is being played */}
         <div
           ref={wrapRef}
-          className="relative border-t border-white/10 touch-pan-y cursor-crosshair"
-          style={{ aspectRatio: `${W} / ${H}` }}
-          onPointerMove={pointerTo}
-          onPointerDown={pointerTo}
+          className="relative border-t border-white/10 cursor-crosshair"
+          style={{ aspectRatio: `1 / ${ASPECT}`, touchAction: phase === "playing" ? "none" : "pan-y" }}
+          onPointerDown={(e) => {
+            if (phaseRef.current === "playing") {
+              e.currentTarget.setPointerCapture?.(e.pointerId);
+              steer(e);
+            }
+          }}
+          onPointerMove={steer}
         >
           <canvas
             ref={canvasRef}
@@ -480,34 +540,43 @@ export default function HeroGame() {
           />
 
           {/* HUD */}
-          <div className="absolute top-2 left-3 right-3 flex items-center justify-between text-[12px] font-bold text-white drop-shadow pointer-events-none">
-            <span>⭐ {score}</span>
+          <div className="absolute top-2 left-3 right-3 flex items-center justify-between text-[13px] font-bold text-white drop-shadow pointer-events-none">
+            <span>
+              {STAR} {score}
+            </span>
             <span aria-label={`${lives} lives left`}>{"❤️".repeat(Math.max(0, lives)) || "💔"}</span>
           </div>
 
           {phase === "idle" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0A1030]/35">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#0A1030]/35 px-3 text-center">
               <button
                 type="button"
                 onClick={start}
-                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white text-sm font-black shadow-lg shadow-purple-900/50 hover:scale-105 active:scale-95 transition-transform glow-pulse"
+                className="px-7 py-3 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 text-white text-base font-black shadow-lg shadow-purple-900/50 hover:scale-105 active:scale-95 transition-transform glow-pulse"
               >
-                ▶ Play the game
+                <svg viewBox="0 0 24 24" className="w-4 h-4 inline -mt-0.5 mr-1.5" fill="currentColor" aria-hidden>
+                  <path d="M8 4.5v15l11-7.5z" />
+                </svg>
+                Play the game
               </button>
-              <span className="text-[11px] text-slate-200/90 font-medium">
-                Catch ⭐ · dodge ☄️ · drag, tap or use ← →
+              <span className="text-xs text-slate-100 font-medium leading-snug">
+                Catch {STAR} and dodge {COMET}
+                <br />
+                Drag the screen or use the buttons below
               </span>
             </div>
           )}
           {phase === "over" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[#0A1030]/70 backdrop-blur-[2px] output-appear">
-              <div className="text-2xl">🎉</div>
-              <div className="text-white font-black text-base">You caught {score} ⭐</div>
-              <div className="text-[11px] text-slate-300">Best this visit: {best}</div>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 bg-[#0A1030]/75 backdrop-blur-[2px] output-appear">
+              <div className="text-3xl">🎉</div>
+              <div className="text-white font-black text-lg">
+                You caught {score} {STAR}
+              </div>
+              <div className="text-xs text-slate-300">Best this visit: {best}</div>
               <button
                 type="button"
                 onClick={start}
-                className="mt-1 px-5 py-2 rounded-full bg-white text-purple-700 text-sm font-black hover:scale-105 active:scale-95 transition-transform"
+                className="mt-1 px-6 py-2.5 rounded-full bg-white text-purple-700 text-sm font-black hover:scale-105 active:scale-95 transition-transform"
               >
                 Play again
               </button>
@@ -515,23 +584,29 @@ export default function HeroGame() {
           )}
         </div>
 
-        {/* Touch / mouse controls */}
+        {/* Steering buttons: hold to move */}
         <div className="grid grid-cols-2 gap-px bg-white/10 border-t border-white/10">
           <button
             type="button"
             aria-label="Move ship left"
             {...hold(-1)}
-            className="py-2.5 bg-[#0A1128] text-slate-300 hover:bg-white/5 active:bg-purple-500/20 text-sm font-bold select-none touch-none"
+            className="py-4 bg-[#0A1128] text-slate-200 hover:bg-white/5 active:bg-purple-500/30 text-base font-bold touch-none"
           >
-            ◀ Left
+            <svg viewBox="0 0 24 24" className="w-5 h-5 inline -mt-0.5 mr-1.5" fill="currentColor" aria-hidden>
+              <path d="M16 4.5v15L6.5 12z" />
+            </svg>
+            Left
           </button>
           <button
             type="button"
             aria-label="Move ship right"
             {...hold(1)}
-            className="py-2.5 bg-[#0A1128] text-slate-300 hover:bg-white/5 active:bg-purple-500/20 text-sm font-bold select-none touch-none"
+            className="py-4 bg-[#0A1128] text-slate-200 hover:bg-white/5 active:bg-purple-500/30 text-base font-bold touch-none"
           >
-            Right ▶
+            Right
+            <svg viewBox="0 0 24 24" className="w-5 h-5 inline -mt-0.5 ml-1.5" fill="currentColor" aria-hidden>
+              <path d="M8 4.5v15l9.5-7.5z" />
+            </svg>
           </button>
         </div>
       </div>

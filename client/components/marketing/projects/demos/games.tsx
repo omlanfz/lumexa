@@ -579,9 +579,9 @@ export function RpgOutput({ flash }: DemoProps) {
       <div className="mt-1 flex flex-col items-center gap-1.5">
         <button type="button" className={pad} aria-label="Move up" onClick={() => move(0, -1)}>▲</button>
         <div className="flex gap-1.5">
-          <button type="button" className={pad} aria-label="Move left" onClick={() => move(-1, 0)}>◀</button>
+          <button type="button" className={pad} aria-label="Move left" onClick={() => move(-1, 0)}>◀︎</button>
           <button type="button" className={pad} aria-label="Move down" onClick={() => move(0, 1)}>▼</button>
-          <button type="button" className={pad} aria-label="Move right" onClick={() => move(1, 0)}>▶</button>
+          <button type="button" className={pad} aria-label="Move right" onClick={() => move(1, 0)}>▶︎</button>
         </div>
       </div>
     </div>
