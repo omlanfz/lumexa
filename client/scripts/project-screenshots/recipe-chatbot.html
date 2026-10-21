@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#fff;color:#31333f}
+.app{position:absolute;top:46px;left:0;right:0;bottom:0;display:flex;font-family:"Inter",sans-serif}
+.sb{width:330px;background:#f0f2f6;padding:34px 24px;display:flex;flex-direction:column;gap:18px}
+.sb h2{font-size:26px;font-weight:700;color:#262730}
+.lab{font-size:14px;color:#31333f;margin-bottom:8px;font-weight:500}
+.ms{background:#fff;border:1px solid #d6d9e0;border-radius:8px;padding:8px;display:flex;flex-wrap:wrap;gap:6px;min-height:46px}
+.chip{background:#ff4b4b;color:#fff;border-radius:6px;padding:5px 10px;font-size:14px;font-weight:500}
+.sel{background:#fff;border:1px solid #d6d9e0;border-radius:8px;padding:11px 12px;font-size:15px;display:flex;justify-content:space-between}
+.sl{height:6px;border-radius:3px;background:#d6d9e0;position:relative;margin-top:14px}
+.sl i{position:absolute;left:0;top:0;bottom:0;width:55%;background:#ff4b4b;border-radius:3px}
+.sl b{position:absolute;left:55%;top:-7px;width:20px;height:20px;border-radius:50%;background:#ff4b4b;margin-left:-10px}
+.btn{margin-top:auto;border:1px solid #d6d9e0;background:#fff;border-radius:8px;padding:11px;text-align:center;font-weight:500;font-size:15px}
+.main{flex:1;padding:36px 70px 0;position:relative;background:#fff}
+.main h1{font-size:44px;font-weight:700;color:#262730;letter-spacing:-.01em}
+.main .cap{color:#6b7280;font-size:16px;margin:6px 0 24px}
+.msg{display:flex;gap:16px;margin-bottom:22px;align-items:flex-start}
+.av{width:42px;height:42px;border-radius:8px;display:grid;place-items:center;font-size:22px;flex:none}
+.u .av{background:#ffe5d9}.b .av{background:#ffd5d5}
+.bub{font-size:17px;line-height:1.6;color:#262730;padding-top:6px}
+.bub h3{font-size:22px;margin-bottom:8px}
+.bub ul,.bub ol{margin:6px 0 10px 22px}
+.bub li{margin:3px 0}
+.meta{display:flex;gap:8px;margin:10px 0}
+.meta span{background:#f0f2f6;border-radius:99px;padding:5px 12px;font-size:14px;font-weight:600}
+.input{position:absolute;left:400px;right:70px;bottom:26px;border:1px solid #d6d9e0;border-radius:12px;padding:15px 18px;color:#9ca3af;font-size:16px;display:flex;justify-content:space-between;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+</style></head><body>
+<div class="browser" style="background:#fff">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url">🔒 localhost:8501</div><span style="width:50px"></span></div>
+</div>
+<div class="app">
+ <div class="sb">
+  <h2>🍲 Chef Bot</h2>
+  <div><div class="lab">What's in your kitchen?</div><div class="ms"><span class="chip">egg ✕</span><span class="chip">rice ✕</span><span class="chip">green chilli ✕</span><span class="chip">onion ✕</span></div></div>
+  <div><div class="lab">Cuisine</div><div class="sel"><span>Any</span><span>⌄</span></div></div>
+  <div><div class="lab">Cooking time: 25 min</div><div class="sl"><i></i><b></b></div></div>
+  <div><div class="lab">Spice level</div><div class="sel"><span>🌶️ Medium</span><span>⌄</span></div></div>
+  <div class="btn">🔄 New chat</div>
+ </div>
+ <div class="main">
+  <h1>Recipe Chatbot</h1>
+  <div class="cap">Ask for a recipe using what you already have at home.</div>
+  <div class="msg u"><div class="av">🧑</div><div class="bub">I have eggs, rice, green chillies and an onion. What can I cook for dinner in under 25 minutes?</div></div>
+  <div class="msg b"><div class="av">🤖</div><div class="bub">
+   <h3>Spicy Egg Fried Rice 🍳🍚</h3>
+   A quick one-pan dinner that uses everything you listed.
+   <div class="meta"><span>⏱ 20 min</span><span>🌶️ Medium</span><span>🍽 Serves 2</span></div>
+   <b>Steps</b>
+   <ol><li>Fry the chopped onion and green chilli in a little oil until soft.</li><li>Push to the side, scramble 2 eggs, then mix everything together.</li><li>Add the cooked rice, salt and a pinch of pepper. Toss on high heat for 3 minutes.</li></ol>
+   Want a side dish idea too? 🥗
+  </div></div>
+ </div>
+ <div class="input"><span>Ask Chef Bot anything about cooking…</span><span>➤</span></div>
+</div>
+</body></html>

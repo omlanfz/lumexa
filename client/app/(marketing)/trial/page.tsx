@@ -12,11 +12,11 @@ import Link from "next/link";
 import axios from "axios";
 
 const subjects = [
-  "Game Creator Path (Roblox / Python games)",
-  "AI Builder Path (Python + machine learning)",
-  "Web Developer Path (HTML / CSS / React)",
-  "Little Coders Path (Scratch, ages 6-11)",
-  "Data Scientist Path (Python + data)",
+  "Game Creator (Roblox / Python games)",
+  "AI Builder (Python + machine learning)",
+  "Web Developer (HTML / CSS / React)",
+  "Little Coders (Scratch, ages 6-11)",
+  "Data Scientist (Python + data)",
   "Not sure yet, help me choose",
 ];
 
@@ -250,7 +250,7 @@ export default function TrialPage() {
 
             <div>
               <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
-                Learning Path of Interest
+                Program of Interest
               </label>
               <select
                 value={form.subject}
@@ -258,7 +258,7 @@ export default function TrialPage() {
                 required
                 className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm transition-colors"
               >
-                <option value="">Select a path…</option>
+                <option value="">Select a program…</option>
                 {subjects.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}

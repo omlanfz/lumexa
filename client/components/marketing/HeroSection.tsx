@@ -1,68 +1,5 @@
 import Link from "next/link";
-
-/* Glassmorphism code preview — the ONE allowed glass element per spec */
-function GlassCodePreview() {
-  const codeLines = [
-    { color: "text-slate-500 dark:text-slate-400", text: "# Build a mood detector AI" },
-    { color: "text-blue-600 dark:text-blue-400",   text: "import cv2, tensorflow as tf" },
-    { color: "text-slate-700 dark:text-slate-500", text: "" },
-    { color: "text-purple-600 dark:text-purple-400", text: "model = load_model(" },
-    { color: "text-green-600 dark:text-green-400",   text: '  "emotion_detector.h5"' },
-    { color: "text-purple-600 dark:text-purple-400", text: ")" },
-    { color: "text-slate-700 dark:text-slate-500", text: "" },
-    { color: "text-blue-600 dark:text-blue-400",   text: "cap = cv2.VideoCapture(0)" },
-    { color: "text-slate-500 dark:text-slate-400", text: "# Real-time face detection" },
-  ];
-
-  return (
-    <div className="relative">
-      {/* Gradient blob behind the glass card */}
-      <div className="absolute -inset-6 bg-gradient-to-br from-purple-300/60 via-blue-300/40 to-cyan-300/50 dark:from-purple-700/30 dark:via-blue-700/20 dark:to-cyan-700/20 rounded-3xl blur-2xl" />
-
-      {/* Glass card */}
-      <div
-        className="relative rounded-2xl p-5 border border-white/70 dark:border-white/10 shadow-2xl shadow-purple-200/60 dark:shadow-purple-900/40 transition-transform duration-300 hover:-translate-y-1"
-        style={{
-          backdropFilter: "blur(14px)",
-          background: "rgba(255,255,255,0.62)",
-        }}
-      >
-        {/* Titlebar */}
-        <div className="flex items-center gap-1.5 mb-4">
-          <div className="w-3 h-3 rounded-full bg-red-400/80" />
-          <div className="w-3 h-3 rounded-full bg-amber-400/80" />
-          <div className="w-3 h-3 rounded-full bg-green-400/80" />
-          <span className="ml-2 text-[#64748B] text-[11px] font-mono">emotion_ai.py</span>
-        </div>
-
-        {/* Code */}
-        <div className="font-mono text-[12px] space-y-0.5">
-          {codeLines.map((l, i) => (
-            <div key={i} className={`${l.color} leading-5`}>
-              {l.text || " "}
-            </div>
-          ))}
-        </div>
-
-        {/* Output strip */}
-        <div className="mt-4 pt-3 border-t border-white/60">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[11px] font-mono text-[#334155]">
-              Detected: <span className="text-purple-700 font-bold">Happy 😄  94%</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Student badge */}
-        <div className="mt-3 inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-full px-3 py-1">
-          <span className="text-xs">👤</span>
-          <span className="text-[11px] font-semibold text-purple-700">Tanvir, age 16 · AI Builder Path</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+import HeroGame from "./HeroGame";
 
 export default function HeroSection() {
   return (
@@ -78,8 +15,8 @@ export default function HeroSection() {
         }}
       />
       {/* Gradient blobs */}
-      <div className="absolute top-1/4 left-0 w-[500px] h-[500px] bg-purple-200/40 dark:bg-purple-700/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-blue-200/30 dark:bg-blue-700/8 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-0 w-[500px] h-[500px] bg-purple-200/40 dark:bg-purple-700/15 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-1/4 right-0 w-96 h-96 bg-blue-200/30 dark:bg-blue-700/12 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 pb-20 w-full">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
@@ -89,86 +26,47 @@ export default function HeroSection() {
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-semibold mb-7">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              Live classes · Expert teachers · Real AI projects
+              Live classes · Expert teachers · Real projects
             </div>
 
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-[58px] font-black text-[#0F172A] dark:text-white leading-[1.06] tracking-tight mb-5">
-              Turn Your Child Into an{" "}
-              <span className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 dark:from-purple-400 dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-                AI Builder
-              </span>
+              Your Child Can{" "}
+              <span className="whitespace-nowrap bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 dark:from-purple-400 dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+                Do More
+              </span>{" "}
+              Than Just Use Technology.
             </h1>
 
-            {/* Sub-headline */}
-            <p className="text-lg text-[#334155] dark:text-gray-400 max-w-lg mb-3 leading-relaxed">
-              While other kids scroll through AI tools,{" "}
-              <span className="font-bold text-[#0F172A] dark:text-white">yours will build them.</span>{" "}
-              Live coding classes for ages 6-18: from Scratch to real AI apps.
+            {/* Supporting line */}
+            <p className="text-lg text-[#334155] dark:text-gray-400 max-w-xl mb-4 leading-relaxed">
+              Live coding classes for ages 6–18, where kids learn to code, build games and websites, and create real AI
+              projects through hands-on learning. Turn your child&apos;s screen time into skills that last.
             </p>
 
-            <p className="text-sm text-[#94A3B8] dark:text-gray-500 mb-9">
-              No prior experience needed · Progress visible after lesson 1 · Cancel anytime
+            <p className="text-sm text-[#64748B] dark:text-gray-500 mb-9">
+              No prior experience needed · Learn by building real projects · Cancel anytime
             </p>
 
             {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3 mb-12">
+            <div className="flex flex-col sm:flex-row gap-3">
               <Link
                 href="/trial"
-                className="px-8 py-4 text-base font-black bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-xl shadow-lg shadow-purple-200 dark:shadow-purple-900/40 hover:shadow-purple-300 dark:hover:shadow-purple-800/50 transition-all hover:scale-[1.02] active:scale-95 glow-pulse"
+                className="px-8 py-4 text-base text-center font-black bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-xl shadow-lg shadow-purple-200 dark:shadow-purple-900/40 hover:shadow-purple-300 dark:hover:shadow-purple-800/50 transition-all hover:scale-[1.02] active:scale-95 glow-pulse"
               >
-                Book Free Trial Class
-                <span className="block text-xs font-normal opacity-75 mt-0.5">
-                  First class on us · No card needed
-                </span>
+                Try a Free Lesson
               </Link>
               <Link
-                href="/courses"
-                className="px-8 py-4 text-base font-semibold border-2 border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 text-[#334155] dark:text-gray-400 hover:text-purple-700 dark:hover:text-purple-300 rounded-xl transition-all hover:bg-purple-50 dark:hover:bg-purple-900/10"
+                href="/programs"
+                className="px-8 py-4 text-base text-center font-semibold border-2 border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-purple-700/50 text-[#334155] dark:text-gray-300 hover:text-purple-700 dark:hover:text-purple-300 rounded-xl transition-all hover:bg-purple-50 dark:hover:bg-purple-900/10"
               >
-                Explore Learning Paths →
+                Explore Programs
               </Link>
             </div>
-
-            {/* Social proof stats */}
-            <div className="flex flex-wrap gap-8">
-              {[
-                { value: "1,200+", label: "AI Builders Enrolled" },
-                { value: "98%",    label: "Parent Satisfaction" },
-                { value: "50+",    label: "Expert Teachers" },
-                { value: "3+",     label: "Projects Per Course" },
-              ].map((s) => (
-                <div key={s.label} className="group cursor-default">
-                  <div className="text-2xl font-black text-[#0F172A] dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors duration-200">{s.value}</div>
-                  <div className="text-xs text-[#64748B] dark:text-gray-500 mt-0.5">{s.label}</div>
-                </div>
-              ))}
-            </div>
           </div>
 
-          {/* Right: glass code preview */}
-          <div className="hidden lg:block">
-            <GlassCodePreview />
-          </div>
-        </div>
-
-        {/* Pathway tags strip */}
-        <div className="mt-14 flex flex-wrap gap-2 justify-center lg:justify-start">
-          {[
-            { label: "🎮 Game Creator",        color: "bg-red-50 dark:bg-red-900/20   border-red-200 dark:border-red-700/40   text-red-700 dark:text-red-300"    },
-            { label: "🤖 AI Builder",           color: "bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-700/40 text-purple-700 dark:text-purple-300" },
-            { label: "🌐 Web Developer",        color: "bg-blue-50 dark:bg-blue-900/20  border-blue-200 dark:border-blue-700/40  text-blue-700 dark:text-blue-300"   },
-            { label: "🌟 Little Coders",        color: "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700/40 text-amber-700 dark:text-amber-300"  },
-            { label: "📊 Data Scientist",       color: "bg-teal-50 dark:bg-teal-900/20  border-teal-200 dark:border-teal-700/40  text-teal-700 dark:text-teal-300"   },
-            { label: "💼 Digital Independence", color: "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700/40 text-green-700 dark:text-green-300"  },
-          ].map((tag) => (
-            <span
-              key={tag.label}
-              className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold transition-all duration-200 hover:scale-105 hover:shadow-sm cursor-default ${tag.color}`}
-            >
-              {tag.label}
-            </span>
-          ))}
+          {/* Right: playable mini-game — stays visible on mobile (stacks under the copy) */}
+          <HeroGame />
         </div>
       </div>
 

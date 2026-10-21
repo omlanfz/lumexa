@@ -8,28 +8,23 @@ import { parseStoredUser, getStoredToken } from "@/lib/storage";
 import MarketingNav    from "../components/marketing/MarketingNav";
 import MarketingFooter from "../components/marketing/MarketingFooter";
 
-// Gamification overlays (fixed, z-indexed)
-import ScrollMilestones from "../components/marketing/ScrollMilestones";
 import LumiChat        from "../components/LumiChat";
 
-// Sections — in optimal conversion order
+// Sections, in the order a parent reads them
 import HeroSection          from "../components/marketing/HeroSection";
 import InterestSelector, { type Interest } from "../components/marketing/InterestSelector";
 import ShowcaseSection      from "../components/marketing/ShowcaseSection";
 import TrustSection         from "../components/marketing/TrustSection";
 import HowItWorksSection    from "../components/marketing/HowItWorksSection";
-import InteractiveCodeDemo  from "../components/marketing/InteractiveCodeDemo";
-import TestimonialsSection  from "../components/marketing/TestimonialsSection";
-import OutcomesSection      from "../components/marketing/OutcomesSection";
-import PathwaysSection      from "../components/marketing/PathwaysSection";
-import BatchSection         from "../components/marketing/BatchSection";
-import PricingSection       from "../components/marketing/PricingSection";
+import ProgramsSection      from "../components/marketing/ProgramsSection";
+import FormatsSection       from "../components/marketing/FormatsSection";
 import FinalCTASection      from "../components/marketing/FinalCTASection";
 
 export default function RootPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
-  const [interest, setInterest] = useState<Interest>("ai");
+  // Nothing is pre-selected: the page should not decide what the child is interested in.
+  const [interest, setInterest] = useState<Interest | null>(null);
 
   useEffect(() => {
     const token = getStoredToken();
@@ -51,6 +46,14 @@ export default function RootPage() {
     router.replace("/login");
   }, [router]);
 
+  // The page renders blank while the auth check runs, so a link like /#how-it-works
+  // has nothing to land on at load time. Scroll to it once the content exists.
+  useEffect(() => {
+    if (!ready || !window.location.hash) return;
+    const el = document.getElementById(decodeURIComponent(window.location.hash.slice(1)));
+    if (el) requestAnimationFrame(() => el.scrollIntoView());
+  }, [ready]);
+
   if (!ready) {
     // Blank splash while checking auth — matches landing bg so there's no flash
     return <div className="min-h-screen bg-[#F7F9FF] dark:bg-[#050D1A]" />;
@@ -58,51 +61,24 @@ export default function RootPage() {
 
   return (
     <div className="bg-[#F7F9FF] dark:bg-[#050D1A] min-h-screen transition-colors duration-200">
-      {/* Fixed gamification overlays */}
-      <ScrollMilestones />
       <LumiChat variant="parent" />
 
       <MarketingNav />
 
       <main>
-        {/*
-          CONVERSION FLOW (from strategy analysis):
-          1. Hero           — outcome-specific hook + glass code preview
-          2. InterestSelect — personalise the journey ("What does your child love?")
-          3. Showcase       — filtered real student projects (proof of outcomes)
-          4. Trust          — parent safety + credibility signals
-          5. HowItWorks     — 3-step simplicity (reduces cognitive load)
-          6. CodeDemo       — interactive "build it yourself" moment (IKEA Effect)
-          7. Testimonials   — age-matched social proof
-          8. Outcomes       — transformation framing (before → after)
-          9. Pathways       — course discovery (comes after value is established)
-         10. Batch          — format choice (batch / pod / 1-on-1)
-         11. Pricing        — LAST before CTA (price shown after all value established)
-         13. FinalCTA       — dark high-contrast punch
-        */}
-        <div id="hero">
-          <HeroSection />
-        </div>
+        <HeroSection />
 
         <InterestSelector selected={interest} onSelect={setInterest} />
 
-        <ShowcaseSection interest={interest} />
+        <ShowcaseSection interest={interest} onClear={() => setInterest(null)} />
 
         <TrustSection />
 
         <HowItWorksSection />
 
-        <InteractiveCodeDemo />
+        <ProgramsSection />
 
-        <TestimonialsSection />
-
-        <OutcomesSection />
-
-        <PathwaysSection />
-
-        <BatchSection />
-
-        <PricingSection />
+        <FormatsSection />
 
         <FinalCTASection />
       </main>

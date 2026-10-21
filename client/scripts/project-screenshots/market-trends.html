@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#fff}
+.page{background:#fff;color:#1f2937;padding:24px 40px;display:flex;flex-direction:column;gap:14px}
+.tool{display:flex;gap:10px;padding:8px 14px;background:#f3f4f6;border-radius:8px;font-size:13px;color:#4b5563;font-weight:600;align-items:center}
+.tool span{background:#fff;border:1px solid #d1d5db;border-radius:6px;padding:4px 10px}
+.cell{display:flex;gap:10px}
+.cell .in{width:62px;font-family:"JetBrains Mono",monospace;font-size:13px;color:#2563eb;padding-top:12px;text-align:right;flex:none}
+.cell .in.o{color:#ea580c}
+.code{flex:1;background:#f7f7f7;border:1px solid #e5e7eb;border-radius:6px;padding:12px 16px;font-family:"JetBrains Mono",monospace;font-size:14px;line-height:1.65}
+.k{color:#7c3aed;font-weight:700}.s{color:#059669}.c{color:#9ca3af;font-style:italic}.n{color:#d97706}
+.out{flex:1;display:grid;grid-template-columns:1.9fr 1fr;gap:18px;padding-top:2px}
+.kp{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:12px 16px;margin-bottom:10px}
+.kp span{font-size:13px;color:#6b7280;font-weight:600}.kp b{display:block;font-size:28px;font-weight:900;margin-top:2px}.kp small{font-size:12px;color:#9ca3af}
+svg text{font-family:Inter,sans-serif}
+</style></head><body>
+<div class="browser">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url">🔒 localhost:8888/notebooks/market_trends.ipynb</div><span style="width:50px"></span></div>
+ <div class="page" style="flex:1;min-height:0">
+  <div class="tool"><span>File</span><span>Edit</span><span>Run</span><span>Kernel</span><b style="margin-left:14px;color:#111827">market_trends.ipynb</b><span style="margin-left:auto">Python 3 ●</span></div>
+  <div class="cell"><div class="in">In [7]:</div><div class="code"><span class="k">from</span> sklearn.linear_model <span class="k">import</span> LinearRegression<br>
+   model = LinearRegression().fit(days, prices)<br>
+   forecast = model.predict(future_days)  <span class="c"># next 15 days</span><br>
+   <span class="k">print</span>(<span class="s">f"Predicted change: {</span>change<span class="s">:+.1f}%"</span>)</div></div>
+  <div class="cell" style="flex:1;min-height:0"><div class="in o">Out [7]:</div><div class="out">
+   <svg id="ch" viewBox="0 0 760 400" style="width:100%;height:100%"></svg>
+   <div>
+    <div class="kp"><span>Predicted change (15 days)</span><b style="color:#16a34a">▲ +4.2%</b><small>trend line, not a promise</small></div>
+    <div class="kp"><span>Model fit (R²)</span><b>0.86</b><small>on 60 days of history</small></div>
+    <div class="kp"><span>Trend direction</span><b>Upward ↗</b><small>LinearRegression</small></div>
+    <div style="font-size:12.5px;color:#6b7280;line-height:1.5;margin-top:4px">⚠️ Practice data for a school project. Not financial advice.</div>
+   </div>
+  </div></div>
+ </div>
+</div>
+<script>
+let seed=21;const rr=()=>{seed=(seed*16807)%2147483647;return seed/2147483647-.5};
+const N=60,F=15,P=[];let v=100;for(let i=0;i<N;i++){v+=0.32+rr()*2.4;P.push(v)}
+// regression
+const xs=[...Array(N).keys()],mx=xs.reduce((a,b)=>a+b)/N,my=P.reduce((a,b)=>a+b)/N;
+const sl=xs.reduce((a,x,i)=>a+(x-mx)*(P[i]-my),0)/xs.reduce((a,x)=>a+(x-mx)**2,0),ic=my-sl*mx;
+const fit=x=>ic+sl*x;
+const W=760,H=400,L=52,B=36,T=24,Rr=14,min=95,max=135;
+const X=i=>L+i/(N+F-1)*(W-L-Rr),Y=q=>T+(1-(q-min)/(max-min))*(H-T-B);
+let h=`<text x="${L}" y="16" font-size="15" font-weight="800" fill="#111827">Price history and 15-day forecast</text>`;
+for(let q=100;q<=135;q+=10){h+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(q)}" y2="${Y(q)}" stroke="#e5e7eb"/><text x="${L-8}" y="${Y(q)+4}" font-size="12" text-anchor="end" fill="#6b7280">${q}</text>`}
+for(let i=0;i<N+F;i+=15){h+=`<text x="${X(i)}" y="${H-12}" font-size="12" text-anchor="middle" fill="#6b7280">Day ${i}</text>`}
+// band
+let up="",dn="";for(let i=N-1;i<N+F;i++){const w=(i-N+1)*.42+1.2;up+=`${X(i)},${Y(fit(i)+w)} `;dn=`${X(i)},${Y(fit(i)-w)} `+dn}
+h+=`<polygon points="${up}${dn}" fill="#7c3aed" opacity=".16"/>`;
+h+=`<line x1="${X(N-1)}" x2="${X(N-1)}" y1="${T}" y2="${H-B}" stroke="#9ca3af" stroke-dasharray="4 4"/><text x="${X(N-1)+8}" y="${T+14}" font-size="12" fill="#6b7280">today</text>`;
+h+=`<polyline fill="none" stroke="#2563eb" stroke-width="3" stroke-linejoin="round" points="${P.map((q,i)=>X(i)+","+Y(q)).join(" ")}"/>`;
+h+=`<line x1="${X(0)}" y1="${Y(fit(0))}" x2="${X(N-1)}" y2="${Y(fit(N-1))}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>`;
+h+=`<line x1="${X(N-1)}" y1="${Y(fit(N-1))}" x2="${X(N+F-1)}" y2="${Y(fit(N+F-1))}" stroke="#7c3aed" stroke-width="3.5" stroke-dasharray="8 6" stroke-linecap="round"/>`;
+h+=`<circle cx="${X(N+F-1)}" cy="${Y(fit(N+F-1))}" r="6" fill="#7c3aed" stroke="#fff" stroke-width="2"/>`;
+h+=`<g font-size="12.5" font-weight="700"><rect x="${L+16}" y="${T+8}" width="250" height="72" rx="8" fill="#fff" stroke="#e5e7eb"/><line x1="${L+30}" x2="${L+58}" y1="${T+28}" y2="${T+28}" stroke="#2563eb" stroke-width="3"/><text x="${L+66}" y="${T+32}" fill="#374151">Actual price</text><line x1="${L+30}" x2="${L+58}" y1="${T+48}" y2="${T+48}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="2 4"/><text x="${L+66}" y="${T+52}" fill="#374151">Fitted trend</text><line x1="${L+30}" x2="${L+58}" y1="${T+68}" y2="${T+68}" stroke="#7c3aed" stroke-width="3" stroke-dasharray="6 4"/><text x="${L+66}" y="${T+72}" fill="#374151">Forecast + range</text></g>`;
+document.getElementById("ch").innerHTML=h;
+</script>
+</body></html>

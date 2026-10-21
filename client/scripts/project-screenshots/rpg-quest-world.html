@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#0f1218}
+.win{background:#14171f}
+.view{position:relative;flex:1;overflow:hidden}
+.ui{position:absolute;color:#fff;font-weight:700}
+.glass{background:rgba(20,16,38,.78);border:2px solid rgba(255,225,160,.55);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+.quest{right:24px;top:24px;width:330px;padding:16px 18px}
+.quest h4{font-size:13px;letter-spacing:.18em;color:#fcd34d;margin-bottom:8px}
+.quest p{font-size:17px;line-height:1.45;font-weight:600}
+.pbar{height:12px;border-radius:7px;background:rgba(255,255,255,.18);margin-top:10px;overflow:hidden}
+.pbar i{display:block;height:100%;width:66%;background:linear-gradient(90deg,#34d399,#fde047)}
+.hp{left:24px;top:24px;padding:10px 16px;font-size:26px;letter-spacing:.2em}
+.inv{left:50%;bottom:196px;transform:translateX(-50%);display:flex;gap:10px;padding:10px 12px}
+.inv i{width:56px;height:56px;border-radius:10px;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);display:grid;place-items:center;font-style:normal;font-size:30px}
+.inv i.on{border-color:#fcd34d;background:rgba(252,211,77,.2)}
+.dlg{left:50%;bottom:24px;transform:translateX(-50%);width:880px;padding:20px 26px;display:flex;gap:22px;align-items:center}
+.dlg .face{font-size:64px;width:92px;height:92px;border-radius:14px;background:rgba(252,211,77,.2);border:2px solid #fcd34d;display:grid;place-items:center;flex:none}
+.dlg b{display:block;color:#fcd34d;font-size:16px;letter-spacing:.12em;margin-bottom:6px}
+.dlg p{font-size:21px;line-height:1.45;font-weight:600}
+.dlg small{position:absolute;right:22px;bottom:14px;color:#fcd34d;font-size:14px}
+.fps{left:24px;bottom:24px;font-family:"JetBrains Mono";font-size:12px;color:#b6f2c9;background:rgba(0,0,0,.55);padding:8px 10px;border-radius:6px;line-height:1.5;font-weight:500}
+</style></head><body>
+<div class="win">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><span style="margin:0 auto">Unity — RPG Quest World · Game View</span><span style="width:50px"></span></div>
+ <div class="view">
+  <canvas id="c" width="1280" height="762" style="position:absolute;inset:0"></canvas>
+  <div class="ui glass hp">❤️ ❤️ ❤️ 🤍</div>
+  <div class="ui glass quest"><h4>ACTIVE QUEST</h4><p>The Lost Gems 💎<br><span style="font-weight:500;color:#e2e8f0;font-size:15px">Find 3 gems for Elder Maple. 2 of 3 found.</span></p><div class="pbar"><i></i></div></div>
+  <div class="ui glass inv"><i class="on">⚔️</i><i>🛡️</i><i>🧪</i><i>💎</i><i>💎</i><i></i></div>
+  <div class="ui glass dlg"><div class="face">👵</div><div><b>ELDER MAPLE</b><p>Brave traveller, you found two gems already! One more is hidden near the old pond. Bring it to me and the village is saved.</p></div><small>▶ Press E to continue</small></div>
+  <div class="ui fps">FPS 60 · Batches 42<br>Quest.Complete(): waiting</div>
+ </div>
+</div>
+<script>
+const c=document.getElementById("c"),x=c.getContext("2d");
+let seed=11;const r=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
+const T=64,W=20,H=12;
+// grass
+for(let i=0;i<W;i++)for(let j=0;j<H;j++){x.fillStyle=(i+j)%2?"#5bb85a":"#62c061";x.fillRect(i*T,j*T,T,T)}
+for(let i=0;i<260;i++){const px=r()*1280,py=r()*762;x.fillStyle=r()>.5?"#4aa24c":"#78d078";x.fillRect(px,py,3,8);x.fillRect(px+5,py+2,3,6)}
+// dirt path
+x.fillStyle="#d2a86a";
+[[0,5],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5],[7,5],[8,5],[8,6],[9,6],[10,6],[11,6],[12,6],[12,5],[13,5],[14,5],[15,5],[16,5],[17,5],[18,5],[19,5]].forEach(([i,j])=>{x.fillRect(i*T,j*T,T,T);x.fillStyle="#c4995b";x.fillRect(i*T+8,j*T+10,10,6);x.fillRect(i*T+38,j*T+36,12,6);x.fillStyle="#d2a86a"});
+// pond
+x.fillStyle="#2f8fd6";x.beginPath();x.ellipse(1110,470,150,80,0,0,7);x.fill();
+x.fillStyle="#58b4f0";x.beginPath();x.ellipse(1100,460,112,52,0,0,7);x.fill();
+x.strokeStyle="rgba(255,255,255,.55)";x.lineWidth=3;[[1060,450,40],[1140,478,30]].forEach(([a,b,w])=>{x.beginPath();x.arc(a,b,w/2,3.4,5.8);x.stroke()});
+x.fillStyle="#3b8a43";[[990,520],[1250,420],[1220,520]].forEach(([a,b])=>{x.beginPath();x.ellipse(a,b,26,12,0,0,7);x.fill()});
+// houses
+function house(hx,hy,roof){x.fillStyle="rgba(0,0,0,.2)";x.fillRect(hx+8,hy+104,180,14);x.fillStyle="#f2dfb8";x.fillRect(hx,hy+36,176,86);x.fillStyle=roof;x.beginPath();x.moveTo(hx-14,hy+42);x.lineTo(hx+88,hy-22);x.lineTo(hx+190,hy+42);x.fill();x.fillStyle="#7c4a26";x.fillRect(hx+68,hy+66,42,56);x.fillStyle="#9fd6ff";x.fillRect(hx+16,hy+56,34,30);x.fillRect(hx+128,hy+56,34,30);x.fillStyle="#fff";x.fillRect(hx+32,hy+56,2,30);x.fillRect(hx+144,hy+56,2,30)}
+house(110,100,"#d9534f");house(420,70,"#3b82f6");
+// trees
+function tree(tx,ty,s=1){x.fillStyle="rgba(0,0,0,.2)";x.beginPath();x.ellipse(tx,ty+46*s,40*s,12*s,0,0,7);x.fill();x.fillStyle="#7a4a24";x.fillRect(tx-9*s,ty,18*s,48*s);x.fillStyle="#2b8a3e";x.beginPath();x.arc(tx,ty-14*s,44*s,0,7);x.fill();x.fillStyle="#37a24b";x.beginPath();x.arc(tx-12*s,ty-24*s,26*s,0,7);x.fill()}
+[[40,330],[100,430],[40,560],[160,620],[640,120],[760,70],[880,130],[1180,140],[1230,300],[1200,420],[720,640],[560,600]].forEach(([a,b])=>tree(a,b,.9+r()*.3));
+// fence
+x.fillStyle="#b88a52";for(let i=0;i<8;i++){x.fillRect(300+i*34,430,10,44)}x.fillRect(296,442,270,8);x.fillRect(296,460,270,8);
+// flowers
+for(let i=0;i<40;i++){const fx=r()*1280,fy=330+r()*400;x.fillStyle=["#fff","#fde047","#f9a8d4"][i%3];x.beginPath();x.arc(fx,fy,4,0,7);x.fill()}
+// gem near pond
+function gem(gx,gy){x.save();x.shadowColor="#67e8f9";x.shadowBlur=24;x.font="46px 'Noto Color Emoji'";x.fillText("💎",gx,gy);x.restore();x.fillStyle="rgba(255,255,255,.9)";[[gx-8,gy-40],[gx+52,gy-16]].forEach(([a,b])=>{x.fillRect(a,b,6,6)})}
+gem(1080,478);
+// slime
+x.font="54px 'Noto Color Emoji'";x.fillText("🟢",640,470);
+// NPC + quest mark
+x.font="64px 'Noto Color Emoji'";x.fillText("👵",560,372);
+x.save();x.shadowColor="#fde047";x.shadowBlur=18;x.fillStyle="#fde047";x.font="900 44px Inter";x.fillText("!",578,314);x.restore();
+// hero
+x.fillStyle="rgba(0,0,0,.25)";x.beginPath();x.ellipse(412,420,34,10,0,0,7);x.fill();
+x.save();x.shadowColor="rgba(255,255,255,.95)";x.shadowBlur=14;x.font="76px 'Noto Color Emoji'";x.fillText("🧝",372,408);x.restore();
+// sword swing arc
+x.strokeStyle="rgba(255,255,255,.8)";x.lineWidth=6;x.lineCap="round";x.beginPath();x.arc(450,370,60,-1,.6);x.stroke();
+// name tags
+x.font="700 16px Inter";x.textAlign="center";
+[["Ayra (You)",412,320,"#a78bfa"],["Elder Maple",600,300,"#fcd34d"]].forEach(([t,a,b,col])=>{x.fillStyle="rgba(0,0,0,.55)";const w=x.measureText(t).width+20;x.fillRect(a-w/2,b-4,w,26);x.fillStyle=col;x.fillText(t,a,b+15)});
+</script></body></html>

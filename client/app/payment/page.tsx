@@ -114,11 +114,11 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
 };
 
 const PATHWAY_LABELS: Record<string, string> = {
-  game: "Game Creator Path", ai: "AI Builder Path", web: "Web Developer Path",
-  little: "Little Coders Path", data: "Data Scientist Path", digital: "Digital Independence Path",
-  "game-creator": "Game Creator Path", "ai-builder": "AI Builder Path",
-  "web-developer": "Web Developer Path", "little-coders": "Little Coders Path",
-  "data-scientist": "Data Scientist Path", "digital-independence": "Digital Independence Path",
+  game: "Game Creator", ai: "AI Builder", web: "Web Developer",
+  little: "Little Coders", data: "Data Scientist", digital: "Digital Independence",
+  "game-creator": "Game Creator", "ai-builder": "AI Builder",
+  "web-developer": "Web Developer", "little-coders": "Little Coders",
+  "data-scientist": "Data Scientist", "digital-independence": "Digital Independence",
 };
 
 function computePrice(base: number, multiplier: number, symbol: string): string {
@@ -204,7 +204,7 @@ function PaymentContent() {
             Thank you, <span className="text-[#0F172A] dark:text-white font-semibold">{form.name}</span>. We&apos;ve
             received your <span className="text-purple-600 dark:text-purple-400 font-semibold">{pack.name}</span> order
             {pathway && (
-              <> for the <span className="text-purple-600 dark:text-purple-400 font-semibold">{pathway}</span></>
+              <> for the <span className="text-purple-600 dark:text-purple-400 font-semibold">{pathway}</span> program</>
             )}.
           </p>
           <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mb-6">
@@ -318,7 +318,7 @@ function PaymentContent() {
             {pathway && (
               <div className="border-t border-[#E2E8F0] dark:border-gray-800 pt-4 mb-4">
                 <p className="text-xs text-[#94A3B8] dark:text-gray-600 font-semibold uppercase tracking-wider mb-1">
-                  Learning Pathway
+                  Learning Program
                 </p>
                 <p className="text-[#0F172A] dark:text-white font-semibold text-sm">{pathway}</p>
               </div>

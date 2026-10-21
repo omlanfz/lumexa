@@ -1,0 +1,51 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#fff}
+.page{background:linear-gradient(180deg,#eef2ff,#f8fafc 60%);color:#0f172a;display:flex}
+.side{width:260px;background:#1e1b4b;color:#e0e7ff;padding:26px 20px;display:flex;flex-direction:column;gap:6px}
+.logo{font-weight:900;font-size:22px;color:#fff;margin-bottom:18px}
+.nv{padding:12px 14px;border-radius:12px;font-weight:600;font-size:15px;display:flex;gap:10px}
+.nv.on{background:#4f46e5;color:#fff}
+.me{margin-top:auto;display:flex;gap:10px;align-items:center;padding:12px;background:rgba(255,255,255,.08);border-radius:14px;font-size:14px}
+.me i{width:38px;height:38px;border-radius:50%;background:#f472b6;display:grid;place-items:center;font-style:normal;font-size:20px}
+.main{flex:1;padding:26px 34px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+.top h1{font-size:34px;font-weight:900;letter-spacing:-.02em}.top p{color:#64748b;margin-top:2px}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tabs span{padding:8px 16px;border-radius:99px;background:#fff;border:1px solid #e2e8f0;font-weight:600;font-size:14px;color:#475569}
+.tabs .on{background:#4f46e5;color:#fff;border-color:#4f46e5}
+.list{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.ev{background:#fff;border-radius:18px;padding:16px;display:flex;gap:16px;box-shadow:0 6px 24px rgba(79,70,229,.08);border:1px solid #eef2ff}
+.date{width:68px;border-radius:14px;color:#fff;text-align:center;padding:10px 0;flex:none;height:78px}
+.date b{display:block;font-size:28px;line-height:1}.date span{font-size:12px;letter-spacing:.12em;font-weight:700;opacity:.9}
+.ev h3{font-size:18px;font-weight:800}
+.ev .m{color:#64748b;font-size:14px;margin:4px 0 8px;display:flex;gap:12px}
+.tag{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px}
+.ev .r{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.at{font-size:13px;color:#64748b;font-weight:600}
+.bt{border-radius:10px;padding:8px 14px;font-weight:800;font-size:14px;background:#4f46e5;color:#fff}
+.bt.ok{background:#dcfce7;color:#15803d}
+.bell{font-size:20px;margin-left:8px}
+.toast{position:absolute;right:34px;bottom:26px;background:#0f172a;color:#fff;border-radius:14px;padding:14px 20px;font-weight:700;font-size:15px;box-shadow:0 12px 36px rgba(15,23,42,.35);display:flex;gap:10px;align-items:center}
+</style></head><body>
+<div class="browser">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url">🔒 school-events.vercel.app</div><span style="width:50px"></span></div>
+ <div class="page" style="flex:1;min-height:0;position:relative">
+  <div class="side"><div class="logo">📅 EventHub</div><div class="nv on">🏠 Upcoming</div><div class="nv">⭐ My events</div><div class="nv">🏆 Clubs</div><div class="nv">🔔 Reminders</div><div class="nv">⚙️ Settings</div><div class="me"><i>🙂</i><div><b>Mahiya</b><br><span style="opacity:.7">Class 8 · Dhaka</span></div></div></div>
+  <div class="main">
+   <div class="top"><div><h1>Upcoming events</h1><p>Find what's happening at school and sign up in one tap.</p></div><div style="font-size:15px;font-weight:700;color:#4f46e5">4 registered ✓</div></div>
+   <div class="tabs"><span class="on">All</span><span>⚽ Sports</span><span>🎭 Arts</span><span>🔬 Science</span><span>🎓 Academic</span></div>
+   <div class="list">
+    <div class="ev"><div class="date" style="background:linear-gradient(135deg,#f97316,#ef4444)"><span>JUL</span><b>22</b></div><div style="flex:1"><h3>Inter-School Football Cup</h3><div class="m"><span>📍 Main ground</span><span>⏰ 3:00 pm</span></div><span class="tag" style="background:#ffedd5;color:#c2410c">⚽ Sports</span><div class="r"><span class="at">👥 86 going</span><span><span class="bt ok">✓ Registered</span><span class="bell">🔔</span></span></div></div></div>
+    <div class="ev"><div class="date" style="background:linear-gradient(135deg,#8b5cf6,#6366f1)"><span>JUL</span><b>25</b></div><div style="flex:1"><h3>Science Fair 2025</h3><div class="m"><span>📍 Hall B</span><span>⏰ 10:00 am</span></div><span class="tag" style="background:#ede9fe;color:#6d28d9">🔬 Science</span><div class="r"><span class="at">👥 142 going</span><span><span class="bt ok">✓ Registered</span><span class="bell">🔔</span></span></div></div></div>
+    <div class="ev"><div class="date" style="background:linear-gradient(135deg,#ec4899,#be185d)"><span>JUL</span><b>28</b></div><div style="flex:1"><h3>Annual Art Exhibition</h3><div class="m"><span>📍 Art room</span><span>⏰ 11:30 am</span></div><span class="tag" style="background:#fce7f3;color:#be185d">🎭 Arts</span><div class="r"><span class="at">👥 58 going</span><span class="bt">Register</span></div></div></div>
+    <div class="ev"><div class="date" style="background:linear-gradient(135deg,#0ea5e9,#2563eb)"><span>AUG</span><b>02</b></div><div style="flex:1"><h3>Maths Olympiad Practice</h3><div class="m"><span>📍 Room 204</span><span>⏰ 2:15 pm</span></div><span class="tag" style="background:#dbeafe;color:#1d4ed8">🎓 Academic</span><div class="r"><span class="at">👥 37 going</span><span><span class="bt ok">✓ Registered</span><span class="bell">🔔</span></span></div></div></div>
+    <div class="ev"><div class="date" style="background:linear-gradient(135deg,#10b981,#059669)"><span>AUG</span><b>05</b></div><div style="flex:1"><h3>Coding Club Demo Day</h3><div class="m"><span>📍 Computer lab</span><span>⏰ 4:00 pm</span></div><span class="tag" style="background:#d1fae5;color:#047857">💻 Clubs</span><div class="r"><span class="at">👥 64 going</span><span><span class="bt ok">✓ Registered</span><span class="bell">🔔</span></span></div></div></div>
+    <div class="ev"><div class="date" style="background:linear-gradient(135deg,#f59e0b,#d97706)"><span>AUG</span><b>09</b></div><div style="flex:1"><h3>Debate Championship</h3><div class="m"><span>📍 Auditorium</span><span>⏰ 9:30 am</span></div><span class="tag" style="background:#fef3c7;color:#b45309">🎤 Clubs</span><div class="r"><span class="at">👥 41 going</span><span class="bt">Register</span></div></div></div>
+   </div>
+  </div>
+  <div class="toast">✅ You're registered for Coding Club Demo Day. Reminder set!</div>
+ </div>
+</div>
+</body></html>

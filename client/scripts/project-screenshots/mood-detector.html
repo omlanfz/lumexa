@@ -1,0 +1,89 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#0b0f19}
+.win{background:#0d1117}
+.main{flex:1;display:flex;min-height:0}
+.cam{position:relative;width:820px;background:radial-gradient(ellipse at 50% 40%,#3b4660 0%,#1c2333 55%,#0d1117 100%);overflow:hidden}
+.side{flex:1;padding:26px 28px;color:#e6edf3;display:flex;flex-direction:column;gap:14px;border-left:1px solid #21262d;background:#0d1117}
+.side h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:#8b949e}
+.em{display:grid;grid-template-columns:34px 1fr 56px;align-items:center;gap:10px;font-size:17px;font-weight:600}
+.em .t{height:16px;border-radius:8px;background:#21262d;overflow:hidden}
+.em .t i{display:block;height:100%;border-radius:8px}
+.em b{text-align:right;font-variant-numeric:tabular-nums}
+.term{margin-top:auto;background:#010409;border:1px solid #21262d;border-radius:10px;padding:14px 16px;font-family:"JetBrains Mono",monospace;font-size:13px;line-height:1.7;color:#7ee787}
+.term span{color:#8b949e}
+.tag{position:absolute;font-family:"JetBrains Mono",monospace;font-size:13px;color:#7ee787;background:rgba(1,4,9,.65);padding:5px 9px;border-radius:5px}
+</style></head><body>
+<div class="win">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><span style="margin:0 auto" class="mono">emotion_ai.py — OpenCV window</span><span style="width:50px"></span></div>
+ <div class="main">
+  <div class="cam">
+   <svg width="820" height="762" viewBox="0 0 820 762" style="position:absolute;inset:0">
+    <defs>
+     <radialGradient id="skin" cx="45%" cy="38%" r="75%"><stop offset="0" stop-color="#e0a878"/><stop offset="1" stop-color="#b9774a"/></radialGradient>
+     <linearGradient id="shirt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#4c1d95"/></linearGradient>
+     <filter id="blur"><feGaussianBlur stdDeviation="14"/></filter>
+    </defs>
+    <!-- room -->
+    <rect x="0" y="560" width="820" height="202" fill="#151b29"/>
+    <rect x="40" y="90" width="150" height="230" rx="8" fill="#26324d" opacity=".55"/><rect x="48" y="98" width="134" height="214" rx="4" fill="#3a4a73" opacity=".5"/>
+    <circle cx="700" cy="150" r="60" fill="#fde68a" opacity=".16" filter="url(#blur)"/>
+    <rect x="620" y="360" width="140" height="190" rx="6" fill="#1b2438"/><rect x="632" y="372" width="116" height="10" fill="#2e3b5b"/><rect x="632" y="400" width="90" height="10" fill="#2e3b5b"/>
+    <!-- shoulders -->
+    <path d="M110 762 C130 600 260 560 410 560 C560 560 690 600 710 762 Z" fill="url(#shirt)"/>
+    <path d="M340 566 L410 640 L480 566 Z" fill="#e8c9a8" opacity=".0"/>
+    <!-- neck -->
+    <rect x="355" y="470" width="110" height="120" rx="40" fill="#a86a40"/>
+    <!-- hair back -->
+    <path d="M250 300 C250 170 340 120 410 120 C500 120 580 180 575 310 C575 330 560 360 545 340 L275 340 C262 360 250 330 250 300 Z" fill="#14100e"/>
+    <!-- head -->
+    <ellipse cx="410" cy="330" rx="148" ry="178" fill="url(#skin)"/>
+    <!-- ears -->
+    <ellipse cx="262" cy="338" rx="22" ry="38" fill="#c98a5a"/><ellipse cx="558" cy="338" rx="22" ry="38" fill="#c98a5a"/>
+    <!-- hair front -->
+    <path d="M262 290 C262 190 330 150 410 150 C490 150 560 190 558 290 C530 240 480 210 420 214 C350 216 296 244 262 290 Z" fill="#14100e"/>
+    <!-- brows -->
+    <path d="M318 276 Q350 258 384 272" stroke="#14100e" stroke-width="10" fill="none" stroke-linecap="round"/><path d="M436 272 Q470 258 502 276" stroke="#14100e" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <!-- eyes -->
+    <ellipse cx="352" cy="312" rx="24" ry="19" fill="#fff"/><ellipse cx="468" cy="312" rx="24" ry="19" fill="#fff"/>
+    <circle cx="354" cy="313" r="12" fill="#2b1a10"/><circle cx="470" cy="313" r="12" fill="#2b1a10"/><circle cx="358" cy="308" r="4" fill="#fff"/><circle cx="474" cy="308" r="4" fill="#fff"/>
+    <path d="M326 300 Q352 286 378 300" stroke="#14100e" stroke-width="3" fill="none"/><path d="M442 300 Q468 286 494 300" stroke="#14100e" stroke-width="3" fill="none"/>
+    <!-- cheeks -->
+    <ellipse cx="318" cy="378" rx="30" ry="18" fill="#e07a5f" opacity=".28"/><ellipse cx="502" cy="378" rx="30" ry="18" fill="#e07a5f" opacity=".28"/>
+    <!-- nose -->
+    <path d="M410 316 C400 352 392 372 402 386 Q410 392 418 386 C428 372 420 352 410 316" fill="#b9774a" opacity=".5"/>
+    <!-- smile -->
+    <path d="M338 412 Q410 490 482 412 Q410 440 338 412 Z" fill="#fff" stroke="#7b2d2d" stroke-width="5" stroke-linejoin="round"/>
+    <path d="M338 412 Q410 490 482 412" fill="none" stroke="#7b2d2d" stroke-width="6" stroke-linecap="round"/>
+    <path d="M372 440 Q410 470 448 440" fill="#c4505f" opacity=".75"/>
+    <!-- landmarks -->
+    <g fill="#22d3ee" opacity=".9">
+     <circle cx="326" cy="300" r="3"/><circle cx="340" cy="294" r="3"/><circle cx="364" cy="296" r="3"/><circle cx="378" cy="302" r="3"/><circle cx="354" cy="322" r="3"/>
+     <circle cx="442" cy="302" r="3"/><circle cx="456" cy="296" r="3"/><circle cx="480" cy="294" r="3"/><circle cx="494" cy="300" r="3"/><circle cx="468" cy="322" r="3"/>
+     <circle cx="338" cy="412" r="3"/><circle cx="364" cy="436" r="3"/><circle cx="410" cy="452" r="3"/><circle cx="456" cy="436" r="3"/><circle cx="482" cy="412" r="3"/>
+     <circle cx="410" cy="386" r="3"/><circle cx="394" cy="380" r="3"/><circle cx="426" cy="380" r="3"/><circle cx="270" cy="360" r="3"/><circle cx="550" cy="360" r="3"/><circle cx="300" cy="440" r="3"/><circle cx="520" cy="440" r="3"/><circle cx="360" cy="486" r="3"/><circle cx="460" cy="486" r="3"/><circle cx="410" cy="500" r="3"/>
+    </g>
+    <!-- detection box -->
+    <g stroke="#7ee787" stroke-width="5" fill="none" stroke-linecap="round"><path d="M226 150 v-34 h34"/><path d="M594 150 v-34 h-34"/><path d="M226 510 v34 h34"/><path d="M594 510 v34 h-34"/></g>
+    <rect x="226" y="116" width="368" height="428" fill="none" stroke="#7ee787" stroke-opacity=".5" stroke-width="2" stroke-dasharray="8 8"/>
+    <rect x="226" y="62" width="262" height="44" rx="6" fill="#7ee787"/>
+    <text x="244" y="92" font-family="Inter" font-weight="800" font-size="24" fill="#04260f">Happy 😄  94%</text>
+   </svg>
+   <div class="tag" style="left:18px;top:16px">● REC · 24 FPS · 640×480</div>
+   <div class="tag" style="right:18px;top:16px">faces: 1</div>
+  </div>
+  <div class="side">
+   <h3>Emotion probabilities</h3>
+   <div class="em"><span>😄</span><div class="t"><i style="width:94%;background:linear-gradient(90deg,#16a34a,#7ee787)"></i></div><b>94%</b></div>
+   <div class="em"><span>😮</span><div class="t"><i style="width:3%;background:#58a6ff"></i></div><b>3%</b></div>
+   <div class="em"><span>😐</span><div class="t"><i style="width:2%;background:#8b949e"></i></div><b>2%</b></div>
+   <div class="em"><span>😢</span><div class="t"><i style="width:1%;background:#79c0ff"></i></div><b>1%</b></div>
+   <div class="em"><span>😠</span><div class="t"><i style="width:0%;background:#f85149"></i></div><b>0%</b></div>
+   <h3 style="margin-top:12px">Model</h3>
+   <div style="font-size:15px;line-height:1.7;color:#c9d1d9">TensorFlow CNN · emotion.h5<br>Input 48×48 grayscale · 5 classes</div>
+   <div class="term"><span>$ python emotion_ai.py</span><br>loading model... done<br>frame 1182 → <b style="color:#fff">happy</b> (0.94)<br>frame 1183 → <b style="color:#fff">happy</b> (0.95)<br>frame 1184 → <b style="color:#fff">happy</b> (0.94)</div>
+  </div>
+ </div>
+</div>
+</body></html>

@@ -16,6 +16,10 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // /courses was renamed to /programs; keep old links and bookmarks working.
+  async redirects() {
+    return [{ source: "/courses", destination: "/programs", permanent: true }];
+  },
   // Suppress build warnings from packages using older React patterns
   experimental: {
     serverActions: {
