@@ -36,12 +36,70 @@ button, a, [role="button"], input, select, textarea {
 }
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
+/* Inner scroll containers (chat panels, modals, tables) keep the slim bar. */
 ::-webkit-scrollbar          { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track    { background: transparent; }
 html.dark  ::-webkit-scrollbar-thumb { background: rgb(126 34 206 / 0.35); border-radius: 3px; }
 html.dark  ::-webkit-scrollbar-thumb:hover { background: rgb(147 51 234 / 0.55); }
 html.light ::-webkit-scrollbar-thumb { background: rgb(126 34 206 / 0.2);  border-radius: 3px; }
 html.light ::-webkit-scrollbar-thumb:hover { background: rgb(126 34 206 / 0.35); }
+
+/* The page scrollbar (right edge of the window) is wider and uses Lumexa's
+   purple → blue palette so it is easy to see and grab. The thumb is inset with
+   a track-coloured border so it reads as a pill on both themes. Chrome styles the
+   viewport scrollbar from <body> when <html> has no overflow of its own, so both
+   are targeted, and the selectors are as specific as the slim-scrollbar rules
+   above (which also match <body>) so these win on both themes. */
+html::-webkit-scrollbar, body::-webkit-scrollbar { width: 14px; height: 14px; }
+
+html:not(.dark)::-webkit-scrollbar-track,
+html:not(.dark) body::-webkit-scrollbar-track {
+  background: #E8EDFB;
+  border-left: 1px solid #D5DDF5;
+}
+html:not(.dark)::-webkit-scrollbar-thumb,
+html:not(.dark) body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7C3AED 0%, #2563EB 100%);
+  border: 3px solid #E8EDFB;
+  border-radius: 999px;
+  min-height: 56px;
+}
+html:not(.dark)::-webkit-scrollbar-thumb:hover,
+html:not(.dark) body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #8B5CF6 0%, #3B82F6 100%);
+}
+html:not(.dark)::-webkit-scrollbar-thumb:active,
+html:not(.dark) body::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #6D28D9 0%, #1D4ED8 100%);
+}
+
+html.dark::-webkit-scrollbar-track,
+html.dark body::-webkit-scrollbar-track {
+  background: #0B1426;
+  border-left: 1px solid #1B2A4A;
+}
+html.dark::-webkit-scrollbar-thumb,
+html.dark body::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #A78BFA 0%, #60A5FA 100%);
+  border: 3px solid #0B1426;
+  border-radius: 999px;
+  min-height: 56px;
+}
+html.dark::-webkit-scrollbar-thumb:hover,
+html.dark body::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #C4B5FD 0%, #93C5FD 100%);
+}
+html.dark::-webkit-scrollbar-thumb:active,
+html.dark body::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, #8B5CF6 0%, #3B82F6 100%);
+}
+
+/* Firefox has no ::-webkit-scrollbar. Chromium 121+ would let these standard
+   properties override the rules above, so they are scoped to non-WebKit. */
+@supports not selector(::-webkit-scrollbar) {
+  html { scrollbar-color: #7C3AED #E8EDFB; scrollbar-width: auto; }
+  html.dark { scrollbar-color: #A78BFA #0B1426; }
+}
 
 /* Student blue scrollbar (add .student-scroll class to container) */
 .student-scroll::-webkit-scrollbar-thumb { background: rgb(37 99 235 / 0.3); }
@@ -864,4 +922,83 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
 
 .cr-live-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
+}
+/* ── Project demo modal + interactive demos ──────────────────────────────── */
+@keyframes demo-backdrop-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes demo-backdrop-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes demo-sheet-in {
+  from { opacity: 0; transform: translateY(32px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes demo-sheet-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(24px) scale(0.97); }
+}
+.demo-backdrop-in  { animation: demo-backdrop-in 0.22s ease-out both; }
+.demo-backdrop-out { animation: demo-backdrop-out 0.2s ease-in both; }
+.demo-sheet-in     { animation: demo-sheet-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.demo-sheet-out    { animation: demo-sheet-out 0.2s ease-in both; }
+
+@keyframes demo-pop {
+  0%   { transform: scale(0.55); opacity: 0; }
+  60%  { transform: scale(1.1);  opacity: 1; }
+  100% { transform: scale(1); }
+}
+.demo-pop { animation: demo-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+@keyframes demo-rise {
+  from { transform: translateY(10px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.demo-rise { animation: demo-rise 0.4s ease-out both; }
+
+@keyframes demo-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.demo-shake { animation: demo-shake 0.35s ease-in-out; }
+
+@keyframes demo-wiggle {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(-10deg) scale(1.15); }
+  75% { transform: rotate(10deg) scale(1.15); }
+}
+.demo-wiggle { animation: demo-wiggle 0.6s ease-in-out infinite; }
+
+@keyframes demo-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+.demo-float { animation: demo-float 2.4s ease-in-out infinite; }
+
+@keyframes demo-burst {
+  0%   { transform: translate(0, 0) scale(0.4); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1.15); opacity: 0; }
+}
+.demo-burst { animation: demo-burst 0.9s ease-out forwards; }
+
+@keyframes demo-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.demo-draw { stroke-dasharray: 1; animation: demo-draw 1.1s ease-out forwards; }
+
+@keyframes demo-scan {
+  0%   { transform: translateY(0); opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translateY(var(--scan-h, 200px)); opacity: 0; }
+}
+.demo-scan { animation: demo-scan 0.9s ease-in-out both; }
+
+@keyframes demo-blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+.demo-blink { animation: demo-blink 1.1s infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-backdrop-in, .demo-backdrop-out, .demo-sheet-in, .demo-sheet-out,
+  .demo-pop, .demo-rise, .demo-shake, .demo-wiggle, .demo-float, .demo-burst,
+  .demo-draw, .demo-scan, .demo-blink {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

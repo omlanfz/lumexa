@@ -1,0 +1,20 @@
+/* Shared styles for the project screenshot sources (1280x800 canvas). */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:800px;overflow:hidden}
+body{font-family:Inter,"Noto Color Emoji",system-ui,sans-serif;position:relative;color:#0f172a;-webkit-font-smoothing:antialiased}
+.mono{font-family:"JetBrains Mono","DejaVu Sans Mono",monospace}
+.abs{position:absolute}
+.emoji{font-family:"Noto Color Emoji",sans-serif}
+/* browser window chrome */
+.browser{position:absolute;inset:0;background:#fff;display:flex;flex-direction:column}
+.browser .bar{height:46px;background:#e8ebf2;display:flex;align-items:center;gap:10px;padding:0 16px;flex:none;border-bottom:1px solid #d3d8e4}
+.browser .dots{display:flex;gap:7px}
+.browser .dots i{width:12px;height:12px;border-radius:50%;display:block}
+.browser .dots i:nth-child(1){background:#ff5f57}.browser .dots i:nth-child(2){background:#febc2e}.browser .dots i:nth-child(3){background:#28c840}
+.browser .url{flex:1;max-width:620px;margin:0 auto;height:28px;border-radius:14px;background:#fff;color:#475569;font-size:13px;display:flex;align-items:center;padding:0 14px;gap:6px}
+.browser .page{flex:1;position:relative;overflow:hidden}
+/* app window chrome (dark) */
+.win{position:absolute;inset:0;display:flex;flex-direction:column;background:#1e1e2e}
+.win .bar{height:38px;background:#2a2a3c;display:flex;align-items:center;gap:8px;padding:0 14px;color:#cdd6f4;font-size:13px;flex:none}
+.win .dots{display:flex;gap:7px}.win .dots i{width:12px;height:12px;border-radius:50%;display:block}
+.win .dots i:nth-child(1){background:#ff5f57}.win .dots i:nth-child(2){background:#febc2e}.win .dots i:nth-child(3){background:#28c840}

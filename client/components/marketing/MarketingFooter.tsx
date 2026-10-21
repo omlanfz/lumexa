@@ -6,6 +6,9 @@ import Image from "next/image";
 
 type LegalDoc = "privacy" | "terms" | "coppa" | null;
 
+const CONTACT_EMAIL = "fz.omlan@gmail.com";
+const WHATSAPP_URL = "https://wa.me/8801774878252";
+
 const LEGAL_CONTENT: Record<NonNullable<LegalDoc>, { title: string; body: React.ReactNode }> = {
   privacy: {
     title: "Privacy Policy",
@@ -129,9 +132,9 @@ export default function MarketingFooter() {
     <>
       <footer className="bg-[#030810] border-t border-gray-800/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1.4fr] gap-8">
             {/* Brand */}
-            <div className="col-span-1 md:col-span-2">
+            <div className="sm:col-span-2 lg:col-span-1">
               <div className="flex items-center gap-2.5 mb-3">
                 <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
                   <Image
@@ -148,19 +151,17 @@ export default function MarketingFooter() {
                 </span>
               </div>
               <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
-                Live coding and AI classes for kids ages 6 to 18. Expert teachers, real projects, and a clear path from beginner to AI Innovator.
-              </p>
-              <p className="text-gray-700 text-xs mt-4">
-                © {new Date().getFullYear()} Lumexa AI School. All rights reserved.
+                Live coding and AI classes for kids ages 6 to 18. Expert teachers, real projects, and hands-on learning.
               </p>
             </div>
 
-            {/* Links */}
+            {/* Explore */}
             <div>
-              <h4 className="text-white text-sm font-semibold mb-3">Platform</h4>
+              <h4 className="text-white text-sm font-semibold mb-3">Explore</h4>
               <ul className="space-y-2">
                 {[
-                  { label: "Learning Pathways", href: "/courses" },
+                  { label: "Programs", href: "/programs" },
+                  { label: "How It Works", href: "/#how-it-works" },
                   { label: "Pricing", href: "/pricing" },
                   { label: "Free Trial", href: "/trial" },
                   { label: "About Us", href: "/about" },
@@ -174,50 +175,88 @@ export default function MarketingFooter() {
               </ul>
             </div>
 
+            {/* For parents */}
             <div>
-              <h4 className="text-white text-sm font-semibold mb-3">Account</h4>
-              <ul className="space-y-2">
-                {[
-                  { label: "Sign In", href: "/login" },
-                  { label: "Register", href: "/register" },
-                  { label: "Parent Dashboard", href: "/dashboard" },
-                  { label: "Teacher Hub", href: "/teacher-dashboard" },
-                ].map((l) => (
-                  <li key={l.href}>
-                    <Link href={l.href} className="text-gray-500 hover:text-gray-300 text-sm transition-colors">
-                      {l.label}
-                    </Link>
-                  </li>
-                ))}
+              <h4 className="text-white text-sm font-semibold mb-3">For Parents</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors">
+                    Parent Support
+                  </a>
+                </li>
+                <li>
+                  <button onClick={() => setOpenDoc("coppa")} className="text-gray-500 hover:text-gray-300 transition-colors text-left">
+                    Child Safety &amp; COPPA
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setOpenDoc("privacy")} className="text-gray-500 hover:text-gray-300 transition-colors text-left">
+                    Privacy Policy
+                  </button>
+                </li>
+                <li>
+                  <button onClick={() => setOpenDoc("terms")} className="text-gray-500 hover:text-gray-300 transition-colors text-left">
+                    Terms of Service
+                  </button>
+                </li>
+                <li>
+                  <Link href="/login" className="text-gray-500 hover:text-gray-300 transition-colors">
+                    Parent Sign In
+                  </Link>
+                </li>
               </ul>
+            </div>
+
+            {/* Contact */}
+            <div>
+              <h4 className="text-white text-sm font-semibold mb-3">Contact Us</h4>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="text-gray-500 hover:text-gray-300 transition-colors break-all">
+                    ✉️ {CONTACT_EMAIL}
+                  </a>
+                </li>
+                <li>
+                  <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap">
+                    💬 WhatsApp +880 1774 878252
+                  </a>
+                </li>
+              </ul>
+              <p className="mt-3 text-gray-600 text-xs leading-relaxed">
+                Questions about a program, a lesson or your child&apos;s details? Message us any time.
+              </p>
             </div>
           </div>
 
           <div className="mt-10 pt-6 border-t border-gray-800/40 flex flex-col sm:flex-row justify-between items-center gap-4">
             <p className="text-gray-700 text-xs">
-              Turning kids into AI builders, one class at a time. 🚀
+              © {new Date().getFullYear()} Lumexa AI School. All rights reserved.
             </p>
-            <div className="flex items-center gap-4 text-xs text-gray-600">
+            <div className="flex flex-wrap justify-center items-center gap-x-4 gap-y-1 text-xs text-gray-600">
               <button
                 onClick={() => setOpenDoc("privacy")}
                 className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline"
               >
-                Privacy Policy
+                Privacy
               </button>
               <span>·</span>
               <button
                 onClick={() => setOpenDoc("terms")}
                 className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline"
               >
-                Terms of Service
+                Terms
               </button>
               <span>·</span>
               <button
                 onClick={() => setOpenDoc("coppa")}
                 className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline"
               >
-                COPPA Compliant
+                COPPA
               </button>
+              <span>·</span>
+              <Link href="/teacher-dashboard" className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline">
+                Teacher Hub
+              </Link>
             </div>
           </div>
         </div>

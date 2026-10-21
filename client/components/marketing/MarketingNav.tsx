@@ -6,6 +6,14 @@ import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { parseStoredUser } from "@/lib/storage";
 
+// How It Works lives on the homepage, so the link works from every marketing page.
+const NAV_LINKS = [
+  { label: "Programs", href: "/programs" },
+  { label: "How It Works", href: "/#how-it-works" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "About", href: "/about" },
+];
+
 function useNavTheme() {
   const [isDark, setIsDark] = useState(false);
   useEffect(() => {
@@ -88,14 +96,14 @@ export default function MarketingNav() {
           </Link>
 
           {/* Desktop Links */}
-          <div className="hidden md:flex items-center gap-6">
-            <NavLink href="/courses">Pathways</NavLink>
-            <NavLink href="/pricing">Pricing</NavLink>
-            <NavLink href="/about">About</NavLink>
+          <div className="hidden lg:flex items-center gap-6">
+            {NAV_LINKS.map((l) => (
+              <NavLink key={l.href} href={l.href}>{l.label}</NavLink>
+            ))}
           </div>
 
           {/* Desktop CTAs */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             {/* Theme toggle */}
             <button
               onClick={toggle}
@@ -123,7 +131,7 @@ export default function MarketingNav() {
                   href="/trial"
                   className="px-4 py-2 text-sm font-bold bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-lg shadow-md shadow-purple-100 hover:shadow-purple-200 transition-all"
                 >
-                  Book Free Trial
+                  Book a Free Trial
                 </Link>
               </>
             )}
@@ -132,7 +140,7 @@ export default function MarketingNav() {
           {/* Mobile hamburger */}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
-            className="md:hidden text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white p-2 transition-colors"
+            className="lg:hidden text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white p-2 transition-colors"
             aria-label="Toggle menu"
           >
             {mobileOpen ? (
@@ -149,10 +157,10 @@ export default function MarketingNav() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden bg-white dark:bg-[#050D1A] border-t border-[#E2E8F0] dark:border-gray-800 py-4 space-y-1 shadow-lg dark:shadow-black/30 fade-in">
-            <MobileNavLink href="/courses" onClick={() => setMobileOpen(false)}>Pathways</MobileNavLink>
-            <MobileNavLink href="/pricing" onClick={() => setMobileOpen(false)}>Pricing</MobileNavLink>
-            <MobileNavLink href="/about" onClick={() => setMobileOpen(false)}>About</MobileNavLink>
+          <div className="lg:hidden bg-white dark:bg-[#050D1A] border-t border-[#E2E8F0] dark:border-gray-800 py-4 space-y-1 shadow-lg dark:shadow-black/30 fade-in">
+            {NAV_LINKS.map((l) => (
+              <MobileNavLink key={l.href} href={l.href} onClick={() => setMobileOpen(false)}>{l.label}</MobileNavLink>
+            ))}
             <div className="pt-3 border-t border-[#E2E8F0] dark:border-gray-800 mt-3 flex flex-col gap-2 px-4">
               {authed ? (
                 <button
@@ -167,7 +175,7 @@ export default function MarketingNav() {
                     Sign In
                   </Link>
                   <Link href="/trial" onClick={() => setMobileOpen(false)} className="w-full py-2.5 text-sm font-bold text-center bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg transition-transform active:scale-[0.98]">
-                    Book Free Trial
+                    Book a Free Trial
                   </Link>
                 </>
               )}

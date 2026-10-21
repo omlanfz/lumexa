@@ -26,7 +26,7 @@ const values = [
   {
     icon: "🏆",
     title: "Portfolio Over Certificates",
-    desc: "When your child finishes a path, they have 3+ real projects deployed on the internet. That's worth more than any badge.",
+    desc: "When your child finishes a program, they have 3+ real projects deployed on the internet. That's worth more than any badge.",
   },
   {
     icon: "📈",
@@ -39,9 +39,9 @@ const stats = [
   { value: "1,200+", label: "Students Enrolled" },
   { value: "98%", label: "Parent Satisfaction" },
   { value: "50+", label: "Expert Teachers" },
-  { value: "6", label: "Learning Pathways" },
+  { value: "6", label: "Learning Programs" },
   { value: "17", label: "Courses Available" },
-  { value: "3+", label: "Projects Per Path" },
+  { value: "3+", label: "Projects Per Program" },
 ];
 
 const team = [
@@ -124,7 +124,7 @@ export default function AboutPage() {
                   </span>
                 </p>
                 <p>
-                  Today, every student who finishes a Lumexa pathway has at least 3 projects deployed and working on the internet. Not screenshots. Not demos. Things other people can actually use.
+                  Today, every student who finishes a Lumexa program has at least 3 projects deployed and working on the internet. Not screenshots. Not demos. Things other people can actually use.
                 </p>
               </div>
             </div>
@@ -225,10 +225,10 @@ export default function AboutPage() {
               <span className="block text-xs font-normal opacity-70 mt-0.5">First class free, no card needed</span>
             </Link>
             <Link
-              href="/courses"
+              href="/programs"
               className="px-8 py-4 text-sm font-semibold text-[#334155] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-gray-500 rounded-xl transition-all"
             >
-              Explore All Courses →
+              Explore Programs →
             </Link>
           </div>
         </div>

@@ -1,0 +1,78 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#e9eefc;font-family:Inter,sans-serif}
+.top{height:50px;background:#7c3aed;color:#fff;display:flex;align-items:center;gap:20px;padding:0 20px;font-weight:700;font-size:15px}
+.top .tab{background:rgba(255,255,255,.18);padding:7px 16px;border-radius:8px}
+.top .tab.on{background:#fff;color:#6d28d9}
+.top .gf{margin-left:auto;background:#22c55e;border-radius:99px;padding:8px 20px;font-weight:800}
+.ed{position:absolute;top:50px;left:0;right:0;bottom:0;display:flex}
+.cats{width:84px;background:#fff;border-right:1px solid #d9dff2;display:flex;flex-direction:column;align-items:center;padding-top:10px;gap:6px}
+.cat{width:64px;text-align:center;font-size:11px;font-weight:700;color:#575e75;padding:6px 0}
+.cat i{display:block;width:34px;height:34px;border-radius:50%;margin:0 auto 4px}
+.code{width:380px;background:#f9f9ff;border-right:1px solid #d9dff2;padding:26px 24px;display:flex;flex-direction:column;gap:6px;background-image:radial-gradient(#d9dff2 1px,transparent 1px);background-size:22px 22px}
+.blk{border-radius:8px;padding:9px 14px;color:#fff;font-weight:700;font-size:14px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.2);width:fit-content;max-width:100%;line-height:1.35}
+.ev{background:#ffbf00;color:#4d3800;border-radius:18px 18px 8px 8px;padding-top:12px}
+.lk{background:#9966ff}.vr{background:#ff8c1a}.sn{background:#cf63cf}.ct{background:#ffab19;color:#4d3800}.mo{background:#4c97ff}.sg{background:#5cb1d6}
+.in{margin-left:24px}
+.inp{background:#fff;color:#333;border-radius:99px;padding:1px 10px;margin:0 3px;font-weight:700}
+.right{flex:1;padding:16px 22px;display:flex;flex-direction:column;gap:12px;background:#e9eefc}
+.stagewrap{width:700px;height:525px;margin:0 auto;border:3px solid #c9d1ee;border-radius:12px;overflow:hidden;position:relative;background:#fff}
+.mon{position:absolute;background:#ff8c1a;color:#fff;font-weight:800;padding:5px 12px;border-radius:7px;font-size:15px;box-shadow:0 2px 4px rgba(0,0,0,.25)}
+.bub{position:absolute;background:#fff;border:3px solid #b9c2e0;border-radius:22px;padding:10px 16px;font-weight:800;font-size:19px;color:#333}
+.sprites{display:flex;gap:10px;justify-content:center}
+.sp{width:92px;height:76px;background:#fff;border:3px solid #c9d1ee;border-radius:10px;display:grid;place-items:center;font-size:36px}
+.sp.on{border-color:#7c3aed;background:#ede9fe}
+.ctl{margin:0 auto;display:flex;gap:14px;align-items:center;font-weight:800;color:#575e75;font-size:15px}
+.ctl i{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-style:normal;color:#fff;font-size:16px}
+</style></head><body>
+<div class="top"><span style="font-size:20px;font-weight:900">🧩 BlockLab</span><span class="tab on">Code</span><span class="tab">Costumes</span><span class="tab">Sounds</span><span class="gf">Safari Adventure</span></div>
+<div class="ed">
+ <div class="cats">
+  <div class="cat"><i style="background:#4c97ff"></i>Motion</div><div class="cat"><i style="background:#9966ff"></i>Looks</div><div class="cat"><i style="background:#cf63cf"></i>Sound</div><div class="cat"><i style="background:#ffbf00"></i>Events</div><div class="cat"><i style="background:#ffab19"></i>Control</div><div class="cat"><i style="background:#ff8c1a"></i>Variables</div>
+ </div>
+ <div class="code">
+  <div class="blk ev">when this sprite clicked</div>
+  <div class="blk vr in" style="margin-top:-2px">change <span class="inp">animals found ▾</span> by <span class="inp">1</span></div>
+  <div class="blk lk in">say <span class="inp">You found me!</span> for <span class="inp">2</span> seconds</div>
+  <div class="blk sn in">play sound <span class="inp">Lion Roar ▾</span></div>
+  <div class="blk ct in">if <span class="inp">animals found = 5</span> then</div>
+  <div class="blk lk" style="margin-left:48px">switch backdrop to <span class="inp">Party ▾</span></div>
+  <div class="blk ev" style="margin-top:26px">when green flag clicked</div>
+  <div class="blk vr in">set <span class="inp">animals found ▾</span> to <span class="inp">0</span></div>
+  <div class="blk ct in">forever</div>
+  <div class="blk mo" style="margin-left:48px">glide <span class="inp">2</span> secs to random position</div>
+ </div>
+ <div class="right">
+  <div class="stagewrap">
+   <svg width="700" height="525" viewBox="0 0 700 525" style="position:absolute;inset:0">
+    <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset=".6" stop-color="#fcd9a0"/><stop offset="1" stop-color="#fdba74"/></linearGradient></defs>
+    <rect width="700" height="525" fill="url(#sky)"/>
+    <circle cx="560" cy="110" r="52" fill="#fde047"/><circle cx="560" cy="110" r="74" fill="#fde047" opacity=".25"/>
+    <g fill="#fff" opacity=".95"><ellipse cx="120" cy="90" rx="62" ry="20"/><ellipse cx="160" cy="76" rx="42" ry="18"/><ellipse cx="340" cy="140" rx="58" ry="17"/></g>
+    <path d="M0 300 Q150 250 300 300 T700 280 L700 525 L0 525Z" fill="#d9a441"/>
+    <path d="M0 360 Q200 320 380 360 T700 350 L700 525 L0 525Z" fill="#c68b2c"/>
+    <path d="M0 430 Q240 400 460 430 T700 420 L700 525 L0 525Z" fill="#a86f1c"/>
+    <!-- acacia trees -->
+    <g><rect x="78" y="190" width="12" height="120" fill="#6b4226"/><ellipse cx="84" cy="188" rx="86" ry="26" fill="#3f8f3b"/><ellipse cx="84" cy="176" rx="60" ry="18" fill="#52a84a"/></g>
+    <g><rect x="596" y="220" width="10" height="100" fill="#6b4226"/><ellipse cx="601" cy="218" rx="70" ry="22" fill="#3f8f3b"/><ellipse cx="601" cy="208" rx="48" ry="15" fill="#52a84a"/></g>
+    <!-- rock -->
+    <path d="M270 360 Q300 300 360 304 Q410 306 430 360Z" fill="#8b8b95"/><path d="M290 360 Q312 322 352 322 Q392 324 410 360Z" fill="#a7a7b3"/>
+    <!-- grass tufts -->
+    <g stroke="#7a8f1c" stroke-width="3" stroke-linecap="round"><path d="M60 480 l-6 -26 M66 480 l2 -30 M72 480 l8 -24"/><path d="M560 500 l-6 -26 M566 500 l2 -30 M572 500 l8 -24"/><path d="M300 470 l-6 -26 M306 470 l2 -30 M312 470 l8 -24"/></g>
+   </svg>
+   <div class="abs emoji" style="left:296px;top:232px;font-size:104px">🦁</div>
+   <div class="abs emoji" style="left:60px;top:312px;font-size:112px;transform:scaleX(-1)">🐘</div>
+   <div class="abs emoji" style="left:548px;top:150px;font-size:112px">🦒</div>
+   <div class="abs emoji" style="left:436px;top:386px;font-size:80px">🦓</div>
+   <div class="abs emoji" style="left:178px;top:410px;font-size:64px">🐒</div>
+   <div class="abs emoji" style="left:206px;top:116px;font-size:52px;transform:rotate(-12deg)">🦜</div>
+   <div class="bub" style="left:360px;top:176px">You found me! 🎉</div>
+   <div class="mon" style="left:10px;top:10px">animals found: 4</div>
+   <div class="abs" style="left:18px;top:462px;background:rgba(255,255,255,.88);border-radius:12px;padding:8px 14px;font-weight:800;font-size:16px;color:#6d28d9">⭐ Find all 5 animals!</div>
+  </div>
+  <div class="ctl"><i style="background:#22c55e">⚑</i><i style="background:#ef4444">■</i><span>Stage: Savanna</span></div>
+  <div class="sprites"><div class="sp on">🦁</div><div class="sp">🐘</div><div class="sp">🦒</div><div class="sp">🦓</div><div class="sp">🐒</div></div>
+ </div>
+</div>
+</body></html>

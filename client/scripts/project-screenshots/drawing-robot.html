@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#d8dde8;font-family:Inter,sans-serif}
+.ide{position:absolute;left:30px;top:40px;width:560px;height:700px;background:#fff;border-radius:12px;box-shadow:0 20px 50px rgba(15,23,42,.3);overflow:hidden;display:flex;flex-direction:column;border:1px solid #c5ccdb}
+.ide .bar{height:38px;background:#e6e9f2;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:13px;color:#475569;font-weight:600;border-bottom:1px solid #d3d8e4}
+.dots{display:flex;gap:7px}.dots i{width:12px;height:12px;border-radius:50%;display:block}.dots i:nth-child(1){background:#ff5f57}.dots i:nth-child(2){background:#febc2e}.dots i:nth-child(3){background:#28c840}
+.tabs{display:flex;background:#f3f5fa;border-bottom:1px solid #d3d8e4}.tabs span{padding:9px 18px;font-size:13px;font-weight:600;color:#64748b}.tabs .on{background:#fff;color:#0f172a;border-top:3px solid #7c3aed}
+.code div{white-space:pre}
+.code{flex:1;padding:16px 0;font-family:"JetBrains Mono",monospace;font-size:15.5px;line-height:1.75}
+.ln{display:inline-block;width:46px;text-align:right;color:#a0a9bd;padding-right:16px;user-select:none}
+.k{color:#7c3aed;font-weight:700}.s{color:#059669}.n{color:#d97706}.c{color:#94a3b8;font-style:italic}.f{color:#2563eb}
+.sh{height:150px;background:#0f172a;color:#cbd5e1;font-family:"JetBrains Mono",monospace;font-size:13.5px;line-height:1.7;padding:12px 18px;border-top:1px solid #1e293b}
+.sh b{color:#4ade80;font-weight:500}
+.tw{position:absolute;left:640px;top:70px;width:610px;height:660px;background:#fff;border-radius:10px;box-shadow:0 22px 60px rgba(15,23,42,.38);overflow:hidden;border:1px solid #b7bfd1}
+.tw .bar{height:38px;background:#e6e9f2;display:flex;align-items:center;gap:8px;padding:0 14px;font-size:13px;color:#475569;font-weight:600;border-bottom:1px solid #d3d8e4}
+.tw svg{display:block}
+</style></head><body>
+<div class="ide">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><span style="margin:0 auto">Thonny — flower.py</span><span style="width:50px"></span></div>
+ <div class="tabs"><span class="on">flower.py</span><span>hello.py</span></div>
+ <div class="code">
+  <div><span class="ln">1</span><span class="k">import</span> turtle</div>
+  <div><span class="ln">2</span></div>
+  <div><span class="ln">3</span>robot = turtle.Turtle()</div>
+  <div><span class="ln">4</span>robot.speed(<span class="n">10</span>)</div>
+  <div><span class="ln">5</span>colors = [<span class="s">"purple"</span>, <span class="s">"blue"</span>,</div>
+  <div><span class="ln">6</span>          <span class="s">"hotpink"</span>, <span class="s">"orange"</span>]</div>
+  <div><span class="ln">7</span></div>
+  <div><span class="ln">8</span><span class="k">for</span> i <span class="k">in</span> <span class="f">range</span>(<span class="n">72</span>):</div>
+  <div><span class="ln">9</span>    robot.color(colors[i % <span class="n">4</span>])</div>
+  <div><span class="ln">10</span>    robot.circle(<span class="n">90</span>, <span class="n">60</span>)</div>
+  <div><span class="ln">11</span>    robot.forward(<span class="n">20</span> + i)</div>
+  <div><span class="ln">12</span>    robot.left(<span class="n">100</span>)</div>
+  <div><span class="ln">13</span></div>
+  <div><span class="ln">14</span><span class="c"># my robot draws a flower! 🌸</span></div>
+ </div>
+ <div class="sh"><span style="color:#64748b">Shell</span><br>&gt;&gt;&gt; %Run flower.py<br><b>Robot started drawing...</b><br><b>Done! 72 shapes drawn.</b></div>
+</div>
+<div class="tw">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><span style="margin:0 auto">Python Turtle Graphics</span><span style="width:50px"></span></div>
+ <svg width="610" height="620" viewBox="-305 -310 610 620" id="t"><rect x="-305" y="-310" width="610" height="620" fill="#fff"/><g id="g"></g></svg>
+</div>
+<script>
+const cols=["#7c3aed","#2563eb","#ec4899","#f97316"];
+let x=0,y=0,a=0,out="";
+const rad=d=>d*Math.PI/180;
+function fwd(d,c,w=2.6){const nx=x+Math.cos(rad(a))*d,ny=y-Math.sin(rad(a))*d;out+=`<line x1="${x}" y1="${y}" x2="${nx}" y2="${ny}" stroke="${c}" stroke-width="${w}" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`;x=nx;y=ny}
+function circle(rd,ext,c,w=2.6){const steps=Math.max(6,Math.round(ext/6));const per=ext/steps;const chord=2*rd*Math.sin(rad(per/2));for(let i=0;i<steps;i++){a+=per/2;fwd(chord,c,w);a+=per/2}}
+for(let i=0;i<72;i++){const c=cols[i%4];circle(90,60,c);fwd(20+i,c);a+=100}
+// turtle arrow
+out+=`<g transform="translate(${x},${y}) rotate(${-a})"><polygon points="8,0 -6,-5 -6,5" fill="#16a34a" stroke="#14532d" stroke-width="1.5"/></g>`;
+const g=document.getElementById("g");g.insertAdjacentHTML("beforeend",out);
+const bb=g.getBBox();const sc=Math.min(560/bb.width,560/bb.height);
+g.setAttribute("transform",`scale(${sc}) translate(${-(bb.x+bb.width/2)},${-(bb.y+bb.height/2)})`);
+</script>
+</body></html>

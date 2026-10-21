@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#fff}
+.page{background:#f8fafc;color:#0f172a;padding:26px 36px;display:flex;flex-direction:column;gap:16px}
+.hd{display:flex;justify-content:space-between;align-items:center}
+.hd h1{font-size:32px;font-weight:900;letter-spacing:-.02em}.hd p{color:#64748b;font-size:15px;margin-top:2px}
+.badge{background:#dcfce7;color:#15803d;border-radius:99px;font-weight:800;font-size:14px;padding:8px 16px}
+.top{display:grid;grid-template-columns:repeat(2,1.25fr) 1fr 1fr;gap:14px}
+.pk{background:#fff;border:2px solid #e2e8f0;border-radius:18px;padding:16px 20px}
+.pk.on{border-color:#2563eb;background:#eff6ff}
+.pk b{font-size:20px;font-weight:900}.pk .pr{font-size:28px;font-weight:900;color:#2563eb;margin:2px 0}.pk p{font-size:13.5px;color:#64748b;line-height:1.45}
+.st{background:#fff;border-radius:18px;padding:16px 20px;border:1px solid #e2e8f0}
+.st span{font-size:13px;color:#64748b;font-weight:700}.st b{display:block;font-size:34px;font-weight:900;margin-top:4px;letter-spacing:-.02em}
+.row{flex:1;display:grid;grid-template-columns:1.4fr 1fr;gap:14px;min-height:0}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:18px;padding:18px 22px;display:flex;flex-direction:column;min-height:0}
+.card h3{font-size:17px;font-weight:900;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th{text-align:left;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:#94a3b8;padding:8px 6px;border-bottom:2px solid #f1f5f9}
+td{padding:11px 6px;border-bottom:1px solid #f1f5f9;font-weight:600}
+.chip{border-radius:7px;padding:4px 10px;font-size:12.5px;font-weight:800}
+.ok{background:#dcfce7;color:#15803d}.pe{background:#fef3c7;color:#a16207}.dn{background:#dbeafe;color:#1d4ed8}
+.av{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;font-size:15px;margin-right:8px;vertical-align:middle;background:#e0e7ff}
+.wk{display:grid;grid-template-columns:62px repeat(5,1fr);gap:6px;font-size:12.5px;font-weight:700;flex:1;grid-template-rows:26px repeat(3,1fr)}
+.wk .h{color:#64748b;text-align:center;align-self:center}.wk .l{color:#94a3b8;align-self:center}
+.wk .s{border-radius:10px;background:#f1f5f9;display:grid;place-items:center;color:#94a3b8;font-weight:600}
+.wk .b{background:linear-gradient(135deg,#2563eb,#6366f1);color:#fff;font-weight:800;text-align:center;line-height:1.25;padding:4px}
+.wk .b2{background:linear-gradient(135deg,#10b981,#059669);color:#fff}
+</style></head><body>
+<div class="browser">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url">🔒 docs.google.com/spreadsheets — Tutoring Bookings</div><span style="width:50px"></span></div>
+ <div class="page" style="flex:1;min-height:0">
+  <div class="hd"><div><h1>💡 CodeBuddy Tutoring</h1><p>Beginner coding help for classmates · booking sheet &amp; weekly plan</p></div><div class="badge">● Accepting new students</div></div>
+  <div class="top">
+   <div class="pk"><b>Starter</b><div class="pr">$5 <span style="font-size:14px;color:#64748b;font-weight:700">/ session</span></div><p>30 minutes · Scratch or Python basics · homework help</p></div>
+   <div class="pk on"><b>Standard</b> <span class="chip dn" style="margin-left:6px">Best value</span><div class="pr">$18 <span style="font-size:14px;color:#64748b;font-weight:700">/ 4 sessions</span></div><p>45 minutes · project-based · progress notes after each session</p></div>
+   <div class="st"><span>Sessions booked</span><b>7</b></div>
+   <div class="st"><span>Plan total</span><b style="color:#16a34a">$35</b></div>
+  </div>
+  <div class="row">
+   <div class="card"><h3>Booking sheet</h3>
+    <table><tr><th>Student</th><th>Topic</th><th>Day</th><th>Time</th><th>Status</th></tr>
+     <tr><td><span class="av">🧒</span>Imran</td><td>Python loops</td><td>Mon</td><td>4:00 pm</td><td><span class="chip ok">Confirmed</span></td></tr>
+     <tr><td><span class="av">👧</span>Sara</td><td>Scratch game</td><td>Mon</td><td>5:00 pm</td><td><span class="chip ok">Confirmed</span></td></tr>
+     <tr><td><span class="av">🧑</span>Rahim</td><td>HTML basics</td><td>Tue</td><td>4:30 pm</td><td><span class="chip pe">Pending</span></td></tr>
+     <tr><td><span class="av">👦</span>Arif</td><td>Python functions</td><td>Wed</td><td>4:00 pm</td><td><span class="chip ok">Confirmed</span></td></tr>
+     <tr><td><span class="av">👧</span>Lina</td><td>First website</td><td>Thu</td><td>5:00 pm</td><td><span class="chip dn">Done ✓</span></td></tr>
+     <tr><td><span class="av">🧒</span>Noor</td><td>Debugging help</td><td>Fri</td><td>4:00 pm</td><td><span class="chip pe">Pending</span></td></tr>
+     <tr><td><span class="av">👦</span>Tahmid</td><td>Python quiz app</td><td>Sat</td><td>11:00 am</td><td><span class="chip ok">Confirmed</span></td></tr>
+    </table>
+   </div>
+   <div class="card"><h3>This week</h3>
+    <div class="wk">
+     <div></div><div class="h">Mon</div><div class="h">Tue</div><div class="h">Wed</div><div class="h">Thu</div><div class="h">Fri</div>
+     <div class="l">4:00 pm</div><div class="b">Imran<br>Python</div><div class="s">open</div><div class="b">Arif<br>Python</div><div class="b b2">Lina ✓<br>HTML</div><div class="b">Noor<br>Debug</div>
+     <div class="l">4:30 pm</div><div class="s">open</div><div class="b">Rahim<br>HTML</div><div class="s">open</div><div class="s">open</div><div class="s">open</div>
+     <div class="l">5:00 pm</div><div class="b">Sara<br>Scratch</div><div class="s">open</div><div class="s">open</div><div class="b">Lina<br>Website</div><div class="s">open</div>
+    </div>
+   </div>
+  </div>
+ </div>
+</div>
+</body></html>

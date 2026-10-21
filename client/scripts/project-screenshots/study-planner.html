@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css">
+<style>
+body{background:#f4f6ff}
+.page{display:flex;background:#f4f6ff}
+.sb{width:300px;background:linear-gradient(180deg,#312e81,#4c1d95);color:#fff;padding:28px 24px;display:flex;flex-direction:column;gap:14px}
+.logo{font-size:24px;font-weight:800;display:flex;gap:10px;align-items:center}
+.sb h4{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#c4b5fd;margin-top:10px}
+.topic{background:rgba(255,255,255,.1);border-radius:12px;padding:12px 14px}
+.topic .r{display:flex;justify-content:space-between;font-weight:600;font-size:16px;margin-bottom:8px}
+.topic .t{height:8px;border-radius:5px;background:rgba(255,255,255,.18);overflow:hidden}
+.topic .t i{display:block;height:100%;border-radius:5px}
+.main{flex:1;padding:28px 34px;display:flex;flex-direction:column;gap:20px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:center}
+.top h1{font-size:34px;font-weight:800;color:#1e1b4b}
+.top p{color:#64748b;font-size:16px;margin-top:2px}
+.stats{display:flex;gap:14px}
+.stat{background:#fff;border-radius:16px;padding:12px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 18px rgba(79,70,229,.1)}
+.stat b{font-size:24px;color:#1e1b4b;display:block;line-height:1}
+.stat span{font-size:13px;color:#64748b}
+.ring{width:58px;height:58px;border-radius:50%;background:conic-gradient(#7c3aed 0 68%,#e2e8f0 0);display:grid;place-items:center}
+.ring i{width:44px;height:44px;border-radius:50%;background:#fff;display:grid;place-items:center;font-style:normal;font-weight:800;font-size:15px;color:#4c1d95}
+.grid{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:12px;min-height:0}
+.day{background:#fff;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:9px;box-shadow:0 4px 18px rgba(79,70,229,.07)}
+.day.today{outline:3px solid #7c3aed;box-shadow:0 8px 28px rgba(124,58,237,.28)}
+.day h5{font-size:14px;color:#64748b;display:flex;justify-content:space-between;font-weight:700}
+.day h5 em{font-style:normal;color:#1e1b4b;font-size:20px;font-weight:800}
+.blk{border-radius:12px;padding:10px 11px;font-size:14px;font-weight:700;line-height:1.3;color:#fff;display:flex;flex-direction:column;gap:2px}
+.blk small{font-weight:500;opacity:.9;font-size:12px}
+.blk.done{opacity:.55;text-decoration:line-through}
+.a{background:linear-gradient(135deg,#7c3aed,#6366f1)}.c{background:linear-gradient(135deg,#0ea5e9,#2563eb)}.g{background:linear-gradient(135deg,#f59e0b,#f97316)}.p{background:linear-gradient(135deg,#10b981,#059669)}.h{background:linear-gradient(135deg,#ec4899,#be185d)}
+.rest{margin-top:auto;text-align:center;color:#94a3b8;font-size:13px;padding:8px;border:2px dashed #e2e8f0;border-radius:12px}
+</style></head><body>
+<div class="browser">
+ <div class="bar"><div class="dots"><i></i><i></i><i></i></div><div class="url">🔒 localhost:5000/planner</div><span style="width:50px"></span></div>
+ <div class="page" style="flex:1;min-height:0">
+  <div class="sb">
+   <div class="logo">🧠 StudyPal</div>
+   <h4>My weak topics</h4>
+   <div class="topic"><div class="r"><span>📐 Algebra</span><span>Hard</span></div><div class="t"><i style="width:90%;background:#f472b6"></i></div></div>
+   <div class="topic"><div class="r"><span>🧪 Chemistry</span><span>Medium</span></div><div class="t"><i style="width:60%;background:#fbbf24"></i></div></div>
+   <div class="topic"><div class="r"><span>📖 Grammar</span><span>Medium</span></div><div class="t"><i style="width:55%;background:#fbbf24"></i></div></div>
+   <div class="topic"><div class="r"><span>🌍 Geography</span><span>Easy</span></div><div class="t"><i style="width:30%;background:#34d399"></i></div></div>
+   <h4>Study time</h4>
+   <div class="topic"><div class="r"><span>⏰ 2 hours / day</span><span></span></div><div class="t"><i style="width:50%;background:#a78bfa"></i></div></div>
+   <div style="margin-top:auto;background:#fff;color:#4c1d95;text-align:center;border-radius:12px;padding:13px;font-weight:800;font-size:16px">✨ Generate my plan</div>
+  </div>
+  <div class="main">
+   <div class="top">
+    <div><h1>Your week, planned 📅</h1><p>Built from your weak topics. Hardest topics come first.</p></div>
+    <div class="stats">
+     <div class="stat"><div class="ring"><i>68%</i></div><div><b>11 / 16</b><span>sessions done</span></div></div>
+     <div class="stat"><span style="font-size:34px">🔥</span><div><b>5 days</b><span>study streak</span></div></div>
+    </div>
+   </div>
+   <div class="grid">
+    <div class="day"><h5>MON <em>14</em></h5><div class="blk a done">📐 Algebra<small>6:00 – 7:00 pm</small></div><div class="blk c done">🧪 Chemistry<small>7:15 – 8:00 pm</small></div></div>
+    <div class="day"><h5>TUE <em>15</em></h5><div class="blk a done">📐 Algebra<small>6:00 – 7:00 pm</small></div><div class="blk g done">📖 Grammar<small>7:15 – 8:00 pm</small></div></div>
+    <div class="day"><h5>WED <em>16</em></h5><div class="blk c done">🧪 Chemistry<small>6:00 – 7:00 pm</small></div><div class="blk a done">📐 Algebra<small>7:15 – 8:00 pm</small></div></div>
+    <div class="day today"><h5>THU <em>17</em></h5><div class="blk a">📐 Algebra<small>6:00 – 7:00 pm</small></div><div class="blk p">🌍 Geography<small>7:15 – 7:45 pm</small></div><div class="rest">Today · 2 left</div></div>
+    <div class="day"><h5>FRI <em>18</em></h5><div class="blk g">📖 Grammar<small>6:00 – 7:00 pm</small></div><div class="blk c">🧪 Chemistry<small>7:15 – 8:00 pm</small></div></div>
+    <div class="day"><h5>SAT <em>19</em></h5><div class="blk a">📐 Algebra<small>10:00 – 11:00 am</small></div><div class="blk h">🏆 Mock quiz<small>11:15 – 12:00</small></div></div>
+    <div class="day"><h5>SUN <em>20</em></h5><div class="blk p">🌍 Geography<small>10:00 – 10:45 am</small></div><div class="rest">🌴 Rest &amp; review</div></div>
+   </div>
+  </div>
+ </div>
+</div>
+</body></html>

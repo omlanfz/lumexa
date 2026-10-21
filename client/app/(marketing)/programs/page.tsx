@@ -17,11 +17,11 @@ function DownloadIcon({ className }: { className?: string }) {
   );
 }
 
-const pathways = [
+const programs = [
   {
     id: "game",
     emoji: "🎮",
-    title: "Game Creator Path",
+    title: "Game Creator",
     tagline: "Build 3 Real Games",
     ages: "Ages 10–18",
     color: "from-red-600 to-orange-600",
@@ -96,7 +96,7 @@ const pathways = [
   {
     id: "ai",
     emoji: "🤖",
-    title: "AI Builder Path",
+    title: "AI Builder",
     tagline: "Build 3 Real AI Projects",
     ages: "Ages 12–18",
     color: "from-purple-600 to-blue-600",
@@ -172,7 +172,7 @@ const pathways = [
   {
     id: "web",
     emoji: "🌐",
-    title: "Web Developer Path",
+    title: "Web Developer",
     tagline: "Build 3 Live Websites",
     ages: "Ages 12–18",
     color: "from-blue-600 to-cyan-600",
@@ -247,7 +247,7 @@ const pathways = [
   {
     id: "little",
     emoji: "🌟",
-    title: "Little Coders Path",
+    title: "Little Coders",
     tagline: "Build 3 Real Projects",
     ages: "Ages 6–11",
     color: "from-yellow-500 to-orange-500",
@@ -322,7 +322,7 @@ const pathways = [
   {
     id: "data",
     emoji: "📊",
-    title: "Data Scientist Path",
+    title: "Data Scientist",
     tagline: "Build 3 Data Projects",
     ages: "Ages 13–18",
     color: "from-teal-600 to-green-600",
@@ -397,7 +397,7 @@ const pathways = [
   {
     id: "digital",
     emoji: "💼",
-    title: "Digital Independence Path",
+    title: "Digital Independence",
     tagline: "Identity to Opportunity",
     ages: "Ages 15–18",
     color: "from-green-600 to-emerald-600",
@@ -473,29 +473,31 @@ const pathways = [
 
 function CoursesContent() {
   const searchParams = useSearchParams();
-  const pathwayParam = searchParams.get("pathway");
+  // `program` is the canonical query param; `pathway` is kept so old links still work.
+  const programParam = searchParams.get("program") || searchParams.get("pathway");
 
-  const [activePathway, setActivePathway] = useState<string>(pathwayParam || "all");
+  const [activeProgram, setActiveProgram] = useState<string>(programParam || "all");
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
 
-  // Auto-scroll to pathway section when coming from a direct link
+  // Auto-scroll to the program section when coming from a direct link
   useEffect(() => {
-    if (pathwayParam) {
-      setActivePathway(pathwayParam);
+    if (programParam) {
+      // Odyssey sits above the program tabs, so it never filters the list.
+      setActiveProgram(programParam === "odyssey" ? "all" : programParam);
       setTimeout(() => {
-        const el = document.getElementById(`pathway-${pathwayParam}`);
+        const el = document.getElementById(`program-${programParam}`);
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
     }
-  }, [pathwayParam]);
+  }, [programParam]);
 
-  const visiblePathways =
-    activePathway === "all"
-      ? pathways
-      : pathways.filter((p) => p.id === activePathway);
+  const visiblePrograms =
+    activeProgram === "all"
+      ? programs
+      : programs.filter((p) => p.id === activeProgram);
 
-  const totalCourses = pathways.reduce((a, p) => a + p.courses.length, 0);
-  const totalLessons = pathways.reduce(
+  const totalCourses = programs.reduce((a, p) => a + p.courses.length, 0);
+  const totalLessons = programs.reduce(
     (a, p) => a + p.courses.reduce((b, c) => b + c.lessons, 0),
     0
   );
@@ -511,7 +513,7 @@ function CoursesContent() {
         <div className="relative max-w-4xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            {pathways.length} Pathways · {totalCourses} Courses · {totalLessons} Lessons
+            {programs.length} Programs · {totalCourses} Courses · {totalLessons} Lessons
           </div>
           <h1 className="text-4xl sm:text-5xl font-black text-[#0F172A] dark:text-white leading-tight mb-4">
             Full Curriculum Catalog
@@ -538,8 +540,8 @@ function CoursesContent() {
         </div>
       </section>
 
-      {/* Flagship: Lumexa Odyssey — sits above the pathway tabs, not part of them */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 mb-10">
+      {/* Flagship: Lumexa Odyssey — sits above the program tabs, not part of them */}
+      <div id="program-odyssey" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 mb-10 scroll-mt-24">
         <div className="relative rounded-3xl p-[2px] bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 glow-pulse">
           <div className="rounded-[22px] bg-white dark:bg-gray-900 p-6 sm:p-8">
             <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white mb-4">
@@ -553,13 +555,16 @@ function CoursesContent() {
                   <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
                     Ages 12–18
                   </span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
+                    For complete beginners
+                  </span>
                 </div>
                 <p className="font-bold text-sm bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent mb-1">
                   Your child&apos;s complete coding journey
                 </p>
                 <p className="text-[#94A3B8] dark:text-gray-500 text-xs mb-3">72 lessons · 9 courses · 3 stages</p>
                 <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed max-w-xl">
-                  Start from zero. Explore games, web, data and AI. Then discover the path that&apos;s right for them.
+                  Start from zero. Explore games, web, data and AI. Then discover the program that&apos;s right for them.
                 </p>
               </div>
 
@@ -588,26 +593,26 @@ function CoursesContent() {
       <div className="sticky top-16 z-20 bg-[#F7F9FF]/95 dark:bg-[#050D1A]/95 backdrop-blur border-b border-[#E2E8F0] dark:border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
           <button
-            onClick={() => setActivePathway("all")}
+            onClick={() => setActiveProgram("all")}
             className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-              activePathway === "all"
+              activeProgram === "all"
                 ? "bg-purple-600 text-white"
                 : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
             }`}
           >
-            All Pathways
+            All Programs
           </button>
-          {pathways.map((p) => (
+          {programs.map((p) => (
             <button
               key={p.id}
-              onClick={() => setActivePathway(p.id)}
+              onClick={() => setActiveProgram(p.id)}
               className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                activePathway === p.id
+                activeProgram === p.id
                   ? `bg-gradient-to-r ${p.color} text-white`
                   : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
               }`}
             >
-              {p.emoji} {p.title.replace(" Path", "")}
+              {p.emoji} {p.title}
             </button>
           ))}
         </div>
@@ -615,33 +620,33 @@ function CoursesContent() {
 
       {/* Courses */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-        {visiblePathways.map((pathway) => (
-          <div key={pathway.id} id={`pathway-${pathway.id}`}>
-            {/* Pathway header */}
-            <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-8 pb-6 border-b ${pathway.border}`}>
+        {visiblePrograms.map((program) => (
+          <div key={program.id} id={`program-${program.id}`} className="scroll-mt-36">
+            {/* Program header */}
+            <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-8 pb-6 border-b ${program.border}`}>
               <div className="flex items-center gap-4 flex-1">
-                <div className="text-5xl">{pathway.emoji}</div>
+                <div className="text-5xl">{program.emoji}</div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <h2 className="text-2xl font-black text-[#0F172A] dark:text-white">{pathway.title}</h2>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${pathway.badge}`}>
-                      {pathway.ages}
+                    <h2 className="text-2xl font-black text-[#0F172A] dark:text-white">{program.title}</h2>
+                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${program.badge}`}>
+                      {program.ages}
                     </span>
-                    {pathway.featured && (
+                    {program.featured && (
                       <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-900/40 text-purple-300">
                         Most Popular
                       </span>
                     )}
                   </div>
-                  <p className={`font-bold text-sm ${pathway.accent}`}>{pathway.tagline}</p>
+                  <p className={`font-bold text-sm ${program.accent}`}>{program.tagline}</p>
                   <p className="text-[#94A3B8] dark:text-gray-500 text-xs mt-0.5">
-                    {pathway.courses.length} courses ·{" "}
-                    {pathway.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
+                    {program.courses.length} courses ·{" "}
+                    {program.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
                   </p>
                   <a
-                    href={`/curriculums/${pathway.curriculumFile}`}
+                    href={`/curriculums/${program.curriculumFile}`}
                     download
-                    className={`inline-flex items-center gap-1.5 mt-3 px-3.5 py-2 rounded-xl border ${pathway.border} ${pathway.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all shadow-sm`}
+                    className={`inline-flex items-center gap-1.5 mt-3 px-3.5 py-2 rounded-xl border ${program.border} ${program.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all shadow-sm`}
                   >
                     <DownloadIcon className="w-4 h-4" />
                     Download Curriculum
@@ -651,7 +656,7 @@ function CoursesContent() {
               <div className="flex gap-2 flex-shrink-0">
                 <Link
                   href="/trial"
-                  className={`px-4 py-2 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${pathway.color} hover:opacity-90 transition-all`}
+                  className={`px-4 py-2 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${program.color} hover:opacity-90 transition-all`}
                 >
                   Free Trial
                 </Link>
@@ -666,19 +671,19 @@ function CoursesContent() {
 
             {/* Course cards */}
             <div className="space-y-4">
-              {pathway.courses.map((course) => {
-                const courseKey = `${pathway.id}-${course.number}`;
+              {program.courses.map((course) => {
+                const courseKey = `${program.id}-${course.number}`;
                 const isOpen = expandedCourse === courseKey;
                 return (
                   <div
                     key={course.number}
-                    className={`border rounded-2xl overflow-hidden transition-all ${pathway.border} bg-white dark:bg-gray-900/40 card-hover`}
+                    className={`border rounded-2xl overflow-hidden transition-all ${program.border} bg-white dark:bg-gray-900/40 card-hover`}
                   >
                     <button
                       className="w-full flex items-start gap-4 p-5 sm:p-6 text-left hover:bg-[#F7F9FF] dark:hover:bg-gray-900/60 transition-colors"
                       onClick={() => setExpandedCourse(isOpen ? null : courseKey)}
                     >
-                      <div className={`text-2xl font-black ${pathway.accent} flex-shrink-0 w-10 text-center`}>
+                      <div className={`text-2xl font-black ${program.accent} flex-shrink-0 w-10 text-center`}>
                         {course.number}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -725,7 +730,7 @@ function CoursesContent() {
                               <ul className="space-y-1.5">
                                 {course.projects.map((proj) => (
                                   <li key={proj} className="flex items-center gap-2 text-sm text-[#334155] dark:text-gray-300">
-                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathway.dot}`} />
+                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${program.dot}`} />
                                     {proj}
                                   </li>
                                 ))}
@@ -741,7 +746,7 @@ function CoursesContent() {
                             <ol className="space-y-1.5">
                               {course.lessonBreakdown.map((lesson, i) => (
                                 <li key={i} className="flex items-start gap-2 text-xs text-[#64748B] dark:text-gray-400">
-                                  <span className={`font-bold flex-shrink-0 ${pathway.accent}`}>{i + 1}.</span>
+                                  <span className={`font-bold flex-shrink-0 ${program.accent}`}>{i + 1}.</span>
                                   <span>{lesson}</span>
                                 </li>
                               ))}
@@ -753,7 +758,7 @@ function CoursesContent() {
                         <div className="flex gap-3 mt-6 pt-4 border-t border-[#E2E8F0] dark:border-gray-800/60">
                           <Link
                             href="/trial"
-                            className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${pathway.color} hover:opacity-90 transition-all`}
+                            className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${program.color} hover:opacity-90 transition-all`}
                           >
                             Book Free Trial
                           </Link>
@@ -779,7 +784,7 @@ function CoursesContent() {
         <div className="max-w-2xl mx-auto text-center">
           <h2 className="text-3xl font-black mb-4">Not Sure Where to Start?</h2>
           <p className="text-[#64748B] dark:text-gray-400 mb-8">
-            Book a free trial and we&apos;ll recommend the perfect pathway for your child&apos;s age,
+            Book a free trial and we&apos;ll recommend the perfect program for your child&apos;s age,
             interests, and goals.
           </p>
           <Link
@@ -788,7 +793,7 @@ function CoursesContent() {
           >
             Book Free Trial Class
             <span className="block text-xs font-normal opacity-70 mt-0.5">
-              We&apos;ll match your child with the perfect pathway
+              We&apos;ll match your child with the perfect program
             </span>
           </Link>
         </div>
