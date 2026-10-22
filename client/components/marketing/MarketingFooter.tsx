@@ -6,9 +6,9 @@ import Image from "next/image";
 import { Mail } from "lucide-react";
 import { SOCIAL_LINKS, type SocialLink } from "@/lib/socialLinks";
 import { CONTACT_EMAIL, WHATSAPP_URL } from "@/lib/siteContact";
+import PolicyModal from "./PolicyModal";
+import type { PolicyDocId } from "./policyDocs";
 import { FacebookIcon, InstagramIcon, LinkedInIcon, WhatsAppIcon, YouTubeIcon } from "./SocialIcons";
-
-type LegalDoc = "privacy" | "terms" | "coppa" | null;
 
 const SOCIAL_ICONS: Record<SocialLink["id"], { Icon: typeof FacebookIcon; hover: string }> = {
   facebook: { Icon: FacebookIcon, hover: "hover:bg-[#1877F2]" },
@@ -17,124 +17,8 @@ const SOCIAL_ICONS: Record<SocialLink["id"], { Icon: typeof FacebookIcon; hover:
   linkedin: { Icon: LinkedInIcon, hover: "hover:bg-[#0A66C2]" },
 };
 
-const LEGAL_CONTENT: Record<NonNullable<LegalDoc>, { title: string; body: React.ReactNode }> = {
-  privacy: {
-    title: "Privacy Policy",
-    body: (
-      <div className="space-y-4 text-sm text-gray-400 leading-relaxed">
-        <p><strong className="text-white">Last updated: January 2026</strong></p>
-        <section>
-          <h3 className="text-white font-semibold mb-1">1. Information We Collect</h3>
-          <p>We collect information you provide directly, including your name, email address, and payment details when you register or enrol in a program. For child profiles, we collect only a first name and age in compliance with COPPA.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">2. How We Use Your Information</h3>
-          <p>We use your information to provide and improve our tutoring services, match students with qualified teachers, process payments, send class confirmations and progress reports, and comply with legal obligations.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">3. Data Sharing</h3>
-          <p>We do not sell your personal data. We share data only with trusted service providers (payment processors, video conferencing platforms) under strict data protection agreements.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">4. Data Retention</h3>
-          <p>We retain your account data for as long as your account is active. Class recordings are retained for 90 days. You may request deletion of your data at any time by contacting fz.omlan@gmail.com.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">5. Security</h3>
-          <p>All data is transmitted over TLS encryption. Payment data is processed exclusively by Stripe and never stored on our servers. We implement industry-standard security practices.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">6. Your Rights</h3>
-          <p>You have the right to access, correct, or delete your personal data. To exercise these rights, contact us at fz.omlan@gmail.com. We will respond within 30 days.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">7. Contact</h3>
-          <p>Lumexa AI School · fz.omlan@gmail.com · WhatsApp: +880 1774 878252</p>
-        </section>
-      </div>
-    ),
-  },
-  terms: {
-    title: "Terms of Service",
-    body: (
-      <div className="space-y-4 text-sm text-gray-400 leading-relaxed">
-        <p><strong className="text-white">Last updated: January 2026</strong></p>
-        <section>
-          <h3 className="text-white font-semibold mb-1">1. Acceptance of Terms</h3>
-          <p>By accessing or using Lumexa AI School, you agree to be bound by these Terms of Service. If you do not agree, please do not use our platform.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">2. Lessons and Payments</h3>
-          <p>Lessons are paid for in blocks of 8, or for a full program upfront at a discount. Each lesson is one live teaching session. Refunds are governed by our <Link href="/refund-policy" className="text-purple-400 underline underline-offset-2 hover:text-purple-300">Refund Policy</Link>.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">3. Platform Rules</h3>
-          <p>Users must not share account credentials, disrupt live sessions, harass teachers or students, or use the platform for any unlawful purpose. Violations may result in immediate account termination without refund.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">4. Teacher Standards</h3>
-          <p>All teachers are background-checked and degree-qualified. If a teacher fails to meet our quality standards, we will replace them at no cost to you.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">5. Intellectual Property</h3>
-          <p>All course materials, recordings, and platform content are the intellectual property of Lumexa AI School. Students may use recordings for personal learning only.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">6. Limitation of Liability</h3>
-          <p>Lumexa AI School is not liable for any indirect or consequential damages arising from the use of our platform. Our liability is limited to the amount paid for lessons in the preceding 30 days.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">7. Changes to Terms</h3>
-          <p>We may update these terms at any time. Continued use of the platform after changes constitutes acceptance of the new terms.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">8. Contact</h3>
-          <p>Lumexa AI School · fz.omlan@gmail.com · WhatsApp: +880 1774 878252</p>
-        </section>
-      </div>
-    ),
-  },
-  coppa: {
-    title: "COPPA Compliance",
-    body: (
-      <div className="space-y-4 text-sm text-gray-400 leading-relaxed">
-        <p><strong className="text-white">Children's Online Privacy Protection Act (COPPA) Compliance Statement</strong></p>
-        <section>
-          <h3 className="text-white font-semibold mb-1">Our Commitment</h3>
-          <p>Lumexa AI School is committed to protecting the privacy of children under 13. We comply fully with COPPA and treat child data with the highest standards of care.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">Parental Consent</h3>
-          <p>All child profiles are created and managed by a verified parent or guardian. We require explicit parental consent before any child data is collected or processed. Parents can review, modify, or delete their child's information at any time.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">Data Minimization</h3>
-          <p>We collect only what is necessary: a child's first name and age. We do not collect last names, photographs, or any other personally identifiable information from children under 13 without explicit parental consent.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">Child Safety in Live Sessions</h3>
-          <p>All live class sessions are conducted by background-checked, verified teachers. Sessions may be recorded for quality and safety review. Parents have full access to all session recordings.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">No Third-Party Sharing</h3>
-          <p>We do not share, sell, or disclose children's personal information to third parties except as required by law or to provide our core educational services (e.g., video conferencing platform).</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">Parental Rights</h3>
-          <p>Parents may request to review, correct, or delete their child's personal information at any time. To exercise these rights, contact us at fz.omlan@gmail.com. We will respond within 5 business days.</p>
-        </section>
-        <section>
-          <h3 className="text-white font-semibold mb-1">Contact</h3>
-          <p>For COPPA-related inquiries: fz.omlan@gmail.com · WhatsApp: +880 1774 878252</p>
-        </section>
-      </div>
-    ),
-  },
-};
-
 export default function MarketingFooter() {
-  const [openDoc, setOpenDoc] = useState<LegalDoc>(null);
-  const doc = openDoc ? LEGAL_CONTENT[openDoc] : null;
+  const [openDoc, setOpenDoc] = useState<PolicyDocId | null>(null);
 
   return (
     <>
@@ -193,7 +77,7 @@ export default function MarketingFooter() {
                   </a>
                 </li>
                 <li>
-                  <button onClick={() => setOpenDoc("coppa")} className="text-gray-500 hover:text-gray-300 transition-colors text-left">
+                  <button onClick={() => setOpenDoc("child-safety")} className="text-gray-500 hover:text-gray-300 transition-colors text-left">
                     Child Safety &amp; COPPA
                   </button>
                 </li>
@@ -285,7 +169,7 @@ export default function MarketingFooter() {
               </button>
               <span>·</span>
               <button
-                onClick={() => setOpenDoc("coppa")}
+                onClick={() => setOpenDoc("child-safety")}
                 className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline"
               >
                 COPPA
@@ -303,49 +187,7 @@ export default function MarketingFooter() {
         </div>
       </footer>
 
-      {/* Legal modal */}
-      {openDoc && doc && (
-        <div
-          className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
-          onClick={() => setOpenDoc(null)}
-        >
-          <div
-            className="relative w-full max-w-2xl max-h-[85vh] bg-[#0D1B2E] border border-gray-700 rounded-2xl shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">
-              <h2 className="text-white font-black text-lg">{doc.title}</h2>
-              <button
-                onClick={() => setOpenDoc(null)}
-                className="w-8 h-8 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white flex items-center justify-center transition-all text-sm"
-                aria-label="Close"
-              >
-                ✕
-              </button>
-            </div>
-            {/* Body */}
-            {/* The footer outlives page navigation, so a link inside a policy must close the modal. */}
-            <div
-              className="overflow-y-auto flex-1 px-6 py-5"
-              onClick={(e) => {
-                if ((e.target as HTMLElement).closest("a")) setOpenDoc(null);
-              }}
-            >
-              {doc.body}
-            </div>
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-800 flex-shrink-0">
-              <button
-                onClick={() => setOpenDoc(null)}
-                className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl text-sm transition-all"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PolicyModal doc={openDoc} onClose={() => setOpenDoc(null)} />
     </>
   );
 }
