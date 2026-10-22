@@ -48,6 +48,58 @@ const ASPECT = 0.66; // height / width of the play area
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/*
+  Emoji are painted once into a small offscreen sprite and stamped with drawImage.
+  Drawing colour-emoji *text* onto a canvas that is rotated and scaled every frame is
+  unreliable on some phones (iOS Safari can render the glyph faint, blurry or missing),
+  while images transform consistently everywhere and are cheaper to draw. If a device
+  cannot paint a glyph into the sprite at all, we fall back to drawing it as text.
+*/
+const spriteCache = new Map<string, HTMLCanvasElement | null>();
+
+function emojiSprite(glyph: string, size: number, dpr: number): HTMLCanvasElement | null {
+  const key = `${glyph}|${size}|${dpr}`;
+  if (spriteCache.has(key)) return spriteCache.get(key) ?? null;
+
+  const px = Math.ceil(size * 1.5 * dpr); // padding so wide glyphs and tall flames never clip
+  const canvas = document.createElement("canvas");
+  canvas.width = px;
+  canvas.height = px;
+  const c = canvas.getContext("2d", { willReadFrequently: true });
+  let sprite: HTMLCanvasElement | null = null;
+  if (c) {
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.font = `${Math.round(size * dpr)}px ${EMOJI_FONT}`;
+    c.fillText(glyph, px / 2, px / 2);
+    try {
+      const data = c.getImageData(0, 0, px, px).data;
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] > 0) {
+          sprite = canvas;
+          break;
+        }
+      }
+    } catch {
+      sprite = canvas; // pixels not readable (privacy mode): trust the sprite
+    }
+  }
+  spriteCache.set(key, sprite);
+  return sprite;
+}
+
+/** Draws `glyph` centred on the current origin, `size` CSS px tall. */
+function drawEmoji(ctx: CanvasRenderingContext2D, glyph: string, size: number, dpr: number) {
+  const sprite = emojiSprite(glyph, size, dpr);
+  if (sprite) {
+    const box = size * 1.5;
+    ctx.drawImage(sprite, -box / 2, -box / 2, box, box);
+    return;
+  }
+  ctx.font = `${size}px ${EMOJI_FONT}`;
+  ctx.fillText(glyph, 0, 0);
+}
+
 // Static starfield in 0-1 space, generated once so SSR/CSR never disagree.
 const STARFIELD = Array.from({ length: 46 }, (_, i) => ({
   x: ((i * 83.7) % 360) / 360,
@@ -135,10 +187,17 @@ export default function HeroGame() {
     s.reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const dpr = Math.min(window.devicePixelRatio || 1, 3);
 
-    // Sizes scale a little with the card but never get small enough to be hard to see.
+    // Sizes scale a little with the card but never get small enough to be hard to see:
+    // on a phone-width card they reach the same size as on desktop, which keeps the
+    // stars and comets easy to spot against the sky.
     const sizes = () => {
       const { w } = dim.current;
-      return { ship: clamp(w * 0.11, 34, 46), star: clamp(w * 0.075, 26, 34), rock: clamp(w * 0.08, 28, 36) };
+      // Whole numbers keep the sprite cache small while the card is being resized.
+      return {
+        ship: Math.round(clamp(w * 0.15, 40, 46)),
+        star: Math.round(clamp(w * 0.11, 30, 34)),
+        rock: Math.round(clamp(w * 0.11, 32, 36)),
+      };
     };
     const shipY = () => dim.current.h - sizes().ship * 1.2; // leaves room for the engine flame
 
@@ -276,20 +335,20 @@ export default function HeroGame() {
         ctx.save();
         ctx.translate(it.x, it.y);
         if (it.kind === "star") {
-          // soft glow drawn as a gradient (much cheaper than shadowBlur on phones)
-          const gl = ctx.createRadialGradient(0, 0, 2, 0, 0, sz.star * 0.9);
-          gl.addColorStop(0, "rgba(253,224,71,0.55)");
+          // Soft halo drawn as a gradient (much cheaper than shadowBlur on phones). The
+          // centre stays clear so the yellow star never washes out against a yellow glow.
+          const gl = ctx.createRadialGradient(0, 0, sz.star * 0.2, 0, 0, sz.star * 0.95);
+          gl.addColorStop(0, "rgba(253,224,71,0)");
+          gl.addColorStop(0.5, "rgba(253,224,71,0.22)");
           gl.addColorStop(1, "rgba(253,224,71,0)");
           ctx.fillStyle = gl;
           ctx.fillRect(-sz.star, -sz.star, sz.star * 2, sz.star * 2);
           const k = 1 + Math.sin(it.spin) * 0.1;
           ctx.scale(k, k);
-          ctx.font = `${sz.star}px ${EMOJI_FONT}`;
-          ctx.fillText(STAR, 0, 0);
+          drawEmoji(ctx, STAR, sz.star, dpr);
         } else {
           ctx.rotate(Math.sin(it.spin) * 0.3);
-          ctx.font = `${sz.rock}px ${EMOJI_FONT}`;
-          ctx.fillText(COMET, 0, 0);
+          drawEmoji(ctx, COMET, sz.rock, dpr);
         }
         ctx.restore();
       }
@@ -300,15 +359,14 @@ export default function HeroGame() {
       ctx.translate(s.shipX, sy);
       const fl = sz.ship * 0.55;
       const flame = ctx.createRadialGradient(0, sz.ship * 0.6, 1, 0, sz.ship * 0.6, fl);
-      flame.addColorStop(0, "rgba(251,191,36,0.85)");
+      flame.addColorStop(0, "rgba(251,191,36,0.55)");
       flame.addColorStop(1, "rgba(251,146,60,0)");
       ctx.fillStyle = flame;
       ctx.beginPath();
       ctx.ellipse(0, sz.ship * 0.6, fl * 0.6, fl + Math.sin(s.t * 30) * 2, 0, 0, 6.283);
       ctx.fill();
       ctx.rotate(ship.tilt + clamp(vx / (w * 0.35), -0.35, 0.35));
-      ctx.font = `${sz.ship}px ${EMOJI_FONT}`;
-      ctx.fillText(ship.glyph, 0, 0);
+      drawEmoji(ctx, ship.glyph, sz.ship, dpr);
       ctx.restore();
 
       ctx.font = `bold ${clamp(w * 0.04, 13, 16)}px ${EMOJI_FONT}`;
@@ -540,11 +598,13 @@ export default function HeroGame() {
           />
 
           {/* HUD */}
-          <div className="absolute top-2 left-3 right-3 flex items-center justify-between text-[13px] font-bold text-white drop-shadow pointer-events-none">
-            <span>
+          <div className="absolute top-2 left-2 right-2 flex items-center justify-between text-sm font-bold text-white pointer-events-none">
+            <span className="rounded-full bg-[#0A1030]/70 px-2.5 py-0.5 leading-6 tabular-nums">
               {STAR} {score}
             </span>
-            <span aria-label={`${lives} lives left`}>{"❤️".repeat(Math.max(0, lives)) || "💔"}</span>
+            <span className="rounded-full bg-[#0A1030]/70 px-2.5 py-0.5 leading-6" aria-label={`${lives} lives left`}>
+              {"❤️".repeat(Math.max(0, lives)) || "💔"}
+            </span>
           </div>
 
           {phase === "idle" && (

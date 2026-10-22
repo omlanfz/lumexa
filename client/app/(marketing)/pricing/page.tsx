@@ -68,7 +68,26 @@ const FAQ_GROUPS: { heading: string; items: Faq[] }[] = [
       },
       {
         q: "What if my child misses a class or we need to change a time?",
-        a: "Message us on WhatsApp or email as early as you can and we will work with the teacher to find another time. If a class cannot go ahead because of a technical problem, it is not counted against your child's lessons and we schedule a make-up class. We email a reminder about an hour before every class, and the classroom opens 10 minutes early.",
+        a: (
+          <div className="space-y-3">
+            <p>
+              <strong className="font-semibold text-[#334155] dark:text-gray-200">Private 1:1 classes:</strong>{" "}
+              please message us on WhatsApp or email as early as you can, and we will work with the teacher to find
+              another time.
+            </p>
+            <p>
+              <strong className="font-semibold text-[#334155] dark:text-gray-200">Small Learning Batch classes:</strong>{" "}
+              a batch class cannot be rescheduled or cancelled, because other students are learning in the same
+              class. If your child misses one, they can watch the class recording at any time to catch up on the
+              concepts, and they can reach out to the teacher for help if they need it.
+            </p>
+            <p>
+              If a class cannot go ahead because of a technical problem, it is not counted against your child&apos;s
+              lessons and we schedule a make-up class. We email a reminder about an hour before every class, and the
+              classroom opens 10 minutes early.
+            </p>
+          </div>
+        ),
       },
     ],
   },
@@ -290,13 +309,9 @@ function PricingContent() {
       {/* Hero */}
       <section className="relative pt-20 pb-12 px-4 sm:px-6 lg:px-8 text-center overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-purple-300/20 dark:bg-purple-700/8 rounded-full blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[200px] bg-purple-300/20 dark:bg-purple-700/8 rounded-full blur-3xl" />
         </div>
         <div className="relative max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-300 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            Simple, transparent pricing · All prices in BDT
-          </div>
           <h1 className="text-4xl sm:text-5xl font-black leading-tight mb-4">
             Pay for{" "}
             <span className="bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
@@ -506,8 +521,8 @@ function PricingContent() {
                           </span>
                         </button>
                         {open && (
-                          <div className="px-5 pb-4">
-                            <p className="text-sm text-[#64748B] dark:text-gray-400 leading-relaxed">{faq.a}</p>
+                          <div className="px-5 pb-4 text-sm text-[#64748B] dark:text-gray-400 leading-relaxed">
+                            {faq.a}
                           </div>
                         )}
                       </div>
