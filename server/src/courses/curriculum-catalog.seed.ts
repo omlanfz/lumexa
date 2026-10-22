@@ -640,7 +640,7 @@ export async function seedPathwayCurriculum(prisma: PrismaClient, courseId: stri
 //                               ai-builder/python-ai-foundations,
 //                               game-creator/roblox-world-builder
 
-const ODYSSEY_STAGES: { pathway: string; module: string }[][] = [
+export const ODYSSEY_STAGES: { pathway: string; module: string }[][] = [
   [
     { pathway: 'little-coders-path', module: 'scratch-adventures' },
     { pathway: 'little-coders-path', module: 'python-for-young-builders' },

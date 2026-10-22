@@ -1,5 +1,6 @@
 import Link from "next/link";
 import ScrollReveal from "../ScrollReveal";
+import { getProgram } from "@/lib/programs";
 
 /*
   Homepage program picker. Each card answers four things and nothing more:
@@ -25,7 +26,7 @@ const programs: Program[] = [
     emoji: "🎮",
     title: "Game Creator",
     builds: "Roblox and Python games that friends can actually play.",
-    ages: "Ages 10–18",
+    ages: getProgram("game").ages,
     beginner: { ok: true, text: "Beginner-friendly" },
     accent: "from-red-600 to-orange-600",
     hover: "hover:border-red-300 dark:hover:border-red-500/50",
@@ -35,7 +36,7 @@ const programs: Program[] = [
     emoji: "🤖",
     title: "AI Builder",
     builds: "Chatbots, image classifiers and other smart AI apps.",
-    ages: "Ages 12–18",
+    ages: getProgram("ai").ages,
     beginner: { ok: true, text: "Starts from Python basics" },
     accent: "from-purple-600 to-blue-600",
     hover: "hover:border-purple-300 dark:hover:border-purple-500/50",
@@ -45,7 +46,7 @@ const programs: Program[] = [
     emoji: "🌐",
     title: "Web Developer",
     builds: "Live websites and web apps that anyone can visit.",
-    ages: "Ages 12–18",
+    ages: getProgram("web").ages,
     beginner: { ok: true, text: "Beginner-friendly" },
     accent: "from-blue-600 to-cyan-600",
     hover: "hover:border-blue-300 dark:hover:border-blue-500/50",
@@ -55,7 +56,7 @@ const programs: Program[] = [
     emoji: "🌟",
     title: "Little Coders",
     builds: "Animated stories, quiz games and first Python projects.",
-    ages: "Ages 6–11",
+    ages: getProgram("little").ages,
     beginner: { ok: true, text: "A perfect first step" },
     accent: "from-amber-500 to-orange-500",
     hover: "hover:border-amber-300 dark:hover:border-amber-500/50",
@@ -65,7 +66,7 @@ const programs: Program[] = [
     emoji: "📊",
     title: "Data Scientist",
     builds: "Charts, dashboards and models that predict from real data.",
-    ages: "Ages 13–18",
+    ages: getProgram("data").ages,
     beginner: { ok: false, text: "Some Python helps" },
     accent: "from-teal-600 to-green-600",
     hover: "hover:border-teal-300 dark:hover:border-teal-500/50",
@@ -75,7 +76,7 @@ const programs: Program[] = [
     emoji: "💼",
     title: "Digital Independence",
     builds: "A professional portfolio, personal brand and service plan.",
-    ages: "Ages 15–18",
+    ages: getProgram("digital").ages,
     beginner: { ok: false, text: "Best after a few projects" },
     accent: "from-green-600 to-emerald-600",
     hover: "hover:border-green-300 dark:hover:border-green-500/50",
@@ -145,7 +146,7 @@ export default function ProgramsSection() {
                   <span className="font-bold text-[#0F172A] dark:text-white">Your child can build: </span>
                   games, websites, data projects and first AI apps while they explore, before choosing a specialty.
                 </p>
-                <Meta ages="Ages 12–18" beginner={{ ok: true, text: "For complete beginners" }} />
+                <Meta ages={getProgram("odyssey").ages} beginner={{ ok: true, text: "For complete beginners" }} />
               </div>
 
               <div className="flex-none flex lg:flex-col items-center lg:items-end justify-between gap-1 lg:text-right">

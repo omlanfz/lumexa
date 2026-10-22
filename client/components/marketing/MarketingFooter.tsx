@@ -3,11 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { Mail } from "lucide-react";
+import { SOCIAL_LINKS, type SocialLink } from "@/lib/socialLinks";
+import { CONTACT_EMAIL, WHATSAPP_URL } from "@/lib/siteContact";
+import { FacebookIcon, InstagramIcon, LinkedInIcon, WhatsAppIcon, YouTubeIcon } from "./SocialIcons";
 
 type LegalDoc = "privacy" | "terms" | "coppa" | null;
 
-const CONTACT_EMAIL = "fz.omlan@gmail.com";
-const WHATSAPP_URL = "https://wa.me/8801774878252";
+const SOCIAL_ICONS: Record<SocialLink["id"], { Icon: typeof FacebookIcon; hover: string }> = {
+  facebook: { Icon: FacebookIcon, hover: "hover:bg-[#1877F2]" },
+  youtube: { Icon: YouTubeIcon, hover: "hover:bg-[#FF0000]" },
+  instagram: { Icon: InstagramIcon, hover: "hover:bg-[#E4405F]" },
+  linkedin: { Icon: LinkedInIcon, hover: "hover:bg-[#0A66C2]" },
+};
 
 const LEGAL_CONTENT: Record<NonNullable<LegalDoc>, { title: string; body: React.ReactNode }> = {
   privacy: {
@@ -17,7 +25,7 @@ const LEGAL_CONTENT: Record<NonNullable<LegalDoc>, { title: string; body: React.
         <p><strong className="text-white">Last updated: January 2026</strong></p>
         <section>
           <h3 className="text-white font-semibold mb-1">1. Information We Collect</h3>
-          <p>We collect information you provide directly, including your name, email address, and payment details when you register or purchase a class pack. For child profiles, we collect only a first name and age in compliance with COPPA.</p>
+          <p>We collect information you provide directly, including your name, email address, and payment details when you register or enrol in a program. For child profiles, we collect only a first name and age in compliance with COPPA.</p>
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">2. How We Use Your Information</h3>
@@ -56,8 +64,8 @@ const LEGAL_CONTENT: Record<NonNullable<LegalDoc>, { title: string; body: React.
           <p>By accessing or using Lumexa AI School, you agree to be bound by these Terms of Service. If you do not agree, please do not use our platform.</p>
         </section>
         <section>
-          <h3 className="text-white font-semibold mb-1">2. Class Packs and Payments</h3>
-          <p>Class packs are purchased upfront and credited to your account. Each class represents one live teaching session. Unused classes may be refunded within 7 days of purchase. Completed sessions are non-refundable.</p>
+          <h3 className="text-white font-semibold mb-1">2. Lessons and Payments</h3>
+          <p>Lessons are paid for in blocks of 8, or for a full program upfront at a discount. Each lesson is one live teaching session. Refunds are governed by our <Link href="/refund-policy" className="text-purple-400 underline underline-offset-2 hover:text-purple-300">Refund Policy</Link>.</p>
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">3. Platform Rules</h3>
@@ -73,7 +81,7 @@ const LEGAL_CONTENT: Record<NonNullable<LegalDoc>, { title: string; body: React.
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">6. Limitation of Liability</h3>
-          <p>Lumexa AI School is not liable for any indirect or consequential damages arising from the use of our platform. Our liability is limited to the amount paid for class packs in the preceding 30 days.</p>
+          <p>Lumexa AI School is not liable for any indirect or consequential damages arising from the use of our platform. Our liability is limited to the amount paid for lessons in the preceding 30 days.</p>
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">7. Changes to Terms</h3>
@@ -200,6 +208,11 @@ export default function MarketingFooter() {
                   </button>
                 </li>
                 <li>
+                  <Link href="/refund-policy" className="text-gray-500 hover:text-gray-300 transition-colors">
+                    Refund Policy
+                  </Link>
+                </li>
+                <li>
                   <Link href="/login" className="text-gray-500 hover:text-gray-300 transition-colors">
                     Parent Sign In
                   </Link>
@@ -212,19 +225,43 @@ export default function MarketingFooter() {
               <h4 className="text-white text-sm font-semibold mb-3">Contact Us</h4>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <a href={`mailto:${CONTACT_EMAIL}`} className="text-gray-500 hover:text-gray-300 transition-colors break-all">
-                    ✉️ {CONTACT_EMAIL}
+                  <a href={`mailto:${CONTACT_EMAIL}`} className="group flex items-center gap-2.5 text-gray-500 hover:text-gray-300 transition-colors break-all">
+                    <Mail className="w-4 h-4 flex-shrink-0 text-gray-400 group-hover:text-white transition-colors" aria-hidden="true" />
+                    <span>{CONTACT_EMAIL}</span>
                   </a>
                 </li>
                 <li>
-                  <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap">
-                    💬 WhatsApp +880 1774 878252
+                  <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2.5 text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap">
+                    <WhatsAppIcon className="w-4 h-4 flex-shrink-0 text-[#25D366]" />
+                    <span>WhatsApp +880 1774 878252</span>
                   </a>
                 </li>
               </ul>
               <p className="mt-3 text-gray-600 text-xs leading-relaxed">
                 Questions about a program, a lesson or your child&apos;s details? Message us any time.
               </p>
+
+              {/* Follow us */}
+              <h4 className="text-white text-sm font-semibold mt-6 mb-3">Follow Us</h4>
+              <ul className="flex flex-wrap gap-2">
+                {SOCIAL_LINKS.map((link) => {
+                  const { Icon, hover } = SOCIAL_ICONS[link.id];
+                  return (
+                    <li key={link.id}>
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Lumexa on ${link.label}`}
+                        title={link.label}
+                        className={`flex w-9 h-9 items-center justify-center rounded-lg border border-gray-800 text-gray-500 hover:text-white hover:border-transparent transition-colors ${hover}`}
+                      >
+                        <Icon className="w-4 h-4" />
+                      </a>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           </div>
 
@@ -253,6 +290,10 @@ export default function MarketingFooter() {
               >
                 COPPA
               </button>
+              <span>·</span>
+              <Link href="/refund-policy" className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline">
+                Refund Policy
+              </Link>
               <span>·</span>
               <Link href="/teacher-dashboard" className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline">
                 Teacher Hub
@@ -284,7 +325,13 @@ export default function MarketingFooter() {
               </button>
             </div>
             {/* Body */}
-            <div className="overflow-y-auto flex-1 px-6 py-5">
+            {/* The footer outlives page navigation, so a link inside a policy must close the modal. */}
+            <div
+              className="overflow-y-auto flex-1 px-6 py-5"
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest("a")) setOpenDoc(null);
+              }}
+            >
               {doc.body}
             </div>
             {/* Footer */}
