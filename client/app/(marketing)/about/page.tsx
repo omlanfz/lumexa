@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import PolicyTrigger from "@/components/about/PolicyTrigger";
 import { FOUNDER, TITIR } from "@/lib/brand";
-import { FEATURED_IDS, INTEREST_META, STUDENT_PROJECTS, projectImage } from "@/lib/studentProjects";
 
 export const metadata: Metadata = {
   title: "About · Lumexa AI School",
@@ -119,8 +118,6 @@ const TRUST = [
     tile: "from-purple-600 to-indigo-600",
   },
 ] as const;
-
-const SHOWCASE = FEATURED_IDS.flatMap((id) => STUDENT_PROJECTS.filter((p) => p.id === id));
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
@@ -374,58 +371,8 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* 5 · Learning in action */}
-      <section id="in-action" className={sectionPad}>
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center max-w-3xl mx-auto mb-12">
-            <p className={eyebrow}>Learning in Action</p>
-            <h2 className={`${h2} mb-5`}>See What Children Can Create.</h2>
-            <p className={lead}>
-              From interactive games and websites to data-driven projects and AI applications, explore the kinds of
-              practical work students can build through Lumexa&apos;s programs.
-            </p>
-          </div>
-
-          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {SHOWCASE.map((project) => (
-              <li
-                key={project.id}
-                className="overflow-hidden rounded-2xl border border-[#E2E8F0] dark:border-gray-700/60 bg-white dark:bg-gray-900/50 card-hover"
-              >
-                <div className="relative aspect-[16/10] bg-[#0A1128]">
-                  <Image
-                    src={projectImage(project.id)}
-                    alt={`${project.title}, an example project built in ${project.program}`}
-                    fill
-                    sizes="(min-width: 1024px) 360px, (min-width: 640px) 45vw, 92vw"
-                    className="object-cover"
-                  />
-                </div>
-                <div className="p-4">
-                  <p className="text-xs font-semibold text-[#64748B] dark:text-gray-400">
-                    {INTEREST_META[project.interest].emoji} {INTEREST_META[project.interest].label}
-                  </p>
-                  <h3 className="mt-1 font-black leading-snug">{project.title}</h3>
-                  <p className="mt-0.5 text-sm text-[#64748B] dark:text-gray-400">Built in {project.program}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-10 text-center">
-            <Link
-              href="/programs"
-              className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 px-7 py-3.5 text-sm font-black text-white shadow-lg shadow-purple-200 dark:shadow-purple-900/40 transition-all hover:from-purple-500 hover:to-blue-500 hover:scale-[1.02]"
-            >
-              Explore Our Programs
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" aria-hidden />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* 6 · Trust, safety & transparency */}
-      <section id="trust" className={`${sectionPad} bg-white dark:bg-[#07101F] transition-colors duration-200`}>
+      {/* 5 · Trust, safety & transparency */}
+      <section id="trust" className={sectionPad}>
         <div className="max-w-6xl mx-auto">
           <div className="text-center max-w-3xl mx-auto mb-12">
             <p className={eyebrow}>Trust, Safety &amp; Transparency</p>
@@ -441,7 +388,7 @@ export default function AboutPage() {
               <PolicyTrigger
                 key={doc}
                 doc={doc}
-                className="group flex h-full flex-col rounded-2xl border border-[#E2E8F0] dark:border-gray-700/60 bg-[#F8FAFF] dark:bg-gray-900/50 p-6 text-left card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500"
+                className="group flex h-full flex-col rounded-2xl border border-[#E2E8F0] dark:border-gray-700/60 bg-white dark:bg-gray-900/50 p-6 text-left card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500"
               >
                 <span className={`mb-4 grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br ${tile} text-white shadow-sm`}>
                   <Icon className="h-6 w-6" aria-hidden />
@@ -458,8 +405,8 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* 7 · Final call to action */}
-      <section id="start" className={sectionPad}>
+      {/* 6 · Final call to action */}
+      <section id="start" className={`${sectionPad} bg-white dark:bg-[#07101F] transition-colors duration-200`}>
         <div className="relative mx-auto max-w-3xl overflow-hidden rounded-[2rem] border border-purple-200 dark:border-purple-700/30 bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-purple-900/20 dark:via-transparent dark:to-blue-900/20 px-6 py-14 text-center sm:px-12">
           <div aria-hidden className="pointer-events-none absolute -top-16 -left-16 h-48 w-48 rounded-full bg-purple-300/30 dark:bg-purple-600/10 blur-3xl" />
           <div aria-hidden className="pointer-events-none absolute -bottom-16 -right-16 h-48 w-48 rounded-full bg-blue-300/30 dark:bg-blue-600/10 blur-3xl" />
