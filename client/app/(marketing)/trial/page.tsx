@@ -7,17 +7,21 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import axios from "axios";
+import { ALL_PROGRAMS, getProgram, resolveProgramId, trialSubjectLabel } from "@/lib/programs";
+import { FORMATS, resolveFormat } from "@/lib/pricing";
 
-const subjects = [
-  "Game Creator (Roblox / Python games)",
-  "AI Builder (Python + machine learning)",
-  "Web Developer (HTML / CSS / React)",
-  "Little Coders (Scratch, ages 6-11)",
-  "Data Scientist (Python + data)",
-  "Not sure yet, help me choose",
+const NOT_SURE = "Not sure yet, help me choose";
+const subjects = [...ALL_PROGRAMS.map(trialSubjectLabel), NOT_SURE];
+
+// Preferred learning format. Optional: families who have not decided can leave it.
+const formatOptions = [
+  { value: "private", label: FORMATS.private.label },
+  { value: "batch", label: FORMATS.batch.label },
+  { value: "unsure", label: "Not sure yet, advise me" },
 ];
 
 interface FormState {
@@ -26,6 +30,7 @@ interface FormState {
   childName: string;
   childAge: string;
   subject: string;
+  format: string;
   timezone: string;
   message: string;
 }
@@ -36,13 +41,22 @@ const initial: FormState = {
   childName: "",
   childAge: "",
   subject: "",
+  format: "",
   timezone: "",
   message: "",
 };
 
-export default function TrialPage() {
+function TrialForm() {
+  const searchParams = useSearchParams();
+  // /programs and /pricing link here with ?program=ai&format=batch so the
+  // family's choice arrives already selected.
+  const programId = resolveProgramId(searchParams.get("program"));
+  const formatParam = resolveFormat(searchParams.get("format"));
+
   const [form, setForm] = useState<FormState>(() => ({
     ...initial,
+    subject: programId ? trialSubjectLabel(getProgram(programId)) : "",
+    format: formatParam ?? "",
     timezone:
       typeof window !== "undefined"
         ? Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -56,6 +70,9 @@ export default function TrialPage() {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
   ) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
+  const formatLabel =
+    form.format === "private" || form.format === "batch" ? FORMATS[form.format].label : "";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -66,7 +83,8 @@ export default function TrialPage() {
         parentEmail: form.parentEmail,
         childName: form.childName,
         childAge: Number(form.childAge),
-        subject: form.subject,
+        // The format preference rides along in `subject`, which the team sees with the lead.
+        subject: formatLabel ? `${form.subject} · ${formatLabel}` : form.subject,
         timezone: form.timezone,
         message: form.message || undefined,
       });
@@ -267,6 +285,22 @@ export default function TrialPage() {
 
             <div>
               <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
+                Preferred Learning Format (optional)
+              </label>
+              <select
+                value={form.format}
+                onChange={set("format")}
+                className="w-full bg-[#F7F9FF] dark:bg-black/60 border border-[#E2E8F0] dark:border-gray-700 focus:border-purple-500 outline-none rounded-lg p-3 text-[#0F172A] dark:text-white text-sm transition-colors"
+              >
+                <option value="">Choose a format…</option>
+                {formatOptions.map((f) => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs text-[#64748B] dark:text-gray-400 uppercase tracking-wider mb-1">
                 Anything else? (optional)
               </label>
               <textarea
@@ -334,5 +368,13 @@ export default function TrialPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TrialPage() {
+  return (
+    <Suspense fallback={<div className="min-h-[80vh]" />}>
+      <TrialForm />
+    </Suspense>
   );
 }

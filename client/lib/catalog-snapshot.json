@@ -1,0 +1,2143 @@
+{
+  "courses": [
+    {
+      "slug": "lumexa-odyssey",
+      "title": "Lumexa Odyssey",
+      "emoji": "🚀",
+      "category": "Odyssey",
+      "ageMin": 12,
+      "ageMax": 18,
+      "kind": "odyssey",
+      "totalLessons": 85,
+      "learningLessons": 72,
+      "assessmentLessons": 13,
+      "modules": [
+        {
+          "slug": "scratch-adventures",
+          "title": "Scratch Adventures",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "What Is Coding, Anyway?"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Meet Scratch and Your First Sprite"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Motion, Looks, and Sound — Your Sprite's 3 Superpowers"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Events and Broadcasting — Sprites That React!"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Loops — Do It Again (and Again)!"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "If This, Then That — Sprites That Decide!"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Build Your Own Interactive Story"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Final Project — Build Your Own Game!"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Scratch Adventures — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-for-young-builders",
+          "title": "Python for Young Builders",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "From Blocks to Words — Hello, Python!"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Variables and User Input"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Printing and String Formatting"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "If/Else Decisions"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "While Loops and For Loops"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Lists and Simple Data"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Building a Mini Quiz App"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Final Project — Our Own Mini Game!"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Python for Young Builders — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-arcade-games",
+          "title": "Python Arcade Games",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "Python Basics for Game Development"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Pygame Setup and the Game Loop"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Sprites, Images, and Movement"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Collision Detection"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Enemies, AI Behavior, and Scoring"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Sound Effects and Music"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Game States — Menu, Play, Game Over"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Packaging and Sharing Your Game"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Python Arcade Games — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "html-css-mastery",
+          "title": "HTML and CSS Mastery",
+          "order": 4,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 29,
+              "type": "LEARNING",
+              "title": "How the web works (browsers, servers, HTML)"
+            },
+            {
+              "order": 30,
+              "type": "LEARNING",
+              "title": "HTML structure and semantic elements"
+            },
+            {
+              "order": 31,
+              "type": "LEARNING",
+              "title": "CSS basics: colors, fonts, spacing"
+            },
+            {
+              "order": 32,
+              "type": "LEARNING",
+              "title": "Flexbox for modern layouts"
+            },
+            {
+              "order": 33,
+              "type": "LEARNING",
+              "title": "CSS Grid for complex designs"
+            },
+            {
+              "order": 34,
+              "type": "LEARNING",
+              "title": "Responsive design and mobile-first"
+            },
+            {
+              "order": 35,
+              "type": "LEARNING",
+              "title": "Animations and hover effects"
+            },
+            {
+              "order": 36,
+              "type": "LEARNING",
+              "title": "Deploying to Vercel and sharing"
+            },
+            {
+              "order": 37,
+              "type": "COURSE_TEST",
+              "title": "HTML and CSS Mastery — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "build-your-professional-identity",
+          "title": "Build Your Professional Identity",
+          "order": 5,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 38,
+              "type": "LEARNING",
+              "title": "What Professional Identity Means in the Digital Age"
+            },
+            {
+              "order": 39,
+              "type": "LEARNING",
+              "title": "Define Your Strengths and Direction"
+            },
+            {
+              "order": 40,
+              "type": "LEARNING",
+              "title": "Build Your Portfolio Website"
+            },
+            {
+              "order": 41,
+              "type": "LEARNING",
+              "title": "Tell Your Story Professionally"
+            },
+            {
+              "order": 42,
+              "type": "LEARNING",
+              "title": "Create Your Personal Brand"
+            },
+            {
+              "order": 43,
+              "type": "LEARNING",
+              "title": "Turn Projects Into Proof"
+            },
+            {
+              "order": 44,
+              "type": "LEARNING",
+              "title": "Launch Your Professional Website"
+            },
+            {
+              "order": 45,
+              "type": "LEARNING",
+              "title": "Build Social Proof"
+            },
+            {
+              "order": 46,
+              "type": "COURSE_TEST",
+              "title": "Build Your Professional Identity — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "javascript-interactivity",
+          "title": "JavaScript and Interactivity",
+          "order": 6,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 47,
+              "type": "LEARNING",
+              "title": "JavaScript fundamentals (variables, functions, loops)"
+            },
+            {
+              "order": 48,
+              "type": "LEARNING",
+              "title": "DOM manipulation: selecting and changing elements"
+            },
+            {
+              "order": 49,
+              "type": "LEARNING",
+              "title": "Event listeners: responding to user actions"
+            },
+            {
+              "order": 50,
+              "type": "LEARNING",
+              "title": "Fetch API: pulling live data from the web"
+            },
+            {
+              "order": 51,
+              "type": "LEARNING",
+              "title": "Async/await and working with APIs"
+            },
+            {
+              "order": 52,
+              "type": "LEARNING",
+              "title": "Local Storage for saving user data"
+            },
+            {
+              "order": 53,
+              "type": "LEARNING",
+              "title": "Building a complete interactive app"
+            },
+            {
+              "order": 54,
+              "type": "LEARNING",
+              "title": "Debugging and polishing"
+            },
+            {
+              "order": 55,
+              "type": "COURSE_TEST",
+              "title": "JavaScript and Interactivity — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-for-data",
+          "title": "Python for Data",
+          "order": 7,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 57,
+              "type": "LEARNING",
+              "title": "Why Data Science Matters (Real Examples)"
+            },
+            {
+              "order": 58,
+              "type": "LEARNING",
+              "title": "Python Refresher and Jupyter Setup"
+            },
+            {
+              "order": 59,
+              "type": "LEARNING",
+              "title": "Loading Data from CSV and Excel"
+            },
+            {
+              "order": 60,
+              "type": "LEARNING",
+              "title": "Pandas — Selecting, Filtering, Sorting"
+            },
+            {
+              "order": 61,
+              "type": "LEARNING",
+              "title": "Cleaning Data — Nulls, Duplicates, Types"
+            },
+            {
+              "order": 62,
+              "type": "LEARNING",
+              "title": "Aggregations — Group By, Pivot Tables"
+            },
+            {
+              "order": 63,
+              "type": "LEARNING",
+              "title": "Statistical Summaries and Correlation"
+            },
+            {
+              "order": 64,
+              "type": "LEARNING",
+              "title": "Full Analysis Project with a Real Dataset"
+            },
+            {
+              "order": 65,
+              "type": "COURSE_TEST",
+              "title": "Python for Data — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-ai-foundations",
+          "title": "Python and AI Foundations",
+          "order": 8,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 66,
+              "type": "LEARNING",
+              "title": "Python Setup and First Program"
+            },
+            {
+              "order": 67,
+              "type": "LEARNING",
+              "title": "Variables, Data Types, and Logic"
+            },
+            {
+              "order": 68,
+              "type": "LEARNING",
+              "title": "Loops, Functions, and Modules"
+            },
+            {
+              "order": 69,
+              "type": "LEARNING",
+              "title": "Working with Data and Lists"
+            },
+            {
+              "order": 70,
+              "type": "LEARNING",
+              "title": "Introduction to Machine Learning Concepts"
+            },
+            {
+              "order": 71,
+              "type": "LEARNING",
+              "title": "Building a First Prediction Model"
+            },
+            {
+              "order": 72,
+              "type": "LEARNING",
+              "title": "Training, Testing, and Evaluating Models"
+            },
+            {
+              "order": 73,
+              "type": "LEARNING",
+              "title": "Presenting Results to Non-Technical Audiences"
+            },
+            {
+              "order": 74,
+              "type": "COURSE_TEST",
+              "title": "Python and AI Foundations — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "roblox-world-builder",
+          "title": "Roblox World Builder",
+          "order": 9,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 75,
+              "type": "LEARNING",
+              "title": "Roblox Studio Setup and First Build"
+            },
+            {
+              "order": 76,
+              "type": "LEARNING",
+              "title": "Scripting Basics in Lua"
+            },
+            {
+              "order": 77,
+              "type": "LEARNING",
+              "title": "Player Mechanics and Movement"
+            },
+            {
+              "order": 78,
+              "type": "LEARNING",
+              "title": "Game Logic and Scoring Systems"
+            },
+            {
+              "order": 79,
+              "type": "LEARNING",
+              "title": "Multiplayer Networking Basics"
+            },
+            {
+              "order": 80,
+              "type": "LEARNING",
+              "title": "World Design and Aesthetics"
+            },
+            {
+              "order": 81,
+              "type": "LEARNING",
+              "title": "Testing, Debugging, and Polishing"
+            },
+            {
+              "order": 82,
+              "type": "LEARNING",
+              "title": "Publishing and Sharing with Friends"
+            },
+            {
+              "order": 83,
+              "type": "COURSE_TEST",
+              "title": "Roblox World Builder — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [
+        {
+          "number": 1,
+          "modules": [
+            {
+              "slug": "scratch-adventures",
+              "title": "Scratch Adventures",
+              "order": 1,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 1,
+                  "type": "LEARNING",
+                  "title": "What Is Coding, Anyway?"
+                },
+                {
+                  "order": 2,
+                  "type": "LEARNING",
+                  "title": "Meet Scratch and Your First Sprite"
+                },
+                {
+                  "order": 3,
+                  "type": "LEARNING",
+                  "title": "Motion, Looks, and Sound — Your Sprite's 3 Superpowers"
+                },
+                {
+                  "order": 4,
+                  "type": "LEARNING",
+                  "title": "Events and Broadcasting — Sprites That React!"
+                },
+                {
+                  "order": 5,
+                  "type": "LEARNING",
+                  "title": "Loops — Do It Again (and Again)!"
+                },
+                {
+                  "order": 6,
+                  "type": "LEARNING",
+                  "title": "If This, Then That — Sprites That Decide!"
+                },
+                {
+                  "order": 7,
+                  "type": "LEARNING",
+                  "title": "Build Your Own Interactive Story"
+                },
+                {
+                  "order": 8,
+                  "type": "LEARNING",
+                  "title": "Final Project — Build Your Own Game!"
+                },
+                {
+                  "order": 9,
+                  "type": "COURSE_TEST",
+                  "title": "Scratch Adventures — Course Test"
+                }
+              ]
+            },
+            {
+              "slug": "python-for-young-builders",
+              "title": "Python for Young Builders",
+              "order": 2,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 10,
+                  "type": "LEARNING",
+                  "title": "From Blocks to Words — Hello, Python!"
+                },
+                {
+                  "order": 11,
+                  "type": "LEARNING",
+                  "title": "Variables and User Input"
+                },
+                {
+                  "order": 12,
+                  "type": "LEARNING",
+                  "title": "Printing and String Formatting"
+                },
+                {
+                  "order": 13,
+                  "type": "LEARNING",
+                  "title": "If/Else Decisions"
+                },
+                {
+                  "order": 14,
+                  "type": "LEARNING",
+                  "title": "While Loops and For Loops"
+                },
+                {
+                  "order": 15,
+                  "type": "LEARNING",
+                  "title": "Lists and Simple Data"
+                },
+                {
+                  "order": 16,
+                  "type": "LEARNING",
+                  "title": "Building a Mini Quiz App"
+                },
+                {
+                  "order": 17,
+                  "type": "LEARNING",
+                  "title": "Final Project — Our Own Mini Game!"
+                },
+                {
+                  "order": 18,
+                  "type": "COURSE_TEST",
+                  "title": "Python for Young Builders — Course Test"
+                }
+              ]
+            },
+            {
+              "slug": "python-arcade-games",
+              "title": "Python Arcade Games",
+              "order": 3,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 19,
+                  "type": "LEARNING",
+                  "title": "Python Basics for Game Development"
+                },
+                {
+                  "order": 20,
+                  "type": "LEARNING",
+                  "title": "Pygame Setup and the Game Loop"
+                },
+                {
+                  "order": 21,
+                  "type": "LEARNING",
+                  "title": "Sprites, Images, and Movement"
+                },
+                {
+                  "order": 22,
+                  "type": "LEARNING",
+                  "title": "Collision Detection"
+                },
+                {
+                  "order": 23,
+                  "type": "LEARNING",
+                  "title": "Enemies, AI Behavior, and Scoring"
+                },
+                {
+                  "order": 24,
+                  "type": "LEARNING",
+                  "title": "Sound Effects and Music"
+                },
+                {
+                  "order": 25,
+                  "type": "LEARNING",
+                  "title": "Game States — Menu, Play, Game Over"
+                },
+                {
+                  "order": 26,
+                  "type": "LEARNING",
+                  "title": "Packaging and Sharing Your Game"
+                },
+                {
+                  "order": 27,
+                  "type": "COURSE_TEST",
+                  "title": "Python Arcade Games — Course Test"
+                }
+              ]
+            }
+          ],
+          "assessments": [
+            {
+              "order": 28,
+              "type": "STAGE_TEST",
+              "title": "Stage 1 Test"
+            }
+          ]
+        },
+        {
+          "number": 2,
+          "modules": [
+            {
+              "slug": "html-css-mastery",
+              "title": "HTML and CSS Mastery",
+              "order": 4,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 29,
+                  "type": "LEARNING",
+                  "title": "How the web works (browsers, servers, HTML)"
+                },
+                {
+                  "order": 30,
+                  "type": "LEARNING",
+                  "title": "HTML structure and semantic elements"
+                },
+                {
+                  "order": 31,
+                  "type": "LEARNING",
+                  "title": "CSS basics: colors, fonts, spacing"
+                },
+                {
+                  "order": 32,
+                  "type": "LEARNING",
+                  "title": "Flexbox for modern layouts"
+                },
+                {
+                  "order": 33,
+                  "type": "LEARNING",
+                  "title": "CSS Grid for complex designs"
+                },
+                {
+                  "order": 34,
+                  "type": "LEARNING",
+                  "title": "Responsive design and mobile-first"
+                },
+                {
+                  "order": 35,
+                  "type": "LEARNING",
+                  "title": "Animations and hover effects"
+                },
+                {
+                  "order": 36,
+                  "type": "LEARNING",
+                  "title": "Deploying to Vercel and sharing"
+                },
+                {
+                  "order": 37,
+                  "type": "COURSE_TEST",
+                  "title": "HTML and CSS Mastery — Course Test"
+                }
+              ]
+            },
+            {
+              "slug": "build-your-professional-identity",
+              "title": "Build Your Professional Identity",
+              "order": 5,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 38,
+                  "type": "LEARNING",
+                  "title": "What Professional Identity Means in the Digital Age"
+                },
+                {
+                  "order": 39,
+                  "type": "LEARNING",
+                  "title": "Define Your Strengths and Direction"
+                },
+                {
+                  "order": 40,
+                  "type": "LEARNING",
+                  "title": "Build Your Portfolio Website"
+                },
+                {
+                  "order": 41,
+                  "type": "LEARNING",
+                  "title": "Tell Your Story Professionally"
+                },
+                {
+                  "order": 42,
+                  "type": "LEARNING",
+                  "title": "Create Your Personal Brand"
+                },
+                {
+                  "order": 43,
+                  "type": "LEARNING",
+                  "title": "Turn Projects Into Proof"
+                },
+                {
+                  "order": 44,
+                  "type": "LEARNING",
+                  "title": "Launch Your Professional Website"
+                },
+                {
+                  "order": 45,
+                  "type": "LEARNING",
+                  "title": "Build Social Proof"
+                },
+                {
+                  "order": 46,
+                  "type": "COURSE_TEST",
+                  "title": "Build Your Professional Identity — Course Test"
+                }
+              ]
+            },
+            {
+              "slug": "javascript-interactivity",
+              "title": "JavaScript and Interactivity",
+              "order": 6,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 47,
+                  "type": "LEARNING",
+                  "title": "JavaScript fundamentals (variables, functions, loops)"
+                },
+                {
+                  "order": 48,
+                  "type": "LEARNING",
+                  "title": "DOM manipulation: selecting and changing elements"
+                },
+                {
+                  "order": 49,
+                  "type": "LEARNING",
+                  "title": "Event listeners: responding to user actions"
+                },
+                {
+                  "order": 50,
+                  "type": "LEARNING",
+                  "title": "Fetch API: pulling live data from the web"
+                },
+                {
+                  "order": 51,
+                  "type": "LEARNING",
+                  "title": "Async/await and working with APIs"
+                },
+                {
+                  "order": 52,
+                  "type": "LEARNING",
+                  "title": "Local Storage for saving user data"
+                },
+                {
+                  "order": 53,
+                  "type": "LEARNING",
+                  "title": "Building a complete interactive app"
+                },
+                {
+                  "order": 54,
+                  "type": "LEARNING",
+                  "title": "Debugging and polishing"
+                },
+                {
+                  "order": 55,
+                  "type": "COURSE_TEST",
+                  "title": "JavaScript and Interactivity — Course Test"
+                }
+              ]
+            }
+          ],
+          "assessments": [
+            {
+              "order": 56,
+              "type": "STAGE_TEST",
+              "title": "Stage 2 Test"
+            }
+          ]
+        },
+        {
+          "number": 3,
+          "modules": [
+            {
+              "slug": "python-for-data",
+              "title": "Python for Data",
+              "order": 7,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 57,
+                  "type": "LEARNING",
+                  "title": "Why Data Science Matters (Real Examples)"
+                },
+                {
+                  "order": 58,
+                  "type": "LEARNING",
+                  "title": "Python Refresher and Jupyter Setup"
+                },
+                {
+                  "order": 59,
+                  "type": "LEARNING",
+                  "title": "Loading Data from CSV and Excel"
+                },
+                {
+                  "order": 60,
+                  "type": "LEARNING",
+                  "title": "Pandas — Selecting, Filtering, Sorting"
+                },
+                {
+                  "order": 61,
+                  "type": "LEARNING",
+                  "title": "Cleaning Data — Nulls, Duplicates, Types"
+                },
+                {
+                  "order": 62,
+                  "type": "LEARNING",
+                  "title": "Aggregations — Group By, Pivot Tables"
+                },
+                {
+                  "order": 63,
+                  "type": "LEARNING",
+                  "title": "Statistical Summaries and Correlation"
+                },
+                {
+                  "order": 64,
+                  "type": "LEARNING",
+                  "title": "Full Analysis Project with a Real Dataset"
+                },
+                {
+                  "order": 65,
+                  "type": "COURSE_TEST",
+                  "title": "Python for Data — Course Test"
+                }
+              ]
+            },
+            {
+              "slug": "python-ai-foundations",
+              "title": "Python and AI Foundations",
+              "order": 8,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 66,
+                  "type": "LEARNING",
+                  "title": "Python Setup and First Program"
+                },
+                {
+                  "order": 67,
+                  "type": "LEARNING",
+                  "title": "Variables, Data Types, and Logic"
+                },
+                {
+                  "order": 68,
+                  "type": "LEARNING",
+                  "title": "Loops, Functions, and Modules"
+                },
+                {
+                  "order": 69,
+                  "type": "LEARNING",
+                  "title": "Working with Data and Lists"
+                },
+                {
+                  "order": 70,
+                  "type": "LEARNING",
+                  "title": "Introduction to Machine Learning Concepts"
+                },
+                {
+                  "order": 71,
+                  "type": "LEARNING",
+                  "title": "Building a First Prediction Model"
+                },
+                {
+                  "order": 72,
+                  "type": "LEARNING",
+                  "title": "Training, Testing, and Evaluating Models"
+                },
+                {
+                  "order": 73,
+                  "type": "LEARNING",
+                  "title": "Presenting Results to Non-Technical Audiences"
+                },
+                {
+                  "order": 74,
+                  "type": "COURSE_TEST",
+                  "title": "Python and AI Foundations — Course Test"
+                }
+              ]
+            },
+            {
+              "slug": "roblox-world-builder",
+              "title": "Roblox World Builder",
+              "order": 9,
+              "lessonCount": 9,
+              "learningCount": 8,
+              "lessons": [
+                {
+                  "order": 75,
+                  "type": "LEARNING",
+                  "title": "Roblox Studio Setup and First Build"
+                },
+                {
+                  "order": 76,
+                  "type": "LEARNING",
+                  "title": "Scripting Basics in Lua"
+                },
+                {
+                  "order": 77,
+                  "type": "LEARNING",
+                  "title": "Player Mechanics and Movement"
+                },
+                {
+                  "order": 78,
+                  "type": "LEARNING",
+                  "title": "Game Logic and Scoring Systems"
+                },
+                {
+                  "order": 79,
+                  "type": "LEARNING",
+                  "title": "Multiplayer Networking Basics"
+                },
+                {
+                  "order": 80,
+                  "type": "LEARNING",
+                  "title": "World Design and Aesthetics"
+                },
+                {
+                  "order": 81,
+                  "type": "LEARNING",
+                  "title": "Testing, Debugging, and Polishing"
+                },
+                {
+                  "order": 82,
+                  "type": "LEARNING",
+                  "title": "Publishing and Sharing with Friends"
+                },
+                {
+                  "order": 83,
+                  "type": "COURSE_TEST",
+                  "title": "Roblox World Builder — Course Test"
+                }
+              ]
+            }
+          ],
+          "assessments": [
+            {
+              "order": 84,
+              "type": "STAGE_TEST",
+              "title": "Stage 3 Test"
+            }
+          ]
+        }
+      ],
+      "closingAssessments": [
+        {
+          "order": 85,
+          "type": "FINAL_TEST",
+          "title": "Lumexa Odyssey — Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "little-coders-path",
+      "title": "Little Coders Path",
+      "emoji": "✦",
+      "category": "Little Coders",
+      "ageMin": 6,
+      "ageMax": 11,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "scratch-adventures",
+          "title": "Scratch Adventures",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "What Is Coding, Anyway?"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Meet Scratch and Your First Sprite"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Motion, Looks, and Sound — Your Sprite's 3 Superpowers"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Events and Broadcasting — Sprites That React!"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Loops — Do It Again (and Again)!"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "If This, Then That — Sprites That Decide!"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Build Your Own Interactive Story"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Final Project — Build Your Own Game!"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Scratch Adventures — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-for-young-builders",
+          "title": "Python for Young Builders",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "From Blocks to Words — Hello, Python!"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Variables and User Input"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Printing and String Formatting"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "If/Else Decisions"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "While Loops and For Loops"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Lists and Simple Data"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Building a Mini Quiz App"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Final Project — Our Own Mini Game!"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Python for Young Builders — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "ai-for-kids",
+          "title": "AI for Kids: Smart Projects",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "What Is AI?"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Training Your First Image Recognition Model"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Connecting AI to Scratch with ML4Kids"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Building an AI Rock-Paper-Scissors Game"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Training a Sound Recognizer"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Voice-Activated Story"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Facial Expression Recognition and Virtual Pets"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Showcase Day!"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "AI for Kids: Smart Projects — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "game-creator-path",
+      "title": "Game Creator Path",
+      "emoji": "🎮",
+      "category": "Game Creator",
+      "ageMin": 10,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "roblox-world-builder",
+          "title": "Roblox World Builder",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "Roblox Studio Setup and First Build"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Scripting Basics in Lua"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Player Mechanics and Movement"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Game Logic and Scoring Systems"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Multiplayer Networking Basics"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "World Design and Aesthetics"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Testing, Debugging, and Polishing"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Publishing and Sharing with Friends"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Roblox World Builder — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-arcade-games",
+          "title": "Python Arcade Games",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "Python Basics for Game Development"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Pygame Setup and the Game Loop"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Sprites, Images, and Movement"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Collision Detection"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Enemies, AI Behavior, and Scoring"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Sound Effects and Music"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Game States — Menu, Play, Game Over"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Packaging and Sharing Your Game"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Python Arcade Games — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "advanced-game-design",
+          "title": "Advanced Game Design",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "Game Design Fundamentals"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Level Design Theory and Practice"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Advanced Python Classes and Game Architecture"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Unity Introduction and First Scene"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "UI Design and Player Experience"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Playtesting and Iteration"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Performance Optimization"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Final Polish and Portfolio Submission"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Advanced Game Design — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "web-developer-path",
+      "title": "Web Developer Path",
+      "emoji": "🌐",
+      "category": "Web Developer",
+      "ageMin": 12,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "html-css-mastery",
+          "title": "HTML and CSS Mastery",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "How the web works (browsers, servers, HTML)"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "HTML structure and semantic elements"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "CSS basics: colors, fonts, spacing"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Flexbox for modern layouts"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "CSS Grid for complex designs"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "Responsive design and mobile-first"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Animations and hover effects"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Deploying to Vercel and sharing"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "HTML and CSS Mastery — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "javascript-interactivity",
+          "title": "JavaScript and Interactivity",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "JavaScript fundamentals (variables, functions, loops)"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "DOM manipulation: selecting and changing elements"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Event listeners: responding to user actions"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Fetch API: pulling live data from the web"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Async/await and working with APIs"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Local Storage for saving user data"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Building a complete interactive app"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Debugging and polishing"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "JavaScript and Interactivity — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "react-fullstack-web",
+          "title": "React and Full-Stack Web",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "Why React exists and how components work"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "JSX, props, and component trees"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "State with useState and event handling"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Fetching data with useEffect"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "React Router and multi-page apps"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Next.js and server-side rendering"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Styling with Tailwind CSS"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Deploying to Vercel and final project"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "React and Full-Stack Web — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "ai-builder-path",
+      "title": "AI Builder Path",
+      "emoji": "🤖",
+      "category": "AI Builder",
+      "ageMin": 12,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "python-ai-foundations",
+          "title": "Python and AI Foundations",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "Python Setup and First Program"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Variables, Data Types, and Logic"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Loops, Functions, and Modules"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Working with Data and Lists"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Introduction to Machine Learning Concepts"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "Building a First Prediction Model"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Training, Testing, and Evaluating Models"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Presenting Results to Non-Technical Audiences"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Python and AI Foundations — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "computer-vision",
+          "title": "Computer Vision Projects",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "How Computers See — Pixels and Arrays"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "OpenCV Setup and First Image Processing"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Face Detection with Pre-Trained Models"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Emotion Recognition and Classification"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Object Detection with YOLO"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Real-Time Webcam Processing"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Building a Full Computer Vision App"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Deploying and Demoing Your Project"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Computer Vision Projects — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "language-models",
+          "title": "Language Models and Chatbots",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "How Language Models Work (Transformers, Simplified)"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "OpenAI API Setup and Your First Call"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Prompt Engineering Fundamentals"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Building Conversational Memory"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Giving Your Bot a Personality and Purpose"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Connecting to External Data Sources"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Building a UI with Streamlit"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Deployment and Sharing"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Language Models and Chatbots — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "data-scientist-path",
+      "title": "Data Scientist Path",
+      "emoji": "📊",
+      "category": "Data Scientist",
+      "ageMin": 13,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "python-for-data",
+          "title": "Python for Data",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "Why Data Science Matters (Real Examples)"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Python Refresher and Jupyter Setup"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Loading Data from CSV and Excel"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Pandas — Selecting, Filtering, Sorting"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Cleaning Data — Nulls, Duplicates, Types"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "Aggregations — Group By, Pivot Tables"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Statistical Summaries and Correlation"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Full Analysis Project with a Real Dataset"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Python for Data — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "data-visualisation",
+          "title": "Data Visualisation",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "The Science of Good Data Visualisation"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Matplotlib: Line, Bar, Scatter Plots"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Seaborn: Statistical Visualisations"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Choosing the Right Chart for Your Data"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Color, Labels, and Storytelling"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Interactive Charts With Plotly"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Building a Dash Dashboard"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Your Own Interactive Dashboard"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Data Visualisation — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "machine-learning-projects",
+          "title": "Machine Learning Projects",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "How Machine Learning Works (No Maths Jargon)"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Types of ML — Regression vs Classification"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Train/Test Splits and Model Evaluation"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Linear Regression From Scratch"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Decision Trees and Random Forests"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Feature Engineering and Selection"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Model Tuning and Improving Accuracy"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Deploying a Prediction Model as an API"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Machine Learning Projects — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "digital-independence-path",
+      "title": "Digital Independence Path",
+      "emoji": "💼",
+      "category": "Digital Independence",
+      "ageMin": 15,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "build-your-professional-identity",
+          "title": "Build Your Professional Identity",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "What Professional Identity Means in the Digital Age"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Define Your Strengths and Direction"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Build Your Portfolio Website"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Tell Your Story Professionally"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Create Your Personal Brand"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "Turn Projects Into Proof"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Launch Your Professional Website"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Build Social Proof"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Build Your Professional Identity — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "skills-that-pay",
+          "title": "Skills That Pay",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "How the Freelance Economy Works"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Turn a Skill Into a Service"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Build a Service Package"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Pricing, Scope, and Agreements"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Finding Your First Opportunities"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Marketplace Models — What Changes at Different Ages?"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Proposals, Communication, and Delivery"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "The Client Simulation"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Skills That Pay — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "professional-presence",
+          "title": "Professional Presence & Opportunity Building",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "Your Professional Presence"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Build Your Profile"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Showcase Your Work"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Share What You Know"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Build a Professional Presence Beyond LinkedIn"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Networking and Professional Communication"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Build Your 90-Day Opportunity Plan"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Measure, Reflect, and Improve"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Professional Presence & Opportunity Building — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Final Test"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "programs": 6,
+    "courses": 18
+  }
+}

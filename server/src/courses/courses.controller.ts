@@ -30,6 +30,14 @@ export class CoursesController {
     return this.coursesService.listAll();
   }
 
+  /** Public — the default catalog with modules, lesson titles and real
+   * lesson counts, for the /programs, /pricing and /about pages. Must be
+   * registered before the public `:slug` route below. */
+  @Get('catalog')
+  getPublicCatalog() {
+    return this.coursesService.getPublicCatalog();
+  }
+
   /** Public — list all active courses (for landing page & course catalog) */
   @Get()
   listActive() {

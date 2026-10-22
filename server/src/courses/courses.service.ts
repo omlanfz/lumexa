@@ -11,6 +11,10 @@ import { AuditService } from '../audit/audit.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { seedCourseCatalog } from './course-catalog.seed';
+import {
+  buildPublicCatalog,
+  lessonIdsNeedingHeading,
+} from './public-catalog.util';
 
 @Injectable()
 export class CoursesService implements OnModuleInit {
@@ -64,6 +68,74 @@ export class CoursesService implements OnModuleInit {
         _count: { select: { lessons: true, assignedStudents: true } },
       },
       orderBy: [{ category: 'asc' }, { title: 'asc' }],
+    });
+  }
+
+  /** Public — the whole default catalog (Odyssey + specialized paths) as the
+   *  marketing site needs it: modules, lesson titles and real lesson counts,
+   *  read from the same rows /admin/courses manages so the website's numbers
+   *  can never drift from the catalog. Active, non-custom courses only
+   *  (a custom one-off curriculum is built for a single student). Never
+   *  exposes lesson content or prices — see buildPublicCatalog. */
+  async getPublicCatalog() {
+    const courses = await this.prisma.course.findMany({
+      where: { isActive: true, isCustom: false },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        emoji: true,
+        category: true,
+        ageMin: true,
+        ageMax: true,
+      },
+      orderBy: [{ category: 'asc' }, { ageMin: 'asc' }],
+    });
+    const courseIds = courses.map((c) => c.id);
+
+    const [modules, lessons] = await Promise.all([
+      this.prisma.courseModule.findMany({
+        where: { courseId: { in: courseIds } },
+        select: {
+          id: true,
+          courseId: true,
+          slug: true,
+          title: true,
+          order: true,
+          stageNumber: true,
+        },
+      }),
+      this.prisma.lesson.findMany({
+        where: { courseId: { in: courseIds } },
+        select: {
+          id: true,
+          courseId: true,
+          moduleId: true,
+          title: true,
+          order: true,
+          type: true,
+        },
+      }),
+    ]);
+
+    // Some imported titles are just "Course 14: … — Lesson 3"; for only
+    // those lessons, read the real heading from the lesson's own markdown
+    // rather than loading every lesson body.
+    const needHeading = lessonIdsNeedingHeading(modules, lessons);
+    const withContent = needHeading.length
+      ? await this.prisma.lesson.findMany({
+          where: { id: { in: needHeading } },
+          select: { id: true, contentMarkdown: true },
+        })
+      : [];
+
+    return buildPublicCatalog({
+      courses,
+      modules,
+      lessons,
+      markdownByLessonId: new Map(
+        withContent.map((l) => [l.id, l.contentMarkdown]),
+      ),
     });
   }
 

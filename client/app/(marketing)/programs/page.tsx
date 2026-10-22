@@ -1,12 +1,33 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import {
+  useCatalog,
+  findCourse,
+  describeRange,
+  type Catalog,
+  type CatalogCourse,
+  type CatalogModule,
+} from "@/lib/catalog";
+import {
+  ODYSSEY,
+  PROGRAMS,
+  STAGE_NAMES,
+  ageSpan,
+  COURSE_OUTCOMES,
+  resolveProgramId,
+  type ProgramId,
+  type ProgramMeta,
+} from "@/lib/programs";
+
+// Shown on the card of the program most families start with.
+const MOST_POPULAR: ProgramId = "ai";
 
 function DownloadIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -17,490 +38,490 @@ function DownloadIcon({ className }: { className?: string }) {
   );
 }
 
-const programs = [
-  {
-    id: "game",
-    emoji: "🎮",
-    title: "Game Creator",
-    tagline: "Build 3 Real Games",
-    ages: "Ages 10–18",
-    color: "from-red-600 to-orange-600",
-    border: "border-red-700/40",
-    badge: "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300",
-    accent: "text-red-600 dark:text-red-400",
-    dot: "bg-red-500",
-    curriculumFile: "game-creator-path-curriculum.pdf",
-    courses: [
-      {
-        number: "01",
-        title: "Roblox World Builder",
-        lessons: 8,
-        outcome: "Build and publish a multiplayer Roblox game from scratch",
-        description:
-          "Your child goes from zero to a working multiplayer Roblox game. They design the world, write the Lua code, set up game logic, and publish it so friends can actually play it.",
-        projects: ["Obstacle course with scoring", "Multiplayer arena with teams", "Custom game world with NPCs"],
-        tools: ["Roblox Studio", "Lua scripting", "Roblox DevHub"],
-        lessonBreakdown: [
-          "Roblox Studio setup and first build",
-          "Scripting basics in Lua",
-          "Player mechanics and movement",
-          "Game logic and scoring systems",
-          "Multiplayer networking basics",
-          "World design and aesthetics",
-          "Testing, debugging, polishing",
-          "Publishing and sharing with friends",
-        ],
-      },
-      {
-        number: "02",
-        title: "Python Arcade Games",
-        lessons: 8,
-        outcome: "Build 2D games using Python and Pygame",
-        description:
-          "After Roblox, your child levels up to Python, the real language used by professional game developers and AI engineers. They build 2D arcade games from scratch.",
-        projects: ["Space shooter with enemies", "Maze runner with timer", "Brick-breaker clone"],
-        tools: ["Python 3", "Pygame", "VS Code"],
-        lessonBreakdown: [
-          "Python basics for game development",
-          "Pygame setup and game loop",
-          "Sprites, images, and movement",
-          "Collision detection",
-          "Enemies, AI behavior, and scoring",
-          "Sound effects and music",
-          "Game states (menu, play, game over)",
-          "Packaging and sharing your game",
-        ],
-      },
-      {
-        number: "03",
-        title: "Advanced Game Design",
-        lessons: 8,
-        outcome: "Design, polish, and publish a complete game with professional quality",
-        description:
-          "The capstone course. Your child applies everything they know to design and ship a complete game: proper level design, a polished UI, and real playtesters giving feedback.",
-        projects: ["RPG adventure with storyline", "Physics-based puzzle game", "Published portfolio game"],
-        tools: ["Python / Pygame", "Unity Basics", "Game Design frameworks"],
-        lessonBreakdown: [
-          "Game design fundamentals (loops, balance, flow)",
-          "Level design theory and practice",
-          "Advanced Python: classes and game architecture",
-          "Unity introduction and first scene",
-          "UI design and player experience",
-          "Playtesting and iteration",
-          "Performance optimization",
-          "Final polish and portfolio submission",
-        ],
-      },
-    ],
-  },
-  {
-    id: "ai",
-    emoji: "🤖",
-    title: "AI Builder",
-    tagline: "Build 3 Real AI Projects",
-    ages: "Ages 12–18",
-    color: "from-purple-600 to-blue-600",
-    border: "border-purple-700/40",
-    badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
-    accent: "text-purple-600 dark:text-purple-400",
-    dot: "bg-purple-500",
-    curriculumFile: "ai-builder-path-curriculum.pdf",
-    featured: true,
-    courses: [
-      {
-        number: "04",
-        title: "Python and AI Foundations",
-        lessons: 8,
-        outcome: "Write Python scripts and understand how machine learning really works",
-        description:
-          "The foundation of everything. Your child learns Python from scratch: variables, loops, functions, data. Then builds their first machine learning model. No fluff, just real code.",
-        projects: ["Number prediction model", "Simple image classifier", "Data pattern finder"],
-        tools: ["Python 3", "Jupyter Notebooks", "scikit-learn", "NumPy"],
-        lessonBreakdown: [
-          "Python setup and first program",
-          "Variables, data types, and logic",
-          "Loops, functions, and modules",
-          "Working with data and lists",
-          "Introduction to machine learning concepts",
-          "Building a first prediction model",
-          "Training, testing, and evaluating models",
-          "Presenting results to non-technical audiences",
-        ],
-      },
-      {
-        number: "05",
-        title: "Computer Vision Projects",
-        lessons: 8,
-        outcome: "Build apps that see, detect, and recognize the real world",
-        description:
-          "Your child builds apps that use a camera to detect faces, recognize objects, and read emotions. The same technology used in self-driving cars and medical diagnostics.",
-        projects: ["Real-time emotion detector", "Object recognition app", "Motion-activated security cam"],
-        tools: ["Python", "OpenCV", "TensorFlow / Keras", "Webcam API"],
-        lessonBreakdown: [
-          "How computers see images (pixels and arrays)",
-          "OpenCV setup and first image processing",
-          "Face detection with pre-trained models",
-          "Emotion recognition and classification",
-          "Object detection with YOLO",
-          "Real-time webcam processing",
-          "Building a full computer vision app",
-          "Deploying and demoing your project",
-        ],
-      },
-      {
-        number: "06",
-        title: "Language Models and Chatbots",
-        lessons: 8,
-        outcome: "Build conversational AI apps using real LLM APIs",
-        description:
-          "Your child learns how ChatGPT actually works, then builds their own chatbot applications using the OpenAI API: complete with memory, personality, and real-world purpose.",
-        projects: ["Recipe chatbot with memory", "Study assistant bot", "Creative story generator"],
-        tools: ["Python", "OpenAI API", "LangChain", "Streamlit"],
-        lessonBreakdown: [
-          "How language models work (transformers simplified)",
-          "OpenAI API setup and first call",
-          "Prompt engineering fundamentals",
-          "Building conversational memory",
-          "Giving your bot a personality and purpose",
-          "Connecting to external data sources",
-          "Building a UI with Streamlit",
-          "Deployment and sharing",
-        ],
-      },
-    ],
-  },
-  {
-    id: "web",
-    emoji: "🌐",
-    title: "Web Developer",
-    tagline: "Build 3 Live Websites",
-    ages: "Ages 12–18",
-    color: "from-blue-600 to-cyan-600",
-    border: "border-blue-700/40",
-    badge: "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
-    accent: "text-blue-600 dark:text-blue-400",
-    dot: "bg-blue-500",
-    curriculumFile: "web-developer-path-curriculum.pdf",
-    courses: [
-      {
-        number: "07",
-        title: "HTML and CSS Mastery",
-        lessons: 8,
-        outcome: "Build beautiful, responsive websites that look great on any device",
-        description:
-          "Your child learns the fundamentals of the web (HTML structure and CSS styling) and builds their first real, deployed website that anyone can visit.",
-        projects: ["Personal landing page", "Responsive portfolio layout", "Product showcase site"],
-        tools: ["HTML5", "CSS3", "Flexbox", "CSS Grid", "Vercel"],
-        lessonBreakdown: [
-          "How the web works (browsers, servers, HTML)",
-          "HTML structure and semantic elements",
-          "CSS basics: colors, fonts, spacing",
-          "Flexbox for modern layouts",
-          "CSS Grid for complex designs",
-          "Responsive design and mobile-first",
-          "Animations and hover effects",
-          "Deploying to Vercel and sharing",
-        ],
-      },
-      {
-        number: "08",
-        title: "JavaScript and Interactivity",
-        lessons: 8,
-        outcome: "Add dynamic, interactive behavior to any webpage",
-        description:
-          "Static websites are just the beginning. Your child learns JavaScript to make pages that react to clicks, fetch live data, and behave like real apps.",
-        projects: ["Interactive to-do app", "Live weather dashboard", "Memory card game"],
-        tools: ["JavaScript (ES6+)", "DOM API", "Fetch API", "Local Storage"],
-        lessonBreakdown: [
-          "JavaScript fundamentals (variables, functions, loops)",
-          "DOM manipulation: selecting and changing elements",
-          "Event listeners: responding to user actions",
-          "Fetch API: pulling live data from the web",
-          "Async/await and working with APIs",
-          "Local Storage for saving user data",
-          "Building a complete interactive app",
-          "Debugging and polishing",
-        ],
-      },
-      {
-        number: "09",
-        title: "React and Full-Stack Web",
-        lessons: 8,
-        outcome: "Build and deploy modern React applications used in real companies",
-        description:
-          "React is the most in-demand frontend framework in the world. Your child builds reusable components, manages state, fetches data from APIs, and deploys a full React app live.",
-        projects: ["E-commerce product page", "Social media feed clone", "Full portfolio React app"],
-        tools: ["React 18", "Next.js", "Vercel", "REST APIs"],
-        lessonBreakdown: [
-          "Why React exists and how components work",
-          "JSX, props, and component trees",
-          "State with useState and event handling",
-          "Fetching data with useEffect",
-          "React Router and multi-page apps",
-          "Next.js and server-side rendering",
-          "Styling with Tailwind CSS",
-          "Deploying to Vercel and final project",
-        ],
-      },
-    ],
-  },
-  {
-    id: "little",
-    emoji: "🌟",
-    title: "Little Coders",
-    tagline: "Build 3 Real Projects",
-    ages: "Ages 6–11",
-    color: "from-yellow-500 to-orange-500",
-    border: "border-yellow-700/40",
-    badge: "bg-amber-100 dark:bg-yellow-900/30 text-amber-700 dark:text-yellow-300",
-    accent: "text-amber-600 dark:text-yellow-400",
-    dot: "bg-amber-500",
-    curriculumFile: "little-coders-path-curriculum.pdf",
-    courses: [
-      {
-        number: "10",
-        title: "Scratch Adventures",
-        lessons: 8,
-        outcome: "Create animated stories, games, and interactive projects visually",
-        description:
-          "The perfect first step for young learners. Scratch uses visual blocks instead of text, so your child focuses on logic and creativity, not syntax. By the end, they have real animated projects to show off.",
-        projects: ["Animated animal story", "Interactive quiz game", "Creative music maker"],
-        tools: ["Scratch (MIT)", "Scratch Editor", "Scratch community"],
-        lessonBreakdown: [
-          "What is coding and why does it matter",
-          "Scratch setup and first sprite",
-          "Motion, looks, and sounds blocks",
-          "Events and broadcasting",
-          "Loops and repetition",
-          "Conditionals and decisions",
-          "Building an interactive story",
-          "Final project: our own game",
-        ],
-      },
-      {
-        number: "11",
-        title: "Python for Young Builders",
-        lessons: 8,
-        outcome: "Write first real Python programs (the same language used by NASA and Google)",
-        description:
-          "The bridge from visual to text-based coding. Your child writes their first Python programs: variables, loops, and their very own mini projects. Taught slowly, with patience, and lots of fun.",
-        projects: ["Personal quiz app", "Simple calculator", "Word guessing game"],
-        tools: ["Python 3", "Thonny IDE", "Repl.it"],
-        lessonBreakdown: [
-          "From Scratch blocks to Python text",
-          "Variables and user input",
-          "Printing and string formatting",
-          "If/else decisions",
-          "While loops and for loops",
-          "Lists and simple data",
-          "Building a mini quiz app",
-          "Final project: our own mini game",
-        ],
-      },
-      {
-        number: "12",
-        title: "AI for Kids: Smart Projects",
-        lessons: 8,
-        outcome: "Train your own AI models and build apps that see, listen, and respond",
-        description:
-          "Your child discovers how AI actually works, not by reading about it, but by building with it. Using Google's Teachable Machine and ML4Kids, they train machine learning models that recognize images and sounds, then connect them to Scratch to build interactive AI-powered projects any parent will be amazed by.",
-        projects: ["AI rock-paper-scissors game", "Voice-activated Scratch story", "Emotion-recognition virtual pet"],
-        tools: ["Scratch", "Teachable Machine", "ML4Kids", "Google AI Tools"],
-        lessonBreakdown: [
-          "What is AI and how do machines actually learn",
-          "Training your first image recognition model",
-          "Connecting an AI model to Scratch with ML4Kids",
-          "Building an AI rock-paper-scissors game",
-          "Voice commands: training a sound recognizer",
-          "Creating a voice-activated story in Scratch",
-          "Facial expression recognition and virtual pets",
-          "Showcase: presenting your AI project to the world",
-        ],
-      },
-    ],
-  },
-  {
-    id: "data",
-    emoji: "📊",
-    title: "Data Scientist",
-    tagline: "Build 3 Data Projects",
-    ages: "Ages 13–18",
-    color: "from-teal-600 to-green-600",
-    border: "border-teal-700/40",
-    badge: "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300",
-    accent: "text-teal-600 dark:text-teal-400",
-    dot: "bg-teal-500",
-    curriculumFile: "data-scientist-path-curriculum.pdf",
-    courses: [
-      {
-        number: "13",
-        title: "Python for Data",
-        lessons: 8,
-        outcome: "Load, clean, and analyse real-world datasets using Python",
-        description:
-          "Every data project starts with messy, real-world data. Your child learns to wrangle it into something useful: finding patterns, calculating stats, and drawing conclusions.",
-        projects: ["Sports performance analysis", "School grade analysis", "City population trends"],
-        tools: ["Python 3", "Pandas", "NumPy", "Jupyter Notebooks"],
-        lessonBreakdown: [
-          "Why data science matters (real examples)",
-          "Python refresher and Jupyter setup",
-          "Loading data from CSV and Excel",
-          "Pandas: selecting, filtering, sorting",
-          "Cleaning data: nulls, duplicates, types",
-          "Aggregations: group by, pivot tables",
-          "Statistical summaries and correlation",
-          "Full analysis project with a real dataset",
-        ],
-      },
-      {
-        number: "14",
-        title: "Data Visualisation",
-        lessons: 8,
-        outcome: "Turn raw data into compelling, interactive charts and dashboards",
-        description:
-          "Data without visuals is just numbers. Your child learns to create charts that tell stories, the kind that make people say 'I never knew that' when they look at the data.",
-        projects: ["Climate change dashboard", "Market trends chart", "Sports comparison visualiser"],
-        tools: ["Python", "Matplotlib", "Seaborn", "Plotly", "Dash"],
-        lessonBreakdown: [
-          "The science of good data visualisation",
-          "Matplotlib: line, bar, scatter plots",
-          "Seaborn: statistical visualisations",
-          "Choosing the right chart for your data",
-          "Color, labels, and storytelling",
-          "Interactive charts with Plotly",
-          "Building a Dash dashboard",
-          "Final: your own interactive dashboard",
-        ],
-      },
-      {
-        number: "15",
-        title: "Machine Learning Projects",
-        lessons: 8,
-        outcome: "Build predictive models that make real decisions from real data",
-        description:
-          "The pinnacle of data science: teaching a computer to predict outcomes. Your child builds real machine learning models, the same technology behind Netflix recommendations and fraud detection.",
-        projects: ["House price predictor", "Customer churn predictor", "Movie recommendation engine"],
-        tools: ["Python", "scikit-learn", "XGBoost", "Joblib"],
-        lessonBreakdown: [
-          "How machine learning works (no maths jargon)",
-          "Types of ML: regression vs classification",
-          "Train/test splits and model evaluation",
-          "Linear regression from scratch",
-          "Decision trees and random forests",
-          "Feature engineering and selection",
-          "Model tuning and improving accuracy",
-          "Deploying a prediction model as an API",
-        ],
-      },
-    ],
-  },
-  {
-    id: "digital",
-    emoji: "💼",
-    title: "Digital Independence",
-    tagline: "Identity to Opportunity",
-    ages: "Ages 15–18",
-    color: "from-green-600 to-emerald-600",
-    border: "border-green-700/40",
-    badge: "bg-green-900/30 text-green-300",
-    accent: "text-green-400",
-    dot: "bg-green-400",
-    curriculumFile: "digital-independence-path-curriculum.pdf",
-    courses: [
-      {
-        number: "16",
-        title: "Build Your Professional Identity",
-        lessons: 8,
-        outcome: "A live portfolio, brand kit, and project case studies that prove your skills are real",
-        description:
-          "Before you can pursue any opportunity, you need a credible online presence. Students learn to present themselves professionally, define a realistic area of focus, and turn real Lumexa projects into honest, demonstrated evidence of their skills.",
-        projects: ["Live portfolio website", "Personal brand kit", "2–3 project case studies", "Professional introduction / bio"],
-        tools: ["HTML / CSS", "Vercel", "Canva", "GitHub", "Google Docs"],
-        lessonBreakdown: [
-          "What professional identity means in the digital age",
-          "Define your strengths and direction",
-          "Build your portfolio website",
-          "Tell your story professionally",
-          "Create your personal brand",
-          "Turn projects into proof",
-          "Launch your professional website",
-          "Build social proof",
-        ],
-      },
-      {
-        number: "17",
-        title: "Skills That Pay",
-        lessons: 8,
-        outcome: "A packaged service, pricing, proposal, and a full simulated client project",
-        description:
-          "Students learn how skills become services and services become professional opportunities — without assuming every teenager can independently use adult marketplaces. Real platforms are taught as case studies, with their actual age and account rules, never a workaround.",
-        projects: ["Professional service package", "Pricing worksheet", "Proposal + client/project brief", "Full simulated client project"],
-        tools: ["Google Docs", "Canva", "Notion", "Email", "Spreadsheets"],
-        lessonBreakdown: [
-          "How the freelance economy works",
-          "Turn a skill into a service",
-          "Build a service package",
-          "Pricing, scope and agreements",
-          "Finding your first opportunities",
-          "Marketplace models: what changes at different ages?",
-          "Proposals, communication and delivery",
-          "The client simulation",
-        ],
-      },
-      {
-        number: "18",
-        title: "Professional Presence & Opportunity Building",
-        lessons: 8,
-        outcome: "A professional presence, real content, and a 90-day plan to generate opportunities",
-        description:
-          "Students build reputation and communicate professionally using LinkedIn where they're age-eligible (16+, subject to local law), and an equally credible portfolio-first path where they're not — so every student leaves discoverable and prepared.",
-        projects: ["Professional profile / presence", "5 pieces of professional content", "Networking plan", "90-day growth plan"],
-        tools: ["LinkedIn (16+)", "Canva", "Google Docs", "Content Planning Tools"],
-        lessonBreakdown: [
-          "Your professional presence",
-          "Build your professional profile",
-          "Showcase your work",
-          "Share what you know",
-          "Build a professional presence beyond LinkedIn",
-          "Networking & professional communication",
-          "Build your 90-day opportunity plan",
-          "Measure, reflect & improve",
-        ],
-      },
-    ],
-  },
-];
+const trialHref = (id: string) => `/trial?program=${id}`;
+const pricingHref = (id: string) => `/pricing?program=${id}#prices`;
 
-function CoursesContent() {
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// ── Odyssey: a simple overview of its stages, no lesson-by-lesson detail ────
+
+function OdysseySection({ course }: { course: CatalogCourse }) {
+  const finalTests = course.closingAssessments.length;
+  return (
+    <div id="program-odyssey" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
+      <div className={`relative rounded-3xl p-[2px] bg-gradient-to-r ${ODYSSEY.color} glow-pulse`}>
+        <div className="rounded-[22px] bg-white dark:bg-gray-900 p-6 sm:p-8">
+          <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-gradient-to-r ${ODYSSEY.color} text-white mb-4`}>
+            🚀 The broader journey · Start here
+          </span>
+
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">{ODYSSEY.title}</h2>
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${ODYSSEY.badge}`}>{ODYSSEY.ages}</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
+                  For complete beginners
+                </span>
+              </div>
+              <p className="font-bold text-sm bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent mb-1">
+                {ODYSSEY.tagline}
+              </p>
+              <p className="text-[#64748B] dark:text-gray-400 text-xs mb-3">
+                {course.totalLessons} lessons · {plural(course.modules.length, "course")} · {plural(course.stages.length, "stage")}
+              </p>
+              <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed max-w-xl">
+                Start from zero. Explore games, web, data and AI across three stages, then discover the specialized
+                program that&apos;s right for them.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-2 flex-shrink-0">
+              <a
+                href={`/curriculums/${ODYSSEY.curriculumFile}`}
+                download
+                className="inline-flex items-center justify-center gap-1.5 px-5 py-3 text-sm font-bold rounded-xl border-2 border-purple-200 dark:border-purple-700/50 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all"
+              >
+                <DownloadIcon className="w-4 h-4" />
+                Download Curriculum
+              </a>
+              <Link
+                href={trialHref(ODYSSEY.id)}
+                className={`inline-flex items-center justify-center px-5 py-3 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${ODYSSEY.color} hover:opacity-90 transition-all shadow-md shadow-purple-900/20`}
+              >
+                Book Free Trial
+              </Link>
+              <Link
+                href={pricingHref(ODYSSEY.id)}
+                className="inline-flex items-center justify-center px-5 py-3 text-sm font-semibold text-[#334155] dark:text-gray-300 hover:text-[#0F172A] dark:hover:text-white border border-[#CBD5E1] dark:border-gray-700 hover:border-purple-300 dark:hover:border-gray-500 rounded-xl transition-all"
+              >
+                View Pricing
+              </Link>
+            </div>
+          </div>
+
+          {/* The three stages: an overview, not a lesson list */}
+          {course.stages.length > 0 && (
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+              {course.stages.map((stage) => {
+                const lessons =
+                  stage.modules.reduce((sum, m) => sum + m.lessonCount, 0) + stage.assessments.length;
+                return (
+                  <div
+                    key={stage.number}
+                    className="rounded-2xl border border-[#E2E8F0] dark:border-gray-700/60 bg-[#F8FAFF] dark:bg-gray-900/50 p-5"
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                      Stage {stage.number}
+                    </p>
+                    <h3 className="text-lg font-black text-[#0F172A] dark:text-white mb-1">
+                      {STAGE_NAMES[stage.number] ?? `Stage ${stage.number}`}
+                    </h3>
+                    <p className="text-xs text-[#64748B] dark:text-gray-400 mb-3">
+                      {plural(stage.modules.length, "course")} · {lessons} lessons
+                    </p>
+                    <ul className="space-y-1.5">
+                      {stage.modules.map((m) => (
+                        <li key={m.slug} className="flex items-start gap-2 text-sm text-[#334155] dark:text-gray-300">
+                          <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${ODYSSEY.dot}`} />
+                          {m.title}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <p className="mt-5 text-xs text-[#64748B] dark:text-gray-400">
+            Each course ends with a course test{course.stages.length > 0 && ", each stage with a stage test"}
+            {finalTests > 0 && ", and the journey with a final test"}. After Odyssey, your child can choose a
+            specialized program to go deeper.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Specialized programs ────────────────────────────────────────────────────
+
+function ProgramCard({
+  program,
+  course,
+  isOpen,
+  onToggle,
+}: {
+  program: ProgramMeta;
+  course: CatalogCourse;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={`flex flex-col p-6 rounded-2xl bg-white dark:bg-gray-900/50 border-2 transition-all ${
+        isOpen
+          ? `${program.border} shadow-lg`
+          : "border-[#E2E8F0] dark:border-gray-700/60 card-hover"
+      }`}
+    >
+      <div className="flex items-start gap-3 mb-3">
+        <div className={`w-12 h-12 flex-none rounded-xl bg-gradient-to-br ${program.color} grid place-items-center text-2xl shadow-sm`}>
+          {program.emoji}
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-[#0F172A] dark:text-white font-black text-xl leading-tight">{program.title}</h3>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1">
+            <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${program.badge}`}>{program.ages}</span>
+            {program.id === MOST_POPULAR && (
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                Most Popular
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <p className={`font-bold text-sm mb-1 ${program.accent}`}>{program.tagline}</p>
+      <p className="text-[#64748B] dark:text-gray-400 text-xs mb-4">
+        {plural(course.modules.length, "course")} · {course.totalLessons} lessons
+      </p>
+
+      <ul className="space-y-1.5 mb-5">
+        {course.modules.map((m) => (
+          <li key={m.slug} className="flex items-start gap-2 text-sm text-[#334155] dark:text-gray-300">
+            <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${program.dot}`} />
+            {m.title}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-auto space-y-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          aria-controls={`program-${program.id}`}
+          className={`w-full flex items-center justify-center gap-1.5 px-4 py-2.5 text-sm font-bold rounded-xl border ${program.border} ${program.badge} hover:brightness-95 dark:hover:brightness-125 transition-all`}
+        >
+          {isOpen ? "Hide Curriculum" : "View Curriculum"}
+          <span aria-hidden className={`transition-transform ${isOpen ? "rotate-180" : ""}`}>▾</span>
+        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            href={trialHref(program.id)}
+            className={`text-center px-3 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${program.color} hover:opacity-90 transition-all`}
+          >
+            Free Trial
+          </Link>
+          <Link
+            href={pricingHref(program.id)}
+            className="text-center px-3 py-2.5 text-sm font-semibold text-[#334155] dark:text-gray-300 hover:text-[#0F172A] dark:hover:text-white border border-[#CBD5E1] dark:border-gray-700 hover:border-purple-300 dark:hover:border-gray-500 rounded-xl transition-all"
+          >
+            View Pricing
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CourseRow({
+  program,
+  module,
+  number,
+  isOpen,
+  onToggle,
+}: {
+  program: ProgramMeta;
+  module: CatalogModule;
+  number: number;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const outcome = COURSE_OUTCOMES[module.slug];
+  const hasTest = module.lessonCount > module.learningCount;
+  const teachingLessons = module.lessons.filter((l) => l.type === "LEARNING");
+  const lessonSummary = `${module.learningCount} lessons${hasTest ? " + test" : ""}`;
+
+  return (
+    <div className={`border rounded-2xl overflow-hidden ${program.border} bg-white dark:bg-gray-900/40`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="w-full flex items-start gap-3 sm:gap-4 p-4 sm:p-5 text-left hover:bg-[#F7F9FF] dark:hover:bg-gray-900/60 transition-colors"
+      >
+        <div className={`text-2xl font-black ${program.accent} flex-shrink-0 w-6 sm:w-8 text-center`}>{number}</div>
+        <div className="flex-1 min-w-0">
+          <h4 className="text-[#0F172A] dark:text-white font-bold text-base">{module.title}</h4>
+          {outcome && <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mt-0.5">{outcome}</p>}
+          <span className="sm:hidden inline-block mt-2 text-xs px-2.5 py-1 rounded-lg bg-[#F1F5F9] dark:bg-gray-800 text-[#64748B] dark:text-gray-400">
+            {lessonSummary}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <span className="hidden sm:inline-block text-xs px-2.5 py-1 rounded-lg bg-[#F1F5F9] dark:bg-gray-800 text-[#64748B] dark:text-gray-400 whitespace-nowrap">
+            {lessonSummary}
+          </span>
+          <span aria-hidden className={`text-xs transition-transform text-[#94A3B8] dark:text-gray-500 ${isOpen ? "rotate-180" : ""}`}>
+            ▾
+          </span>
+        </div>
+      </button>
+
+      {isOpen && (
+        <ol className="px-5 pb-5 pt-4 border-t border-[#E2E8F0] dark:border-gray-800/60 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+          {module.lessons.map((lesson) => {
+            if (lesson.type !== "LEARNING") {
+              return (
+                <li
+                  key={lesson.order}
+                  className={`flex items-start gap-2 text-sm font-semibold sm:col-span-2 mt-1 pt-3 border-t border-dashed border-[#E2E8F0] dark:border-gray-800 ${program.accent}`}
+                >
+                  <span aria-hidden>✓</span>
+                  <span>
+                    Course Test
+                    <span className="font-normal text-[#64748B] dark:text-gray-400">
+                      {" "}· a check of everything covered in this course
+                    </span>
+                  </span>
+                </li>
+              );
+            }
+            return (
+              <li key={lesson.order} className="flex items-start gap-2 text-sm text-[#475569] dark:text-gray-400">
+                <span className={`font-bold flex-shrink-0 w-5 ${program.accent}`}>{teachingLessons.indexOf(lesson) + 1}.</span>
+                <span>{lesson.title}</span>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function ProgramDetail({
+  program,
+  course,
+  expandedCourse,
+  setExpandedCourse,
+  onClose,
+}: {
+  program: ProgramMeta;
+  course: CatalogCourse;
+  expandedCourse: string | null;
+  setExpandedCourse: (key: string | null) => void;
+  onClose: () => void;
+}) {
+  const learning = course.learningLessons;
+  return (
+    <div id={`program-${program.id}`} className="scroll-mt-24 mt-8 rounded-3xl border border-[#E2E8F0] dark:border-gray-700/60 bg-[#F8FAFF] dark:bg-gray-900/30 p-5 sm:p-8">
+      <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-6 pb-6 border-b ${program.border}`}>
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="text-4xl sm:text-5xl">{program.emoji}</div>
+          <div className="min-w-0">
+            <h3 className="text-xl sm:text-2xl font-black text-[#0F172A] dark:text-white">{program.title} curriculum</h3>
+            <p className={`font-bold text-sm ${program.accent}`}>{program.tagline}</p>
+            <p className="text-[#64748B] dark:text-gray-400 text-xs mt-0.5">
+              {course.totalLessons} lessons: {learning} teaching lessons plus {course.assessmentLessons}{" "}
+              {course.assessmentLessons === 1 ? "assessment" : "assessments"}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 flex-shrink-0">
+          <a
+            href={`/curriculums/${program.curriculumFile}`}
+            download
+            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border ${program.border} ${program.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 transition-all`}
+          >
+            <DownloadIcon className="w-4 h-4" />
+            Download Curriculum
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3.5 py-2 rounded-xl border border-[#CBD5E1] dark:border-gray-700 text-xs font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {course.modules.map((module, i) => {
+          const key = `${program.id}:${module.slug}`;
+          return (
+            <CourseRow
+              key={module.slug}
+              program={program}
+              module={module}
+              number={i + 1}
+              isOpen={expandedCourse === key}
+              onToggle={() => setExpandedCourse(expandedCourse === key ? null : key)}
+            />
+          );
+        })}
+
+        {course.closingAssessments.map((test) => (
+          <div
+            key={test.order}
+            className={`flex items-start gap-3 border border-dashed rounded-2xl p-5 ${program.border} bg-white dark:bg-gray-900/40`}
+          >
+            <span aria-hidden className="text-xl">🏆</span>
+            <div>
+              <p className="text-[#0F172A] dark:text-white font-bold text-base">{test.title}</p>
+              <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mt-0.5">
+                A practical challenge and a short live viva with the teacher. Passing it earns your child a completion
+                certificate.
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-3 mt-6">
+        <Link
+          href={trialHref(program.id)}
+          className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${program.color} hover:opacity-90 transition-all`}
+        >
+          Book Free Trial for {program.title}
+        </Link>
+        <Link
+          href={pricingHref(program.id)}
+          className="px-5 py-2.5 text-sm font-semibold text-[#334155] dark:text-gray-300 hover:text-[#0F172A] dark:hover:text-white border border-[#CBD5E1] dark:border-gray-700 hover:border-purple-300 dark:hover:border-gray-500 rounded-xl transition-all"
+        >
+          View {program.title} Pricing
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// ── Page ────────────────────────────────────────────────────────────────────
+
+function JourneyChoice({ catalog, odyssey }: { catalog: Catalog; odyssey: CatalogCourse | undefined }) {
+  const specialized = catalog.courses.filter((c) => c.kind === "specialized");
+  const lessons = describeRange(specialized.map((c) => c.totalLessons));
+  const courses = describeRange(specialized.map((c) => c.modules.length));
+
+  return (
+    <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
+      <div className="text-center mb-8">
+        <p className="text-purple-600 dark:text-purple-400 text-sm font-bold uppercase tracking-widest mb-2">
+          Step 1 · Choose a journey
+        </p>
+        <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">Two ways to learn at Lumexa</h2>
+      </div>
+
+      <div className={`grid grid-cols-1 ${odyssey ? "md:grid-cols-2" : ""} gap-5`}>
+        {odyssey && (
+          <a
+            href="#program-odyssey"
+            className="group flex flex-col p-6 sm:p-7 rounded-3xl bg-white dark:bg-gray-900/50 border-2 border-purple-200 dark:border-purple-700/40 hover:border-purple-400 dark:hover:border-purple-500/60 card-hover"
+          >
+            <span className="text-[10px] font-black uppercase tracking-wider text-purple-600 dark:text-purple-400 mb-2">
+              The broader journey
+            </span>
+            <h3 className="text-xl font-black text-[#0F172A] dark:text-white mb-2">🚀 {ODYSSEY.title}</h3>
+            <p className="text-[#334155] dark:text-gray-300 text-sm leading-relaxed mb-4">
+              A guided path for beginners. Your child explores games, websites, data and AI before choosing what to
+              specialize in.
+            </p>
+            <p className="text-xs font-semibold text-[#64748B] dark:text-gray-400 mb-1">
+              {odyssey.totalLessons} lessons · {plural(odyssey.modules.length, "course")} · {plural(odyssey.stages.length, "stage")}
+            </p>
+            <p className="text-xs text-[#64748B] dark:text-gray-400 mb-5">{ODYSSEY.ages} · No experience needed</p>
+            <span className="mt-auto text-sm font-black text-purple-600 dark:text-purple-400 group-hover:translate-x-1 transition-transform">
+              See the {odyssey.stages.length || 3} stages ↓
+            </span>
+          </a>
+        )}
+
+        <a
+          href="#specialized"
+          className="group flex flex-col p-6 sm:p-7 rounded-3xl bg-white dark:bg-gray-900/50 border-2 border-blue-200 dark:border-blue-700/40 hover:border-blue-400 dark:hover:border-blue-500/60 card-hover"
+        >
+          <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 dark:text-blue-400 mb-2">
+            A focused journey
+          </span>
+          <h3 className="text-xl font-black text-[#0F172A] dark:text-white mb-2">🎯 Specialized Program</h3>
+          <p className="text-[#334155] dark:text-gray-300 text-sm leading-relaxed mb-4">
+            Go deep in one area your child already loves. Choose from {specialized.length} programs, each a complete
+            path that ends with a final test and certificate.
+          </p>
+          <p className="text-xs font-semibold text-[#64748B] dark:text-gray-400 mb-1">
+            {lessons} lessons · {courses} courses per program
+          </p>
+          <p className="text-xs text-[#64748B] dark:text-gray-400 mb-5">{ageSpan(PROGRAMS)}, depending on the program</p>
+          <span className="mt-auto text-sm font-black text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform">
+            Explore the {specialized.length} programs ↓
+          </span>
+        </a>
+      </div>
+
+      <p className="text-center text-sm text-[#64748B] dark:text-gray-400 mt-6">
+        Not sure which is right?{" "}
+        <Link href="/trial" className="font-semibold text-purple-600 dark:text-purple-400 hover:underline underline-offset-2">
+          Book a free trial
+        </Link>{" "}
+        and we&apos;ll recommend one for your child&apos;s age and interests.
+      </p>
+    </section>
+  );
+}
+
+function ProgramsContent() {
   const searchParams = useSearchParams();
   // `program` is the canonical query param; `pathway` is kept so old links still work.
-  const programParam = searchParams.get("program") || searchParams.get("pathway");
+  const programParam = resolveProgramId(searchParams.get("program") || searchParams.get("pathway"));
+  const { catalog } = useCatalog();
 
-  const [activeProgram, setActiveProgram] = useState<string>(programParam || "all");
+  const [openProgram, setOpenProgram] = useState<ProgramId | null>(
+    programParam && programParam !== "odyssey" ? programParam : null,
+  );
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
 
-  // Auto-scroll to the program section when coming from a direct link
+  // A new ?program= (e.g. a link clicked while already on this page) opens that
+  // program. Odyssey has no panel; it just scrolls to its section below.
+  const [seenParam, setSeenParam] = useState(programParam);
+  if (seenParam !== programParam) {
+    setSeenParam(programParam);
+    if (programParam && programParam !== "odyssey") setOpenProgram(programParam);
+  }
+
+  // Bring the linked program into view.
   useEffect(() => {
-    if (programParam) {
-      // Odyssey sits above the program tabs, so it never filters the list.
-      setActiveProgram(programParam === "odyssey" ? "all" : programParam);
-      setTimeout(() => {
-        const el = document.getElementById(`program-${programParam}`);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
-    }
+    if (!programParam) return;
+    const timer = setTimeout(() => {
+      document.getElementById(`program-${programParam}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => clearTimeout(timer);
   }, [programParam]);
 
-  const visiblePrograms =
-    activeProgram === "all"
-      ? programs
-      : programs.filter((p) => p.id === activeProgram);
-
-  const totalCourses = programs.reduce((a, p) => a + p.courses.length, 0);
-  const totalLessons = programs.reduce(
-    (a, p) => a + p.courses.reduce((b, c) => b + c.lessons, 0),
-    0
+  const odyssey = findCourse(catalog, ODYSSEY.catalogSlug);
+  const visible = useMemo(
+    () =>
+      PROGRAMS.flatMap((meta) => {
+        const course = findCourse(catalog, meta.catalogSlug);
+        return course ? [{ meta, course }] : [];
+      }),
+    [catalog],
   );
+  const open = visible.find((v) => v.meta.id === openProgram);
+
+  const toggleProgram = (id: ProgramId) => {
+    const next = openProgram === id ? null : id;
+    setOpenProgram(next);
+    setExpandedCourse(null);
+    if (next) {
+      setTimeout(() => {
+        document.getElementById(`program-${next}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 60);
+    }
+  };
 
   return (
     <div className="bg-[#F7F9FF] dark:bg-[#050D1A] text-[#0F172A] dark:text-white transition-colors duration-200">
@@ -511,16 +532,12 @@ function CoursesContent() {
           <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-blue-700/6 rounded-full blur-3xl" />
         </div>
         <div className="relative max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-medium mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-            {programs.length} Programs · {totalCourses} Courses · {totalLessons} Lessons
-          </div>
           <h1 className="text-4xl sm:text-5xl font-black text-[#0F172A] dark:text-white leading-tight mb-4">
-            Full Curriculum Catalog
+            Find the Right Program for Your Child
           </h1>
-          <p className="text-lg text-[#334155] dark:text-gray-400 max-w-2xl mx-auto mb-6">
-            Every course is taught live by a verified expert teacher across all learning formats.
-            Every lesson ends with something your child built. Every course ends with a real portfolio project.
+          <p className="text-lg text-[#334155] dark:text-gray-400 max-w-2xl mx-auto mb-8">
+            Every program is taught live by a verified expert teacher. Every lesson ends with something your child
+            built, and every program ends with real portfolio work.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
@@ -540,244 +557,54 @@ function CoursesContent() {
         </div>
       </section>
 
-      {/* Flagship: Lumexa Odyssey — sits above the program tabs, not part of them */}
-      <div id="program-odyssey" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 -mt-4 mb-10 scroll-mt-24">
-        <div className="relative rounded-3xl p-[2px] bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 glow-pulse">
-          <div className="rounded-[22px] bg-white dark:bg-gray-900 p-6 sm:p-8">
-            <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 text-white mb-4">
-              🚀 Flagship · Start Here
-            </span>
+      {/* The parent decision comes first */}
+      <JourneyChoice catalog={catalog} odyssey={odyssey} />
 
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">Lumexa Odyssey</h2>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300">
-                    Ages 12–18
-                  </span>
-                  <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
-                    For complete beginners
-                  </span>
-                </div>
-                <p className="font-bold text-sm bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent mb-1">
-                  Your child&apos;s complete coding journey
-                </p>
-                <p className="text-[#94A3B8] dark:text-gray-500 text-xs mb-3">72 lessons · 9 courses · 3 stages</p>
-                <p className="text-[#334155] dark:text-gray-400 text-sm leading-relaxed max-w-xl">
-                  Start from zero. Explore games, web, data and AI. Then discover the program that&apos;s right for them.
-                </p>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-2 flex-shrink-0">
-                <a
-                  href="/curriculums/lumexa-odyssey-curriculum.pdf"
-                  download
-                  className="inline-flex items-center justify-center gap-1.5 px-5 py-3 text-sm font-bold rounded-xl border-2 border-purple-200 dark:border-purple-700/50 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all"
-                >
-                  <DownloadIcon className="w-4 h-4" />
-                  View Odyssey Curriculum
-                </a>
-                <Link
-                  href="/trial"
-                  className="inline-flex items-center justify-center px-5 py-3 text-sm font-bold text-white rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 hover:opacity-90 transition-all shadow-md shadow-purple-900/20"
-                >
-                  Free Trial
-                </Link>
-              </div>
-            </div>
-          </div>
+      {/* Odyssey */}
+      {odyssey && (
+        <div className="pb-16">
+          <OdysseySection course={odyssey} />
         </div>
-      </div>
+      )}
 
-      {/* Filter tabs */}
-      <div className="sticky top-16 z-20 bg-[#F7F9FF]/95 dark:bg-[#050D1A]/95 backdrop-blur border-b border-[#E2E8F0] dark:border-gray-800/60 py-3 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-          <button
-            onClick={() => setActiveProgram("all")}
-            className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-              activeProgram === "all"
-                ? "bg-purple-600 text-white"
-                : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
-            }`}
-          >
-            All Programs
-          </button>
-          {programs.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setActiveProgram(p.id)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                activeProgram === p.id
-                  ? `bg-gradient-to-r ${p.color} text-white`
-                  : "bg-[#E2E8F0] dark:bg-gray-800/60 text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-[#D1D5DB] dark:hover:bg-gray-800"
-              }`}
-            >
-              {p.emoji} {p.title}
-            </button>
+      {/* Specialized programs */}
+      <section id="specialized" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-16 scroll-mt-24">
+        <div className="text-center mb-10">
+          <p className="text-blue-600 dark:text-blue-400 text-sm font-bold uppercase tracking-widest mb-2">
+            Step 2 · Pick a program
+          </p>
+          <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white mb-2">Specialized Programs</h2>
+          <p className="text-[#64748B] dark:text-gray-400 max-w-xl mx-auto text-sm">
+            Choose the program that matches what your child loves. Open its curriculum whenever you want the
+            lesson-by-lesson detail.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {visible.map(({ meta, course }) => (
+            <ProgramCard
+              key={meta.id}
+              program={meta}
+              course={course}
+              isOpen={openProgram === meta.id}
+              onToggle={() => toggleProgram(meta.id as ProgramId)}
+            />
           ))}
         </div>
-      </div>
 
-      {/* Courses */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-        {visiblePrograms.map((program) => (
-          <div key={program.id} id={`program-${program.id}`} className="scroll-mt-36">
-            {/* Program header */}
-            <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-8 pb-6 border-b ${program.border}`}>
-              <div className="flex items-center gap-4 flex-1">
-                <div className="text-5xl">{program.emoji}</div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <h2 className="text-2xl font-black text-[#0F172A] dark:text-white">{program.title}</h2>
-                    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${program.badge}`}>
-                      {program.ages}
-                    </span>
-                    {program.featured && (
-                      <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-900/40 text-purple-300">
-                        Most Popular
-                      </span>
-                    )}
-                  </div>
-                  <p className={`font-bold text-sm ${program.accent}`}>{program.tagline}</p>
-                  <p className="text-[#94A3B8] dark:text-gray-500 text-xs mt-0.5">
-                    {program.courses.length} courses ·{" "}
-                    {program.courses.reduce((a, c) => a + c.lessons, 0)} lessons total
-                  </p>
-                  <a
-                    href={`/curriculums/${program.curriculumFile}`}
-                    download
-                    className={`inline-flex items-center gap-1.5 mt-3 px-3.5 py-2 rounded-xl border ${program.border} ${program.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 active:brightness-90 transition-all shadow-sm`}
-                  >
-                    <DownloadIcon className="w-4 h-4" />
-                    Download Curriculum
-                  </a>
-                </div>
-              </div>
-              <div className="flex gap-2 flex-shrink-0">
-                <Link
-                  href="/trial"
-                  className={`px-4 py-2 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${program.color} hover:opacity-90 transition-all`}
-                >
-                  Free Trial
-                </Link>
-                <Link
-                  href="/pricing"
-                  className="px-4 py-2 text-sm font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-purple-200 dark:hover:border-gray-500 rounded-xl transition-all"
-                >
-                  Buy Now
-                </Link>
-              </div>
-            </div>
-
-            {/* Course cards */}
-            <div className="space-y-4">
-              {program.courses.map((course) => {
-                const courseKey = `${program.id}-${course.number}`;
-                const isOpen = expandedCourse === courseKey;
-                return (
-                  <div
-                    key={course.number}
-                    className={`border rounded-2xl overflow-hidden transition-all ${program.border} bg-white dark:bg-gray-900/40 card-hover`}
-                  >
-                    <button
-                      className="w-full flex items-start gap-4 p-5 sm:p-6 text-left hover:bg-[#F7F9FF] dark:hover:bg-gray-900/60 transition-colors"
-                      onClick={() => setExpandedCourse(isOpen ? null : courseKey)}
-                    >
-                      <div className={`text-2xl font-black ${program.accent} flex-shrink-0 w-10 text-center`}>
-                        {course.number}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <h3 className="text-[#0F172A] dark:text-white font-bold text-base mb-1">{course.title}</h3>
-                            <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed">{course.outcome}</p>
-                          </div>
-                          <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                            <span className="text-xs px-2.5 py-1 rounded-lg bg-[#F1F5F9] dark:bg-gray-800 text-[#64748B] dark:text-gray-400 whitespace-nowrap">
-                              {course.lessons} lessons
-                            </span>
-                            <span className={`text-xs transition-transform ${isOpen ? "rotate-180" : ""} text-[#94A3B8] dark:text-gray-500`}>
-                              ▾
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Tools preview */}
-                        <div className="flex flex-wrap gap-1.5 mt-3">
-                          {course.tools.map((t) => (
-                            <span
-                              key={t}
-                              className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#D1D5DB] dark:border-gray-700 text-[#94A3B8] dark:text-gray-500"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </button>
-
-                    {isOpen && (
-                      <div className="px-5 sm:px-6 pb-6 border-t border-[#E2E8F0] dark:border-gray-800/60">
-                        <div className="pt-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                          {/* Description + Projects */}
-                          <div className="lg:col-span-2 space-y-5">
-                            <p className="text-sm text-[#64748B] dark:text-gray-400 leading-relaxed">{course.description}</p>
-
-                            <div>
-                              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
-                                Portfolio Projects
-                              </p>
-                              <ul className="space-y-1.5">
-                                {course.projects.map((proj) => (
-                                  <li key={proj} className="flex items-center gap-2 text-sm text-[#334155] dark:text-gray-300">
-                                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${program.dot}`} />
-                                    {proj}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          </div>
-
-                          {/* Lesson breakdown */}
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
-                              Lesson Breakdown
-                            </p>
-                            <ol className="space-y-1.5">
-                              {course.lessonBreakdown.map((lesson, i) => (
-                                <li key={i} className="flex items-start gap-2 text-xs text-[#64748B] dark:text-gray-400">
-                                  <span className={`font-bold flex-shrink-0 ${program.accent}`}>{i + 1}.</span>
-                                  <span>{lesson}</span>
-                                </li>
-                              ))}
-                            </ol>
-                          </div>
-                        </div>
-
-                        {/* CTA */}
-                        <div className="flex gap-3 mt-6 pt-4 border-t border-[#E2E8F0] dark:border-gray-800/60">
-                          <Link
-                            href="/trial"
-                            className={`px-5 py-2.5 text-sm font-bold text-white rounded-xl bg-gradient-to-r ${program.color} hover:opacity-90 transition-all`}
-                          >
-                            Book Free Trial
-                          </Link>
-                          <Link
-                            href="/pricing"
-                            className="px-5 py-2.5 text-sm font-semibold text-[#64748B] dark:text-gray-400 hover:text-[#0F172A] dark:hover:text-white border border-[#E2E8F0] dark:border-gray-700 hover:border-[#CBD5E1] dark:hover:border-gray-500 rounded-xl transition-all"
-                          >
-                            Buy Now
-                          </Link>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+        {open && (
+          <ProgramDetail
+            program={open.meta}
+            course={open.course}
+            expandedCourse={expandedCourse}
+            setExpandedCourse={setExpandedCourse}
+            onClose={() => {
+              setOpenProgram(null);
+              setExpandedCourse(null);
+            }}
+          />
+        )}
+      </section>
 
       {/* Bottom CTA */}
       <section className="py-16 px-4 sm:px-6 lg:px-8 bg-white dark:bg-gradient-to-b dark:from-[#07101F] dark:to-[#050D1A] transition-colors duration-200">
@@ -802,7 +629,7 @@ function CoursesContent() {
   );
 }
 
-export default function CoursesPage() {
+export default function ProgramsPage() {
   return (
     <Suspense
       fallback={
@@ -811,7 +638,7 @@ export default function CoursesPage() {
         </div>
       }
     >
-      <CoursesContent />
+      <ProgramsContent />
     </Suspense>
   );
 }

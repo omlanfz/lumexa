@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useCatalog, type Catalog } from "@/lib/catalog";
 
 const values = [
   {
@@ -35,14 +36,18 @@ const values = [
   },
 ];
 
-const stats = [
-  { value: "1,200+", label: "Students Enrolled" },
-  { value: "98%", label: "Parent Satisfaction" },
-  { value: "50+", label: "Expert Teachers" },
-  { value: "6", label: "Learning Programs" },
-  { value: "17", label: "Courses Available" },
-  { value: "3+", label: "Projects Per Program" },
-];
+// Program and course totals come from the live catalog (the same one
+// /admin/courses manages), so they stay right as courses are added.
+function buildStats(catalog: Catalog) {
+  return [
+    { value: "1,200+", label: "Students Enrolled" },
+    { value: "98%", label: "Parent Satisfaction" },
+    { value: "50+", label: "Expert Teachers" },
+    { value: String(catalog.totals.programs), label: "Learning Programs" },
+    { value: String(catalog.totals.courses), label: "Courses Available" },
+    { value: "3+", label: "Projects Per Program" },
+  ];
+}
 
 const team = [
   {
@@ -63,6 +68,8 @@ const team = [
 ];
 
 export default function AboutPage() {
+  const { catalog } = useCatalog();
+  const stats = buildStats(catalog);
   return (
     <div className="bg-[#F7F9FF] dark:bg-[#050D1A] text-[#0F172A] dark:text-white transition-colors duration-200">
       {/* Hero */}
