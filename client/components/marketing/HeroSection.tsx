@@ -23,12 +23,6 @@ export default function HeroSection() {
 
           {/* Left: copy */}
           <div>
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-purple-200 dark:border-purple-700/40 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 text-xs font-semibold mb-7">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              Live classes · Expert teachers · Real projects
-            </div>
-
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-[58px] font-black text-[#0F172A] dark:text-white leading-[1.06] tracking-tight mb-5">
               Your Child Can{" "}
