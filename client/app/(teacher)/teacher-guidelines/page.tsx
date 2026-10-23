@@ -9,6 +9,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import LumiChat from "@/components/LumiChat";
 // ──────────────────────────────────────────────────────────────────────────────
 import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
+import { WHATSAPP_URL } from "@/lib/siteContact";
 
 interface Profile {
   user: { fullName: string; avatarUrl?: string | null };
@@ -144,7 +145,7 @@ function TeacherConductContent() {
               <p className="text-red-400/70 text-sm mt-1">
                 You have reached 3 strikes.{" "}
                 <a
-                  href="https://wa.me/8801774878252"
+                  href={WHATSAPP_URL}
                   target="_blank"
                   rel="noreferrer"
                   className="underline hover:opacity-80"
@@ -359,7 +360,7 @@ function TeacherConductContent() {
             succeed.
           </p>
           <a
-            href="https://wa.me/8801774878252"
+            href={WHATSAPP_URL}
             target="_blank"
             rel="noreferrer"
             className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-xl transition-colors"

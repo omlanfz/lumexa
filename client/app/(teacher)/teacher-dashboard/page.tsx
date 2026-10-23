@@ -21,6 +21,7 @@ import LumiChat from "@/components/LumiChat";
 import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 import { isTeacherProfileComplete } from "@/lib/teacherProfileCompletion";
 import { isDemoTeacherEmail } from "@/lib/demoClassroom";
+import { WHATSAPP_URL } from "@/lib/siteContact";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ function TeacherDashboardContent() {
               <p className="font-semibold">Account suspended</p>
               <p className="text-sm opacity-80">
                 <a
-                  href="https://wa.me/8801774878252"
+                  href={WHATSAPP_URL}
                   target="_blank"
                   rel="noreferrer"
                   className="underline hover:opacity-80"

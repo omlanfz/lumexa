@@ -96,7 +96,7 @@ const FAQ_GROUPS: { heading: string; items: Faq[] }[] = [
     items: [
       {
         q: "Is the trial class really free?",
-        a: "Yes. Your child joins a live class with a real teacher. No card is needed and there is no obligation. Send us the short trial form with your child's age and the program you are interested in, and we will email you the class time and link within a few hours.",
+        a: "Yes. Your child joins a live class with a real teacher. No card is needed and there is no obligation. Choose a time that suits you on the trial page and fill in a short form. Your 30-minute trial is confirmed straight away by email and WhatsApp, and there is no pressure to enrol afterwards.",
       },
       {
         q: "What happens after the trial?",

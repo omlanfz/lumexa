@@ -965,19 +965,155 @@ model ConsentToken {
   @@index([token])
 }
 
+// ─── Trial classes ────────────────────────────────────────────────────────────
+//
+// A TrialLead is a parent's free-trial request. Rows created before the
+// booking calendar existed have no appointment (appointmentStatus = null).
+// Every row created through the booking flow carries a confirmed 30-minute
+// appointment: `startAt`/`endAt` are UTC instants, and recurring availability
+// is configured in `Asia/Dhaka` (see TrialAvailabilityRule).
+//
+// Two CONFIRMED appointments can never start less than 60 minutes apart
+// (30-minute session + mandatory 30-minute gap). The service enforces this
+// inside a transaction guarded by an advisory lock, and the migration adds an
+// exclusion constraint ("TrialLead_no_overlapping_slots") as a database-level
+// backstop that no code path can bypass.
 model TrialLead {
   id          String   @id @default(uuid())
   parentName  String
   parentEmail String
+  // E.164 (e.g. +8801712345678). Null only for legacy leads created before
+  // the booking form collected it. Never exposed on public endpoints.
+  parentPhone String?
   childName   String
   childAge    Int
   subject     String
-  timezone    String?
+  timezone    String? // the parent's browser timezone — informational only
   message     String?
   status      String   @default("NEW") // "NEW" | "CONTACTED" | "BOOKED" | "CONVERTED"
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  whatsappConsent   Boolean   @default(false)
+  whatsappConsentAt DateTime?
+
+  startAt           DateTime?
+  endAt             DateTime?
+  appointmentStatus TrialAppointmentStatus?
+  bookedBy          String                  @default("PARENT") // "PARENT" | "ADMIN"
+  // Bumped on every reschedule; part of the WhatsApp reminder dedupe key so a
+  // moved appointment gets exactly one reminder for its new time.
+  revision          Int                     @default(0)
+  cancelledAt       DateTime?
+  cancelReason      String?
+  adminNotes        String?                 @db.Text
+
+  whatsappMessages TrialWhatsAppMessage[]
 
   @@index([status])
+  @@index([appointmentStatus, startAt])
+  @@index([startAt])
+  @@index([parentEmail])
+}
+
+enum TrialAppointmentStatus {
+  CONFIRMED
+  CANCELLED
+}
+
+// Weekly recurring availability, evaluated in `timezone` (Asia/Dhaka). Several
+// rows may share a weekday (e.g. Wed 15:00–19:00 and Wed 21:00–23:00).
+// weekday: 0=Sunday..6=Saturday. startMinute/endMinute: minutes after local
+// midnight, multiples of 30, 0 ≤ start < end ≤ 1440. effectiveFrom/Until are
+// inclusive 'YYYY-MM-DD' local dates (null = open-ended).
+model TrialAvailabilityRule {
+  id             String   @id @default(uuid())
+  weekday        Int
+  startMinute    Int
+  endMinute      Int
+  timezone       String   @default("Asia/Dhaka")
+  effectiveFrom  String?
+  effectiveUntil String?
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([weekday])
+}
+
+// One-off availability on a single local calendar date ('YYYY-MM-DD').
+model TrialAvailabilityWindow {
+  id          String   @id @default(uuid())
+  date        String
+  startMinute Int
+  endMinute   Int
+  timezone    String   @default("Asia/Dhaka")
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([date])
+}
+
+// Holiday / unavailable period. Covers startDate..endDate inclusive; when
+// startMinute/endMinute are set only that part of each day is blocked.
+// Blocks always win over rules and one-off windows.
+model TrialBlockedPeriod {
+  id          String   @id @default(uuid())
+  startDate   String
+  endDate     String
+  startMinute Int?
+  endMinute   Int?
+  reason      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([startDate, endDate])
+}
+
+// Durable outbox for the three trial WhatsApp messages. A row is written in
+// the same transaction as the booking, then delivered by TrialWhatsAppService
+// (immediately after commit, and by a once-a-minute sweep for retries and the
+// scheduled reminder) so nothing depends on in-memory timers. `dedupeKey` is
+// unique, so a retried job can never create — or send — a second copy.
+// Trial *emails* are not stored here: they go through EmailService/EmailLog.
+enum TrialWhatsAppKind {
+  PARENT_CONFIRMATION
+  PARENT_REMINDER
+  ADMIN_ALERT
+}
+
+enum TrialWhatsAppStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model TrialWhatsAppMessage {
+  id                String              @id @default(uuid())
+  trialLeadId       String
+  trialLead         TrialLead           @relation(fields: [trialLeadId], references: [id], onDelete: Cascade)
+  kind              TrialWhatsAppKind
+  revision          Int                 @default(0)
+  dedupeKey         String              @unique
+  status            TrialWhatsAppStatus @default(PENDING)
+  scheduledFor      DateTime
+  // Next time the sweep may try this row. Null on a FAILED row = out of
+  // retries (or a permanent error) — only a manual admin retry revives it.
+  nextAttemptAt     DateTime?
+  attempts          Int                 @default(0)
+  lockedAt          DateTime?
+  lastError         String?
+  errorCode         String?
+  providerMessageId String?
+  sentAt            DateTime?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([trialLeadId])
 }
 
 model TeacherStudentNote {

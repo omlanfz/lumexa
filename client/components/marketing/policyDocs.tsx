@@ -31,7 +31,7 @@ export const POLICY_DOCS: Record<PolicyDocId, { title: string; body: ReactNode }
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">4. Data Retention</h3>
-          <p>We retain your account data for as long as your account is active. Class recordings are retained for 90 days. You may request deletion of your data at any time by contacting fz.omlan@gmail.com.</p>
+          <p>We retain your account data for as long as your account is active. Class recordings are retained for 90 days. You may request deletion of your data at any time by contacting {CONTACT_EMAIL}.</p>
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">5. Security</h3>
@@ -39,11 +39,11 @@ export const POLICY_DOCS: Record<PolicyDocId, { title: string; body: ReactNode }
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">6. Your Rights</h3>
-          <p>You have the right to access, correct, or delete your personal data. To exercise these rights, contact us at fz.omlan@gmail.com. We will respond within 30 days.</p>
+          <p>You have the right to access, correct, or delete your personal data. To exercise these rights, contact us at {CONTACT_EMAIL}. We will respond within 30 days.</p>
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">7. Contact</h3>
-          <p>Lumexa AI School · fz.omlan@gmail.com · WhatsApp: +880 1774 878252</p>
+          <p>Lumexa AI School · {CONTACT_EMAIL} · WhatsApp: {WHATSAPP_DISPLAY}</p>
         </section>
       </div>
     ),
@@ -83,7 +83,7 @@ export const POLICY_DOCS: Record<PolicyDocId, { title: string; body: ReactNode }
         </section>
         <section>
           <h3 className="text-white font-semibold mb-1">8. Contact</h3>
-          <p>Lumexa AI School · fz.omlan@gmail.com · WhatsApp: +880 1774 878252</p>
+          <p>Lumexa AI School · {CONTACT_EMAIL} · WhatsApp: {WHATSAPP_DISPLAY}</p>
         </section>
       </div>
     ),

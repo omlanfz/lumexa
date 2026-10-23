@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Mail } from "lucide-react";
 import { SOCIAL_LINKS, type SocialLink } from "@/lib/socialLinks";
-import { CONTACT_EMAIL, WHATSAPP_URL } from "@/lib/siteContact";
+import { CONTACT_EMAIL, WHATSAPP_URL, WHATSAPP_DISPLAY } from "@/lib/siteContact";
 import PolicyModal from "./PolicyModal";
 import type { PolicyDocId } from "./policyDocs";
 import { FacebookIcon, InstagramIcon, LinkedInIcon, WhatsAppIcon, YouTubeIcon } from "./SocialIcons";
@@ -117,7 +117,7 @@ export default function MarketingFooter() {
                 <li>
                   <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-2.5 text-gray-500 hover:text-gray-300 transition-colors whitespace-nowrap">
                     <WhatsAppIcon className="w-4 h-4 flex-shrink-0 text-[#25D366]" />
-                    <span>WhatsApp +880 1774 878252</span>
+                    <span>WhatsApp {WHATSAPP_DISPLAY}</span>
                   </a>
                 </li>
               </ul>

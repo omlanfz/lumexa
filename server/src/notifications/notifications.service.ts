@@ -35,6 +35,14 @@ import {
   teacherPenaltyEmail,
 } from '../email/templates/teacher.templates';
 import {
+  trialBookingConfirmedParentEmail,
+  trialBookingAdminAlertEmail,
+  trialRescheduledParentEmail,
+  trialCancelledParentEmail,
+  type TrialEmailAppointment,
+  type TrialContact,
+} from '../email/templates/trial.templates';
+import {
   newStudentRegistrationEmail,
   newTeacherApplicationEmail,
   disputeFiledEmail,
@@ -48,6 +56,13 @@ interface BookingEmailData {
   classStart: Date;
   classEnd: Date;
   bookingId: string;
+}
+
+/** FRONTEND_URL may be a comma-separated list (see main.ts CORS setup); the
+ *  first entry is the canonical public site. */
+function frontendBaseUrl(): string {
+  const first = (process.env.FRONTEND_URL || '').split(',')[0].trim();
+  return (first || 'http://localhost:3000').replace(/\/+$/, '');
 }
 
 function adminRecipients(): string[] {
@@ -158,7 +173,7 @@ export class NotificationsService {
           Go to Dashboard →
         </a>
         <p style="color: #6b7280; font-size: 13px; margin-top: 24px;">
-          If you have questions, contact support at support@lumexa.app
+          If you have questions, contact us at lumexa.school@gmail.com
         </p>
       </div>
       `,
@@ -734,6 +749,119 @@ export class NotificationsService {
       html,
       'ADMIN_SYSTEM_ERROR',
       `admin-system-error:${data.bucketKey}`,
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Trial classes — the only emails added for the trial booking flow.
+  // Parent: booked / rescheduled / cancelled. Admin: new booking.
+  // Each has a dedupeKey tied to the appointment (and, for a reschedule,
+  // its revision), so a retried job can never send a duplicate.
+  // ══════════════════════════════════════════════════════════════════════
+
+  async sendTrialBookingConfirmedToParent(data: {
+    leadId: string;
+    parentEmail: string;
+    parentName: string;
+    childName: string;
+    program: string;
+    appointment: TrialEmailAppointment;
+    contact: TrialContact;
+  }): Promise<void> {
+    const base = frontendBaseUrl();
+    const { subject, html } = trialBookingConfirmedParentEmail({
+      parentName: data.parentName,
+      childName: data.childName,
+      program: data.program,
+      appointment: data.appointment,
+      programsUrl: `${base}/programs`,
+      contact: data.contact,
+    });
+    await this.send(
+      data.parentEmail,
+      subject,
+      html,
+      'TRIAL_BOOKING_CONFIRMED',
+      `trial:${data.leadId}:confirmation:parent`,
+    );
+  }
+
+  async sendTrialBookingAlertToAdmins(data: {
+    leadId: string;
+    parentName: string;
+    parentEmail: string;
+    parentPhone: string;
+    childName: string;
+    childAge: number;
+    program: string;
+    message?: string | null;
+    appointment: TrialEmailAppointment;
+    bookingReference: string;
+  }): Promise<void> {
+    const { subject, html } = trialBookingAdminAlertEmail({
+      ...data,
+      adminUrl: `${frontendBaseUrl()}/admin/trial-classes`,
+    });
+    await this.sendToAdmins(
+      subject,
+      html,
+      'TRIAL_ADMIN_ALERT',
+      `trial:${data.leadId}:admin-alert`,
+    );
+  }
+
+  async sendTrialRescheduledToParent(data: {
+    leadId: string;
+    revision: number;
+    parentEmail: string;
+    parentName: string;
+    childName: string;
+    program: string;
+    previous: TrialEmailAppointment;
+    appointment: TrialEmailAppointment;
+    contact: TrialContact;
+  }): Promise<void> {
+    const { subject, html } = trialRescheduledParentEmail({
+      parentName: data.parentName,
+      childName: data.childName,
+      program: data.program,
+      previous: data.previous,
+      appointment: data.appointment,
+      programsUrl: `${frontendBaseUrl()}/programs`,
+      contact: data.contact,
+    });
+    await this.send(
+      data.parentEmail,
+      subject,
+      html,
+      'TRIAL_RESCHEDULED',
+      `trial:${data.leadId}:rescheduled:r${data.revision}`,
+    );
+  }
+
+  async sendTrialCancelledToParent(data: {
+    leadId: string;
+    parentEmail: string;
+    parentName: string;
+    childName: string;
+    appointment: TrialEmailAppointment;
+    note?: string | null;
+    contact: TrialContact;
+  }): Promise<void> {
+    const { subject, html } = trialCancelledParentEmail({
+      parentName: data.parentName,
+      childName: data.childName,
+      appointment: data.appointment,
+      note: data.note,
+      trialUrl: `${frontendBaseUrl()}/trial`,
+      contact: data.contact,
+    });
+    await this.send(
+      data.parentEmail,
+      subject,
+      html,
+      'TRIAL_CANCELLED',
+      `trial:${data.leadId}:cancelled`,
     );
   }
 }

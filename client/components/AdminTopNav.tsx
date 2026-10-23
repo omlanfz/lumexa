@@ -2,7 +2,7 @@
 //
 // Top navigation for /admin, mirroring TeacherTopNav/StudentTopNav's
 // structure. Primary nav is deliberately short: Dashboard | Classes |
-// Teachers | Students | Payouts. "Manage Courses" is a secondary link in
+// Trial Classes | Teachers | Students | Payouts. "Manage Courses" is a secondary link in
 // the profile dropdown, not a main nav item (courses are a supporting
 // config screen, not a daily Operations workspace).
 
@@ -20,6 +20,7 @@ interface AdminTopNavProps {
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/classes", label: "Classes" },
+  { href: "/admin/trial-classes", label: "Trial Classes" },
   { href: "/admin/teachers", label: "Teachers" },
   { href: "/admin/students", label: "Students" },
   { href: "/admin/payouts", label: "Payouts" },
