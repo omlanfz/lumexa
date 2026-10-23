@@ -36,6 +36,7 @@ import { useTheme } from "@/components/ThemeProvider";
 import LumiChat from "@/components/LumiChat";
 import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 import { computeTeacherProfileCompletion } from "@/lib/teacherProfileCompletion";
+import { WHATSAPP_URL } from "@/lib/siteContact";
 
 interface Profile {
   id: string;
@@ -885,7 +886,7 @@ function TeacherProfileContent() {
                       it&apos;s now locked to prevent accidental or risky changes.
                       Need to update it?{" "}
                       <a
-                        href="https://wa.me/8801774878252"
+                        href={WHATSAPP_URL}
                         target="_blank"
                         rel="noreferrer"
                         className="underline hover:opacity-80"

@@ -3,7 +3,7 @@ const steps = [
     step: "01",
     icon: "🎯",
     title: "Book a Free Trial",
-    desc: "Pick a subject and a time. We match your child with the perfect teacher. Zero commitment, no card required.",
+    desc: "Pick a time that suits you and tell us about your child. You get an instant confirmation. Zero commitment, no card required.",
     accentBg: "bg-purple-50 dark:bg-purple-900/20",
     accentBorder: "border-purple-200 dark:border-purple-700/40",
     numColor: "text-purple-200 dark:text-purple-700",

@@ -14,6 +14,11 @@ import { createPortal } from "react-dom";
 
 const STATUS_STYLES: Record<string, string> = {
   SCHEDULED: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
+  CONFIRMED: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
+  SENT: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
+  SENDING: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
+  SKIPPED: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
+  NOT_SENT: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
   COMPLETED: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
   PARTIALLY_COMPLETED: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
   INCOMPLETE: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",
@@ -298,10 +303,16 @@ export function Modal({
   title,
   onClose,
   children,
+  wide,
+  hidden,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Wider panel for detail views (default is max-w-lg). */
+  wide?: boolean;
+  /** Hide the panel without losing the caller's state (used when another dialog is stacked on top). */
+  hidden?: boolean;
 }) {
   // Rendered into a portal at document.body — admin pages wrap their content
   // in a `.fade-in` div (see admin/layout.tsx) whose entrance animation ends
@@ -311,7 +322,7 @@ export function Modal({
   // content div instead of the viewport — clipping its top edge behind the
   // sticky top nav instead of covering the whole screen. A portal escapes
   // that ancestor entirely.
-  if (typeof document === "undefined") return null;
+  if (typeof document === "undefined" || hidden) return null;
 
   return createPortal(
     <div
@@ -319,7 +330,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto a-card p-6 fade-in"
+        className={`w-full ${wide ? "max-w-3xl" : "max-w-lg"} max-h-[90vh] overflow-y-auto a-card p-6 fade-in`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

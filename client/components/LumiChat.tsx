@@ -448,8 +448,8 @@ export default function LumiChat({
 
       const errorContent =
         status === 401
-          ? "🔐 Authentication error. Please log out and log back in, then try again!\nIf this keeps happening, contact **support@lumexa.app**."
-          : "Oops! My signal got lost in space 🛸\nPlease try again, or email **support@lumexa.app** if this keeps happening!";
+          ? "🔐 Authentication error. Please log out and log back in, then try again!\nIf this keeps happening, contact **lumexa.school@gmail.com**."
+          : "Oops! My signal got lost in space 🛸\nPlease try again, or email **lumexa.school@gmail.com** if this keeps happening!";
 
       setMessages((prev) => [
         ...prev,
