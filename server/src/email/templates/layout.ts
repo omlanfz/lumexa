@@ -11,6 +11,19 @@ const BRAND_TEAL = '#0d9488';
 const INK = '#0f172a';
 const MUTED = '#64748b';
 
+/** Escapes user-supplied text before it is interpolated into an email body.
+ *  Trial emails render public-form input (names, messages), so — unlike the
+ *  older templates, which only render data Lumexa itself created — they must
+ *  never trust it. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function emailButton(
   label: string,
   url: string,
@@ -60,8 +73,9 @@ export function emailLayout(params: {
           <tr>
             <td style="padding: 20px 32px; border-top: 1px solid #e2e8f0;">
               <p style="margin: 0; color: ${MUTED}; font-size: 12px; line-height: 1.6;">
-                Lumexa · Online tutoring for K-12 students<br />
-                Questions? Reach us at <a href="mailto:support@lumexa.app" style="color: ${BRAND_TEAL};">support@lumexa.app</a>
+                Lumexa AI School · Live coding &amp; AI classes for ages 6–18<br />
+                Questions? Reach us at <a href="mailto:lumexa.school@gmail.com" style="color: ${BRAND_TEAL};">lumexa.school@gmail.com</a>
+                or on WhatsApp <a href="https://wa.me/8801522122194" style="color: ${BRAND_TEAL};">+880 1522 122194</a>
               </p>
             </td>
           </tr>

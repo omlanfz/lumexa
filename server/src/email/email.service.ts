@@ -80,7 +80,11 @@ export class EmailService implements OnModuleInit {
 
   private get fromAddress(): string {
     const user = process.env.SMTP_USER || `noreply@${process.env.EMAIL_DOMAIN || 'lumexa.app'}`;
-    return `Lumexa <${user}>`;
+    // Gmail only honours a From address it owns (the authenticated SMTP_USER
+    // or a verified "Send mail as" alias), so the address is always SMTP_USER;
+    // only the display name is configurable.
+    const name = (process.env.EMAIL_FROM_NAME || 'Lumexa AI School').replace(/["<>\r\n]/g, '');
+    return `"${name}" <${user}>`;
   }
 
   /** Journals + fires an email without blocking the caller. Never throws —

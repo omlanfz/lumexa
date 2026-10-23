@@ -1,25 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CreateTrialDto } from './dto/create-trial.dto';
 
+/** Legacy lead pipeline (list + status). Booking lives in TrialBookingService. */
 @Injectable()
 export class TrialService {
   constructor(private readonly prisma: PrismaService) {}
-
-  async create(dto: CreateTrialDto) {
-    const lead = await this.prisma.trialLead.create({
-      data: {
-        parentName: dto.parentName,
-        parentEmail: dto.parentEmail,
-        childName: dto.childName,
-        childAge: dto.childAge,
-        subject: dto.subject,
-        timezone: dto.timezone,
-        message: dto.message,
-      },
-    });
-    return { success: true, leadId: lead.id };
-  }
 
   async list(page = 1, limit = 20) {
     const [leads, total] = await this.prisma.$transaction([

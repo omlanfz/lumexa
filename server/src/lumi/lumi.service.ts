@@ -287,7 +287,7 @@ const FAQ_ENTRIES: Array<{ keywords: string[]; response: string }> = [
       'locked out',
     ],
     response:
-      "Login trouble? Let me help! 🔑\n\nIf you can't log in:\n1. Make sure you're using the right **email address**\n2. Try the **Create Account** option if you haven't registered yet\n3. Check your email for any confirmation links\n\nIf you're still stuck, contact Lumexa support at **support@lumexa.app** and we'll get you sorted! 🐱",
+      "Login trouble? Let me help! 🔑\n\nIf you can't log in:\n1. Make sure you're using the right **email address**\n2. Try the **Create Account** option if you haven't registered yet\n3. Check your email for any confirmation links\n\nIf you're still stuck, contact Lumexa support at **lumexa.school@gmail.com** and we'll get you sorted! 🐱",
   },
 
   // ── REGISTER / CREATE ACCOUNT ────────────────────────────────────────────────
@@ -365,7 +365,7 @@ const FAQ_ENTRIES: Array<{ keywords: string[]; response: string }> = [
       'cancel booking',
     ],
     response:
-      'About payments on Lumexa 💳\n\n• Classes are paid when you book\n• We use **Stripe** — a secure, trusted payment platform\n• Your card details are never stored on Lumexa\n\nFor refunds or billing issues, contact **support@lumexa.app** with your booking ID.\n\nNote: Refunded classes will show as *Cancelled* in your lesson history.',
+      'About payments on Lumexa 💳\n\n• Classes are paid when you book\n• We use **Stripe** — a secure, trusted payment platform\n• Your card details are never stored on Lumexa\n\nFor refunds or billing issues, contact **lumexa.school@gmail.com** with your booking ID.\n\nNote: Refunded classes will show as *Cancelled* in your lesson history.',
   },
 
   // ── TECHNICAL ISSUES ─────────────────────────────────────────────────────────
@@ -384,7 +384,7 @@ const FAQ_ENTRIES: Array<{ keywords: string[]; response: string }> = [
       'fix',
     ],
     response:
-      "Uh oh, something's not working? Let me help! 🛠️\n\nTry these quick fixes first:\n1. **Refresh the page** (Ctrl+R or Cmd+R)\n2. **Clear your browser cache** (Ctrl+Shift+Delete)\n3. **Try a different browser** (Chrome works best)\n4. **Check your internet connection**\n\nIf it's still broken, please email **support@lumexa.app** with:\n• What you were doing\n• A screenshot if possible\n• Your device and browser",
+      "Uh oh, something's not working? Let me help! 🛠️\n\nTry these quick fixes first:\n1. **Refresh the page** (Ctrl+R or Cmd+R)\n2. **Clear your browser cache** (Ctrl+Shift+Delete)\n3. **Try a different browser** (Chrome works best)\n4. **Check your internet connection**\n\nIf it's still broken, please email **lumexa.school@gmail.com** with:\n• What you were doing\n• A screenshot if possible\n• Your device and browser",
   },
 
   // ── CAMERA / MICROPHONE ──────────────────────────────────────────────────────
@@ -401,7 +401,7 @@ const FAQ_ENTRIES: Array<{ keywords: string[]; response: string }> = [
       'can t see',
     ],
     response:
-      "Camera or mic issues during class? 🎙️\n\nHere's how to fix it:\n1. Look for a **camera icon** in your browser's address bar — click it and **Allow**\n2. If denied, go to **Browser Settings → Privacy → Camera/Microphone** and allow Lumexa\n3. Reload the page after allowing\n4. Make sure no other app is using your camera (Zoom, Teams, etc.)\n\nStill having trouble? Email us at **support@lumexa.app** 📧",
+      "Camera or mic issues during class? 🎙️\n\nHere's how to fix it:\n1. Look for a **camera icon** in your browser's address bar — click it and **Allow**\n2. If denied, go to **Browser Settings → Privacy → Camera/Microphone** and allow Lumexa\n3. Reload the page after allowing\n4. Make sure no other app is using your camera (Zoom, Teams, etc.)\n\nStill having trouble? Email us at **lumexa.school@gmail.com** 📧",
   },
 
   // ── SUBJECTS ─────────────────────────────────────────────────────────────────
@@ -452,7 +452,7 @@ const FAQ_ENTRIES: Array<{ keywords: string[]; response: string }> = [
       'agent',
     ],
     response:
-      "Need real support? I've got you! 🐱\n\nFor urgent issues, reach our team:\n📧 **support@lumexa.app**\n\nI can also help with:\n• Finding your way around the platform\n• Booking and scheduling\n• Account and profile setup\n• Understanding how Lumexa works\n\nWhat do you need help with?",
+      "Need real support? I've got you! 🐱\n\nFor urgent issues, reach our team:\n📧 **lumexa.school@gmail.com**\n\nI can also help with:\n• Finding your way around the platform\n• Booking and scheduling\n• Account and profile setup\n• Understanding how Lumexa works\n\nWhat do you need help with?",
   },
 
   // ── GOODBYE ──────────────────────────────────────────────────────────────────
@@ -690,7 +690,7 @@ STRICT RULES:
 3. Keep responses SHORT (2-4 sentences max for simple questions)
 4. Use a friendly, playful, slightly cat-like tone
 5. Use 1-2 emojis max per response
-6. If you don't know something specific about the platform, suggest emailing support@lumexa.app
+6. If you don't know something specific about the platform, suggest emailing lumexa.school@gmail.com
 
 Personality: Friendly, curious, encouraging, engaging. Like a helpful space cat companion.`;
 
@@ -749,10 +749,10 @@ Personality: Friendly, curious, encouraging, engaging. Like a helpful space cat 
     const lower = message.toLowerCase();
 
     if (lower.includes('?')) {
-      return "Hmm, I'm not sure about that one! 🐱\nFor anything I can't answer, our support team is always ready:\n📧 **support@lumexa.app**\n\nOr try asking me about booking, lessons, or your profile!";
+      return "Hmm, I'm not sure about that one! 🐱\nFor anything I can't answer, our support team is always ready:\n📧 **lumexa.school@gmail.com**\n\nOr try asking me about booking, lessons, or your profile!";
     }
 
-    return "Interesting! 🌟 I'm still learning, so for complex questions, check with our team at **support@lumexa.app**.\nI'm best at helping with booking, navigation, and platform questions — ask me anything about those!";
+    return "Interesting! 🌟 I'm still learning, so for complex questions, check with our team at **lumexa.school@gmail.com**.\nI'm best at helping with booking, navigation, and platform questions — ask me anything about those!";
   }
 }
 
