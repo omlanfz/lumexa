@@ -8,10 +8,10 @@
 // by scripts/extract-curriculum.mjs and scripts/build-web-developer.mjs (run
 // offline, not at app runtime; see those scripts' header comments). This
 // file turns that raw content into real DB rows: CourseModule, Lesson
-// (LEARNING + COURSE_TEST/STAGE_TEST/FINAL_TEST), Project, Assessment,
-// MCQQuestion, PracticalQuestion — never inventing curriculum content, only
-// assembling and (for MCQ distractors only) mechanically generating options
-// around a real, extracted correct answer.
+// (LEARNING + COURSE_TEST/STAGE_TEST/FINAL_TEST), Project and an empty
+// Assessment per test session. The questions themselves are NOT generated
+// here: they are the authored, validated banks in server/src/assessments/bank,
+// applied by syncAssessmentBanks (see course-catalog.seed.ts).
 //
 // Every specialized pathway becomes: 3 modules × (8 learning + 1 course
 // test) + 1 final test = 28 sessions (24 learning + 4 assessment).
@@ -34,6 +34,8 @@
 import { LessonStatus, PrismaClient, SessionType } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import { standardInstructions } from '../assessments/bank/bank.constants';
+import type { BankTestType } from '../assessments/bank/bank.types';
 
 const DATA_DIR = path.join(__dirname, '../../prisma/curriculum-data');
 
@@ -45,12 +47,6 @@ interface RawCodeSnippet {
   code: string;
   part?: string;
 }
-interface RawQuizItem {
-  questionText: string;
-  options: string[] | null;
-  correctIndex?: number;
-  correctAnswerText?: string;
-}
 interface RawLesson {
   order: number;
   title: string;
@@ -59,7 +55,6 @@ interface RawLesson {
   homework?: string | null;
   teacherNotes?: string | null;
   codeSnippets: RawCodeSnippet[];
-  miniQuiz: RawQuizItem[];
   sourceRefs?: unknown;
   hasEmbeddedProject?: boolean;
   checkpoint?: string;
@@ -130,38 +125,6 @@ function loadPathway(slug: string): RawPathway {
   return deepCleanStrings(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
-// ── Seeded PRNG (mulberry32) so MCQ distractor shuffling is stable across
-// re-runs of the same content, instead of producing a different bank on
-// every boot ───────────────────────────────────────────────────────────────
-
-function seedFromString(s: string): number {
-  let h = 1779033703 ^ s.length;
-  for (let i = 0; i < s.length; i++) {
-    h = Math.imul(h ^ s.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  return h >>> 0;
-}
-function mulberry32(seed: number) {
-  let a = seed;
-  return function () {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function seededShuffle<T>(arr: T[], seedStr: string): T[] {
-  const rnd = mulberry32(seedFromString(seedStr));
-  const out = [...arr];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
-
 // ── Project-checkpoint assignment: the standard 8-lesson shape ─────────────
 // L1 intro · L2-3 Project1 · L4-5 Project2 · L6-7 Project3 · L8 review
 
@@ -224,240 +187,6 @@ function assignDigitalIndependenceCheckpoints(mod: RawModule) {
   }
 }
 
-// ── MCQ bank generation ─────────────────────────────────────────────────────
-//
-// True-MCQ quiz items (real options + correct letter, from ai-builder's
-// Mini Quiz sections) are used as-is. Open-response quiz items (question +
-// a real correct answer, but no options — data-scientist/game-creator's
-// Mini Quiz sections) are turned into 4-option MCQs by drawing 3 distractors
-// from OTHER real answers in the same module's quiz pool — the question and
-// the correct answer are always the source material's own; only the wrong
-// options are synthesized, and only from other real, in-scope answers.
-// Modules with no Mini Quiz section at all (little-coders,
-// digital-independence, web-developer) fall back to an objectives-recall
-// pool built the same way, from that module's own authored lesson
-// objectives — still real, module-grounded content, never invented facts.
-
-interface MCQSeed {
-  questionText: string;
-  options: string[];
-  correctIndex: number;
-  tags: string[];
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1).trimEnd() + '…';
-}
-
-function buildMCQPoolFromQuiz(mod: RawModule): MCQSeed[] {
-  const trueChoice: MCQSeed[] = [];
-  const openResponse: { questionText: string; answer: string; lessonTitle: string }[] = [];
-
-  for (const lesson of mod.lessons) {
-    for (const item of lesson.miniQuiz) {
-      if (item.options && item.correctIndex !== undefined && item.correctIndex !== null) {
-        trueChoice.push({
-          questionText: item.questionText,
-          options: item.options,
-          correctIndex: item.correctIndex,
-          tags: [lesson.title],
-        });
-      } else if (item.correctAnswerText) {
-        openResponse.push({
-          questionText: item.questionText,
-          answer: truncate(item.correctAnswerText, 160),
-          lessonTitle: lesson.title,
-        });
-      }
-    }
-  }
-
-  const answerPool = openResponse.map((o) => o.answer);
-  const synthesized: MCQSeed[] = openResponse.map((o, idx) => {
-    const others = seededShuffle(
-      answerPool.filter((a) => a !== o.answer),
-      `${mod.slug}:${idx}:${o.questionText}`,
-    ).slice(0, 3);
-    while (others.length < 3) others.push('None of the other options');
-    const options = seededShuffle([o.answer, ...others], `${mod.slug}:opts:${idx}`);
-    return {
-      questionText: o.questionText,
-      options,
-      correctIndex: options.indexOf(o.answer),
-      tags: [o.lessonTitle],
-    };
-  });
-
-  return [...trueChoice, ...synthesized];
-}
-
-function buildMCQPoolFromObjectives(mod: RawModule): MCQSeed[] {
-  const items: { text: string; lessonTitle: string }[] = [];
-  for (const lesson of mod.lessons) {
-    for (const obj of lesson.objectives.slice(0, 2)) {
-      items.push({ text: truncate(obj, 160), lessonTitle: lesson.title });
-    }
-  }
-  const pool = items.map((i) => i.text);
-  return items.map((item, idx) => {
-    const others = seededShuffle(
-      pool.filter((t) => t !== item.text),
-      `${mod.slug}:obj:${idx}:${item.text}`,
-    ).slice(0, 3);
-    while (others.length < 3) others.push('None of the above');
-    const options = seededShuffle([item.text, ...others], `${mod.slug}:objopts:${idx}`);
-    return {
-      questionText: `Which of these is a real learning objective from "${item.lessonTitle}"?`,
-      options,
-      correctIndex: options.indexOf(item.text),
-      tags: [item.lessonTitle],
-    };
-  });
-}
-
-function buildModuleMCQPool(mod: RawModule): MCQSeed[] {
-  const fromQuiz = buildMCQPoolFromQuiz(mod);
-  if (fromQuiz.length >= 10) return fromQuiz;
-  return [...fromQuiz, ...buildMCQPoolFromObjectives(mod)];
-}
-
-// ── Practical question templates ────────────────────────────────────────────
-//
-// One deterministically-gradable coding task where the module's real
-// dominant language supports server-side execution (python/javascript —
-// see AiGradingService/PracticalGradingService), else a rubric+AI-graded
-// task (html/css/lua/visual work, where "executable tests" genuinely aren't
-// meaningful — see requirement #7B: AI grading never bypasses deterministic
-// checks WHERE POSSIBLE, and for these it is not). Each template's
-// instructions are grounded in the module's real title/topic.
-
-interface PracticalSeed {
-  title: string;
-  instructions: string;
-  language: string;
-  starterCode: string;
-  testCases: { name: string; input: unknown[]; expectedOutput: unknown }[] | null;
-  rubric: { criterion: string; maxPoints: number }[];
-  maxScore: number;
-}
-
-function pythonClassifierTemplate(moduleTitle: string): PracticalSeed {
-  return {
-    title: `${moduleTitle}: Build a Threshold Classifier`,
-    instructions:
-      `Write a Python function \`classify(score, threshold)\` that returns the string "pass" if ` +
-      `\`score >= threshold\`, otherwise returns "fail". This is the same core pattern used throughout ` +
-      `"${moduleTitle}" — turning a raw number into a real decision.\n\n` +
-      `Requirements:\n- Function name must be exactly \`classify\`.\n- It takes two arguments: \`score\`, \`threshold\`.\n- It returns a string, never prints.`,
-    language: 'python',
-    starterCode: `def classify(score, threshold):\n    # your code here\n    pass\n`,
-    testCases: [
-      { name: 'above threshold', input: [82, 60], expectedOutput: 'pass' },
-      { name: 'exactly at threshold', input: [60, 60], expectedOutput: 'pass' },
-      { name: 'below threshold', input: [45, 60], expectedOutput: 'fail' },
-      { name: 'zero score', input: [0, 50], expectedOutput: 'fail' },
-      { name: 'negative threshold edge', input: [-5, -10], expectedOutput: 'pass' },
-    ],
-    rubric: [
-      { criterion: 'All test cases pass', maxPoints: 70 },
-      { criterion: 'Correct function signature and return type (string, not print)', maxPoints: 15 },
-      { criterion: 'Readable, reasonably concise implementation', maxPoints: 15 },
-    ],
-    maxScore: 100,
-  };
-}
-
-function pythonAggregateTemplate(moduleTitle: string): PracticalSeed {
-  return {
-    title: `${moduleTitle}: Summarize a Dataset`,
-    instructions:
-      `Write a Python function \`summarize(values)\` that takes a list of numbers and returns a dict with keys ` +
-      `\`"average"\`, \`"minimum"\`, and \`"maximum"\`. Round the average to 2 decimal places. If the list is ` +
-      `empty, return \`{"average": 0, "minimum": None, "maximum": None}\`. This mirrors the real ` +
-      `collect → clean → analyze → communicate workflow from "${moduleTitle}".`,
-    language: 'python',
-    starterCode: `def summarize(values):\n    # your code here\n    pass\n`,
-    testCases: [
-      { name: 'basic list', input: [[1, 2, 3, 4, 5]], expectedOutput: { average: 3.0, minimum: 1, maximum: 5 } },
-      { name: 'single value', input: [[10]], expectedOutput: { average: 10.0, minimum: 10, maximum: 10 } },
-      { name: 'negatives', input: [[-2, 4, -6, 8]], expectedOutput: { average: 1.0, minimum: -6, maximum: 8 } },
-      { name: 'empty list', input: [[]], expectedOutput: { average: 0, minimum: null, maximum: null } },
-    ],
-    rubric: [
-      { criterion: 'All test cases pass', maxPoints: 70 },
-      { criterion: 'Handles the empty-list edge case explicitly', maxPoints: 15 },
-      { criterion: 'Readable, reasonably concise implementation', maxPoints: 15 },
-    ],
-    maxScore: 100,
-  };
-}
-
-function javascriptFilterTemplate(moduleTitle: string): PracticalSeed {
-  return {
-    title: `${moduleTitle}: Filter and Transform`,
-    instructions:
-      `Write a JavaScript function \`activeTotals(items)\` that takes an array of objects shaped like ` +
-      `\`{ name, active, amount }\` and returns the sum of \`amount\` for every item where \`active === true\`. ` +
-      `Return \`0\` if there are none. This is the same "read real data, compute something useful" pattern ` +
-      `behind "${moduleTitle}".\n\nRequirements:\n- Function name must be exactly \`activeTotals\`.\n- It must not mutate the input array.`,
-    language: 'javascript',
-    starterCode: `function activeTotals(items) {\n  // your code here\n}\n`,
-    testCases: [
-      { name: 'mixed active/inactive', input: [[{ name: 'a', active: true, amount: 10 }, { name: 'b', active: false, amount: 5 }, { name: 'c', active: true, amount: 7 }]], expectedOutput: 17 },
-      { name: 'all inactive', input: [[{ name: 'a', active: false, amount: 10 }]], expectedOutput: 0 },
-      { name: 'empty array', input: [[]], expectedOutput: 0 },
-      { name: 'all active', input: [[{ name: 'a', active: true, amount: 3 }, { name: 'b', active: true, amount: 4 }]], expectedOutput: 7 },
-    ],
-    rubric: [
-      { criterion: 'All test cases pass', maxPoints: 70 },
-      { criterion: 'Does not mutate the input array', maxPoints: 15 },
-      { criterion: 'Readable, idiomatic JavaScript (e.g. array methods over manual loops)', maxPoints: 15 },
-    ],
-    maxScore: 100,
-  };
-}
-
-function rubricOnlyTemplate(moduleTitle: string, language: string, promptHint: string): PracticalSeed {
-  return {
-    title: `${moduleTitle}: Practical Challenge`,
-    instructions:
-      `${promptHint}\n\nSubmit your ${language.toUpperCase()} solution below. This is graded by a teacher/AI review ` +
-      `against the rubric (no automated test cases for ${language} in Lumexa yet) — write real, working code, not ` +
-      `pseudocode.`,
-    language,
-    starterCode: '',
-    testCases: null,
-    rubric: [
-      { criterion: 'Meets the functional requirement described', maxPoints: 50 },
-      { criterion: 'Code is organized and readable', maxPoints: 25 },
-      { criterion: 'Applies the concepts taught in this module correctly', maxPoints: 25 },
-    ],
-    maxScore: 100,
-  };
-}
-
-const MODULE_PRACTICAL: Record<string, (title: string) => PracticalSeed> = {
-  'python-ai-foundations': pythonClassifierTemplate,
-  'computer-vision': pythonClassifierTemplate,
-  'language-models': pythonAggregateTemplate,
-  'python-for-data': pythonAggregateTemplate,
-  'data-visualisation': pythonAggregateTemplate,
-  'machine-learning-projects': pythonClassifierTemplate,
-  'python-arcade-games': pythonClassifierTemplate,
-  'advanced-game-design': pythonAggregateTemplate,
-  'python-for-young-builders': pythonClassifierTemplate,
-  'html-css-mastery': (t) => rubricOnlyTemplate(t, 'html', `Build a small responsive page section (a card row or hero) using semantic HTML and CSS Flexbox/Grid, applying what "${t}" covered.`),
-  'javascript-interactivity': javascriptFilterTemplate,
-  'react-fullstack-web': javascriptFilterTemplate,
-};
-
-function buildPracticalForModule(mod: RawModule): PracticalSeed {
-  const fn = MODULE_PRACTICAL[mod.slug];
-  if (fn) return fn(mod.title);
-  return rubricOnlyTemplate(mod.title, 'text', `Describe and script out, step by step, how you would build a small project applying what "${mod.title}" covered. Where relevant, include real code/pseudo-block sequence.`);
-}
-
 // ── Core builders ────────────────────────────────────────────────────────────
 
 async function createModuleRows(
@@ -514,9 +243,9 @@ async function createModuleRows(
     order++;
   }
 
-  // Course Test session directly after this module's 8 lessons.
-  const pool = buildModuleMCQPool(mod);
-  const mcqCount = Math.min(18, Math.max(10, pool.length));
+  // Course Test session directly after this module's 8 lessons. The
+  // assessment starts as an empty shell; syncAssessmentBanks fills it with the
+  // module's authored 40-question bank (see server/src/assessments/bank).
   const testLesson = await prisma.lesson.create({
     data: {
       courseId,
@@ -527,67 +256,39 @@ async function createModuleRows(
       objectives: [`Demonstrate mastery of everything taught in "${mod.title}"`],
     },
   });
-  const practical = buildPracticalForModule(mod);
-  await createAssessment(prisma, testLesson.id, SessionType.COURSE_TEST, `${mod.title} — Course Test`, pool, mcqCount, [practical]);
+  await createAssessmentShell(
+    prisma,
+    testLesson.id,
+    SessionType.COURSE_TEST,
+    `${mod.title} — Course Test`,
+  );
 
   return order + 1; // next free lesson order
 }
 
-async function createAssessment(
+/** An Assessment row with no questions yet — the maintained question banks
+ *  (server/src/assessments/bank) are applied by syncAssessmentBanks, which
+ *  runs straight after the seed (see seedCourseCatalog), so a fresh database
+ *  and an upgraded one end up with exactly the same questions. */
+async function createAssessmentShell(
   prisma: PrismaClient,
   lessonId: string,
   type: SessionType,
   title: string,
-  mcqPool: MCQSeed[],
-  mcqCount: number,
-  practicals: PracticalSeed[],
 ) {
-  const assessment = await prisma.assessment.create({
+  return prisma.assessment.create({
     data: {
       lessonId,
       type,
       title,
-      instructions:
-        type === SessionType.FINAL_TEST
-          ? 'Part A: concept-check MCQs. Part B: a hands-on practical challenge. Part C: a live viva with your teacher.'
-          : 'Part A: knowledge-check MCQs. Part B: a hands-on practical challenge.',
-      mcqCount,
+      instructions: standardInstructions(type as BankTestType),
+      mcqCount: 0,
       randomizeQuestions: true,
       randomizeOptions: true,
-      vivaMaxScore: type === SessionType.FINAL_TEST ? 20 : 0,
+      vivaMaxScore: 0,
       isPublished: true,
     },
   });
-
-  if (mcqPool.length > 0) {
-    await prisma.mCQQuestion.createMany({
-      data: mcqPool.map((q, i) => ({
-        assessmentId: assessment.id,
-        questionText: q.questionText,
-        options: q.options as unknown as object,
-        correctIndex: q.correctIndex,
-        tags: q.tags,
-        order: i,
-      })),
-    });
-  }
-  for (let i = 0; i < practicals.length; i++) {
-    const p = practicals[i];
-    await prisma.practicalQuestion.create({
-      data: {
-        assessmentId: assessment.id,
-        title: p.title,
-        instructions: p.instructions,
-        language: p.language,
-        starterCode: p.starterCode,
-        testCases: (p.testCases as unknown as object) ?? undefined,
-        rubric: p.rubric as unknown as object,
-        maxScore: p.maxScore,
-        order: i,
-      },
-    });
-  }
-  return assessment;
 }
 
 // ── Pathway (specialized, 28-session) builder ───────────────────────────────
@@ -607,22 +308,27 @@ export async function seedPathwayCurriculum(prisma: PrismaClient, courseId: stri
     order = await createModuleRows(prisma, courseId, raw.modules[i], i + 1, order, null);
   }
 
-  // Final Test: MCQ pool spans all 3 modules (10-15 concept-check questions),
-  // one practical challenge from the pathway's final module, plus Part C
-  // (viva) recorded live by the teacher via VivaRecord.
-  const allPool = raw.modules.flatMap((m) => buildModuleMCQPool(m));
-  const finalMcq = seededShuffle(allPool, `${pathwaySlug}:final`).slice(0, 15);
-  const finalPractical = buildPracticalForModule(raw.modules[raw.modules.length - 1]);
+  // Final Test: 25 MCQs + 5 True/False across all 3 modules plus one ~15-minute
+  // coding project the teacher marks — applied by syncAssessmentBanks.
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { title: true },
+  });
   const finalLesson = await prisma.lesson.create({
     data: {
       courseId,
-      title: `${raw.slug} — Final Test`,
+      title: `${course?.title ?? raw.slug} — Final Test`,
       order,
       type: SessionType.FINAL_TEST,
       objectives: ['Demonstrate complete mastery of every module in this pathway'],
     },
   });
-  await createAssessment(prisma, finalLesson.id, SessionType.FINAL_TEST, `Final Test`, finalMcq, finalMcq.length, [finalPractical]);
+  await createAssessmentShell(
+    prisma,
+    finalLesson.id,
+    SessionType.FINAL_TEST,
+    'Final Test',
+  );
 
   return order; // total session count
 }
@@ -672,7 +378,6 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
 
   let order = 1;
   let moduleOrderCounter = 1;
-  const allPoolsByStage: MCQSeed[][] = [];
 
   for (let stageIdx = 0; stageIdx < ODYSSEY_STAGES.length; stageIdx++) {
     const stageModules = ODYSSEY_STAGES[stageIdx].map(({ pathway, module }) => getModule(pathway, module));
@@ -681,17 +386,12 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
       else assignStandardCheckpoints(mod);
     }
 
-    const stagePool: MCQSeed[] = [];
     for (const mod of stageModules) {
       order = await createModuleRows(prisma, courseId, mod, moduleOrderCounter, order, stageIdx + 1);
       moduleOrderCounter++;
-      stagePool.push(...buildModuleMCQPool(mod));
     }
-    allPoolsByStage.push(stagePool);
 
     // Stage Test — spans this stage's 3 modules.
-    const stageMcq = seededShuffle(stagePool, `odyssey:stage${stageIdx + 1}`).slice(0, 18);
-    const stagePractical = buildPracticalForModule(stageModules[stageModules.length - 1]);
     const stageLesson = await prisma.lesson.create({
       data: {
         courseId,
@@ -701,15 +401,16 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
         objectives: [`Demonstrate mastery of everything taught in Stage ${stageIdx + 1}`],
       },
     });
-    await createAssessment(prisma, stageLesson.id, SessionType.STAGE_TEST, `Stage ${stageIdx + 1} Test`, stageMcq, stageMcq.length, [stagePractical]);
+    await createAssessmentShell(
+      prisma,
+      stageLesson.id,
+      SessionType.STAGE_TEST,
+      `Stage ${stageIdx + 1} Test`,
+    );
     order++;
   }
 
   // Final Test — spans all 9 modules across all 3 stages.
-  const grandPool = allPoolsByStage.flat();
-  const finalMcq = seededShuffle(grandPool, 'odyssey:final').slice(0, 15);
-  const finalStageModules = ODYSSEY_STAGES[2].map(({ pathway, module }) => getModule(pathway, module));
-  const finalPractical = buildPracticalForModule(finalStageModules[finalStageModules.length - 1]);
   const finalLesson = await prisma.lesson.create({
     data: {
       courseId,
@@ -719,7 +420,12 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
       objectives: ['Demonstrate complete mastery of the entire Odyssey journey across all 3 stages'],
     },
   });
-  await createAssessment(prisma, finalLesson.id, SessionType.FINAL_TEST, 'Final Test', finalMcq, finalMcq.length, [finalPractical]);
+  await createAssessmentShell(
+    prisma,
+    finalLesson.id,
+    SessionType.FINAL_TEST,
+    'Final Test',
+  );
 
   return order;
 }

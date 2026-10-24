@@ -29,9 +29,13 @@
 //     pricing is admin-owned and must never be overwritten by a reseed).
 //   - Module/lesson/project/assessment content is only (re)built when a
 //     course doesn't already have it — see seedCurriculumContent.
+//   - Test questions are applied by syncAssessmentBanks (server/src/
+//     assessments/bank), which upgrades already-seeded databases in place
+//     without losing student history.
 
 import { PrismaClient } from '@prisma/client';
 import { seedCurriculumContent } from './curriculum-catalog.seed';
+import { syncAssessmentBanks } from '../assessments/bank/bank.sync';
 
 interface CourseSeed {
   slug: string;
@@ -179,6 +183,11 @@ export async function seedCourseCatalog(
   }
 
   await seedCurriculumContent(prisma, logger, reconcile);
+
+  // Questions: apply the authored test banks to every default test session
+  // (and keep custom curricula linked to them). Idempotent — a no-op once an
+  // assessment is on the current bank version.
+  await syncAssessmentBanks(prisma, logger);
 
   return results;
 }
