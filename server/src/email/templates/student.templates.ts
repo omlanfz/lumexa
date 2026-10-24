@@ -1,4 +1,4 @@
-import { emailButton, emailLayout, formatDateTime } from './layout';
+import { emailButton, emailLayout, escapeHtml, formatDateTime } from './layout';
 
 export function classBookedEmail(params: {
   studentName: string;
@@ -210,6 +210,93 @@ export function certificateIssuedEmail(params: {
           ${params.progressSummaryHtml}
         </div>
         ${nextStepHtml}
+        ${emailButton('View on dashboard', params.dashboardUrl)}
+      `,
+    }),
+  };
+}
+
+// ─── Test report card (sent to the parent/guardian by the evaluating teacher) ─
+
+export interface TestReportEmailParams {
+  studentName: string;
+  teacherName: string;
+  courseTitle: string;
+  testTitle: string;
+  testTypeLabel: string;
+  submittedAt: Date;
+  objective: {
+    score: number;
+    max: number;
+    mcq: { correct: number; total: number };
+    trueFalse: { correct: number; total: number };
+  };
+  coding: { score: number; max: number } | null;
+  total: number;
+  totalMax: number;
+  percentage: number;
+  passed: boolean;
+  passScorePct: number;
+  feedback: string | null;
+  strengths: string | null;
+  improvements: string | null;
+  codingFeedback: string | null;
+  dashboardUrl: string;
+}
+
+/** Teacher-written text, safe for HTML with line breaks preserved. */
+function paragraphs(text: string): string {
+  return escapeHtml(text).replace(/\r?\n/g, '<br />');
+}
+
+function noteBlock(title: string, text: string | null): string {
+  if (!text || !text.trim()) return '';
+  return `
+    <div style="margin: 16px 0;">
+      <p style="margin: 0 0 4px; font-weight: 700; color: #0f172a;">${escapeHtml(title)}</p>
+      <p style="margin: 0; color: #334155;">${paragraphs(text)}</p>
+    </div>`;
+}
+
+const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+export function testReportEmail(params: TestReportEmailParams) {
+  const resultColor = params.passed ? '#15803d' : '#b45309';
+  const resultLabel = params.passed
+    ? `Passed (pass mark ${params.passScorePct}%)`
+    : `Below the ${params.passScorePct}% pass mark — a good chance to revisit the topics together`;
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">${escapeHtml(label)}</td><td style="padding: 8px 0; text-align: right; font-weight: 600; border-bottom: 1px solid #e2e8f0;">${value}</td></tr>`;
+
+  return {
+    subject: `${params.studentName}'s ${params.testTitle} report card`,
+    html: emailLayout({
+      title: 'Test report card',
+      previewText: `${params.studentName} scored ${fmt(params.percentage)}% on ${params.testTitle}.`,
+      bodyHtml: `
+        <h2 style="margin: 0 0 12px; color: #0f172a;">📝 ${escapeHtml(params.studentName)}'s test report</h2>
+        <p style="margin: 0 0 8px;">Hello,</p>
+        <p style="margin: 0 0 8px;">${escapeHtml(params.teacherName)} has reviewed ${escapeHtml(params.studentName)}'s <strong>${escapeHtml(params.testTitle)}</strong> (${escapeHtml(params.courseTitle)}) and approved the report card below.</p>
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 16px; margin: 16px 0;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size: 14px;">
+            ${row('Assessment', `${escapeHtml(params.testTypeLabel)}`)}
+            ${row('Date taken', escapeHtml(formatDateTime(params.submittedAt)))}
+            ${row(
+              `Objective questions (${params.objective.mcq.total} multiple-choice + ${params.objective.trueFalse.total} True/False)`,
+              `${fmt(params.objective.score)} / ${fmt(params.objective.max)}`,
+            )}
+            ${row('Multiple-choice correct', `${params.objective.mcq.correct} / ${params.objective.mcq.total}`)}
+            ${row('True/False correct', `${params.objective.trueFalse.correct} / ${params.objective.trueFalse.total}`)}
+            ${params.coding ? row('Coding project (marked by the teacher)', `${fmt(params.coding.score)} / ${fmt(params.coding.max)}`) : ''}
+            ${row('Total', `${fmt(params.total)} / ${fmt(params.totalMax)}`)}
+            <tr><td style="padding: 12px 0 8px; font-weight: 700;">Percentage</td><td style="padding: 12px 0 8px; text-align: right; font-size: 20px; font-weight: 800; color: ${resultColor};">${fmt(params.percentage)}%</td></tr>
+          </table>
+        </div>
+        <p style="margin: 0 0 8px; font-weight: 700; color: ${resultColor};">${escapeHtml(resultLabel)}</p>
+        ${noteBlock('Teacher feedback', params.feedback)}
+        ${noteBlock('Strengths', params.strengths)}
+        ${noteBlock('Areas to work on', params.improvements)}
+        ${noteBlock('Coding project feedback', params.codingFeedback)}
         ${emailButton('View on dashboard', params.dashboardUrl)}
       `,
     }),

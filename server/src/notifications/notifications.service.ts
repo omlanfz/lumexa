@@ -24,6 +24,8 @@ import {
   packageExpiringSoonEmail,
   packageExpiredEmail,
   certificateIssuedEmail,
+  testReportEmail,
+  type TestReportEmailParams,
 } from '../email/templates/student.templates';
 import {
   teacherAccountCreatedEmail,
@@ -500,6 +502,36 @@ export class NotificationsService {
       category: 'CERTIFICATE_ISSUED',
       dedupeKey: `certificate:${data.studentUserId}:${data.courseId}`,
       attachments,
+    });
+  }
+
+  /** A teacher-approved test report card, sent to the parent/guardian.
+   *
+   * Unlike every other notification this one is NOT fire-and-forget: the
+   * caller (TestReportsService.share) must only tell the teacher the report
+   * was shared if the mail server really accepted it, so this waits for the
+   * delivery attempt and returns the real outcome (see EmailService.
+   * sendTracked). `attempt` makes each deliberate re-send a distinct message
+   * while a retried HTTP request for the same attempt stays a no-op. */
+  async sendTestReportToParent(
+    to: string,
+    data: { reportId: string; attempt: number; studentUserId: string } & Omit<
+      TestReportEmailParams,
+      'dashboardUrl'
+    >,
+  ) {
+    const { reportId, attempt, studentUserId, ...rest } = data;
+    const { subject, html } = testReportEmail({
+      ...rest,
+      dashboardUrl: `${frontendBaseUrl()}/student-dashboard`,
+    });
+    return this.email.sendTracked({
+      to,
+      subject,
+      html,
+      category: 'TEST_REPORT',
+      dedupeKey: `test-report:${reportId}:share:${attempt}`,
+      relatedUserId: studentUserId,
     });
   }
 

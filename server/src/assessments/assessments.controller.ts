@@ -1,7 +1,19 @@
 // FILE PATH: server/src/assessments/assessments.controller.ts
 
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { Role } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -13,18 +25,38 @@ import {
   UpdateMCQQuestionDto,
   UpdatePracticalQuestionDto,
 } from '../curriculum/dto/curriculum.dto';
-import { RecordVivaDto, StartAttemptDto, SubmitMCQAnswerDto, SubmitPracticalDto } from './dto/assessment.dto';
+import {
+  AttachBankDto,
+  RecordVivaDto,
+  SaveAnswerDto,
+  SaveCodeDto,
+  StartAttemptDto,
+  SubmitAttemptDto,
+} from './dto/assessment.dto';
+
+// Autosave fires once per answer click and per pause in typing, so these two
+// routes get a far higher ceiling than the app-wide 20 requests/minute.
+const AUTOSAVE_LIMIT = { default: { limit: 600, ttl: 60_000 } };
 
 @Controller('assessments')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class AssessmentsController {
   constructor(private readonly assessments: AssessmentsService) {}
 
   // ── Student attempt flow ──────────────────────────────────────────────────
 
   @Post(':id/attempts/start')
-  startAttempt(@Param('id') id: string, @Body() dto: StartAttemptDto, @Req() req: any) {
-    return this.assessments.startAttempt(id, req.user.userId, dto.scheduledLessonId);
+  @Roles(Role.STUDENT)
+  startAttempt(
+    @Param('id') id: string,
+    @Body() dto: StartAttemptDto,
+    @Req() req: any,
+  ) {
+    return this.assessments.startAttempt(
+      id,
+      req.user.userId,
+      dto.scheduledLessonId,
+    );
   }
 
   @Get('attempts/:attemptId')
@@ -32,34 +64,84 @@ export class AssessmentsController {
     return this.assessments.getAttempt(attemptId, req.user);
   }
 
-  @Post('attempts/:attemptId/mcq-answer')
-  submitMCQAnswer(@Param('attemptId') attemptId: string, @Body() dto: SubmitMCQAnswerDto, @Req() req: any) {
-    return this.assessments.submitMCQAnswer(attemptId, dto, req.user.userId);
+  @Post('attempts/:attemptId/answers')
+  @Roles(Role.STUDENT)
+  @Throttle(AUTOSAVE_LIMIT)
+  saveAnswer(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: SaveAnswerDto,
+    @Req() req: any,
+  ) {
+    return this.assessments.saveAnswer(attemptId, dto, req.user.userId);
   }
 
-  @Post('attempts/:attemptId/practical-submit')
-  submitPractical(@Param('attemptId') attemptId: string, @Body() dto: SubmitPracticalDto, @Req() req: any) {
-    return this.assessments.submitPractical(attemptId, dto, req.user.userId);
+  @Post('attempts/:attemptId/code')
+  @Roles(Role.STUDENT)
+  @Throttle(AUTOSAVE_LIMIT)
+  saveCode(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: SaveCodeDto,
+    @Req() req: any,
+  ) {
+    return this.assessments.saveCode(attemptId, dto, req.user.userId);
   }
 
   @Post('attempts/:attemptId/submit')
-  submitAttempt(@Param('attemptId') attemptId: string, @Req() req: any) {
-    return this.assessments.submitAttempt(attemptId, req.user.userId);
+  @Roles(Role.STUDENT)
+  submitAttempt(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: SubmitAttemptDto,
+    @Req() req: any,
+  ) {
+    return this.assessments.submitAttempt(attemptId, req.user.userId, dto);
   }
 
-  // ── Teacher/admin: viva (Final Test Part C) ───────────────────────────────
+  // ── Class-level status (student launcher + teacher monitor) ───────────────
+
+  @Get('scheduled-lessons/:scheduledLessonId/status')
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  getLessonTestStatus(
+    @Param('scheduledLessonId') scheduledLessonId: string,
+    @Req() req: any,
+  ) {
+    return this.assessments.getLessonTestStatus(scheduledLessonId, req.user);
+  }
+
+  /** Teacher's preview of the test they are running. Answers are only sent
+   *  when `?answers=1` is passed, so they are never on screen by accident. */
+  @Get(':id/preview')
+  @Roles(Role.TEACHER, Role.ADMIN)
+  preview(
+    @Param('id') id: string,
+    @Query('answers') answers: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.assessments.previewForTeacher(
+      id,
+      req.user,
+      answers === '1' || answers === 'true',
+    );
+  }
+
+  // ── Legacy viva (superseded by the coding project; old attempts only) ─────
 
   @Post('attempts/:attemptId/viva')
-  @UseGuards(RolesGuard)
   @Roles(Role.TEACHER, Role.ADMIN)
-  recordViva(@Param('attemptId') attemptId: string, @Body() dto: RecordVivaDto, @Req() req: any) {
+  recordViva(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: RecordVivaDto,
+    @Req() req: any,
+  ) {
     return this.assessments.recordViva(attemptId, dto, req.user);
   }
 
   // ── Results ────────────────────────────────────────────────────────────────
 
   @Get('students/:studentUserId/attempts')
-  listForStudent(@Param('studentUserId') studentUserId: string, @Req() req: any) {
+  listForStudent(
+    @Param('studentUserId') studentUserId: string,
+    @Req() req: any,
+  ) {
     return this.assessments.listAttemptsForStudent(studentUserId, req.user);
   }
 
@@ -68,59 +150,90 @@ export class AssessmentsController {
     return this.assessments.listAttemptsForCourse(courseId, req.user);
   }
 
-  // ── Admin: question bank + assessment settings ────────────────────────────
+  // ── Admin: question banks ─────────────────────────────────────────────────
+
+  /** Banks a test lesson can be linked to (the "reuse an existing bank" picker). */
+  @Get('banks')
+  @Roles(Role.ADMIN)
+  listBanks() {
+    return this.assessments.listLinkableBanks();
+  }
+
+  /** Gives a test lesson that has no assessment one — linked to an existing
+   *  bank, or an empty bank of its own. */
+  @Post('lessons/:lessonId/bank')
+  @Roles(Role.ADMIN)
+  attachBank(@Param('lessonId') lessonId: string, @Body() dto: AttachBankDto) {
+    return this.assessments.attachBankToLesson(
+      lessonId,
+      dto.sourceAssessmentId,
+    );
+  }
 
   @Get(':id/admin')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   getAssessmentAdmin(@Param('id') id: string) {
     return this.assessments.getAssessmentAdmin(id);
   }
 
   @Patch(':id/settings')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   updateSettings(@Param('id') id: string, @Body() dto: UpdateAssessmentDto) {
-    return this.assessments.updateAssessmentSettings(id, dto as Record<string, unknown>);
+    return this.assessments.updateAssessmentSettings(
+      id,
+      dto as Record<string, unknown>,
+    );
   }
 
   @Post(':id/mcq-questions')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   createMCQ(@Param('id') id: string, @Body() dto: CreateMCQQuestionDto) {
-    return this.assessments.createMCQQuestion(id, dto as unknown as Record<string, unknown>);
+    return this.assessments.createMCQQuestion(
+      id,
+      dto as unknown as Record<string, unknown>,
+    );
   }
 
   @Patch('mcq-questions/:qid')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   updateMCQ(@Param('qid') qid: string, @Body() dto: UpdateMCQQuestionDto) {
-    return this.assessments.updateMCQQuestion(qid, dto as unknown as Record<string, unknown>);
+    return this.assessments.updateMCQQuestion(
+      qid,
+      dto as unknown as Record<string, unknown>,
+    );
   }
 
   @Delete('mcq-questions/:qid')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   deleteMCQ(@Param('qid') qid: string) {
     return this.assessments.deleteMCQQuestion(qid);
   }
 
   @Post(':id/practical-questions')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  createPractical(@Param('id') id: string, @Body() dto: CreatePracticalQuestionDto) {
-    return this.assessments.createPracticalQuestion(id, dto as unknown as Record<string, unknown>);
+  createPractical(
+    @Param('id') id: string,
+    @Body() dto: CreatePracticalQuestionDto,
+  ) {
+    return this.assessments.createPracticalQuestion(
+      id,
+      dto as unknown as Record<string, unknown>,
+    );
   }
 
   @Patch('practical-questions/:qid')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  updatePractical(@Param('qid') qid: string, @Body() dto: UpdatePracticalQuestionDto) {
-    return this.assessments.updatePracticalQuestion(qid, dto as unknown as Record<string, unknown>);
+  updatePractical(
+    @Param('qid') qid: string,
+    @Body() dto: UpdatePracticalQuestionDto,
+  ) {
+    return this.assessments.updatePracticalQuestion(
+      qid,
+      dto as unknown as Record<string, unknown>,
+    );
   }
 
   @Delete('practical-questions/:qid')
-  @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   deletePractical(@Param('qid') qid: string) {
     return this.assessments.deletePracticalQuestion(qid);
