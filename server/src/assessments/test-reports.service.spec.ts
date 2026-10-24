@@ -101,6 +101,11 @@ function courseReport(over: Row = {}): Row {
       billingContactEmail: null,
     },
     teacher: { id: 'tp-1', user: { fullName: 'Ms Karim' } },
+    attempt: {
+      startedAt: new Date('2026-10-24T08:40:00.000Z'),
+      submittedAt: new Date('2026-10-24T09:00:00.000Z'),
+      lockedAt: null,
+    },
     ...over,
   };
 }

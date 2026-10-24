@@ -154,6 +154,11 @@ export class TestReportsService {
           },
         },
         teacher: { select: { id: true, user: { select: { fullName: true } } } },
+        // When the test was started and how it ended (handed in, or locked by
+        // the teacher when time was up).
+        attempt: {
+          select: { startedAt: true, submittedAt: true, lockedAt: true },
+        },
       },
     });
     if (!report) throw new NotFoundException('Report not found.');
@@ -368,7 +373,22 @@ export class TestReportsService {
       improvements: report.improvements,
       teacherEdited: report.teacherEdited,
       timeline: {
+        startedAt: report.attempt.startedAt,
         submittedAt: report.submittedAt,
+        // Set when the teacher locked the test instead of the student handing
+        // it in — the answers are whatever had been saved by then.
+        lockedByTeacherAt: report.attempt.lockedAt,
+        timeTakenSeconds:
+          report.attempt.startedAt && report.attempt.submittedAt
+            ? Math.max(
+                0,
+                Math.round(
+                  (report.attempt.submittedAt.getTime() -
+                    report.attempt.startedAt.getTime()) /
+                    1000,
+                ),
+              )
+            : null,
         lastEditedAt: report.lastEditedAt,
         approvedAt: report.approvedAt,
         sharedAt: report.sharedAt,

@@ -67,7 +67,9 @@ function questionRow(id: string, kind: QuestionKind, over: Row = {}): Row {
 
 function setup() {
   const tx: any = {
-    $queryRaw: jest.fn(),
+    // startAttempt's shared row lock on the class; the autosave tests replace
+    // this with the attempt row.
+    $queryRaw: jest.fn().mockResolvedValue([{ testLockedAt: null }]),
     assessmentAttempt: {
       create: jest.fn(async ({ data }: Row) => ({ id: 'att-new', ...data })),
       updateMany: jest.fn(),
@@ -83,6 +85,7 @@ function setup() {
     practicalSubmission: { upsert: jest.fn() },
     testReport: { create: jest.fn() },
     assessment: { findUnique: jest.fn() },
+    scheduledLesson: { update: jest.fn().mockResolvedValue({}) },
   };
   const prisma: any = {
     ...tx,
@@ -174,6 +177,35 @@ describe('AssessmentsService.startAttempt', () => {
       role: Role.STUDENT,
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('will not start a new attempt once the teacher closed the class’s test', async () => {
+    const { service, prisma } = ready({ cls: { testLockedAt: new Date() } });
+    await expect(
+      service.startAttempt('asm-1', STUDENT, 'sl-1'),
+    ).rejects.toThrow(/teacher has closed this test/);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('a lock that lands while the attempt is being created wins', async () => {
+    // The class looked open at the first check; by the time the row lock is
+    // taken inside the transaction the teacher had closed it.
+    const { service, tx } = ready();
+    tx.$queryRaw.mockResolvedValue([{ testLockedAt: new Date() }]);
+    await expect(
+      service.startAttempt('asm-1', STUDENT, 'sl-1'),
+    ).rejects.toThrow(/teacher has closed this test/);
+    expect(tx.assessmentAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it('a locked class still lets the student back into their own attempt', async () => {
+    const { service, prisma } = ready({ cls: { testLockedAt: new Date() } });
+    prisma.assessmentAttempt.findUnique.mockResolvedValue({ id: 'att-old' });
+    await service.startAttempt('asm-1', STUDENT, 'sl-1');
+    expect(service.getAttempt).toHaveBeenCalledWith('att-old', {
+      userId: STUDENT,
+      role: Role.STUDENT,
+    });
   });
 
   it('will not start a new attempt on an unpublished test', async () => {
@@ -356,6 +388,7 @@ describe('AssessmentsService.getAttempt — who sees what', () => {
       startedAt: new Date('2026-10-24T09:00:00.000Z'),
       submittedAt: null,
       gradedAt: null,
+      lockedAt: null,
       ...over,
     };
   }
@@ -411,6 +444,19 @@ describe('AssessmentsService.getAttempt — who sees what', () => {
       await expect(service.getAttempt('att-1', who)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
+  });
+
+  it('tells the test tab whether the teacher locked it, and what time the server thinks it is', async () => {
+    const student = { userId: STUDENT, role: Role.STUDENT };
+    const open = await view(attemptRow()).service.getAttempt('att-1', student);
+    expect(open).toMatchObject({ lockedAt: null, lockedByTeacher: false });
+    expect(open.serverTime).toBeInstanceOf(Date);
+
+    const lockedAt = new Date('2026-10-24T09:30:00.000Z');
+    const locked = await view(
+      attemptRow({ status: AttemptStatus.SUBMITTED, lockedAt }),
+    ).service.getAttempt('att-1', student);
+    expect(locked).toMatchObject({ lockedAt, lockedByTeacher: true });
   });
 
   it('a missing attempt is not found', async () => {
@@ -657,6 +703,81 @@ describe('AssessmentsService.getAttempt — who sees what', () => {
   });
 });
 
+describe('AssessmentsService.getAttemptState — "is my test still open?"', () => {
+  function state(row: Row | null, who: { userId: string; role: Role }) {
+    const ctx = setup();
+    ctx.prisma.assessmentAttempt.findUnique.mockResolvedValue(row);
+    return ctx.service.getAttemptState('att-1', who);
+  }
+  const row = (over: Row = {}): Row => ({
+    id: 'att-1',
+    status: AttemptStatus.IN_PROGRESS,
+    startedAt: new Date('2026-10-24T09:00:00.000Z'),
+    submittedAt: null,
+    lockedAt: null,
+    studentUserId: STUDENT,
+    student: { assignedTeacher: { userId: 'tch-assigned' } },
+    scheduledLesson: { teacher: { userId: 'tch-class' } },
+    ...over,
+  });
+
+  it('answers with the status, the lock and the server clock — nothing else', async () => {
+    const out = await state(row(), { userId: STUDENT, role: Role.STUDENT });
+    expect(out).toMatchObject({
+      id: 'att-1',
+      status: AttemptStatus.IN_PROGRESS,
+      released: false,
+      lockedAt: null,
+      lockedByTeacher: false,
+    });
+    expect(out.serverTime).toBeInstanceOf(Date);
+    expect(Object.keys(out).sort()).toEqual(
+      [
+        'id',
+        'status',
+        'released',
+        'startedAt',
+        'submittedAt',
+        'lockedAt',
+        'lockedByTeacher',
+        'serverTime',
+      ].sort(),
+    );
+  });
+
+  it('reports a teacher lock', async () => {
+    const lockedAt = new Date('2026-10-24T09:40:00.000Z');
+    const out = await state(
+      row({ status: AttemptStatus.SUBMITTED, submittedAt: lockedAt, lockedAt }),
+      { userId: STUDENT, role: Role.STUDENT },
+    );
+    expect(out).toMatchObject({ lockedByTeacher: true, lockedAt });
+  });
+
+  it('is open to the student, the class’s and the assigned teacher, and admins only', async () => {
+    for (const who of [
+      { userId: STUDENT, role: Role.STUDENT },
+      { userId: 'tch-class', role: Role.TEACHER },
+      { userId: 'tch-assigned', role: Role.TEACHER },
+      { userId: 'adm', role: Role.ADMIN },
+    ])
+      await expect(state(row(), who)).resolves.toBeDefined();
+    for (const who of [
+      { userId: 'other-student', role: Role.STUDENT },
+      { userId: 'other-teacher', role: Role.TEACHER },
+    ])
+      await expect(state(row(), who)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+  });
+
+  it('an unknown attempt is not found', async () => {
+    await expect(
+      state(null, { userId: STUDENT, role: Role.STUDENT }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
 describe('AssessmentsService.saveAnswer / saveCode', () => {
   function editable(over: { row?: Row | null; answer?: Row | null } = {}) {
     const ctx = setup();
@@ -771,6 +892,20 @@ describe('AssessmentsService.saveAnswer / saveCode', () => {
         STUDENT,
       ),
     ).rejects.toThrow(/already been submitted/);
+    expect(tx.mCQAnswer.update).not.toHaveBeenCalled();
+  });
+
+  it('says so when the teacher locked the test', async () => {
+    const { service, tx } = editable({
+      row: { status: AttemptStatus.SUBMITTED, lockedAt: new Date() },
+    });
+    await expect(
+      service.saveAnswer(
+        'att-1',
+        { questionId: 'q1', selectedIndex: 0 },
+        STUDENT,
+      ),
+    ).rejects.toThrow(/teacher locked this test/);
     expect(tx.mCQAnswer.update).not.toHaveBeenCalled();
   });
 
@@ -988,6 +1123,77 @@ describe('AssessmentsService.submitAttempt', () => {
         type: 'TEST_SUBMITTED',
       }),
     );
+  });
+
+  describe('lockAttempt — the teacher’s “Lock & submit”', () => {
+    it('submits exactly what was saved and records the lock on the attempt and the class, in one transaction', async () => {
+      const { service, prisma, tx } = submittable();
+      const out = await service.lockAttempt(
+        'att-1',
+        STUDENT,
+        'sl-1',
+        'tch-user',
+      );
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const claim = tx.assessmentAttempt.updateMany.mock.calls[0][0];
+      expect(claim.where).toEqual({
+        id: 'att-1',
+        studentUserId: STUDENT,
+        status: AttemptStatus.IN_PROGRESS,
+      });
+      expect(claim.data).toMatchObject({
+        status: AttemptStatus.SUBMITTED,
+        lockedByUserId: 'tch-user',
+      });
+      expect(claim.data.lockedAt).toBeInstanceOf(Date);
+      // The same instant is the submit time, the lock time and the class's.
+      expect(claim.data.submittedAt).toBe(claim.data.lockedAt);
+      expect(tx.scheduledLesson.update).toHaveBeenCalledWith({
+        where: { id: 'sl-1' },
+        data: {
+          testLockedAt: claim.data.lockedAt,
+          testLockedByUserId: 'tch-user',
+        },
+      });
+      // Graded from the SAVED answers (q1 right, q2 blank) — nothing is sent.
+      expect(tx.testReport.create.mock.calls[0][0].data).toMatchObject({
+        objectiveScore: 1,
+        objectiveMaxScore: 2,
+        status: TestReportStatus.PENDING_REVIEW,
+      });
+      expect(out).toMatchObject({ alreadySubmitted: false });
+    });
+
+    it('does not alert the teacher about a test they just locked themselves', async () => {
+      const { service, alerts } = submittable();
+      await service.lockAttempt('att-1', STUDENT, 'sl-1', 'tch-user');
+      await new Promise((r) => setImmediate(r));
+      expect(alerts.create).not.toHaveBeenCalled();
+    });
+
+    it('when the student handed in first, the lock changes nothing and returns that submission', async () => {
+      const { service, tx } = submittable();
+      tx.assessmentAttempt.updateMany.mockResolvedValue({ count: 0 });
+      const out = await service.lockAttempt(
+        'att-1',
+        STUDENT,
+        'sl-1',
+        'tch-user',
+      );
+      expect(out.alreadySubmitted).toBe(true);
+      expect(tx.testReport.create).not.toHaveBeenCalled();
+      expect(tx.scheduledLesson.update).not.toHaveBeenCalled();
+    });
+
+    it('a student’s own submit does not touch the lock columns', async () => {
+      const { service, tx } = submittable();
+      await service.submitAttempt('att-1', STUDENT);
+      const data = tx.assessmentAttempt.updateMany.mock.calls[0][0].data;
+      expect(data).not.toHaveProperty('lockedAt');
+      expect(data).not.toHaveProperty('lockedByUserId');
+      expect(tx.scheduledLesson.update).not.toHaveBeenCalled();
+    });
   });
 
   it('applies the answers sent with the submit (display positions → canonical)', async () => {
@@ -1240,6 +1446,28 @@ describe('AssessmentsService — class test status', () => {
       { userId: 'other-teacher', role: Role.TEACHER },
     ])
       await expect(status(who)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('tells a student who never started that the teacher closed the test', async () => {
+    const ctx = setup();
+    const closedAt = new Date('2026-10-24T09:50:00.000Z');
+    ctx.prisma.scheduledLesson.findUnique.mockResolvedValue({
+      id: 'sl-1',
+      studentUserId: STUDENT,
+      status: LessonStatus.UPCOMING,
+      testLockedAt: closedAt,
+      teacher: { userId: 'tch-class' },
+      student: { fullName: 'Mira', assignedTeacher: null },
+      lesson: null,
+      assessmentAttempt: null,
+    });
+    const out = await ctx.service.getLessonTestStatus('sl-1', {
+      userId: STUDENT,
+      role: Role.STUDENT,
+    });
+    expect(out.closedAt).toEqual(closedAt);
+    expect(out.attempt).toBeNull();
+    expect(out.serverTime).toBeInstanceOf(Date);
   });
 
   it('shows progress, and the report only to the teacher side', async () => {
