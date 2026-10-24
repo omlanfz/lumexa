@@ -17,6 +17,7 @@ import {
 } from '../scheduling/lesson-window.util';
 import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
 import {
+  ClassType,
   LessonStatus,
   RecordingStatus,
   ClassEndReason,
@@ -27,16 +28,28 @@ import {
   RoomServiceClient,
   TrackSource,
 } from 'livekit-server-sdk';
+import type { ParticipantInfo } from 'livekit-server-sdk';
 import { RecordingService } from './recording.service';
 import { AdmissionService } from './admission.service';
 import {
   ClassFinalizationService,
   type ClassOutcome,
 } from './class-finalization.service';
+import { RoomAccessService } from './room-access.service';
+import { RoomDirectoryService } from './room-directory.service';
 import {
   DEMO_ROOM_NAME,
+  DEMO_STUDENT_EMAIL,
+  DEMO_TEACHER_EMAIL,
+  MAX_PEOPLE_PER_CLASSROOM,
+  buildIdentity,
+  getRoomRef,
+  isCurriculumRoom,
   isLessonRoom,
   lessonIdFromRoom,
+  personKey,
+  roomForLessonRecord,
+  sanitizeDeviceId,
 } from './room-ref.util';
 
 export interface EndClassParams {
@@ -51,10 +64,9 @@ export interface EndClassParams {
 // shared classroom instantly, with no real booking or scheduled lesson
 // involved, purely to test/QA the classroom experience. Deliberately kept
 // isolated from Booking/ScheduledLesson/payouts/cron so it can never affect
-// real revenue, payout, or admin reporting — remove this block (and the
-// join-demo controller route + frontend buttons) once QA is done.
-const DEMO_TEACHER_EMAIL = 'dmtc@gmail.com';
-const DEMO_STUDENT_EMAIL = 'dmst@gmail.com';
+// real revenue, payout, or admin reporting — remove joinDemoClassroom (and the
+// join-demo controller route + frontend buttons) once QA is done. The two
+// accounts are named in room-ref.util.ts.
 
 const RANK_THRESHOLDS: { rank: SpaceRank; min: number }[] = [
   { rank: 'STARCHILD', min: 0 },
@@ -79,6 +91,8 @@ export class ClassroomService {
     private recordingService: RecordingService,
     private admissionService: AdmissionService,
     private classFinalization: ClassFinalizationService,
+    private roomAccess: RoomAccessService,
+    private roomDirectory: RoomDirectoryService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -92,7 +106,11 @@ export class ClassroomService {
    * Restricted to the two seeded demo accounts — see the block comment
    * above DEMO_ROOM_NAME for why this is kept separate from the real
    * booking/lesson flows. */
-  async joinDemoClassroom(userId: string, email: string | undefined) {
+  async joinDemoClassroom(
+    userId: string,
+    email: string | undefined,
+    deviceId?: unknown,
+  ) {
     const normalizedEmail = email?.toLowerCase();
     const isTeacher = normalizedEmail === DEMO_TEACHER_EMAIL;
     const isStudent = normalizedEmail === DEMO_STUDENT_EMAIL;
@@ -115,6 +133,21 @@ export class ClassroomService {
     const displayName =
       user?.fullName ?? (isTeacher ? 'Teacher Demo' : 'Demo Student');
     const participantName = `${displayName} (${isTeacher ? 'Teacher' : 'Student'})`;
+    const device = sanitizeDeviceId(deviceId);
+
+    // Locked / full / too many devices — same rules as a real class.
+    const entry = await this.checkRoomEntry({
+      room: DEMO_ROOM_NAME,
+      userId,
+      role: isTeacher ? 'TEACHER' : 'STUDENT',
+      deviceId: device,
+      // (If the demo teacher's account is missing there is nobody to reserve
+      // a seat for; the limits still apply.)
+      teacherUserId: await this.roomDirectory
+        .teacherUserIdOf(DEMO_ROOM_NAME)
+        .catch(() => ''),
+    });
+    if (entry) return entry;
 
     // A student the teacher removed must knock and be re-admitted rather
     // than silently rejoining — see AdmissionService. Without this, LiveKit
@@ -138,7 +171,7 @@ export class ClassroomService {
     }
 
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userId,
+      identity: buildIdentity(userId, device),
       name: participantName,
       ttl: '3h',
     });
@@ -156,6 +189,29 @@ export class ClassroomService {
       roomName: DEMO_ROOM_NAME,
       scheduledStart: await this.getDemoRoomStart(),
       classType: 'ONE_TO_ONE' as const,
+      roomLocked: await this.roomAccess.isLocked(DEMO_ROOM_NAME),
+      maxPeople: MAX_PEOPLE_PER_CLASSROOM,
+    };
+  }
+
+  /** The room limits and the teacher's lock, as the response a join returns
+   * when it must refuse (the browser shows `message` and offers a retry) —
+   * or null when this person may come in. A refusal is a normal answer, not
+   * an error, the same way "waiting to be let back in" is. */
+  private async checkRoomEntry(params: {
+    room: string;
+    userId: string;
+    role: 'TEACHER' | 'STUDENT';
+    deviceId: string;
+    teacherUserId: string;
+  }) {
+    const entry = await this.roomAccess.checkEntry(params);
+    if (entry.ok) return null;
+    return {
+      blocked: true as const,
+      reason: entry.reason,
+      message: entry.message,
+      roomName: params.room,
     };
   }
 
@@ -214,7 +270,7 @@ export class ClassroomService {
       ) {
         throw new BadRequestException('This class is not currently live.');
       }
-      room = `lesson-${id}`;
+      room = roomForLessonRecord(lesson);
     } else {
       const booking = await this.prisma.booking.findUnique({
         where: { id },
@@ -267,13 +323,17 @@ export class ClassroomService {
    * scheduled-lesson flow depending on which id was given. */
   async joinLab(
     userId: string,
-    dto: { bookingId?: string; scheduledLessonId?: string },
+    dto: { bookingId?: string; scheduledLessonId?: string; deviceId?: string },
   ) {
     if (dto.scheduledLessonId) {
-      return this.joinScheduledLesson(userId, dto.scheduledLessonId);
+      return this.joinScheduledLesson(
+        userId,
+        dto.scheduledLessonId,
+        dto.deviceId,
+      );
     }
     if (dto.bookingId) {
-      return this.joinBooking(userId, dto.bookingId);
+      return this.joinBooking(userId, dto.bookingId, dto.deviceId);
     }
     throw new BadRequestException(
       'Either bookingId or scheduledLessonId is required.',
@@ -282,7 +342,11 @@ export class ClassroomService {
 
   // ─── Curriculum flow: Operations-scheduled recurring lessons ─────────────
 
-  async joinScheduledLesson(userId: string, lessonId: string) {
+  async joinScheduledLesson(
+    userId: string,
+    lessonId: string,
+    deviceId?: unknown,
+  ) {
     const lesson = await this.schedulingService.getLessonForClassroom(lessonId);
 
     // A class is never closed by its own scheduled end time — only the
@@ -324,7 +388,20 @@ export class ClassroomService {
       throw new BadRequestException('Video service is not configured.');
     }
 
-    const roomName = `lesson-${lessonId}`;
+    // A 1:1 class has a room of its own; every student of a BATCH class takes
+    // the same room (see roomForLessonRecord).
+    const roomName = roomForLessonRecord(lesson);
+    const device = sanitizeDeviceId(deviceId);
+
+    // The teacher's lock, the 10-people limit and the per-person device limit.
+    const blocked = await this.checkRoomEntry({
+      room: roomName,
+      userId,
+      role,
+      deviceId: device,
+      teacherUserId: lesson.teacher.userId,
+    });
+    if (blocked) return blocked;
 
     // A student the teacher removed must knock and be re-admitted rather
     // than silently rejoining — see AdmissionService.
@@ -345,7 +422,9 @@ export class ClassroomService {
     }
 
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userId,
+      // One identity per device/tab: the same person can be in the room from
+      // several at once (see room-ref.util.ts).
+      identity: buildIdentity(userId, device),
       name: participantName,
       ttl: '3h',
     });
@@ -357,6 +436,16 @@ export class ClassroomService {
       canPublishData: true,
     });
 
+    // The lessons this join counts for: just this one, except that a teacher
+    // entering a batch room has joined every student's lesson in it.
+    const joinedLessons =
+      role === 'TEACHER' && lesson.classType === ClassType.BATCH
+        ? await this.schedulingService.getUpcomingBatchLessons(
+            lesson.teacherId,
+            lesson.start,
+          )
+        : [lesson];
+
     await this.schedulingService
       .recordLessonJoin(lessonId, role)
       .catch((err) => {
@@ -367,21 +456,39 @@ export class ClassroomService {
 
     // Immediate late-join check — a teacher who joins more than the grace
     // period after the scheduled start is penalized right away rather than
-    // waiting for PayoutsService's sweep cron. Idempotent either way.
+    // waiting for PayoutsService's sweep cron. Idempotent either way. Each
+    // student's lesson is its own paid class, so each carries its own penalty
+    // (the same way each earns its own payment).
+    //
+    // Lateness is judged by when the teacher FIRST came in (the join time kept
+    // on the lesson), not by the moment of this token request: one is also
+    // made when the teacher presses Join on the pre-join screen, opens a second
+    // device or tab, or refreshes — none of which may fine a teacher who was
+    // on time. (`joinedLessons` was read before recordLessonJoin, so a lesson
+    // with no join time is genuinely the first.)
     if (role === 'TEACHER') {
-      const lateMinutes = computeLateMinutes(lesson.start, new Date());
+      const arrivals = joinedLessons
+        .map((l) => l.teacherJoinedAt)
+        .filter((at): at is Date => at !== null);
+      const arrivedAt =
+        arrivals.length > 0
+          ? new Date(Math.min(...arrivals.map((at) => at.getTime())))
+          : new Date();
+      const lateMinutes = computeLateMinutes(lesson.start, arrivedAt);
       if (lateMinutes > LATE_JOIN_GRACE_MINUTES) {
-        await this.payoutsService
-          .triggerLateJoinPenalty({
-            teacherId: lesson.teacher.id,
-            scheduledLessonId: lessonId,
-            lateMinutes,
-          })
-          .catch((err) => {
-            this.logger.error(
-              `Failed to apply late-join penalty for lesson ${lessonId}: ${err}`,
-            );
-          });
+        for (const joined of joinedLessons) {
+          await this.payoutsService
+            .triggerLateJoinPenalty({
+              teacherId: lesson.teacher.id,
+              scheduledLessonId: joined.id,
+              lateMinutes,
+            })
+            .catch((err) => {
+              this.logger.error(
+                `Failed to apply late-join penalty for lesson ${joined.id}: ${err}`,
+              );
+            });
+        }
       }
     }
 
@@ -392,19 +499,40 @@ export class ClassroomService {
       scheduledStart: lesson.start.toISOString(),
       classType: lesson.classType,
       // The teacher's Partially Completed option is only offered once per
-      // lesson — disabled on the extra class that option itself creates.
-      partialCompletionAvailable:
-        !(await this.schedulingService.hasPartialCompletion(
-          lesson.studentUserId,
-          lesson.courseId,
-          lesson.lessonNumber,
-        )),
+      // lesson — disabled on the extra class that option itself creates. In a
+      // batch it is only offered if every student can still use it.
+      partialCompletionAvailable: !(await this.anyPartialCompletionUsed(
+        joinedLessons.length > 0 ? joinedLessons : [lesson],
+      )),
+      roomLocked: await this.roomAccess.isLocked(roomName),
+      maxPeople: MAX_PEOPLE_PER_CLASSROOM,
     };
+  }
+
+  private async anyPartialCompletionUsed(
+    lessons: {
+      studentUserId: string;
+      courseId: string;
+      lessonNumber: number;
+    }[],
+  ): Promise<boolean> {
+    for (const l of lessons) {
+      if (
+        await this.schedulingService.hasPartialCompletion(
+          l.studentUserId,
+          l.courseId,
+          l.lessonNumber,
+        )
+      ) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // ─── Marketplace flow: booked shift ───────────────────────────────────────
 
-  async joinBooking(userId: string, bookingId: string) {
+  async joinBooking(userId: string, bookingId: string, deviceId?: unknown) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -465,6 +593,17 @@ export class ClassroomService {
       );
     }
 
+    // The teacher's lock, the 10-people limit and the per-person device limit.
+    const device = sanitizeDeviceId(deviceId);
+    const blocked = await this.checkRoomEntry({
+      room: bookingId,
+      userId,
+      role: isStudent ? 'STUDENT' : 'TEACHER',
+      deviceId: device,
+      teacherUserId: booking.shift.teacher.userId,
+    });
+    if (blocked) return blocked;
+
     // A student the teacher removed must knock and be re-admitted rather
     // than silently rejoining — see AdmissionService.
     if (isStudent) {
@@ -492,7 +631,7 @@ export class ClassroomService {
     }
 
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: userId,
+      identity: buildIdentity(userId, device),
       name: participantName,
       ttl: '3h', // Token valid for 3 hours max
     });
@@ -515,6 +654,8 @@ export class ClassroomService {
       scheduledStart: booking.shift.start.toISOString(),
       // Marketplace bookings are always 1:1 sessions.
       classType: 'ONE_TO_ONE' as const,
+      roomLocked: await this.roomAccess.isLocked(bookingId),
+      maxPeople: MAX_PEOPLE_PER_CLASSROOM,
     };
   }
 
@@ -563,19 +704,62 @@ export class ClassroomService {
 
       const event = await receiver.receive(JSON.stringify(body), authHeader);
 
+      if (event.event === 'participant_joined') {
+        await this.enforceRoomLimits(event);
+        return;
+      }
+
       if (event.event === 'egress_ended') {
         const room = event.egressInfo?.roomName;
         if (!room) return;
 
         await this.recordingService.handleEgressEnded(event.egressInfo as any);
 
-        if (isLessonRoom(room)) return; // no payment/gem flow for curriculum lessons
+        if (isCurriculumRoom(room)) return; // no payment/gem flow for curriculum lessons
         await this.finalizeBookingIfDue(room);
       }
     } catch (err) {
       this.logger.error(`Webhook processing error: ${err}`);
       // Don't throw — webhook endpoints should always return 200
     }
+  }
+
+  /** A join token is issued before the person actually connects, so the
+   * limits checked then (the teacher's lock, 10 people, 3 devices each) can be
+   * outrun: a token issued a moment before the teacher locked, or two
+   * students racing for the last seat. This is the second line — as soon as
+   * LiveKit reports someone connected, anyone who should not be there is told
+   * why and removed. Rooms that are not Lumexa classrooms are ignored. */
+  private async enforceRoomLimits(event: {
+    room?: { name?: string };
+    participant?: {
+      identity?: string;
+      kind?: number;
+      joinedAt?: bigint;
+      joinedAtMs?: bigint;
+    };
+  }): Promise<void> {
+    const room = event.room?.name;
+    const participant = event.participant;
+    if (!room || !participant?.identity) return;
+
+    let teacherUserId: string;
+    try {
+      teacherUserId = await this.roomDirectory.teacherUserIdOf(room);
+    } catch {
+      return; // not one of our classrooms
+    }
+
+    const joinedAtMs =
+      Number(participant.joinedAtMs ?? 0n) ||
+      Number(participant.joinedAt ?? 0n) * 1000;
+    await this.roomAccess.enforceAfterJoin({
+      room,
+      identity: participant.identity,
+      joinedAtMs: joinedAtMs || Date.now(),
+      kind: Number(participant.kind ?? 0),
+      teacherUserId,
+    });
   }
 
   /**
@@ -684,29 +868,11 @@ export class ClassroomService {
     return new RoomServiceClient(url, apiKey, apiSecret);
   }
 
-  /** Room names are either `lesson-<scheduledLessonId>` (curriculum flow) or
-   * a raw bookingId (marketplace flow) — mirrors the naming in joinLab. */
+  /** Room names are `lesson-<scheduledLessonId>` (a 1:1 class),
+   * `batch-<teacherId>-<start>` (a batch), a raw bookingId (marketplace) or the
+   * demo room — see RoomDirectoryService. */
   private async getRoomTeacherUserId(roomName: string): Promise<string> {
-    if (roomName === DEMO_ROOM_NAME) {
-      const teacher = await this.prisma.user.findUnique({
-        where: { email: DEMO_TEACHER_EMAIL },
-        select: { id: true },
-      });
-      if (!teacher) throw new BadRequestException('Classroom not found.');
-      return teacher.id;
-    }
-    if (roomName.startsWith('lesson-')) {
-      const lessonId = roomName.slice('lesson-'.length);
-      const lesson =
-        await this.schedulingService.getLessonForClassroom(lessonId);
-      return lesson.teacher.userId;
-    }
-    const booking = await this.prisma.booking.findUnique({
-      where: { id: roomName },
-      include: { shift: { include: { teacher: true } } },
-    });
-    if (!booking) throw new BadRequestException('Classroom not found.');
-    return booking.shift.teacher.userId;
+    return this.roomDirectory.teacherUserIdOf(roomName);
   }
 
   private async assertTeacherOfRoom(
@@ -731,15 +897,18 @@ export class ClassroomService {
     await this.assertTeacherOfRoom(userId, roomName);
   }
 
-  private async findPublishedTrackSid(
+  /** Every connection of one person currently in the room. A person may be in
+   * from several devices at once (see room-ref.util.ts), and a teacher's
+   * action on them — mute, stop sharing, remove — applies to all of them, so
+   * `identity` may be their userId or any one of their identities. */
+  private async connectionsOf(
     client: RoomServiceClient,
     room: string,
     identity: string,
-    source: TrackSource,
-  ): Promise<string | null> {
-    const participant = await client.getParticipant(room, identity);
-    const track = participant.tracks.find((t) => t.source === source);
-    return track?.sid ?? null;
+  ): Promise<ParticipantInfo[]> {
+    const key = personKey(identity);
+    const all = await client.listParticipants(room);
+    return all.filter((p) => personKey(p.identity) === key);
   }
 
   async muteParticipant(
@@ -752,14 +921,11 @@ export class ClassroomService {
     const client = this.getRoomServiceClient();
     const source =
       kind === 'audio' ? TrackSource.MICROPHONE : TrackSource.CAMERA;
-    const sid = await this.findPublishedTrackSid(
-      client,
-      room,
-      identity,
-      source,
-    );
-    if (sid) {
-      await client.mutePublishedTrack(room, identity, sid, true);
+    for (const c of await this.connectionsOf(client, room, identity)) {
+      const track = c.tracks.find((t) => t.source === source);
+      if (track && !track.muted) {
+        await client.mutePublishedTrack(room, c.identity, track.sid, true);
+      }
     }
     return { ok: true };
   }
@@ -773,7 +939,7 @@ export class ClassroomService {
     const participants = await client.listParticipants(room);
     let mutedCount = 0;
     for (const p of participants) {
-      if (p.identity === userId) continue; // never mute the teacher
+      if (personKey(p.identity) === userId) continue; // never mute the teacher (on any device)
       const micTrack = p.tracks.find(
         (t) => t.source === TrackSource.MICROPHONE,
       );
@@ -799,14 +965,15 @@ export class ClassroomService {
   ): Promise<{ ok: true }> {
     await this.assertTeacherOfRoom(userId, room);
     const client = this.getRoomServiceClient();
-    const participant = await client.getParticipant(room, identity);
-    const shareTracks = participant.tracks.filter(
-      (t) =>
-        t.source === TrackSource.SCREEN_SHARE ||
-        t.source === TrackSource.SCREEN_SHARE_AUDIO,
-    );
-    for (const track of shareTracks) {
-      await client.mutePublishedTrack(room, identity, track.sid, true);
+    for (const c of await this.connectionsOf(client, room, identity)) {
+      const shareTracks = c.tracks.filter(
+        (t) =>
+          t.source === TrackSource.SCREEN_SHARE ||
+          t.source === TrackSource.SCREEN_SHARE_AUDIO,
+      );
+      for (const track of shareTracks) {
+        await client.mutePublishedTrack(room, c.identity, track.sid, true);
+      }
     }
     return { ok: true };
   }
@@ -824,33 +991,43 @@ export class ClassroomService {
   ): Promise<{ ok: true }> {
     await this.assertTeacherOfRoom(userId, room);
     const client = this.getRoomServiceClient();
-    const participant = await client.getParticipant(room, identity);
-    const current = participant.permission;
-    const currentSources = current?.canPublishSources?.length
-      ? current.canPublishSources
-      : [
-          TrackSource.CAMERA,
-          TrackSource.MICROPHONE,
-          TrackSource.SCREEN_SHARE,
-          TrackSource.SCREEN_SHARE_AUDIO,
-        ];
-    const nextSources = locked
-      ? currentSources.filter((s) => s !== TrackSource.MICROPHONE)
-      : Array.from(new Set([...currentSources, TrackSource.MICROPHONE]));
+    for (const participant of await this.connectionsOf(
+      client,
+      room,
+      identity,
+    )) {
+      const current = participant.permission;
+      const currentSources = current?.canPublishSources?.length
+        ? current.canPublishSources
+        : [
+            TrackSource.CAMERA,
+            TrackSource.MICROPHONE,
+            TrackSource.SCREEN_SHARE,
+            TrackSource.SCREEN_SHARE_AUDIO,
+          ];
+      const nextSources = locked
+        ? currentSources.filter((s) => s !== TrackSource.MICROPHONE)
+        : Array.from(new Set([...currentSources, TrackSource.MICROPHONE]));
 
-    await client.updateParticipant(room, identity, undefined, {
-      canPublish: current?.canPublish ?? true,
-      canSubscribe: current?.canSubscribe ?? true,
-      canPublishData: current?.canPublishData ?? true,
-      canPublishSources: nextSources,
-    });
+      await client.updateParticipant(room, participant.identity, undefined, {
+        canPublish: current?.canPublish ?? true,
+        canSubscribe: current?.canSubscribe ?? true,
+        canPublishData: current?.canPublishData ?? true,
+        canPublishSources: nextSources,
+      });
 
-    if (locked) {
-      const micTrack = participant.tracks.find(
-        (t) => t.source === TrackSource.MICROPHONE,
-      );
-      if (micTrack && !micTrack.muted) {
-        await client.mutePublishedTrack(room, identity, micTrack.sid, true);
+      if (locked) {
+        const micTrack = participant.tracks.find(
+          (t) => t.source === TrackSource.MICROPHONE,
+        );
+        if (micTrack && !micTrack.muted) {
+          await client.mutePublishedTrack(
+            room,
+            participant.identity,
+            micTrack.sid,
+            true,
+          );
+        }
       }
     }
     return { ok: true };
@@ -862,23 +1039,31 @@ export class ClassroomService {
     identity: string,
   ): Promise<{ ok: true }> {
     await this.assertTeacherOfRoom(userId, room);
+    if (personKey(identity) === userId) {
+      throw new BadRequestException(
+        'You cannot remove yourself from your own class.',
+      );
+    }
     const client = this.getRoomServiceClient();
 
-    const displayName = await client
-      .getParticipant(room, identity)
-      .then(
-        (p) =>
-          p.name.replace(/\s*\((Teacher|Student)\)\s*$/i, '').trim() || p.name,
-      )
-      .catch(() => 'Student');
+    // Removing a person removes them from every device they are in from.
+    const connections = await this.connectionsOf(client, room, identity);
+    if (connections.length === 0) return { ok: true }; // already gone
+
+    const displayName =
+      connections[0].name.replace(/\s*\((Teacher|Student)\)\s*$/i, '').trim() ||
+      connections[0].name ||
+      'Student';
     await this.admissionService.markRemoved(
       room,
-      identity,
+      personKey(identity),
       displayName,
       'STUDENT',
     );
 
-    await client.removeParticipant(room, identity);
+    for (const c of connections) {
+      await client.removeParticipant(room, c.identity);
+    }
     return { ok: true };
   }
 
@@ -943,13 +1128,39 @@ export class ClassroomService {
     userId: string,
     room: string,
     params: EndClassParams = {},
-  ): Promise<{ ok: true; status?: LessonStatus }> {
+  ): Promise<{
+    ok: true;
+    status?: LessonStatus;
+    lessons?: { lessonId: string; status: LessonStatus }[];
+  }> {
     const { outcome, reason, note } = params;
     await this.assertTeacherOfRoom(userId, room);
 
     let status: LessonStatus | undefined;
+    let lessons: { lessonId: string; status: LessonStatus }[] | undefined;
 
-    if (isLessonRoom(room)) {
+    if (getRoomRef(room).kind === 'batch') {
+      // A batch is one class with one teacher and several students, each of
+      // whom has their own lesson (and their own payment and progress). The
+      // teacher ends the class once; every student's lesson is finalized.
+      const resolved = await this.roomDirectory.resolve(room);
+      if (!outcome) {
+        throw new BadRequestException(
+          'Choose Completed, Partially Completed or Incomplete to end this class.',
+        );
+      }
+      const open = resolved.lessons.filter(
+        (l) => l.status === LessonStatus.UPCOMING,
+      );
+      // A repeat of an already-applied request (double click / retry) must
+      // stay a harmless success, so only gate classes that are still open.
+      if (open.length > 0) this.assertEndClassWindowOpen(open[0].start);
+      lessons = await this.classFinalization.finalizeBatch(
+        open.map((l) => l.id),
+        { outcome, reason, note, actor: { role: 'TEACHER', userId } },
+      );
+      status = lessons[0]?.status ?? resolved.lessons[0]?.status;
+    } else if (isLessonRoom(room)) {
       const lessonId = lessonIdFromRoom(room);
       const lesson = await this.prisma.scheduledLesson.findUnique({
         where: { id: lessonId },
@@ -989,9 +1200,12 @@ export class ClassroomService {
     } else {
       await this.recordingService.stopActiveSegmentIfAny(room);
       await this.deleteLiveKitRoom(room);
+      // The demo room has a fixed name, so unlike a real class it would stay
+      // locked for the next QA session.
+      await this.roomAccess.setLocked(room, false, userId).catch(() => {});
     }
 
-    return { ok: true, status };
+    return { ok: true, status, ...(lessons ? { lessons } : {}) };
   }
 
   private async deleteLiveKitRoom(room: string): Promise<void> {
@@ -1005,14 +1219,43 @@ export class ClassroomService {
 
   /** Merges into the room's JSON metadata — the shared source of truth for
    * classroom-wide state (chat lock, "students can unmute") that every
-   * participant's client picks up via LiveKit's RoomMetadataChanged event. */
+   * participant's client picks up via LiveKit's RoomMetadataChanged event.
+   * Only these two settings can be changed this way: the recording flag and the
+   * room lock have their own endpoints and are owned by the server. */
   async updateClassroomState(
     userId: string,
     room: string,
     patch: { chatLocked?: boolean; studentsMuted?: boolean },
   ): Promise<{ ok: true; state: Record<string, unknown> }> {
     await this.assertTeacherOfRoom(userId, room);
-    const next = await this.patchRoomMetadata(room, patch);
+    const allowed: Record<string, boolean> = {};
+    if (typeof patch?.chatLocked === 'boolean') {
+      allowed.chatLocked = patch.chatLocked;
+    }
+    if (typeof patch?.studentsMuted === 'boolean') {
+      allowed.studentsMuted = patch.studentsMuted;
+    }
+    const next = await this.patchRoomMetadata(room, allowed);
     return { ok: true, state: next };
+  }
+
+  /** Teacher-only: lock or unlock the classroom. While it is locked no student
+   * can join (see RoomAccessService); people already inside stay. The database
+   * decides; the room's metadata only mirrors it so every screen updates at
+   * once (the LiveKit room may not exist yet, which is fine). */
+  async setRoomLocked(
+    userId: string,
+    room: string,
+    locked: boolean,
+  ): Promise<{ ok: true; locked: boolean }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const result = await this.roomAccess.setLocked(room, locked, userId);
+    await this.patchRoomMetadata(room, { roomLocked: result.locked }).catch(
+      (err) =>
+        this.logger.debug(
+          `Room ${room} is not live yet, lock state not mirrored: ${err}`,
+        ),
+    );
+    return { ok: true, locked: result.locked };
   }
 }

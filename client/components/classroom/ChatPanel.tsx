@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Send, Lock, Unlock, X, ThumbsUp, PartyPopper, Heart, Smile } from 'lucide-react';
 import type { ReceivedChatMessage } from '@livekit/components-core';
 import { parseParticipantMeta } from '@/lib/classroom/types';
+import { samePerson } from '@/lib/classroom/identity';
 
 interface ChatPanelProps {
   messages: ReceivedChatMessage[];
@@ -99,7 +100,8 @@ export default function ChatPanel({
           </p>
         ) : (
           messages.map((m) => {
-            const isSelf = m.from?.identity === localIdentity;
+            // "You" includes your other devices.
+            const isSelf = !!m.from && samePerson(m.from.identity, localIdentity);
             const meta = m.from
               ? parseParticipantMeta(m.from.identity, m.from.name || m.from.identity)
               : { displayName: 'Unknown', role: 'STUDENT' as const };

@@ -34,12 +34,13 @@
 
 import { Monitor, MonitorOff, Maximize2, Minimize2, MonitorX } from 'lucide-react';
 import { Track } from 'livekit-client';
-import { isTrackReference, VideoTrack, useTracks } from '@livekit/components-react';
+import { isTrackReference, VideoTrack, useRoomContext, useTracks } from '@livekit/components-react';
 import type { TrackReferenceOrPlaceholder, TrackReference } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
 import LessonPanel from './LessonPanel';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 import { parseParticipantMeta } from '@/lib/classroom/types';
+import { personKey, samePerson } from '@/lib/classroom/identity';
 
 /** Centers content and constrains it to a sensible 16:9-ish frame instead of
  * letting it stretch to fill whatever (often ultra-wide, short) space the
@@ -66,6 +67,7 @@ function ScreenShareTile({
   trackRef,
   isTeacher,
   isLocal,
+  isSelf,
   isFullscreen,
   onToggleFullscreen,
   onForceStopShare,
@@ -73,7 +75,10 @@ function ScreenShareTile({
 }: {
   trackRef: TrackReference;
   isTeacher: boolean;
+  /** Shared from THIS device — the only share this tab can stop itself. */
   isLocal: boolean;
+  /** Shared by me, from this device or another of mine. */
+  isSelf: boolean;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   onForceStopShare?: (identity: string) => void;
@@ -89,9 +94,9 @@ function ScreenShareTile({
       <VideoTrack trackRef={trackRef} className="w-full h-full object-contain bg-black" />
       <div className="absolute top-3 left-3 flex items-center gap-2">
         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
-          <Monitor size={12} /> {isLocal ? 'You are presenting' : `${meta.displayName} is presenting`}
+          <Monitor size={12} /> {isSelf ? 'You are presenting' : `${meta.displayName} is presenting`}
         </div>
-        {isLocal ? (
+        {isSelf && !isLocal ? null : isLocal ? (
           <button
             onClick={onStopOwnShare}
             data-tooltip="Stop sharing"
@@ -122,8 +127,8 @@ function ScreenShareTile({
   );
 }
 
-/** Roughly-square grid column count for N tiles — good enough for Lumexa's
- * real class sizes (1 teacher + up to 4 students, so at most 5 shares). */
+/** Roughly-square grid column count for N tiles — a classroom holds up to 10
+ * people, so up to 10 shares: 1, 2, 2, 3, 3, 3, 3, 3, 3, 4 columns. */
 function gridColumns(count: number): number {
   return Math.max(1, Math.ceil(Math.sqrt(count)));
 }
@@ -157,6 +162,8 @@ export default function Stage({
   fullscreenIdentity,
   onToggleFullscreen,
 }: StageProps) {
+  const room = useRoomContext();
+  const selfIdentity = room.localParticipant.identity;
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenShareRefs = screenTracks.filter(isTrackReference);
 
@@ -175,6 +182,7 @@ export default function Stage({
             trackRef={t}
             isTeacher={isTeacher}
             isLocal={t.participant.isLocal}
+            isSelf={t.participant.isLocal || samePerson(t.participant.identity, selfIdentity)}
             isFullscreen={fullscreenIdentity === t.participant.identity}
             onToggleFullscreen={() => onToggleFullscreen(t.participant.identity)}
             onForceStopShare={onForceStopShare}
@@ -188,14 +196,14 @@ export default function Stage({
   // ── 2. Spotlight / pin ─────────────────────────────────────────────────
   const focusIdentity = spotlightIdentity ?? pinnedIdentity;
   if (focusIdentity) {
-    const focusTrack = cameraTracks.find((t) => t.participant.identity === focusIdentity);
+    const focusTrack = cameraTracks.find((t) => personKey(t.participant.identity) === focusIdentity);
     if (focusTrack) {
       return (
         <MainFrame>
           <ParticipantTile
             trackRef={focusTrack}
             size="main"
-            raised={!!raisedHands[focusTrack.participant.identity]}
+            raised={!!raisedHands[focusIdentity]}
             pinned={pinnedIdentity === focusIdentity}
             onTogglePin={() => onTogglePin(focusIdentity)}
             spotlighted={spotlightIdentity === focusIdentity}
@@ -220,9 +228,9 @@ export default function Stage({
         <ParticipantTile
           trackRef={teacherTrack}
           size="main"
-          raised={!!raisedHands[teacherTrack.participant.identity]}
-          pinned={pinnedIdentity === teacherTrack.participant.identity}
-          onTogglePin={() => onTogglePin(teacherTrack.participant.identity)}
+          raised={!!raisedHands[personKey(teacherTrack.participant.identity)]}
+          pinned={pinnedIdentity === personKey(teacherTrack.participant.identity)}
+          onTogglePin={() => onTogglePin(personKey(teacherTrack.participant.identity))}
         />
       </MainFrame>
     );

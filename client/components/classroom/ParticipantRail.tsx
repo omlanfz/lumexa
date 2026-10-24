@@ -8,16 +8,22 @@
 // stage (teaching content) + this rail (who's here) + FilmStrip taking over
 // only below the lg breakpoint, where there's no room for a side column.
 //
-// Sized for Lumexa's real class shapes — 1:1 (teacher + student) or a batch
-// of up to ~4 students — never a large gallery grid.
+// Sized for Lumexa's real class shapes — 1:1 (teacher + student) or a batch of
+// about 4 students — but a classroom holds up to 10 people, so past five tiles
+// the rail goes two to a row, and the tiles are sized from the window's height
+// so every one of them stays on screen instead of scrolling out of sight (see
+// lib/classroom/railLayout.ts).
 
 'use client';
 
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
+import { personKey } from '@/lib/classroom/identity';
+import { railLayout, railTileWidthCss, railWidthCss } from '@/lib/classroom/railLayout';
 
 interface ParticipantRailProps {
+  /** One tile per person (see pickPersonTiles). */
   tracks: TrackReferenceOrPlaceholder[];
   raisedHands: Record<string, boolean>;
   pinnedIdentity: string | null;
@@ -36,6 +42,11 @@ export default function ParticipantRail({
 }: ParticipantRailProps) {
   if (tracks.length === 0) return null;
 
+  const { columns } = railLayout(tracks.length);
+  const twoColumns = columns === 2;
+  const tileW = railTileWidthCss(tracks.length);
+  const railW = railWidthCss(tracks.length, tileW);
+
   // The toggle button lives in this OUTER wrapper, which never collapses or
   // clips — only the inner content box does. Previously the button was
   // inside the width-0/overflow-hidden box it controlled, so collapsing the
@@ -51,22 +62,31 @@ export default function ParticipantRail({
       </button>
 
       <div
-        className={`flex flex-col border-l border-[var(--cr-border)] bg-[var(--cr-bg)] transition-all duration-200 overflow-hidden ${
-          collapsed ? 'w-0' : 'w-[220px] xl:w-[260px]'
-        }`}
+        data-testid="participant-rail"
+        data-columns={twoColumns ? 2 : 1}
+        className="flex flex-col border-l border-[var(--cr-border)] bg-[var(--cr-bg)] transition-all duration-200 overflow-hidden"
+        style={{ width: collapsed ? 0 : railW }}
       >
-        <div className="flex-1 overflow-y-auto cr-scroll p-2 flex flex-col gap-2 w-[220px] xl:w-[260px]">
-          {tracks.map((t) => (
-            <div key={t.participant.identity} className="aspect-video flex-shrink-0">
-              <ParticipantTile
-                trackRef={t}
-                size="strip"
-                raised={!!raisedHands[t.participant.identity]}
-                pinned={pinnedIdentity === t.participant.identity}
-                onTogglePin={() => onTogglePin(t.participant.identity)}
-              />
-            </div>
-          ))}
+        <div
+          className={`flex-1 overflow-y-auto cr-scroll p-2 gap-2 ${
+            twoColumns ? 'grid grid-cols-2 content-start' : 'flex flex-col'
+          }`}
+          style={{ width: railW }}
+        >
+          {tracks.map((t) => {
+            const who = personKey(t.participant.identity);
+            return (
+              <div key={who} className="aspect-video flex-shrink-0 min-h-0">
+                <ParticipantTile
+                  trackRef={t}
+                  size="strip"
+                  raised={!!raisedHands[who]}
+                  pinned={pinnedIdentity === who}
+                  onTogglePin={() => onTogglePin(who)}
+                />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

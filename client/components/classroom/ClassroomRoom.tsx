@@ -10,6 +10,13 @@
 // (that duplication was the old layout's core problem). Mobile/tablet has
 // no room for a side column, so it keeps the bottom FilmStrip instead.
 //
+// A classroom holds up to 10 people, and one person may be in it from several
+// devices (see lib/classroom/identity.ts): everything on screen is per PERSON —
+// one tile, one raised hand, one entry in the count — however many devices
+// they joined from. Your own tile stays in the rail while you share your
+// screen, so you can always see yourself; only the fullscreen share view (a
+// layer over everything) hides the tiles.
+//
 // "Presentation Mode" is simply "is anyone currently screen-sharing" (see
 // `presentationMode` below) — it only tightens the stage's padding a bit;
 // it never hides the header or bottom control bar, and screen sharing
@@ -26,7 +33,7 @@
 
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Track } from 'livekit-client';
 import type { LocalVideoTrack } from 'livekit-client';
 import {
@@ -36,10 +43,9 @@ import {
   useRoomContext,
   useTracks,
   isTrackReference,
-  RoomAudioRenderer,
   VideoTrack,
 } from '@livekit/components-react';
-import { AlertTriangle, Hand, PhoneOff, Minimize2, Monitor } from 'lucide-react';
+import { AlertTriangle, Hand, Lock, PhoneOff, Minimize2, Monitor } from 'lucide-react';
 import Header from './Header';
 import Stage from './Stage';
 import FilmStrip from './FilmStrip';
@@ -52,7 +58,15 @@ import ConnectionBanner from './ConnectionBanner';
 import ClassTestMonitor from '@/components/assessment/ClassTestMonitor';
 import ReactionsOverlay from './ReactionsOverlay';
 import EndClassModal from './EndClassModal';
+import ClassAudioRenderer from './ClassAudioRenderer';
+import AwardToast from './AwardToast';
+import BadgeCelebration from './BadgeCelebration';
 import { parseParticipantMeta } from '@/lib/classroom/types';
+import { personKey } from '@/lib/classroom/identity';
+import { countPeople, listStudents, pickPersonTiles } from '@/lib/classroom/people';
+import type { AwardResponse } from '@/lib/classroom/badgeAward';
+import type { BadgeAwardedEvent } from '@/lib/classroom/serverEvents';
+import { useServerEvents } from '@/lib/classroom/useServerEvents';
 import { useClassroomState } from '@/lib/classroom/useClassroomState';
 import { useClassroomControls } from '@/lib/classroom/useClassroomControls';
 import { useVideoEffects } from '@/lib/classroom/useVideoEffects';
@@ -65,6 +79,7 @@ import {
   listPendingAdmissions,
   decideAdmission,
   stopParticipantScreenShare,
+  setRoomLocked as setRoomLockedRequest,
   type PendingAdmission,
   type EndClassParams,
 } from '@/lib/classroom/api';
@@ -88,6 +103,9 @@ interface ClassroomRoomProps {
   initialLighting: AppearanceOptions;
   scheduledStart?: string;
   classType?: 'ONE_TO_ONE' | 'BATCH';
+  /** Whether the teacher had the classroom locked when this person joined (from
+   * the join response; live changes arrive through the room's metadata). */
+  initialRoomLocked?: boolean;
   /** False on the extra class of a lesson that already used its one Partially
    * Completed — the teacher's End Class flow then disables that option. */
   partialCompletionAvailable?: boolean;
@@ -118,6 +136,7 @@ export default function ClassroomRoom({
   initialLighting,
   scheduledStart,
   classType,
+  initialRoomLocked,
   partialCompletionAvailable,
   observerMode,
   demo,
@@ -126,7 +145,11 @@ export default function ClassroomRoom({
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled, cameraTrack } =
     useLocalParticipant();
   const participants = useParticipants();
-  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
+  const localKey = personKey(localParticipant.identity);
+  // LiveKit hands out one camera tile per CONNECTION; on screen it is one per
+  // PERSON (the device with the camera on wins).
+  const cameraTracks = pickPersonTiles(useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]));
+  const peopleCount = countPeople(participants);
   const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
   const screenShareRefs = screenTracks.filter(isTrackReference);
   const screenShare = screenShareRefs[0];
@@ -166,6 +189,12 @@ export default function ClassroomRoom({
   const [timerMilestoneVisible, setTimerMilestoneVisible] = useState(false);
   const [pendingAdmissions, setPendingAdmissions] = useState<PendingAdmission[]>([]);
   const [lessonFocused, setLessonFocused] = useState(false);
+  const [lockedLocal, setLockedLocal] = useState(!!initialRoomLocked);
+  const [lockBusy, setLockBusy] = useState(false);
+  const [controlError, setControlError] = useState<string | null>(null);
+  const [awardResult, setAwardResult] = useState<AwardResponse | null>(null);
+  const [celebrations, setCelebrations] = useState<BadgeAwardedEvent[]>([]);
+  const [denied, setDenied] = useState<string | null>(null);
   const [fullscreenIdentity, setFullscreenIdentity] = useState<string | null>(null);
   const fullscreenTrack = fullscreenIdentity
     ? screenShareRefs.find((t) => t.participant.identity === fullscreenIdentity)
@@ -190,7 +219,8 @@ export default function ClassroomRoom({
   // for this room (no real economics) and the lesson content shown there
   // isn't tied to any real progress. Legacy marketplace bookings get
   // neither — they're a different flow entirely.
-  const isCurriculumLesson = roomName.startsWith('lesson-');
+  // A 1:1 class is "lesson-<id>"; a batch's shared room is "batch-<teacher>-<start>".
+  const isCurriculumLesson = roomName.startsWith('lesson-') || roomName.startsWith('batch-');
   const isLessonFlow = isCurriculumLesson || !!demo;
   // Stage's own default content (priority #3, see Stage.tsx) always uses
   // `lessonData` untouched — only the View Lesson panel falls back to the
@@ -208,6 +238,51 @@ export default function ClassroomRoom({
       : null;
   const presentationMode = !!screenShare;
   const expectedDurationMinutes = classType === 'BATCH' ? 60 : 45;
+
+  // The database decides whether the room is locked; the live room's metadata
+  // mirrors it so every screen updates at once. What we show is whichever
+  // changed last: the join response, a change announced in the metadata, or the
+  // teacher's own toggle (the server's answer, so a metadata update that never
+  // arrived cannot leave the teacher looking at the wrong state).
+  const metaLocked = classroomState.roomLocked;
+  const [seenMetaLocked, setSeenMetaLocked] = useState(metaLocked);
+  if (metaLocked !== seenMetaLocked) {
+    setSeenMetaLocked(metaLocked);
+    if (metaLocked !== undefined) setLockedLocal(metaLocked);
+  }
+  const roomLocked = lockedLocal;
+
+  const showControlError = (message: string) => {
+    setControlError(message);
+    setTimeout(() => setControlError(null), 6000);
+  };
+
+  const handleToggleLock = async () => {
+    if (lockBusy) return;
+    setLockBusy(true);
+    try {
+      setLockedLocal(await setRoomLockedRequest(roomName, !roomLocked));
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string } } };
+      showControlError(e.response?.data?.message ?? 'Could not change the classroom lock. Please try again.');
+    } finally {
+      setLockBusy(false);
+    }
+  };
+
+  // Things the server tells THIS participant: a badge they were awarded (a
+  // celebration, shown to them alone), or why they are being removed.
+  useServerEvents((event) => {
+    if (event.type === 'badge-awarded') {
+      if (isTeacher || observerMode) return;
+      setCelebrations((queue) => (queue.some((c) => c.awardId === event.awardId) ? queue : [...queue, event]));
+    } else if (event.type === 'room-denied') {
+      setDenied(event.message);
+    }
+  });
+  const finishCelebration = useCallback((awardId: string) => {
+    setCelebrations((queue) => queue.filter((c) => c.awardId !== awardId));
+  }, []);
 
   useEffect(() => {
     if (isRecordingLive) setRecordingState('active');
@@ -243,34 +318,36 @@ export default function ClassroomRoom({
     void decideAdmission(roomName, admissionId, decision).catch(() => {});
   };
 
-  // Subtle presence sounds — a remote participant (never the local user's
-  // own connect) joining or leaving plays a short, space-themed chime.
+  // Subtle presence sounds — another person (never you, on any of your own
+  // devices) arriving or leaving plays a short, space-themed chime. It is
+  // about people, not connections: someone opening a second device is not a
+  // new arrival.
   useEffect(() => {
-    const currentIdentities = new Set(participants.map((p) => p.identity));
+    const currentKeys = new Set(participants.map((p) => personKey(p.identity)));
     const prev = prevParticipantIdentitiesRef.current;
 
     for (const p of participants) {
-      participantRolesRef.current[p.identity] = parseParticipantMeta(p.identity, p.name || '').role;
+      participantRolesRef.current[personKey(p.identity)] = parseParticipantMeta(p.identity, p.name || '').role;
     }
 
     if (prev) {
-      for (const p of participants) {
-        if (p.identity === localParticipant.identity) continue;
-        if (!prev.has(p.identity)) {
-          const role = participantRolesRef.current[p.identity];
+      for (const key of currentKeys) {
+        if (key === localKey) continue;
+        if (!prev.has(key)) {
+          const role = participantRolesRef.current[key];
           playClassroomTone(role === 'TEACHER' ? 'teacher-join' : 'student-join');
         }
       }
-      for (const identity of prev) {
-        if (identity === localParticipant.identity) continue;
-        if (!currentIdentities.has(identity)) {
-          const role = participantRolesRef.current[identity];
+      for (const key of prev) {
+        if (key === localKey) continue;
+        if (!currentKeys.has(key)) {
+          const role = participantRolesRef.current[key];
           playClassroomTone(role === 'TEACHER' ? 'teacher-leave' : 'student-leave');
-          delete participantRolesRef.current[identity];
+          delete participantRolesRef.current[key];
         }
       }
     }
-    prevParticipantIdentitiesRef.current = currentIdentities;
+    prevParticipantIdentitiesRef.current = currentKeys;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants]);
 
@@ -328,19 +405,19 @@ export default function ClassroomRoom({
   // Teacher notification toast + sound when a new hand goes up.
   useEffect(() => {
     if (!isTeacher) return;
-    Object.entries(raisedHands).forEach(([identity, raised]) => {
-      const wasRaised = prevRaisedRef.current[identity];
-      if (raised && !wasRaised && identity !== localParticipant.identity) {
-        const p = participants.find((pp) => pp.identity === identity);
-        const name = p ? parseParticipantMeta(identity, p.name || identity).displayName : 'A student';
-        const id = `${identity}-${Date.now()}`;
+    Object.entries(raisedHands).forEach(([who, raised]) => {
+      const wasRaised = prevRaisedRef.current[who];
+      if (raised && !wasRaised && who !== localKey) {
+        const p = participants.find((pp) => personKey(pp.identity) === who);
+        const name = p ? parseParticipantMeta(p.identity, p.name || p.identity).displayName : 'A student';
+        const id = `${who}-${Date.now()}`;
         setHandToasts((prev) => [...prev, { id, name }]);
         playClassroomTone('hand-raised');
         setTimeout(() => setHandToasts((prev) => prev.filter((t) => t.id !== id)), 5000);
       }
     });
     prevRaisedRef.current = raisedHands;
-  }, [raisedHands, isTeacher, participants, localParticipant.identity]);
+  }, [raisedHands, isTeacher, participants, localKey]);
 
   const unreadChat = activePanel === 'chat' ? 0 : Math.max(0, chatMessages.length - lastSeenChatCount);
   useEffect(() => {
@@ -353,12 +430,12 @@ export default function ClassroomRoom({
   useEffect(() => {
     if (chatMessages.length > prevChatCountRef.current) {
       const latest = chatMessages[chatMessages.length - 1];
-      if (latest?.from && latest.from.identity !== localParticipant.identity) {
+      if (latest?.from && personKey(latest.from.identity) !== localKey) {
         playClassroomTone('chat-message');
       }
     }
     prevChatCountRef.current = chatMessages.length;
-  }, [chatMessages, localParticipant.identity]);
+  }, [chatMessages, localKey]);
 
   useEffect(() => {
     if (activePanel !== 'lesson') setLessonFocused(false);
@@ -410,9 +487,9 @@ export default function ClassroomRoom({
     setFullscreenIdentity((prev) => (prev === identity ? null : identity));
   };
 
-  const handStripExcludeIdentity =
-    screenShare && screenShare.participant.isLocal ? localParticipant.identity : null;
-  const filmstripTracks = cameraTracks.filter((t) => t.participant.identity !== handStripExcludeIdentity);
+  // Everyone is in the strip — including you while you share your screen, so
+  // you can always see yourself. (Only the fullscreen share layer hides tiles.)
+  const filmstripTracks = cameraTracks;
 
   const micDisabledByTeacher = !isTeacher && !!classroomState.studentsMuted;
 
@@ -470,6 +547,9 @@ export default function ClassroomRoom({
       theme={theme}
       onToggleTheme={toggleTheme}
       floating={!!fullscreenTrack}
+      roomLocked={roomLocked}
+      onToggleLock={isTeacher ? () => void handleToggleLock() : undefined}
+      lockBusy={lockBusy}
     />
   );
 
@@ -482,7 +562,7 @@ export default function ClassroomRoom({
       onPointerDown={fullscreenTrack ? bumpChrome : undefined}
       onTouchStart={fullscreenTrack ? bumpChrome : undefined}
     >
-      <RoomAudioRenderer />
+      <ClassAudioRenderer selfIdentity={localParticipant.identity} />
 
       {fullscreenTrack && (
         <div className="fixed inset-0 z-30 bg-black" onDoubleClick={() => setFullscreenIdentity(null)}>
@@ -563,9 +643,9 @@ export default function ClassroomRoom({
             </div>
           )}
 
-          {recordingError && (
+          {(recordingError || controlError) && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 backdrop-blur text-red-400 text-xs font-medium shadow-lg cr-fade-in">
-              {recordingError}
+              {recordingError ?? controlError}
             </div>
           )}
 
@@ -632,6 +712,10 @@ export default function ClassroomRoom({
             compact={presentationMode}
             className="lg:hidden"
           />
+
+          {isTeacher && awardResult && (
+            <AwardToast result={awardResult} roomName={roomName} onDismiss={() => setAwardResult(null)} />
+          )}
         </div>
 
         <ParticipantRail
@@ -719,12 +803,12 @@ export default function ClassroomRoom({
             onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
             onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
             micDisabledByTeacher={micDisabledByTeacher}
-            handRaised={!!raisedHands[localParticipant.identity]}
-            onToggleHand={() => setOwnHandRaised(!raisedHands[localParticipant.identity])}
+            handRaised={!!raisedHands[localKey]}
+            onToggleHand={() => setOwnHandRaised(!raisedHands[localKey])}
             activePanel={activePanel}
             onSetPanel={setActivePanel}
             unreadChat={unreadChat}
-            participantCount={participants.length}
+            participantCount={peopleCount}
             classroomState={classroomState}
             onPatchState={patchState}
             onMuteAll={() => void muteAllParticipants(roomName)}
@@ -745,6 +829,18 @@ export default function ClassroomRoom({
             endClassDisabledReason={endClassGate}
             onViewLesson={isLessonFlow ? () => setActivePanel('lesson') : undefined}
             floating={!!fullscreenTrack}
+            roomLocked={roomLocked}
+            onToggleRoomLock={isTeacher ? () => void handleToggleLock() : undefined}
+            awardBadge={
+              isTeacher && isLessonFlow
+                ? {
+                    roomName,
+                    isBatch: classType === 'BATCH',
+                    students: listStudents(participants),
+                    onAwarded: setAwardResult,
+                  }
+                : undefined
+            }
           />
         );
 
@@ -770,6 +866,36 @@ export default function ClassroomRoom({
           onSubmit={(params: EndClassParams) => endClassRequest(roomName, params)}
           onFinished={() => room.disconnect()}
         />
+      )}
+
+      {/* A student's badge celebration — a few seconds of pop and sparkle that
+          never takes focus or blocks anything underneath. */}
+      <BadgeCelebration queue={celebrations} onDone={finishCelebration} />
+
+      {/* The server removed this connection (the teacher locked the classroom
+          just before it connected, or the class was already full). */}
+      {denied && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+          role="alertdialog"
+          aria-label="You can't stay in this classroom"
+          data-testid="room-denied"
+        >
+          <div className="max-w-sm rounded-2xl border border-[var(--cr-border)] bg-[var(--cr-surface)] p-6 text-center shadow-2xl">
+            <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
+              <Lock size={20} />
+            </div>
+            <p className="mb-1 text-base font-semibold text-[var(--cr-text)]">You can&apos;t stay in this classroom</p>
+            <p className="text-sm text-[var(--cr-text-muted)]">{denied}</p>
+            <button
+              type="button"
+              onClick={() => room.disconnect()}
+              className="mt-5 rounded-lg bg-[var(--cr-surface-2)] px-4 py-2 text-sm text-[var(--cr-text)] transition-colors hover:bg-[var(--cr-surface-3)]"
+            >
+              Back to dashboard
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

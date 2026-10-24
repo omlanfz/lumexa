@@ -32,6 +32,10 @@ export interface ClassroomState {
    * room metadata (see ClassroomService.startTeacherRecording/
    * stopTeacherRecording) so every participant sees the same state. */
   recording?: boolean;
+  /** True while the teacher has locked the classroom (no one new can join).
+   * The database is the source of truth; the server mirrors it into the room
+   * metadata (see ClassroomService.setRoomLocked) so every screen updates. */
+  roomLocked?: boolean;
 }
 
 export function parseClassroomState(metadata: string | undefined): ClassroomState {
