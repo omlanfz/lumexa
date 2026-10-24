@@ -122,6 +122,23 @@ function ScreenShareTile({
   );
 }
 
+/** Will Stage render the lesson (priority #3) right now? Mirrors Stage's own
+ * priority order below — ClassroomRoom uses it so the "View Lesson" side panel
+ * never mounts a SECOND copy of a live test while the stage is already
+ * hosting it (two answer sheets for one attempt would fight each other). */
+export function stageShowsLesson(opts: {
+  screenShareCount: number;
+  spotlightIdentity: string | null;
+  pinnedIdentity: string | null;
+  cameraTracks: TrackReferenceOrPlaceholder[];
+  hasLesson: boolean;
+}): boolean {
+  if (opts.screenShareCount > 0) return false;
+  const focusIdentity = opts.spotlightIdentity ?? opts.pinnedIdentity;
+  if (focusIdentity && opts.cameraTracks.some((t) => t.participant.identity === focusIdentity)) return false;
+  return opts.hasLesson;
+}
+
 /** Roughly-square grid column count for N tiles — good enough for Lumexa's
  * real class sizes (1 teacher + up to 4 students, so at most 5 shares). */
 function gridColumns(count: number): number {

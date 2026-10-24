@@ -65,6 +65,7 @@ export default function LessonDetailsPage() {
       <LessonDetailsView
         data={data}
         onTestAction={() => router.push(`/assessment/${params.scheduledLessonId}`)}
+        testButtonLabel={role === 'TEACHER' ? 'Open test monitor' : undefined}
         isStudent={role === 'STUDENT'}
         onSubmissionChange={(submission) => setData((d) => (d ? { ...d, submission } : d))}
       />

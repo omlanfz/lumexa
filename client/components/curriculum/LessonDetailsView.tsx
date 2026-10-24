@@ -59,7 +59,16 @@ export interface LessonDetailsResponse {
     module: { id: string; title: string; stageNumber: number | null } | null;
     project: { id: string; title: string; description: string | null } | null;
   };
-  assessment?: { id: string; type: string; title: string; isPublished: boolean } | null;
+  assessment?: {
+    id: string;
+    type: string;
+    title: string;
+    isPublished: boolean;
+    /** Published questions on the test's (possibly shared) question bank. */
+    counts?: { mcq: number; trueFalse: number; practical: number };
+    totalMarks?: number;
+    meetsStandard?: boolean;
+  } | null;
   submission?: SubmissionInfo | null;
 }
 
@@ -124,16 +133,33 @@ export default function LessonDetailsView({
       ) : data.isTest ? (
         <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl p-6 text-center space-y-3">
           <div className="text-3xl">📝</div>
-          <p className="font-semibold text-gray-900 dark:text-white">{data.assessment?.title}</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            This is an assessment session. {data.session.scheduledLessonId ? "Today's class is a test — the assessment interface replaces normal lesson material." : 'Preview the test structure below by opening it from a scheduled session.'}
-          </p>
-          {onTestAction && data.session.scheduledLessonId && (
+          {data.assessment ? (
+            <>
+              <p className="font-semibold text-gray-900 dark:text-white">{data.assessment.title}</p>
+              {data.assessment.counts && (
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  {data.assessment.counts.mcq} multiple-choice + {data.assessment.counts.trueFalse} True/False
+                  {data.assessment.counts.practical > 0 ? ' + 1 coding project' : ''}
+                  {data.assessment.totalMarks ? ` · ${data.assessment.totalMarks} marks` : ''}
+                </p>
+              )}
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                {data.session.scheduledLessonId
+                  ? 'This is a test session. The test opens inside the live classroom — you can also open it here.'
+                  : 'Preview the test structure by opening it from a scheduled session.'}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              No question bank is linked to this test session yet. Please let Lumexa Operations know so they can set it up.
+            </p>
+          )}
+          {data.assessment && onTestAction && data.session.scheduledLessonId && (
             <button
               onClick={onTestAction}
               className="inline-block px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
             >
-              {testButtonLabel || (data.session.status === 'COMPLETED' || data.session.status === 'PARTIALLY_COMPLETED' ? 'View Test Results' : 'Start Test')}
+              {testButtonLabel || (data.session.status === 'COMPLETED' || data.session.status === 'PARTIALLY_COMPLETED' ? 'View Test Results' : 'Open Test')}
             </button>
           )}
         </div>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import api from '@/lib/axios';
-import { Card } from '@/components/admin/AdminUI';
+import { Card, Modal } from '@/components/admin/AdminUI';
 
 interface CodeSnippet {
   label: string;
@@ -114,7 +114,7 @@ export default function AdminCurriculumPage() {
           {expanded.has(mod.id) && (
             <div className="divide-y divide-[var(--a-border)]">
               {mod.lessons.map((l) => (
-                <LessonRowView key={l.id} lesson={l} />
+                <LessonRowView key={l.id} lesson={l} onChanged={load} />
               ))}
             </div>
           )}
@@ -130,7 +130,7 @@ export default function AdminCurriculumPage() {
           )}
           <div className="divide-y divide-[var(--a-border)]">
             {data.looseLessons.map((l) => (
-              <LessonRowView key={l.id} lesson={l} />
+              <LessonRowView key={l.id} lesson={l} onChanged={load} />
             ))}
           </div>
         </Card>
@@ -139,7 +139,9 @@ export default function AdminCurriculumPage() {
   );
 }
 
-function LessonRowView({ lesson }: { lesson: LessonRow }) {
+function LessonRowView({ lesson, onChanged }: { lesson: LessonRow; onChanged: () => void }) {
+  const [settingUp, setSettingUp] = useState(false);
+  const isTest = lesson.type !== 'LEARNING';
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
@@ -150,6 +152,11 @@ function LessonRowView({ lesson }: { lesson: LessonRow }) {
           <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase ${TYPE_COLORS[lesson.type] || ''}`}>
             {lesson.type.replace('_', ' ')}
           </span>
+          {isTest && !lesson.assessment && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]">
+              No question bank
+            </span>
+          )}
         </div>
         {lesson.checkpoint && <p className="text-xs text-[var(--a-text-faint)] truncate">{lesson.checkpoint}</p>}
       </div>
@@ -165,7 +172,112 @@ function LessonRowView({ lesson }: { lesson: LessonRow }) {
             Question Bank {lesson.assessment.isPublished ? '' : '(unpublished)'}
           </a>
         )}
+        {isTest && !lesson.assessment && (
+          <button onClick={() => setSettingUp(true)} className="text-xs font-medium text-[var(--a-accent)] hover:underline">
+            Set up question bank
+          </button>
+        )}
       </div>
+      {settingUp && (
+        <SetupBankModal
+          lesson={lesson}
+          onClose={() => setSettingUp(false)}
+          onDone={() => {
+            setSettingUp(false);
+            onChanged();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+interface LinkableBank {
+  id: string;
+  type: string;
+  label: string;
+  questionCount: number;
+}
+
+/** A test session with no assessment (e.g. one built by hand in a custom
+ *  curriculum) gets its question bank here: reuse an existing bank, or start
+ *  an empty one to fill in on the Question Bank page. */
+function SetupBankModal({ lesson, onClose, onDone }: { lesson: LessonRow; onClose: () => void; onDone: () => void }) {
+  const [banks, setBanks] = useState<LinkableBank[] | null>(null);
+  const [mode, setMode] = useState<'link' | 'empty'>('link');
+  const [sourceId, setSourceId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<LinkableBank[]>('/assessments/banks')
+      .then((res) => {
+        const sameType = res.data.filter((b) => b.type === lesson.type);
+        setBanks(sameType);
+        if (sameType.length === 0) setMode('empty');
+      })
+      .catch(() => {
+        setBanks([]);
+        setMode('empty');
+      });
+  }, [lesson.type]);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await api.post(`/assessments/lessons/${lesson.id}/bank`, mode === 'link' ? { sourceAssessmentId: sourceId } : {});
+      onDone();
+    } catch (err) {
+      setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not set up the question bank.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title={`Question bank for “${lesson.title}”`} onClose={onClose}>
+      <div className="space-y-3 text-sm text-[var(--a-text)]">
+        <p className="text-xs text-[var(--a-text-muted)]">
+          This {lesson.type.replace('_', ' ').toLowerCase()} has no questions yet, so students and teachers will see an empty test.
+        </p>
+        <label className="flex items-start gap-2">
+          <input type="radio" checked={mode === 'link'} disabled={!banks || banks.length === 0} onChange={() => setMode('link')} className="mt-1" />
+          <span>
+            Reuse an existing question bank
+            <span className="block text-xs text-[var(--a-text-faint)]">Linked, not copied — a fix to the original shows up here too.</span>
+          </span>
+        </label>
+        {mode === 'link' && (
+          <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} className="w-full rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] px-2 py-2 text-sm" aria-label="Question bank">
+            <option value="">{banks ? 'Choose a bank…' : 'Loading…'}</option>
+            {(banks ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label} ({b.questionCount} questions)
+              </option>
+            ))}
+          </select>
+        )}
+        <label className="flex items-start gap-2">
+          <input type="radio" checked={mode === 'empty'} onChange={() => setMode('empty')} className="mt-1" />
+          <span>
+            Start an empty bank
+            <span className="block text-xs text-[var(--a-text-faint)]">You will add the questions yourself on the Question Bank page. It stays unpublished until you publish it.</span>
+          </span>
+        </label>
+        {error && <p role="alert" className="text-sm text-[var(--a-danger)]">{error}</p>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)]">Cancel</button>
+          <button
+            onClick={() => void save()}
+            disabled={saving || (mode === 'link' && !sourceId)}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
+          >
+            {saving ? 'Saving…' : 'Set up'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

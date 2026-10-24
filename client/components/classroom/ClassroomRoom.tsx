@@ -41,7 +41,7 @@ import {
 } from '@livekit/components-react';
 import { AlertTriangle, Hand, PhoneOff, Minimize2, Monitor } from 'lucide-react';
 import Header from './Header';
-import Stage from './Stage';
+import Stage, { stageShowsLesson } from './Stage';
 import FilmStrip from './FilmStrip';
 import ParticipantRail from './ParticipantRail';
 import ControlBar, { PanelKind, RecordingUiState } from './ControlBar';
@@ -196,6 +196,15 @@ export default function ClassroomRoom({
   // demo example, so demo's main stage keeps showing the camera by default.
   const lessonPanelData = lessonData ?? (demo ? demoExampleLesson ?? null : null);
   const isRecordingLive = !!classroomState.recording;
+  // Is the main stage currently showing the lesson (and so hosting a live
+  // test)? If so the View Lesson side panel must not open a second copy.
+  const testHostedInStage = stageShowsLesson({
+    screenShareCount: screenShareRefs.length,
+    spotlightIdentity,
+    pinnedIdentity,
+    cameraTracks,
+    hasLesson: !!lessonData,
+  });
   const presentationMode = !!screenShare;
   const expectedDurationMinutes = classType === 'BATCH' ? 60 : 45;
 
@@ -620,6 +629,7 @@ export default function ClassroomRoom({
             focused={lessonFocused}
             onToggleFocused={() => setLessonFocused((v) => !v)}
             overlay={!!fullscreenTrack}
+            testHostedElsewhere={testHostedInStage}
           />
         )}
 
