@@ -135,6 +135,7 @@ function TeacherDashboardContent() {
   const [error, setError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<DashboardAlertItem[]>([]);
   const [pendingSubmissions, setPendingSubmissions] = useState<number>(0);
+  const [testReports, setTestReports] = useState<{ needsAction: number; readyToShare: number }>({ needsAction: 0, readyToShare: 0 });
 
   const now = useClock(!!nextClass);
   const { hours, minutes, seconds } = nextClass
@@ -154,7 +155,7 @@ function TeacherDashboardContent() {
 
     (async () => {
       try {
-        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes, alertsRes, submissionsRes] = await Promise.all([
+        const [statsRes, nextRes, profileRes, studentsRes, shiftsRes, alertsRes, submissionsRes, testReportsRes] = await Promise.all([
           api.get("/teachers/me/stats"),
           api.get("/teachers/me/next-class"),
           api.get("/teachers/me/profile"),
@@ -162,6 +163,7 @@ function TeacherDashboardContent() {
           api.get("/shifts"),
           api.get("/alerts/me", { params: { limit: 5 } }).catch(() => ({ data: [] })),
           api.get("/submissions/pending-count").catch(() => ({ data: { count: 0 } })),
+          api.get("/test-reports/summary").catch(() => ({ data: { needsAction: 0, readyToShare: 0 } })),
         ]);
 
         setStats(statsRes.data);
@@ -170,6 +172,10 @@ function TeacherDashboardContent() {
         setStudents(studentsRes.data ?? []);
         setAlerts((alertsRes.data ?? []).filter((a: DashboardAlertItem) => !a.read));
         setPendingSubmissions(submissionsRes.data?.count ?? 0);
+        setTestReports({
+          needsAction: testReportsRes.data?.needsAction ?? 0,
+          readyToShare: testReportsRes.data?.readyToShare ?? 0,
+        });
 
         const now = new Date();
         const open = (shiftsRes.data as Shift[]).filter(
@@ -488,6 +494,40 @@ function TeacherDashboardContent() {
               </div>
               <span className="text-sm px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)]">
                 Review Now →
+              </span>
+            </button>
+          </section>
+        )}
+
+        {/* ── Test Evaluations: submitted tests awaiting the teacher ──── */}
+        {(testReports.needsAction > 0 || testReports.readyToShare > 0) && (
+          <section className="mb-8">
+            <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
+              Test Evaluations
+            </p>
+            <button
+              onClick={() => router.push("/teacher-test-evaluations")}
+              className={`${card} p-5 flex items-center justify-between flex-wrap gap-3 w-full text-left`}
+            >
+              <div className="flex items-center gap-3">
+                <span className="w-9 h-9 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-500 font-bold flex items-center justify-center flex-shrink-0">
+                  {testReports.needsAction || testReports.readyToShare}
+                </span>
+                <div>
+                  <p className="text-lg font-semibold text-[var(--t-text)]">
+                    {testReports.needsAction > 0
+                      ? `test report${testReports.needsAction !== 1 ? "s" : ""} need${testReports.needsAction === 1 ? "s" : ""} your review`
+                      : `approved report${testReports.readyToShare !== 1 ? "s" : ""} ready to share with parents`}
+                  </p>
+                  {testReports.needsAction > 0 && testReports.readyToShare > 0 && (
+                    <p className="text-xs text-[var(--t-text-muted)]">
+                      Plus {testReports.readyToShare} approved report{testReports.readyToShare !== 1 ? "s" : ""} ready to share.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className="text-sm px-3 py-1.5 rounded-lg bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)]">
+                Open Test Evaluations →
               </span>
             </button>
           </section>

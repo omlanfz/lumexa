@@ -2,7 +2,8 @@
 //
 // Replaces the old persistent sidebar (TeacherNav) with a clean top navbar,
 // mirroring StudentTopNav's structure/behavior so both dashboards share one
-// visual language. Primary nav: Dashboard | Schedule | Students | Earnings.
+// visual language. Primary nav: Dashboard | Schedule | Students | Test
+// Evaluations | Earnings.
 // Everything else (Profile, Guidelines, Lumexa Resources, Leaderboard, Log
 // out) lives in the avatar/profile dropdown on the right — this is the one
 // place nav items and their routes are defined, so no page duplicates it.
@@ -12,6 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
+import api from "@/lib/axios";
 import { ThemeToggle } from "./ThemeProvider";
 
 interface TeacherTopNavProps {
@@ -23,6 +25,7 @@ const NAV_ITEMS = [
   { href: "/teacher-dashboard", label: "Dashboard" },
   { href: "/schedule", label: "Schedule" },
   { href: "/teacher-students", label: "Students" },
+  { href: "/teacher-test-evaluations", label: "Test Evaluations" },
   { href: "/teacher-earnings", label: "Earnings" },
 ];
 
@@ -38,7 +41,24 @@ export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavP
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendingTests, setPendingTests] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Badge on "Test Evaluations": reports waiting for this teacher. Refreshed
+  // on every navigation, so approving a report clears it by the time they are
+  // back on another page. A failure just means no badge.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ needsAction: number }>("/test-reports/summary")
+      .then((res) => {
+        if (!cancelled) setPendingTests(res.data?.needsAction ?? 0);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -96,6 +116,14 @@ export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavP
               aria-current={isActive(item.href) ? "page" : undefined}
             >
               {item.label}
+              {item.href === "/teacher-test-evaluations" && pendingTests > 0 && (
+                <span
+                  className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold leading-5 text-white"
+                  aria-label={`${pendingTests} awaiting review`}
+                >
+                  {pendingTests}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -185,6 +213,11 @@ export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavP
               }`}
             >
               {item.label}
+              {item.href === "/teacher-test-evaluations" && pendingTests > 0 && (
+                <span className="ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold leading-5 text-white">
+                  {pendingTests}
+                </span>
+              )}
             </button>
           ))}
         </nav>

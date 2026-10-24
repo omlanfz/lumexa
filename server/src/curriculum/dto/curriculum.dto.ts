@@ -1,6 +1,8 @@
 // FILE PATH: server/src/curriculum/dto/curriculum.dto.ts
 
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsIn,
@@ -102,11 +104,21 @@ export class UpdateLessonContentDto {
   @IsOptional() @IsArray() projectLinks?: ProjectLinkDto[];
 }
 
+// A question is either a four-option MCQ or a True/False statement (options
+// are then always ["True", "False"]). The service enforces the shape; the DTO
+// only bounds the sizes.
 export class CreateMCQQuestionDto {
-  @IsString() questionText: string;
-  @IsArray() @IsString({ each: true }) options: string[];
-  @IsInt() @Min(0) correctIndex: number;
-  @IsOptional() @IsString() explanation?: string;
+  @IsOptional() @IsIn(['MCQ', 'TRUE_FALSE']) questionType?:
+    | 'MCQ'
+    | 'TRUE_FALSE';
+  @IsString() @MaxLength(1500) questionText: string;
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(4)
+  @IsString({ each: true })
+  options: string[];
+  @IsInt() @Min(0) @Max(3) correctIndex: number;
+  @IsOptional() @IsString() @MaxLength(1500) explanation?: string;
   @IsOptional() @IsIn(['EASY', 'MEDIUM', 'HARD']) difficulty?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @IsOptional() @IsInt() order?: number;
@@ -114,10 +126,18 @@ export class CreateMCQQuestionDto {
 }
 
 export class UpdateMCQQuestionDto {
-  @IsOptional() @IsString() questionText?: string;
-  @IsOptional() @IsArray() @IsString({ each: true }) options?: string[];
-  @IsOptional() @IsInt() @Min(0) correctIndex?: number;
-  @IsOptional() @IsString() explanation?: string;
+  @IsOptional() @IsIn(['MCQ', 'TRUE_FALSE']) questionType?:
+    | 'MCQ'
+    | 'TRUE_FALSE';
+  @IsOptional() @IsString() @MaxLength(1500) questionText?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(4)
+  @IsString({ each: true })
+  options?: string[];
+  @IsOptional() @IsInt() @Min(0) @Max(3) correctIndex?: number;
+  @IsOptional() @IsString() @MaxLength(1500) explanation?: string;
   @IsOptional() @IsIn(['EASY', 'MEDIUM', 'HARD']) difficulty?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) tags?: string[];
   @IsOptional() @IsInt() order?: number;

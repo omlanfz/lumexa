@@ -119,6 +119,110 @@ export class EmailService implements OnModuleInit {
     void this.deliverWithRetry(logId, params.to, params.subject, params.html, params.attachments);
   }
 
+  /** Like send(), but WAITS for the first delivery attempt and reports what
+   * actually happened — for the few places that must not claim "delivered"
+   * unless it was (e.g. a teacher sharing a report card with a parent).
+   *
+   * `ok` means the SMTP server accepted the message; it is never true when
+   * SMTP is not configured. A failed attempt is journaled FAILED and parked
+   * at MAX_ATTEMPTS so the retry sweep never re-sends it later — the caller
+   * shows the failure and the user retries explicitly (with a fresh
+   * dedupeKey), so the same message can never be delivered twice. If the
+   * attempt outlives `timeoutMs` the result is `ok: false` with
+   * `pending: true`: the send may still complete, and the EmailLog row
+   * (returned as `logId`) is the source of truth for the final status. */
+  async sendTracked(
+    params: SendEmailParams,
+    timeoutMs = 25_000,
+  ): Promise<{
+    ok: boolean;
+    logId?: string;
+    pending?: boolean;
+    duplicate?: boolean;
+    error?: string;
+  }> {
+    let logId: string;
+    try {
+      const log = await this.prisma.emailLog.create({
+        data: {
+          toEmail: params.to,
+          subject: params.subject,
+          html: params.html,
+          category: params.category,
+          dedupeKey: params.dedupeKey,
+          relatedUserId: params.relatedUserId,
+          attempts: MAX_ATTEMPTS, // parked: the retry sweep must not touch it
+        },
+        select: { id: true },
+      });
+      logId = log.id;
+    } catch (err) {
+      if ((err as { code?: string } | null)?.code === 'P2002') {
+        return {
+          ok: false,
+          duplicate: true,
+          error: 'This message was already sent.',
+        };
+      }
+      this.logger.error(
+        `Failed to journal tracked email to ${params.to}: ${String(err)}`,
+      );
+      return { ok: false, error: 'Could not record the email for delivery.' };
+    }
+
+    if (!this.transporter) {
+      // Journals the failure on the EmailLog row.
+      await this.attemptDelivery(
+        logId,
+        params.to,
+        params.subject,
+        params.html,
+        params.attachments,
+      );
+      return {
+        ok: false,
+        logId,
+        error:
+          'Email delivery is not configured on this server (SMTP_USER / SMTP_PASS are not set), so nothing was sent.',
+      };
+    }
+
+    const attempt = this.attemptDelivery(
+      logId,
+      params.to,
+      params.subject,
+      params.html,
+      params.attachments,
+    );
+    let timer: NodeJS.Timeout | undefined;
+    const timedOut = new Promise<'timeout'>((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+    const outcome = await Promise.race([
+      attempt.then((ok) => ({ ok })),
+      timedOut,
+    ]).finally(() => clearTimeout(timer));
+    if (outcome === 'timeout') {
+      return {
+        ok: false,
+        logId,
+        pending: true,
+        error:
+          'The mail server did not answer in time. The message may still be delivered — check again shortly.',
+      };
+    }
+    if (outcome.ok) return { ok: true, logId };
+    const row = await this.prisma.emailLog.findUnique({
+      where: { id: logId },
+      select: { lastError: true },
+    });
+    return {
+      ok: false,
+      logId,
+      error: row?.lastError ?? 'The mail server rejected the message.',
+    };
+  }
+
   private async deliverWithRetry(
     logId: string,
     to: string,

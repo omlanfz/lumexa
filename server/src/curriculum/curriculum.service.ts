@@ -20,7 +20,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { LessonStatus, Role, SessionType } from '@prisma/client';
+import { Lesson, LessonStatus, Role, SessionType } from '@prisma/client';
 import {
   COUNTS_AS_COMPLETED,
   findCanonicalCompletedRow,
@@ -30,7 +30,15 @@ import {
   todayDhakaDateStr,
   utcToDhakaParts,
 } from '../scheduling/dhaka-time.util';
-import { getProjectLinksFallback, tableizeKeyTerminology } from '../courses/curriculum-catalog.seed';
+import {
+  getProjectLinksFallback,
+  tableizeKeyTerminology,
+} from '../courses/curriculum-catalog.seed';
+import { getBankSummary } from '../assessments/bank-summary';
+import {
+  BANK_OWNER_SELECT,
+  ensureLinkedAssessment,
+} from '../assessments/linked-assessment';
 import {
   CreateModuleDto,
   CreateProjectDto,
@@ -89,7 +97,13 @@ export class CurriculumService {
             module: true,
             project: true,
             assessment: {
-              select: { id: true, type: true, title: true, isPublished: true },
+              select: {
+                id: true,
+                type: true,
+                title: true,
+                isPublished: true,
+                sourceAssessmentId: true,
+              },
             },
           },
         })
@@ -138,7 +152,7 @@ export class CurriculumService {
             }
           : null,
       },
-      assessment: lesson.assessment ?? null,
+      assessment: await this.describeAssessment(lesson.assessment),
     };
   }
 
@@ -157,7 +171,13 @@ export class CurriculumService {
         module: true,
         project: true,
         assessment: {
-          select: { id: true, type: true, title: true, isPublished: true },
+          select: {
+            id: true,
+            type: true,
+            title: true,
+            isPublished: true,
+            sourceAssessmentId: true,
+          },
         },
         course: { select: { id: true, title: true, slug: true } },
       },
@@ -219,7 +239,7 @@ export class CurriculumService {
             }
           : null,
       },
-      assessment: lesson.assessment ?? null,
+      assessment: await this.describeAssessment(lesson.assessment),
     };
   }
 
@@ -235,7 +255,13 @@ export class CurriculumService {
             module: true,
             project: true,
             assessment: {
-              select: { id: true, type: true, title: true, isPublished: true },
+              select: {
+                id: true,
+                type: true,
+                title: true,
+                isPublished: true,
+                sourceAssessmentId: true,
+              },
             },
           },
         },
@@ -353,7 +379,7 @@ export class CurriculumService {
             }
           : null,
       },
-      assessment: sl.lesson.assessment ?? null,
+      assessment: await this.describeAssessment(sl.lesson.assessment),
       submission: sl.lesson.homework
         ? canonical && canonical.id !== sl.id
           ? await this.findSubmission(canonical.id)
@@ -379,6 +405,24 @@ export class CurriculumService {
         feedback: true,
       },
     });
+  }
+
+  /** The assessment as the lesson page/classroom needs it: identity plus what
+   *  the test actually contains (question counts, marks), read from its root
+   *  bank — so a linked custom-course test reports the original's questions. */
+  private async describeAssessment(
+    assessment: {
+      id: string;
+      type: SessionType;
+      title: string;
+      isPublished: boolean;
+      sourceAssessmentId: string | null;
+    } | null,
+  ) {
+    if (!assessment) return null;
+    const { sourceAssessmentId: _source, ...visible } = assessment;
+    void _source;
+    return { ...visible, ...(await getBankSummary(this.prisma, assessment)) };
   }
 
   private baseSessionInfo(sl: {
@@ -493,23 +537,18 @@ export class CurriculumService {
 
   // ── Custom Curriculum Builder: reuse existing default-curriculum content ──
   //
-  // Every LEARNING-type lesson from every default (non-custom) course,
-  // categorized by curriculum -> module, for the "reuse existing
-  // lessons/courses" picker. Test-type sessions (COURSE_TEST/STAGE_TEST/
-  // FINAL_TEST) are deliberately excluded — they carry an Assessment +
-  // question bank that isn't safe to duplicate blind, so a custom
-  // curriculum's own tests (if any) are hand-built via the regular lesson
-  // editor instead.
+  // Every session from every default (non-custom) course, categorized by
+  // curriculum -> module, for the "reuse existing lessons/courses" picker.
+  // Importing a test session (COURSE_TEST/STAGE_TEST/FINAL_TEST) links the new
+  // lesson to the ORIGINAL question bank — see importLesson.
 
   /** Every default curriculum's full, ordered session list — every course
    * (module) and every session, learning and test alike — grouped by
    * curriculum -> module, exactly matching that curriculum's real teaching
    * order (Lesson.order is the session number within the whole course, not
    * per-module — see ScheduledLesson.lessonId's doc comment). Test-type
-   * sessions (COURSE_TEST/STAGE_TEST/FINAL_TEST) ARE included here for a
-   * true "all 28 lessons" picker, but importing one copies only its
-   * content — never its Assessment/question bank, which isn't safe to
-   * duplicate blind (see importLesson). */
+   * sessions ARE included for a true "all 28 lessons" picker; importing one
+   * gives the custom course a test that reads the original's questions. */
   async getReusableLessons() {
     const courses = await this.prisma.course.findMany({
       where: { isCustom: false },
@@ -585,20 +624,37 @@ export class CurriculumService {
   /** Copies one default-curriculum Lesson's content into a custom course as
    * a new, independent, flat (moduleId: null) lesson at the given order —
    * the default lesson and its module/course are never touched, so this can
-   * never mutate a default curriculum. The session type is preserved for an
-   * accurate structure preview, but no Assessment/question bank is cloned —
-   * an imported test session has no question bank until the admin builds
-   * one fresh for it. */
+   * never mutate a default curriculum.
+   *
+   * A test session (Course/Stage/Final Test) is imported WITH its question
+   * bank: the new lesson gets its own Assessment row (own attempts, own
+   * publish/pass settings) LINKED to the original bank rather than a copy of
+   * its questions (see linked-assessment.ts). Importing the lesson without
+   * its bank was the bug that left every imported test with "no questions". */
   async importLesson(targetCourseId: string, dto: ImportLessonDto) {
     const target = await this.requireCustomCourse(targetCourseId);
     const source = await this.prisma.lesson.findUnique({
       where: { id: dto.sourceLessonId },
-      include: { course: { select: { slug: true } } },
+      include: {
+        course: { select: { slug: true } },
+        assessment: { select: BANK_OWNER_SELECT },
+      },
     });
     if (!source) throw new NotFoundException('Source lesson not found');
 
-    return this.prisma.lesson.create({
-      data: this.lessonImportData(target.id, dto.order, source),
+    return this.prisma.$transaction(async (tx) => {
+      const lesson = await tx.lesson.create({
+        data: this.lessonImportData(target.id, dto.order, source),
+      });
+      if (source.assessment) {
+        await ensureLinkedAssessment(
+          tx,
+          lesson.id,
+          source.type,
+          source.assessment,
+        );
+      }
+      return lesson;
     });
   }
 
@@ -611,7 +667,10 @@ export class CurriculumService {
     const target = await this.requireCustomCourse(targetCourseId);
     const sources = await this.prisma.lesson.findMany({
       where: { id: { in: dto.sourceLessonIds } },
-      include: { course: { select: { slug: true } } },
+      include: {
+        course: { select: { slug: true } },
+        assessment: { select: BANK_OWNER_SELECT },
+      },
     });
     if (sources.length === 0) {
       throw new NotFoundException('No matching source lessons found');
@@ -624,15 +683,31 @@ export class CurriculumService {
     });
     let nextOrder = (currentMax._max.order ?? 0) + 1;
 
-    const creates = dto.sourceLessonIds
+    const ordered = dto.sourceLessonIds
       .map((id) => byId.get(id))
-      .filter((s): s is NonNullable<typeof s> => !!s)
-      .map((source) =>
-        this.prisma.lesson.create({
-          data: this.lessonImportData(target.id, nextOrder++, source),
-        }),
-      );
-    return this.prisma.$transaction(creates);
+      .filter((s): s is NonNullable<typeof s> => !!s);
+    return this.prisma.$transaction(
+      async (tx) => {
+        const created: Lesson[] = [];
+        for (const source of ordered) {
+          const lesson = await tx.lesson.create({
+            data: this.lessonImportData(target.id, nextOrder++, source),
+          });
+          // Test sessions come with their (linked) question bank.
+          if (source.assessment) {
+            await ensureLinkedAssessment(
+              tx,
+              lesson.id,
+              source.type,
+              source.assessment,
+            );
+          }
+          created.push(lesson);
+        }
+        return created;
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
   }
 
   private async requireCustomCourse(courseId: string) {

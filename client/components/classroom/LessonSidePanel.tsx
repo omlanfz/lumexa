@@ -32,9 +32,12 @@ interface LessonSidePanelProps {
    * is visually covered by the fullscreen video layer, so this instead
    * renders as a fixed right-side overlay above it. */
   overlay?: boolean;
+  /** The main stage is already showing this lesson (and, for a test session,
+   * hosting the live test) — see stageShowsLesson in Stage.tsx. */
+  testHostedElsewhere?: boolean;
 }
 
-export default function LessonSidePanel({ data, onClose, focused, onToggleFocused, overlay }: LessonSidePanelProps) {
+export default function LessonSidePanel({ data, onClose, focused, onToggleFocused, overlay, testHostedElsewhere }: LessonSidePanelProps) {
   const header = (
     <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--cr-border)] flex-shrink-0">
       <p className="text-sm font-semibold text-[var(--cr-text)] flex items-center gap-2">
@@ -62,7 +65,7 @@ export default function LessonSidePanel({ data, onClose, focused, onToggleFocuse
 
   const body = (
     <div className="flex-1 min-h-0 p-2">
-      <LessonPanel data={data} />
+      <LessonPanel data={data} testHostedElsewhere={testHostedElsewhere} />
     </div>
   );
 
