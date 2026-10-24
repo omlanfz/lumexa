@@ -1,8 +1,10 @@
 'use client';
 
-// What the teacher sees in the classroom while a student sits a test: the test
-// they are running (counts, marks, a question preview), the student's live
-// progress, and a one-click path to the report card once it is submitted.
+// About the test the teacher is running: counts, marks and a question preview.
+// By default it also shows the (single) student's live progress and a path to
+// their report card — that is what the standalone page used to be. In the live
+// classroom the progress of EVERY student, and the lock buttons, live in the
+// ClassTestMonitor dock instead, so it is switched off there (`showStudents`).
 // The answer key is hidden unless the teacher deliberately reveals it.
 
 import { useCallback, useEffect, useState } from 'react';
@@ -15,7 +17,16 @@ import QuestionText from './QuestionText';
 
 const POLL_MS = 8_000;
 
-export default function TeacherTestMonitor({ scheduledLessonId, variant }: { scheduledLessonId: string; variant: Exclude<Variant, 'page'> }) {
+export default function TeacherTestMonitor({
+  scheduledLessonId,
+  variant,
+  showStudents = true,
+}: {
+  scheduledLessonId: string;
+  variant: Exclude<Variant, 'page'>;
+  /** Show this class's student progress and report-card link (default). */
+  showStudents?: boolean;
+}) {
   const [status, setStatus] = useState<LessonTestStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,9 +48,11 @@ export default function TeacherTestMonitor({ scheduledLessonId, variant }: { sch
 
   useEffect(() => {
     void refresh();
+    // Only the per-student progress changes while a test runs.
+    if (!showStudents) return;
     const t = setInterval(() => void refresh(), POLL_MS);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [refresh, showStudents]);
 
   const assessmentId = status?.assessment?.id;
   const loadPreview = useCallback(
@@ -105,6 +118,11 @@ export default function TeacherTestMonitor({ scheduledLessonId, variant }: { sch
               {a.counts.mcq} multiple-choice + {a.counts.trueFalse} True/False = {objective} questions
               {a.counts.practical > 0 ? ' + 1 coding project' : ''} · {formatMarks(a.totalMarks)} marks
             </p>
+            <p className="text-xs text-[var(--ar-muted)]">
+              Students take the test in their own tab while sharing their entire screen. There&apos;s no fixed time limit — you end it with{' '}
+              <strong className="text-[var(--ar-text)]">Lock &amp; submit</strong> (one student) or{' '}
+              <strong className="text-[var(--ar-text)]">Time&apos;s up — lock &amp; submit all</strong> in the test progress panel.
+            </p>
             {!a.isPublished && (
               <p className="rounded-lg border border-[var(--ar-warning)]/40 bg-[var(--ar-warning)]/10 px-3 py-2 text-xs">
                 This test is not published, so the student cannot start it. Ask Lumexa Operations to publish it.
@@ -112,6 +130,7 @@ export default function TeacherTestMonitor({ scheduledLessonId, variant }: { sch
             )}
           </section>
 
+          {showStudents && (
           <section className="space-y-2 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-4" aria-live="polite">
             <h3 className="text-sm font-semibold">{status?.studentName ?? 'Student'}&apos;s progress</h3>
             {!attempt ? (
@@ -148,6 +167,7 @@ export default function TeacherTestMonitor({ scheduledLessonId, variant }: { sch
               </div>
             )}
           </section>
+          )}
 
           <section className="space-y-2 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">

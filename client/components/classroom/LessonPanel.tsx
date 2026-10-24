@@ -6,28 +6,26 @@
 // (which is what caused the shared-screen recursion in the first place).
 //
 // A TEST session (Course/Stage/Final Test) is different: there is no lesson
-// material to read, so the panel hosts the test itself — the student sits it
-// right here (AssessmentRunner), and the teacher gets a live monitor with the
-// question preview and a link to the report card (TeacherTestMonitor). Nobody
-// has to leave the classroom.
+// material to read. The student does NOT sit the test here — they share their
+// whole screen while testing, and a screen share takes over the stage — so
+// "Start test" opens it in its own tab (StudentTestLauncher), and this panel
+// only reports on it. The teacher sees the test they are running; every
+// student's progress, and the lock buttons, are in the ClassTestMonitor dock
+// that ClassroomRoom keeps above the stage whatever the stage is showing.
 
 'use client';
 
-import { BookOpen, ClipboardList } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import LessonDetailsView, { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
-import AssessmentRunner from '@/components/assessment/AssessmentRunner';
+import StudentTestLauncher from '@/components/assessment/StudentTestLauncher';
 import TeacherTestMonitor from '@/components/assessment/TeacherTestMonitor';
 import { getStoredRole } from '@/lib/storage';
 
 interface LessonPanelProps {
   data: LessonDetailsResponse | null;
-  /** The test is already open in the main classroom area, so this (side)
-   *  panel must not mount a second copy of it — two live answer sheets for
-   *  the same attempt would fight each other. */
-  testHostedElsewhere?: boolean;
 }
 
-export default function LessonPanel({ data, testHostedElsewhere }: LessonPanelProps) {
+export default function LessonPanel({ data }: LessonPanelProps) {
   if (!data) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center text-[var(--cr-text-muted)] gap-2">
@@ -47,16 +45,10 @@ export default function LessonPanel({ data, testHostedElsewhere }: LessonPanelPr
             {data.session.courseTitle} · Session {data.session.lessonNumber}
           </p>
           <h1 className="mb-4 mt-1 text-xl font-bold text-[var(--cr-text)]">{data.lesson?.title ?? 'Test'}</h1>
-          {testHostedElsewhere ? (
-            <div className="flex flex-col items-center gap-2 rounded-xl border border-[var(--cr-border)] bg-[var(--cr-surface-2)] p-6 text-center text-sm text-[var(--cr-text-muted)]">
-              <ClipboardList size={24} className="opacity-60" />
-              <p className="font-medium text-[var(--cr-text)]">The test is open in the main classroom area.</p>
-              <p>It is shown there so your answers are only ever saved from one place.</p>
-            </div>
-          ) : role === 'STUDENT' ? (
-            <AssessmentRunner key={scheduledLessonId} scheduledLessonId={scheduledLessonId} variant="classroom" />
+          {role === 'STUDENT' ? (
+            <StudentTestLauncher key={scheduledLessonId} scheduledLessonId={scheduledLessonId} />
           ) : (
-            <TeacherTestMonitor key={scheduledLessonId} scheduledLessonId={scheduledLessonId} variant="classroom" />
+            <TeacherTestMonitor key={scheduledLessonId} scheduledLessonId={scheduledLessonId} variant="classroom" showStudents={false} />
           )}
         </div>
       </div>

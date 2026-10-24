@@ -145,7 +145,7 @@ export default function LessonDetailsView({
               )}
               <p className="text-sm text-gray-600 dark:text-gray-400">
                 {data.session.scheduledLessonId
-                  ? 'This is a test session. The test opens inside the live classroom — you can also open it here.'
+                  ? 'This is a test session. In the live class, the test opens in its own browser tab while you share your entire screen — you can also open it here.'
                   : 'Preview the test structure by opening it from a scheduled session.'}
               </p>
             </>

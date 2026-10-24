@@ -25,9 +25,12 @@ const MAPS: Record<Variant, Record<string, string>> = {
     '--ar-warning': 'var(--cr-warning)',
     '--ar-success': '#16a34a',
   },
+  // The standalone test page: cards sit on the page canvas (--s-bg), so a card
+  // is the brightest surface and what is nested inside it (answer options, code
+  // panels) is one step tinted.
   page: {
-    '--ar-bg': 'var(--s-surface)',
-    '--ar-surface': 'var(--s-surface-2)',
+    '--ar-bg': 'var(--s-surface-2)',
+    '--ar-surface': 'var(--s-surface)',
     '--ar-surface-2': 'var(--s-surface-3)',
     '--ar-border': 'var(--s-border)',
     '--ar-border-strong': 'var(--s-border-strong)',
