@@ -34,7 +34,13 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { AlertsService } from '../alerts/alerts.service';
-import { Role, RecordingStatus, RecordingSegmentStatus } from '@prisma/client';
+import {
+  ClassType,
+  LessonStatus,
+  Role,
+  RecordingStatus,
+  RecordingSegmentStatus,
+} from '@prisma/client';
 import {
   S3Client,
   GetObjectCommand,
@@ -48,7 +54,12 @@ import { mkdtemp, writeFile, rm, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { pipeline } from 'stream/promises';
-import { DEMO_ROOM_NAME, getRoomRef, roomForLesson } from './room-ref.util';
+import {
+  DEMO_ROOM_NAME,
+  getRoomRef,
+  roomForLesson,
+  roomForLessonRecord,
+} from './room-ref.util';
 
 const RECORDING_MAX_DURATION_MINUTES =
   Number(process.env.RECORDING_MAX_DURATION_MINUTES) || 70;
@@ -70,6 +81,10 @@ export class RecordingService {
   // click (or a retried request) can never create two active egress jobs
   // for the same room — see startSegment/stopActiveSegment.
   private readonly roomLocks = new Set<string>();
+
+  // Rooms whose recording is being merged right now, so the 30-second sweep can
+  // never start a second merge of the same class while a long one is running.
+  private readonly mergingRooms = new Set<string>();
 
   // In-memory recording state for the demo classroom only (see
   // ClassroomService's DEMO_ROOM_NAME block comment) — there is no
@@ -155,15 +170,39 @@ export class RecordingService {
   private entityKindForRoom(room: string): EntityKind | null {
     const ref = getRoomRef(room);
     if (ref.kind === 'demo') return null;
-    return ref.kind === 'lesson' ? 'lesson' : 'booking';
+    return ref.kind === 'lesson' || ref.kind === 'batch' ? 'lesson' : 'booking';
+  }
+
+  /** The lessons a room's recording belongs to: the one lesson of a 1:1 class,
+   * or every student's lesson of a batch — they all sat the same class, so
+   * each of them gets the one recording (the file is stored once). */
+  private async lessonIdsForRoom(room: string): Promise<string[]> {
+    const ref = getRoomRef(room);
+    if (ref.kind === 'lesson') return [ref.scheduledLessonId];
+    if (ref.kind === 'batch') {
+      const rows = await this.prisma.scheduledLesson.findMany({
+        where: {
+          teacherId: ref.teacherId,
+          classType: ClassType.BATCH,
+          start: new Date(ref.startMs),
+          status: { not: LessonStatus.CANCELLED },
+        },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      return rows.map((r) => r.id);
+    }
+    return [];
   }
 
   private async readMirror(room: string): Promise<RecordingMirror | null> {
     if (room === DEMO_ROOM_NAME) return this.demoMirror;
     const ref = getRoomRef(room);
-    if (ref.kind === 'lesson') {
+    if (ref.kind === 'lesson' || ref.kind === 'batch') {
+      const [anchor] = await this.lessonIdsForRoom(room);
+      if (!anchor) return null;
       return this.prisma.scheduledLesson.findUnique({
-        where: { id: ref.scheduledLessonId },
+        where: { id: anchor },
         select: { recordingStatus: true },
       });
     }
@@ -190,6 +229,14 @@ export class RecordingService {
         where: { id: ref.scheduledLessonId },
         data: { recordingStatus },
       });
+    } else if (ref.kind === 'batch') {
+      const ids = await this.lessonIdsForRoom(room);
+      if (ids.length > 0) {
+        await this.prisma.scheduledLesson.updateMany({
+          where: { id: { in: ids } },
+          data: { recordingStatus },
+        });
+      }
     } else if (ref.kind === 'booking') {
       await this.prisma.booking.update({
         where: { id: ref.bookingId },
@@ -277,8 +324,14 @@ export class RecordingService {
           data: {
             room,
             bookingId: ref.kind === 'booking' ? ref.bookingId : undefined,
+            // A batch's segments hang off its first lesson; the room name is
+            // what ties them all to the whole batch.
             scheduledLessonId:
-              ref.kind === 'lesson' ? ref.scheduledLessonId : undefined,
+              ref.kind === 'lesson'
+                ? ref.scheduledLessonId
+                : ref.kind === 'batch'
+                  ? (await this.lessonIdsForRoom(room))[0]
+                  : undefined,
             egressId: info.egressId,
             status: RecordingSegmentStatus.RECORDING,
             storagePath: objectKey,
@@ -460,6 +513,21 @@ export class RecordingService {
     const hasAnySegment =
       (await this.prisma.recordingSegment.count({ where: { room } })) > 0;
     if (!hasAnySegment) return;
+    if (getRoomRef(room).kind === 'batch') {
+      // Called once per student's lesson as each ends, so only move a lesson
+      // on that has not already been handed to (or finished with) the merge.
+      const ids = await this.lessonIdsForRoom(room);
+      await this.prisma.scheduledLesson.updateMany({
+        where: {
+          id: { in: ids },
+          recordingStatus: {
+            in: [RecordingStatus.NONE, RecordingStatus.RECORDING],
+          },
+        },
+        data: { recordingStatus: RecordingStatus.PROCESSING },
+      });
+      return;
+    }
     await this.writeMirror(room, RecordingStatus.PROCESSING);
   }
 
@@ -481,7 +549,7 @@ export class RecordingService {
           recordingStatus: RecordingStatus.PROCESSING,
           recordingMergedAt: null,
         },
-        select: { id: true },
+        select: { id: true, classType: true, teacherId: true, start: true },
         take: 20,
       }),
     ]);
@@ -489,24 +557,41 @@ export class RecordingService {
       await this.tryMerge('booking', b.id).catch((e) =>
         this.logger.error(String(e)),
       );
-    for (const l of lessons)
-      await this.tryMerge('lesson', l.id).catch((e) =>
+    // The students of a batch all show up here (they share one recording);
+    // merge each classroom once.
+    const seenRooms = new Set<string>();
+    for (const l of lessons) {
+      const room = roomForLessonRecord(l);
+      if (seenRooms.has(room)) continue;
+      seenRooms.add(room);
+      await this.tryMerge('lesson', l.id, room).catch((e) =>
         this.logger.error(String(e)),
       );
+    }
   }
 
-  private async tryMerge(kind: EntityKind, id: string): Promise<void> {
-    const room = kind === 'lesson' ? roomForLesson(id) : id;
-    const segments = await this.prisma.recordingSegment.findMany({
-      where: { room },
-    });
-    const stillSettling = segments.some(
-      (s) =>
-        s.status === RecordingSegmentStatus.RECORDING ||
-        s.status === RecordingSegmentStatus.UPLOADING,
-    );
-    if (stillSettling) return; // wait for the Egress webhook (or the next sweep tick)
-    await this.mergeEntity(kind, id, room, segments);
+  private async tryMerge(
+    kind: EntityKind,
+    id: string,
+    roomOverride?: string,
+  ): Promise<void> {
+    const room = roomOverride ?? (kind === 'lesson' ? roomForLesson(id) : id);
+    if (this.mergingRooms.has(room)) return; // a merge of this class is under way
+    this.mergingRooms.add(room);
+    try {
+      const segments = await this.prisma.recordingSegment.findMany({
+        where: { room },
+      });
+      const stillSettling = segments.some(
+        (s) =>
+          s.status === RecordingSegmentStatus.RECORDING ||
+          s.status === RecordingSegmentStatus.UPLOADING,
+      );
+      if (stillSettling) return; // wait for the Egress webhook (or the next sweep tick)
+      await this.mergeEntity(kind, id, room, segments);
+    } finally {
+      this.mergingRooms.delete(room);
+    }
   }
 
   /** Admin-triggered retry for a FAILED merge. */
@@ -530,9 +615,18 @@ export class RecordingService {
       recordingMergedAt: null,
       recordingMergeError: null,
     };
-    if (kind === 'lesson')
-      await this.prisma.scheduledLesson.update({ where: { id }, data });
-    else await this.prisma.booking.update({ where: { id }, data });
+    if (kind === 'lesson') {
+      // A batch's students share one recording, so retry it for all of them.
+      const lesson = await this.prisma.scheduledLesson.findUniqueOrThrow({
+        where: { id },
+        select: { id: true, classType: true, teacherId: true, start: true },
+      });
+      const ids = await this.lessonIdsForRoom(roomForLessonRecord(lesson));
+      await this.prisma.scheduledLesson.updateMany({
+        where: { id: { in: ids.length > 0 ? ids : [id] } },
+        data,
+      });
+    } else await this.prisma.booking.update({ where: { id }, data });
     return { ok: true };
   }
 
@@ -553,25 +647,23 @@ export class RecordingService {
       )
       .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
+    // The classes this recording belongs to: one lesson/booking, or every
+    // student's lesson of a batch.
+    const targetIds =
+      kind === 'lesson' ? await this.lessonIdsForRoom(room) : [id];
+    const lessonIds = targetIds.length > 0 ? targetIds : [id];
+
     const fail = async (message: string) => {
-      const attempts =
-        (kind === 'lesson'
-          ? await this.prisma.scheduledLesson.findUnique({
-              where: { id },
-              select: { recordingMergeAttempts: true },
-            })
-          : await this.prisma.booking.findUnique({
-              where: { id },
-              select: { recordingMergeAttempts: true },
-            })
-        )?.recordingMergeAttempts ?? 0;
       const data = {
         recordingStatus: RecordingStatus.FAILED,
         recordingMergeError: message,
-        recordingMergeAttempts: attempts + 1,
+        recordingMergeAttempts: { increment: 1 },
       };
       if (kind === 'lesson')
-        await this.prisma.scheduledLesson.update({ where: { id }, data });
+        await this.prisma.scheduledLesson.updateMany({
+          where: { id: { in: lessonIds } },
+          data,
+        });
       else await this.prisma.booking.update({ where: { id }, data });
       this.logger.error(`Recording merge failed for ${kind} ${id}: ${message}`);
       await this.notifyMergeFailure(kind, id, message).catch(() => {});
@@ -673,7 +765,10 @@ export class RecordingService {
         recordingMergeError: null,
       };
       if (kind === 'lesson')
-        await this.prisma.scheduledLesson.update({ where: { id }, data });
+        await this.prisma.scheduledLesson.updateMany({
+          where: { id: { in: lessonIds } },
+          data,
+        });
       else await this.prisma.booking.update({ where: { id }, data });
       this.logger.log(
         `Recording merged for ${kind} ${id} (${available.length} segment(s), ${size} bytes)`,
@@ -814,8 +909,11 @@ export class RecordingService {
           recordingUrl: null,
         };
         if (rec.kind === 'lesson')
-          await this.prisma.scheduledLesson.update({
-            where: { id: rec.id },
+          // Every student of a batch points at the same file.
+          await this.prisma.scheduledLesson.updateMany({
+            where: rec.recordingUrl
+              ? { recordingUrl: rec.recordingUrl }
+              : { id: rec.id },
             data,
           });
         else await this.prisma.booking.update({ where: { id: rec.id }, data });
@@ -845,14 +943,16 @@ export class RecordingService {
   }
 
   private async currentStorageUsageBytes(): Promise<number> {
-    const [bookingAgg, lessonAgg, segmentAgg] = await Promise.all([
+    const [bookingAgg, lessonFiles, segmentAgg] = await Promise.all([
       this.prisma.booking.aggregate({
         where: { recordingStatus: RecordingStatus.AVAILABLE },
         _sum: { recordingFileSizeBytes: true },
       }),
-      this.prisma.scheduledLesson.aggregate({
+      // One file per URL: the students of a batch share a single recording.
+      this.prisma.scheduledLesson.groupBy({
+        by: ['recordingUrl'],
         where: { recordingStatus: RecordingStatus.AVAILABLE },
-        _sum: { recordingFileSizeBytes: true },
+        _max: { recordingFileSizeBytes: true },
       }),
       this.prisma.recordingSegment.aggregate({
         where: { status: RecordingSegmentStatus.AVAILABLE },
@@ -861,7 +961,10 @@ export class RecordingService {
     ]);
     return (
       (bookingAgg._sum.recordingFileSizeBytes ?? 0) +
-      (lessonAgg._sum.recordingFileSizeBytes ?? 0) +
+      lessonFiles.reduce(
+        (sum, f) => sum + (f._max.recordingFileSizeBytes ?? 0),
+        0,
+      ) +
       (segmentAgg._sum.fileSizeBytes ?? 0)
     );
   }
@@ -912,13 +1015,21 @@ export class RecordingService {
         size: b.recordingFileSizeBytes ?? 0,
         mergedAt: b.recordingMergedAt ?? new Date(0),
       })),
-      ...lessons.map((l) => ({
-        kind: 'lesson' as const,
-        id: l.id,
-        recordingUrl: l.recordingUrl,
-        size: l.recordingFileSizeBytes ?? 0,
-        mergedAt: l.recordingMergedAt ?? new Date(0),
-      })),
+      // A batch's students share one file: offer it once, or its size would
+      // be taken off the total once per student.
+      ...lessons
+        .filter(
+          (l, i) =>
+            !l.recordingUrl ||
+            lessons.findIndex((o) => o.recordingUrl === l.recordingUrl) === i,
+        )
+        .map((l) => ({
+          kind: 'lesson' as const,
+          id: l.id,
+          recordingUrl: l.recordingUrl,
+          size: l.recordingFileSizeBytes ?? 0,
+          mergedAt: l.recordingMergedAt ?? new Date(0),
+        })),
     ].sort((a, b) => a.mergedAt.getTime() - b.mergedAt.getTime());
   }
 

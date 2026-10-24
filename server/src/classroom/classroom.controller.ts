@@ -10,8 +10,10 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { ClassroomService } from './classroom.service';
 import { AdmissionService } from './admission.service';
 import type { ClassOutcome } from './class-finalization.service';
@@ -24,11 +26,17 @@ export class ClassroomController {
     private readonly admissionService: AdmissionService,
   ) {}
 
+  // Asked twice per person (when the page opens, and again when they press Join,
+  // so the teacher's lock and the 10-people limit are checked at the last moment),
+  // and a school's whole class may share one IP address — so well above the
+  // default of 20 a minute.
   @Post('join')
   @UseGuards(AuthGuard('jwt'))
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
   joinLab(
     @Request() req,
-    @Body() body: { bookingId?: string; scheduledLessonId?: string },
+    @Body()
+    body: { bookingId?: string; scheduledLessonId?: string; deviceId?: string },
   ) {
     return this.classroomService.joinLab(req.user.userId, body);
   }
@@ -38,10 +46,11 @@ export class ClassroomController {
    * accounts regardless of what the client sends. */
   @Post('join-demo')
   @UseGuards(AuthGuard('jwt'))
-  joinDemo(@Request() req) {
+  joinDemo(@Request() req, @Body() body: { deviceId?: string }) {
     return this.classroomService.joinDemoClassroom(
       req.user.userId,
       req.user.email,
+      body?.deviceId,
     );
   }
 
@@ -180,6 +189,25 @@ export class ClassroomController {
   @UseGuards(AuthGuard('jwt'))
   stopRecording(@Request() req, @Param('room') room: string) {
     return this.classroomService.stopTeacherRecording(req.user.userId, room);
+  }
+
+  /** Lock or unlock the classroom. While locked no student can join; people
+   * already inside stay. A class starts unlocked. */
+  @Post(':room/lock')
+  @UseGuards(AuthGuard('jwt'))
+  setRoomLocked(
+    @Request() req: { user: { userId: string } },
+    @Param('room') room: string,
+    @Body() body: { locked: boolean },
+  ) {
+    if (typeof body?.locked !== 'boolean') {
+      throw new BadRequestException('"locked" must be true or false.');
+    }
+    return this.classroomService.setRoomLocked(
+      req.user.userId,
+      room,
+      body.locked,
+    );
   }
 
   @Patch(':room/state')

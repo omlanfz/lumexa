@@ -88,6 +88,11 @@ model User {
   submissions        Submission[]        @relation("StudentSubmissions")
   testReports        TestReport[]        @relation("StudentTestReports")
 
+  // Classroom badges (see ClassroomBadgeAward) — a student's own collection
+  // and, for a teacher's User row, the awards they have handed out.
+  classroomBadgesReceived ClassroomBadgeAward[] @relation("ClassroomBadgeRecipient")
+  classroomBadgesAwarded  ClassroomBadgeAward[] @relation("ClassroomBadgeAwarder")
+
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
 }
@@ -612,6 +617,57 @@ model ClassroomAdmission {
   @@index([room, status])
 }
 
+// The teacher's lock on a classroom. `room` is the LiveKit room name (see
+// room-ref.util.ts). A room that has no row here is unlocked — locking is
+// opt-in and a class starts open. Stored in the database (not only in the
+// LiveKit room's metadata) because the LiveKit room disappears when it
+// empties, and a lock must survive the teacher's connection dropping for a
+// moment. While locked, no student can join (see RoomAccessService).
+model ClassroomRoomState {
+  room           String    @id
+  locked         Boolean   @default(false)
+  lockedAt       DateTime?
+  lockedByUserId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+// One badge a teacher awarded to one student during a class (the Lumexa
+// Classroom Badge System). The 16 badge definitions live in code
+// (server/src/classroom/badges/badge-catalog.ts) — `badgeId` is a key into
+// that catalog — so a row here is only "who got what, from whom, where, when".
+//
+// `requestId` is chosen by the teacher's browser for one award action and is
+// what makes a double click or a network retry harmless: the same
+// (requestId, student) can only ever be stored once. Awarding the same badge
+// to the same student on a later occasion is a different action, so it has a
+// different requestId and is stored normally.
+//
+// Undo does not delete: it sets revokedAt, so there is always a record of
+// what happened. Everything that shows a collection ignores revoked rows.
+model ClassroomBadgeAward {
+  id                String           @id @default(uuid())
+  badgeId           String
+  requestId         String
+  studentUserId     String
+  student           User             @relation("ClassroomBadgeRecipient", fields: [studentUserId], references: [id])
+  awardedByUserId   String
+  awardedBy         User             @relation("ClassroomBadgeAwarder", fields: [awardedByUserId], references: [id])
+  // The recipient's own lesson in the class (null for the QA demo room).
+  scheduledLessonId String?
+  scheduledLesson   ScheduledLesson? @relation(fields: [scheduledLessonId], references: [id], onDelete: SetNull)
+  // The classroom (LiveKit room name) the award was made in.
+  room              String
+  createdAt         DateTime         @default(now())
+  revokedAt         DateTime?
+  revokedByUserId   String?
+
+  @@unique([requestId, studentUserId])
+  @@index([studentUserId, createdAt])
+  @@index([room, createdAt])
+  @@index([scheduledLessonId])
+}
+
 model RecurringSlot {
   id            String         @id @default(uuid())
   studentUserId String
@@ -695,6 +751,7 @@ model ScheduledLesson {
   submission        Submission?
   ledgerEntries     StudentLedgerEntry[]
   recordingSegments RecordingSegment[]
+  badgeAwards       ClassroomBadgeAward[]
 
   // NOTE: uniqueness of (studentUserId, courseId, lessonNumber) is enforced
   // by a PARTIAL unique index created in migration SQL — scoped to

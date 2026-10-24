@@ -32,12 +32,13 @@
 
 import {
   BadRequestException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { ClassEndReason, LessonStatus, Role } from '@prisma/client';
+import { ClassEndReason, ClassType, LessonStatus, Role } from '@prisma/client';
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -48,7 +49,7 @@ import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CLASS_COMPLETED_AMOUNT_CENTS } from '../payouts/payout.constants';
 import { RecordingService } from './recording.service';
-import { roomForLesson } from './room-ref.util';
+import { roomForLessonRecord } from './room-ref.util';
 
 export type ClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED' | 'INCOMPLETE';
 
@@ -128,27 +129,12 @@ export class ClassFinalizationService {
     params: FinalizeParams,
   ): Promise<FinalizeResult> {
     const { outcome, actor } = params;
-    if (!CLASS_OUTCOMES.includes(outcome)) {
-      throw new BadRequestException(
-        'Choose Completed, Partially Completed or Incomplete to end this class.',
-      );
-    }
+    this.assertValidParams(params);
 
     const isIncomplete = outcome === 'INCOMPLETE';
     const isPaid = !isIncomplete;
     const reason = isIncomplete ? params.reason : undefined;
     const note = isIncomplete ? params.note?.trim() || null : null;
-
-    if (isIncomplete) {
-      if (!reason || !INCOMPLETE_REASONS.includes(reason)) {
-        throw new BadRequestException(
-          'Choose a reason for marking this class incomplete.',
-        );
-      }
-      if (reason === ClassEndReason.OTHER && !note) {
-        throw new BadRequestException('Add a short note explaining why.');
-      }
-    }
 
     const lesson = await this.prisma.scheduledLesson.findUnique({
       where: { id: lessonId },
@@ -245,6 +231,114 @@ export class ClassFinalizationService {
     return { finalized: true, status: outcome };
   }
 
+  /** What every caller must say to end a class: one of the three outcomes
+   * and, for Incomplete, why. */
+  private assertValidParams(params: FinalizeParams): void {
+    const { outcome } = params;
+    if (!CLASS_OUTCOMES.includes(outcome)) {
+      throw new BadRequestException(
+        'Choose Completed, Partially Completed or Incomplete to end this class.',
+      );
+    }
+    if (outcome === 'INCOMPLETE') {
+      const reason = params.reason;
+      const note = params.note?.trim() || null;
+      if (!reason || !INCOMPLETE_REASONS.includes(reason)) {
+        throw new BadRequestException(
+          'Choose a reason for marking this class incomplete.',
+        );
+      }
+      if (reason === ClassEndReason.OTHER && !note) {
+        throw new BadRequestException('Add a short note explaining why.');
+      }
+    }
+  }
+
+  // ─── Public: finalize a batch (one classroom, one lesson per student) ─────
+  //
+  // A batch has one teacher and several students in a single classroom, but
+  // every student keeps their own ScheduledLesson — their own payment to the
+  // teacher, their own lesson balance and progress. Ending the batch ends each
+  // of those lessons through the SAME finalizeLesson, so the money rules are
+  // exactly the 1:1 rules, applied once per student.
+  //
+  // The teacher picks one outcome. A student who never joined is the one place
+  // it is not applied as-is: a class cannot be paid for when the student did
+  // not attend (finalizeLesson refuses it, and the 75-minute failsafe records
+  // the same thing), so that student's lesson is ended Incomplete — no payment,
+  // no deduction, a make-up class — and they get the usual missed-class notice.
+  //
+  // Lessons that are no longer UPCOMING (an admin already settled one) are left
+  // alone. Every lesson that can be ended is; if one cannot, the rest are still
+  // ended and the first problem is raised, so the teacher can fix it and simply
+  // end the class again (a lesson that is already ended is skipped).
+  async finalizeBatch(
+    lessonIds: string[],
+    params: FinalizeParams,
+  ): Promise<{ lessonId: string; status: LessonStatus }[]> {
+    this.assertValidParams(params);
+    const { outcome, actor } = params;
+
+    const lessons = await this.prisma.scheduledLesson.findMany({
+      where: { id: { in: lessonIds }, status: LessonStatus.UPCOMING },
+      include: { student: { select: { fullName: true } } },
+      orderBy: { id: 'asc' },
+    });
+
+    const plan = lessons.map((lesson) => ({
+      lesson,
+      params:
+        outcome === 'INCOMPLETE' || lesson.studentJoinedAt
+          ? params
+          : ({
+              outcome: 'INCOMPLETE',
+              reason: ClassEndReason.STUDENT_NO_SHOW,
+              note: 'The student did not join this batch class.',
+              actor,
+            } satisfies FinalizeParams),
+    }));
+
+    // Say so before anything is changed if a student cannot be given the
+    // outcome, rather than ending half the batch and then refusing.
+    if (outcome === 'PARTIALLY_COMPLETED') {
+      for (const { lesson, params: p } of plan) {
+        if (
+          p.outcome === 'PARTIALLY_COMPLETED' &&
+          (await this.scheduling.hasPartialCompletion(
+            lesson.studentUserId,
+            lesson.courseId,
+            lesson.lessonNumber,
+          ))
+        ) {
+          throw new BadRequestException(
+            `Partially Completed has already been used for ${lesson.student.fullName}'s lesson. Choose Completed or Incomplete.`,
+          );
+        }
+      }
+    }
+
+    const results: { lessonId: string; status: LessonStatus }[] = [];
+    let firstProblem: Error | null = null;
+    for (const { lesson, params: p } of plan) {
+      try {
+        const done = await this.finalizeLesson(lesson.id, p);
+        results.push({ lessonId: lesson.id, status: done.status });
+      } catch (err) {
+        this.logger.error(`Could not end batch lesson ${lesson.id}: ${err}`);
+        firstProblem ??=
+          err instanceof HttpException
+            ? new BadRequestException(
+                `${lesson.student.fullName}: ${err.message}`,
+              )
+            : err instanceof Error
+              ? err
+              : new Error(String(err));
+      }
+    }
+    if (firstProblem) throw firstProblem;
+    return results;
+  }
+
   /** The class is no longer UPCOMING. An exact repeat of the same request
    * (double click, network retry) is a harmless success; a system caller just
    * stands down; anything else is told what already happened. */
@@ -276,6 +370,8 @@ export class ClassFinalizationService {
       studentUserId: string;
       courseId: string;
       lessonNumber: number;
+      classType: ClassType;
+      teacherId: string;
       start: Date;
       studentJoinedAt: Date | null;
       teacher: { id: string; userId: string };
@@ -288,22 +384,43 @@ export class ClassFinalizationService {
     },
   ) {
     const { outcome, actor } = params;
-    const room = roomForLesson(lesson.id);
+    const room = roomForLessonRecord(lesson);
     const isPaid = outcome !== 'INCOMPLETE';
 
-    // Recording: stop whatever is still running (no-op when it was never
-    // started or the teacher already stopped it) and hand the room to the
-    // merge sweep. Both calls are idempotent and swallow Egress errors.
-    await this.recording
-      .stopActiveSegmentIfAny(room)
-      .then(() => this.recording.finalizeAtClassEnd(room))
-      .catch((err) =>
-        this.logger.error(
-          `Recording wrap-up failed for lesson ${lesson.id}: ${err}`,
-        ),
-      );
+    // The classroom itself (recording, the live room) belongs to the whole
+    // batch, so it is wrapped up once the LAST student's lesson has ended —
+    // an admin settling one student's lesson must not end the class for the
+    // rest. A 1:1 class is its own classroom and is always wrapped up here.
+    // (If the count cannot be read, wrap up: leaving it would leave a
+    // recording that is never merged.)
+    const classroomStillNeeded =
+      lesson.classType === ClassType.BATCH &&
+      (await this.prisma.scheduledLesson
+        .count({
+          where: {
+            teacherId: lesson.teacherId,
+            classType: ClassType.BATCH,
+            start: lesson.start,
+            status: LessonStatus.UPCOMING,
+          },
+        })
+        .catch(() => 0)) > 0;
 
-    await this.closeRoom(room);
+    if (!classroomStillNeeded) {
+      // Recording: stop whatever is still running (no-op when it was never
+      // started or the teacher already stopped it) and hand the room to the
+      // merge sweep. Both calls are idempotent and swallow Egress errors.
+      await this.recording
+        .stopActiveSegmentIfAny(room)
+        .then(() => this.recording.finalizeAtClassEnd(room))
+        .catch((err) =>
+          this.logger.error(
+            `Recording wrap-up failed for lesson ${lesson.id}: ${err}`,
+          ),
+        );
+
+      await this.closeRoom(room);
+    }
 
     await this.audit
       .log({
@@ -337,7 +454,11 @@ export class ClassFinalizationService {
           role: Role.TEACHER,
           type: 'CLASS_COMPLETED_EARNING',
           title: 'Class completed',
-          message: `You earned ৳${(CLASS_COMPLETED_AMOUNT_CENTS / 100).toFixed(0)} for successfully completing this class. Great work!`,
+          message: `You earned ৳${(CLASS_COMPLETED_AMOUNT_CENTS / 100).toFixed(0)} for successfully completing this class${
+            lesson.classType === ClassType.BATCH
+              ? ` (${lesson.student.fullName}'s lesson)`
+              : ''
+          }. Great work!`,
           metadata: { scheduledLessonId: lesson.id },
         })
         .catch(() => {});

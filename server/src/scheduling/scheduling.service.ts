@@ -31,6 +31,7 @@ import {
 } from './dhaka-time.util';
 import { computeLateMinutes } from './lesson-window.util';
 import { COUNTS_AS_COMPLETED } from './lesson-state.util';
+import { MAX_STUDENTS_PER_CLASSROOM } from '../classroom/room-ref.util';
 
 export const CLASS_DURATION_MINUTES: Record<ClassType, number> = {
   ONE_TO_ONE: 45,
@@ -261,15 +262,20 @@ export class SchedulingService {
             teacherId,
             lesson.start,
             lesson.end,
+            undefined,
+            classType === ClassType.BATCH,
           );
           if (conflict) {
+            const when = lesson.start.toLocaleString('en-US', {
+              timeZone: 'Asia/Dhaka',
+            });
             throw new BadRequestException(
-              `Teacher is already booked on ${lesson.start.toLocaleString(
-                'en-US',
-                {
-                  timeZone: 'Asia/Dhaka',
-                },
-              )} (Asia/Dhaka). Choose a different day/time.`,
+              classType === ClassType.BATCH &&
+              'classType' in conflict &&
+              conflict.classType === ClassType.BATCH &&
+              conflict.start.getTime() === lesson.start.getTime()
+                ? `The batch on ${when} (Asia/Dhaka) already has ${MAX_STUDENTS_PER_CLASSROOM} students, the most a classroom holds. Choose a different day/time.`
+                : `Teacher is already booked on ${when} (Asia/Dhaka). Choose a different day/time.`,
             );
           }
         }
@@ -381,6 +387,7 @@ export class SchedulingService {
       newStart,
       newEnd,
       lessonId,
+      lesson.classType === ClassType.BATCH,
     );
     if (conflict) {
       throw new BadRequestException(
@@ -760,14 +767,41 @@ export class SchedulingService {
 
   /** Records the first time each side's LiveKit token was issued for this
    * lesson — teacherJoinedAt is the sole source for lateness (see
-   * lesson-window.util computeLateMinutes), never a manually entered value. */
+   * lesson-window.util computeLateMinutes), never a manually entered value.
+   * A batch has one classroom for all its students, so the teacher entering it
+   * has joined every student's lesson in it. */
   async recordLessonJoin(lessonId: string, role: 'TEACHER' | 'STUDENT') {
     const field = role === 'TEACHER' ? 'teacherJoinedAt' : 'studentJoinedAt';
     const lesson = await this.prisma.scheduledLesson.findUnique({
       where: { id: lessonId },
-      select: { teacherJoinedAt: true, studentJoinedAt: true },
+      select: {
+        teacherJoinedAt: true,
+        studentJoinedAt: true,
+        classType: true,
+        teacherId: true,
+        start: true,
+      },
     });
     if (!lesson) return;
+
+    // The teacher entering a batch's classroom has joined EVERY student's lesson
+    // in it — also one added to the slot after they first came in, which is why
+    // this runs even when this lesson already has a join time. It only fills in
+    // lessons that have none (the first join time is always kept).
+    if (role === 'TEACHER' && lesson.classType === ClassType.BATCH) {
+      await this.prisma.scheduledLesson.updateMany({
+        where: {
+          teacherId: lesson.teacherId,
+          classType: ClassType.BATCH,
+          start: lesson.start,
+          status: LessonStatus.UPCOMING,
+          teacherJoinedAt: null,
+        },
+        data: { teacherJoinedAt: new Date() },
+      });
+      return;
+    }
+
     if (lesson[field]) return; // already recorded — keep the first join time
 
     await this.prisma.scheduledLesson.update({
@@ -776,25 +810,75 @@ export class SchedulingService {
     });
   }
 
+  /** Every class still to be held by this teacher at this start that is a BATCH
+   * class — one lesson per student, all taught in one classroom. */
+  async getUpcomingBatchLessons(
+    teacherId: string,
+    start: Date,
+    client: PrismaService | Prisma.TransactionClient = this.prisma,
+  ) {
+    return client.scheduledLesson.findMany({
+      where: {
+        teacherId,
+        classType: ClassType.BATCH,
+        start,
+        status: LessonStatus.UPCOMING,
+      },
+      orderBy: { id: 'asc' },
+    });
+  }
+
   // ─── Conflict detection (also used by ShiftsService) ─────────────────────
 
+  /**
+   * Is this teacher busy during [start, end)? Returns what they are busy with,
+   * or null.
+   *
+   * `batch` is true when the class being placed is a BATCH class. Students of
+   * one batch share a slot — the same teacher, the same start — and a
+   * classroom holds the teacher plus at most MAX_STUDENTS_PER_CLASSROOM
+   * students, so lessons already in exactly this batch slot are NOT conflicts
+   * until the batch is full. Everything else that overlaps (a 1:1 class, a
+   * batch at another time, a marketplace shift) still is.
+   */
   async findTeacherConflict(
     prismaOrTx: PrismaService | Prisma.TransactionClient,
     teacherId: string,
     start: Date,
     end: Date,
     excludeLessonId?: string,
+    batch = false,
   ) {
+    const notThisLesson = excludeLessonId
+      ? { id: { not: excludeLessonId } }
+      : {};
+
     const lessonConflict = await prismaOrTx.scheduledLesson.findFirst({
       where: {
         teacherId,
         status: LessonStatus.UPCOMING,
-        ...(excludeLessonId ? { id: { not: excludeLessonId } } : {}),
+        ...notThisLesson,
         start: { lt: end },
         end: { gt: start },
+        ...(batch ? { NOT: { classType: ClassType.BATCH, start, end } } : {}),
       },
     });
     if (lessonConflict) return lessonConflict;
+
+    if (batch) {
+      const mates = await prismaOrTx.scheduledLesson.findMany({
+        where: {
+          teacherId,
+          classType: ClassType.BATCH,
+          status: LessonStatus.UPCOMING,
+          start,
+          end,
+          ...notThisLesson,
+        },
+      });
+      const students = new Set(mates.map((m) => m.studentUserId));
+      if (students.size >= MAX_STUDENTS_PER_CLASSROOM) return mates[0];
+    }
 
     const shiftConflict = await prismaOrTx.shift.findFirst({
       where: {
@@ -992,6 +1076,8 @@ export class SchedulingService {
               teacherId,
               lesson.start,
               lesson.end,
+              undefined,
+              classType === ClassType.BATCH,
             );
             if (conflict) {
               throw new Error(
@@ -1244,6 +1330,8 @@ export class SchedulingService {
         teacherId,
         start,
         end,
+        undefined,
+        classType === ClassType.BATCH,
       );
       if (!conflict) {
         trailing = { start, end };
