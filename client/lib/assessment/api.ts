@@ -5,9 +5,14 @@
 // free of string-built paths.
 
 import api from '@/lib/axios';
+import { clockOffsetMs } from './clock.ts';
 import type {
+  AttemptState,
   AttemptView,
+  ClassTestOverview,
   LessonTestStatus,
+  LockClassResponse,
+  LockResult,
   ReportDetail,
   ReportListItem,
   ReportSummary,
@@ -33,16 +38,29 @@ export function isNetworkError(err: unknown): boolean {
   return !e?.response;
 }
 
+// Responses that carry the server's clock (`serverTime`) also get
+// `clockOffsetMs`, so every stopwatch counts from the server's start time and not
+// from a computer clock that may be minutes off (see clock.ts).
+async function withClock<T extends { serverTime?: string }>(request: () => Promise<{ data: T }>): Promise<T & { clockOffsetMs: number }> {
+  const sentAt = Date.now();
+  const { data } = await request();
+  return { ...data, clockOffsetMs: clockOffsetMs(data.serverTime, sentAt, Date.now()) };
+}
+
 // ── Student / classroom ─────────────────────────────────────────────────────
 
 export const getTestStatus = (scheduledLessonId: string) =>
-  api.get<LessonTestStatus>(`/assessments/scheduled-lessons/${scheduledLessonId}/status`).then((r) => r.data);
+  withClock(() => api.get<Omit<LessonTestStatus, 'clockOffsetMs'>>(`/assessments/scheduled-lessons/${scheduledLessonId}/status`));
 
 export const getAttempt = (attemptId: string) =>
-  api.get<AttemptView>(`/assessments/attempts/${attemptId}`).then((r) => r.data);
+  withClock(() => api.get<Omit<AttemptView, 'clockOffsetMs'>>(`/assessments/attempts/${attemptId}`));
+
+/** The light poll a test tab makes to learn its test was locked or submitted. */
+export const getAttemptState = (attemptId: string) =>
+  withClock(() => api.get<Omit<AttemptState, 'clockOffsetMs'>>(`/assessments/attempts/${attemptId}/state`));
 
 export const startAttempt = (assessmentId: string, scheduledLessonId: string) =>
-  api.post<AttemptView>(`/assessments/${assessmentId}/attempts/start`, { scheduledLessonId }).then((r) => r.data);
+  withClock(() => api.post<Omit<AttemptView, 'clockOffsetMs'>>(`/assessments/${assessmentId}/attempts/start`, { scheduledLessonId }));
 
 export const saveAnswer = (attemptId: string, questionId: string, selectedIndex: number | null) =>
   api.post(`/assessments/attempts/${attemptId}/answers`, { questionId, selectedIndex }).then((r) => r.data);
@@ -56,6 +74,22 @@ export const submitAttempt = (
 ) => api.post<SubmitResponse>(`/assessments/attempts/${attemptId}/submit`, payload).then((r) => r.data);
 
 // ── Teacher ──────────────────────────────────────────────────────────────────
+
+/** Every learner's progress in this class (a batch is one group of up to four). */
+export const getClassStatus = (scheduledLessonId: string) =>
+  withClock(() => api.get<Omit<ClassTestOverview, 'clockOffsetMs'>>(`/assessments/scheduled-lessons/${scheduledLessonId}/class-status`));
+
+/** "Lock & submit" one learner: their test is submitted with what was saved. */
+export const lockStudentTest = (scheduledLessonId: string) =>
+  api.post<LockResult>(`/assessments/scheduled-lessons/${scheduledLessonId}/lock`).then((r) => r.data);
+
+/** "Time's up" — lock & submit every learner in the class. */
+export const lockClassTests = (scheduledLessonId: string) =>
+  api.post<LockClassResponse>(`/assessments/scheduled-lessons/${scheduledLessonId}/lock-class`).then((r) => r.data);
+
+/** Let a learner who never started (and was locked out) start after all. */
+export const reopenStudentTest = (scheduledLessonId: string) =>
+  api.post<{ reopened: boolean }>(`/assessments/scheduled-lessons/${scheduledLessonId}/reopen`).then((r) => r.data);
 
 export interface TestPreview {
   id: string;

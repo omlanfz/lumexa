@@ -5,7 +5,9 @@ import {
   formatElapsed,
   formatMarks,
   formatPercent,
+  optionsAreShort,
   parseQuestionText,
+  questionHasCode,
   questionHeadline,
   reportStatusMeta,
   splitSections,
@@ -90,4 +92,19 @@ test('questionHeadline: long code lines are shortened, blank lines skipped', () 
 test('questionHeadline: a question that starts with code shows the code; an empty fence falls back to the first line', () => {
   assert.equal(questionHeadline('```python\nprint(1)\n```\nWhat does this print?'), 'print(1)');
   assert.equal(questionHeadline('Look at this:\n```\n```'), 'Look at this:');
+});
+
+test('questionHasCode spots a fenced block but not inline code', () => {
+  assert.equal(questionHasCode('What does `len(x)` return?'), false);
+  assert.equal(questionHasCode('What is printed?\n\n```python\nprint(1)\n```'), true);
+  assert.equal(questionHasCode('Plain question'), false);
+});
+
+test('optionsAreShort: short single lines fit two to a row, long or multi-line ones do not', () => {
+  assert.equal(optionsAreShort(['4', '5', '6', '7']), true);
+  assert.equal(optionsAreShort(['True', 'False']), true);
+  assert.equal(optionsAreShort(['a '.repeat(30), 'b', 'c', 'd']), false);
+  assert.equal(optionsAreShort(['1\n2', '3', '4', '5']), false);
+  assert.equal(optionsAreShort(['only one']), false);
+  assert.equal(optionsAreShort([]), false);
 });

@@ -682,6 +682,12 @@ model ScheduledLesson {
   endReason    ClassEndReason?
   endNote      String?
 
+  // The teacher closed this student's test (the live "lock" button): the
+  // student can no longer start it, and an attempt in progress was submitted
+  // with what was saved. See AssessmentsService.lockStudentTest.
+  testLockedAt       DateTime?
+  testLockedByUserId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1355,6 +1361,10 @@ model AssessmentAttempt {
   startedAt         DateTime?
   submittedAt       DateTime?
   gradedAt          DateTime?
+  // Set when a teacher locked the test and the attempt was auto-submitted with
+  // whatever had been saved (instead of the student pressing Submit).
+  lockedAt          DateTime?
+  lockedByUserId    String?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 

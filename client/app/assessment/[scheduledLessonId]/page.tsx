@@ -1,20 +1,33 @@
 'use client';
 
-// Standalone test page — the same experience as inside the live classroom
-// (AssessmentRunner), for resuming a test after leaving the class, opening
-// results later, or a teacher/admin looking in. Students sit the test with
-// <AssessmentRunner/>; teachers and admins get the monitor and a path to the
-// report card.
+// The test page. For a student this IS their test: it opens in its own browser
+// tab when they press "Start test" in the classroom (?autostart=1), so it can use
+// the whole window and is never covered by a screen share. Teachers and admins
+// get the class's live progress (with the lock buttons, for the teacher) and the
+// test they are running.
 
-import { useSyncExternalStore } from 'react';
-import { useParams } from 'next/navigation';
+import { Suspense, useState, useSyncExternalStore } from 'react';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getStoredRole } from '@/lib/storage';
 import AssessmentRunner from '@/components/assessment/AssessmentRunner';
+import ClassTestMonitor from '@/components/assessment/ClassTestMonitor';
 import TeacherTestMonitor from '@/components/assessment/TeacherTestMonitor';
 
 export default function AssessmentPage() {
+  return (
+    <Suspense fallback={<div className="min-h-dvh bg-[var(--s-bg)]" />}>
+      <AssessmentPageInner />
+    </Suspense>
+  );
+}
+
+function AssessmentPageInner() {
   const params = useParams<{ scheduledLessonId: string }>();
+  const searchParams = useSearchParams();
+  // Read once: ?autostart=1 is for the first load only (the runner takes it off
+  // the address afterwards, which must not re-trigger anything).
+  const [autostart] = useState(() => searchParams.get('autostart') === '1');
   // localStorage is only readable in the browser: `undefined` on the server
   // and during hydration, then the stored role — so both renders agree.
   const role = useSyncExternalStore(
@@ -23,20 +36,31 @@ export default function AssessmentPage() {
     () => undefined,
   );
 
-  const backHref = role === 'TEACHER' ? '/schedule' : role === 'ADMIN' ? '/admin/classes' : '/student-dashboard/learning?tab=lessons';
+  if (role === undefined) {
+    return <div className="min-h-dvh bg-[var(--s-bg)]" />;
+  }
 
+  if (role === 'STUDENT') {
+    return (
+      <div className="min-h-dvh bg-[var(--s-bg)] text-[var(--s-text)]">
+        <AssessmentRunner
+          scheduledLessonId={params.scheduledLessonId}
+          autostart={autostart}
+          backHref="/student-dashboard/learning?tab=lessons"
+          backLabel="Back to my lessons"
+        />
+      </div>
+    );
+  }
+
+  const backHref = role === 'TEACHER' ? '/schedule' : '/admin/classes';
   return (
-    <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
-      <Link href={backHref} className="text-sm text-teal-600 dark:text-teal-400 hover:underline">
+    <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
+      <Link href={backHref} className="inline-block text-sm text-teal-600 hover:underline dark:text-teal-400">
         ← Back
       </Link>
-      {role === undefined ? (
-        <div className="h-64 animate-pulse rounded-xl bg-gray-100 dark:bg-gray-800" />
-      ) : role === 'STUDENT' ? (
-        <AssessmentRunner scheduledLessonId={params.scheduledLessonId} variant="page" />
-      ) : (
-        <TeacherTestMonitor scheduledLessonId={params.scheduledLessonId} variant="teacher" />
-      )}
+      <ClassTestMonitor scheduledLessonId={params.scheduledLessonId} variant="teacher" layout="page" canLock={role === 'TEACHER'} />
+      <TeacherTestMonitor scheduledLessonId={params.scheduledLessonId} variant="teacher" showStudents={false} />
     </div>
   );
 }

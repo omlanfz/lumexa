@@ -117,6 +117,17 @@ export function parseQuestionText(text: string): TextSegment[] {
   return out;
 }
 
+/** Does the question show a code block? Those are laid out side by side with
+ *  their answers on a wide screen: the code on the left, the choices on the right. */
+export function questionHasCode(text: string): boolean {
+  return parseQuestionText(text).some((seg) => seg.type === 'block');
+}
+
+/** Are all the answer options short single lines? Then they fit two to a row. */
+export function optionsAreShort(options: string[], max = 44): boolean {
+  return options.length > 1 && options.every((o) => o.length <= max && !o.includes('\n'));
+}
+
 /** One-line summary of a question for lists: its first line, plus the first
  *  line of its code when it is about a snippet — so "What is printed when this
  *  code runs?" can be told apart from the dozen others like it. */

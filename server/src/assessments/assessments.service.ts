@@ -13,6 +13,11 @@
 //                   the TestReport for the teacher. A second submit (double
 //                   click, two tabs, retry after a dropped response) is a
 //                   harmless no-op that returns the first result.
+//   lockAttempt   → the TEACHER's "Lock & submit" (see class-tests.service.ts):
+//                   the same transaction, from whatever was last saved, plus a
+//                   mark that the teacher closed the test. There is no deadline
+//                   anywhere — the teacher ends the test, so a student is never
+//                   cut off by a clock they cannot see.
 //
 // The questions of a test live on its "root bank" (see linked-assessment.ts) —
 // the assessment itself, or the original assessment a custom curriculum's
@@ -172,6 +177,7 @@ export class AssessmentsService {
         courseId: true,
         lessonNumber: true,
         lessonId: true,
+        testLockedAt: true,
       },
     });
     if (!sl || sl.studentUserId !== studentUserId)
@@ -198,6 +204,11 @@ export class AssessmentsService {
       });
 
     // Only a brand-new attempt is gated.
+    if (sl.testLockedAt) {
+      throw new ForbiddenException(
+        'Your teacher has closed this test, so it can no longer be started.',
+      );
+    }
     if (!assessment.isPublished)
       throw new ForbiddenException('This test has not been published yet.');
     if (sl.status !== LessonStatus.UPCOMING) {
@@ -240,6 +251,17 @@ export class AssessmentsService {
 
     try {
       const attempt = await this.prisma.$transaction(async (tx) => {
+        // The teacher may have locked this test since the checks above. The
+        // shared row lock makes "start" and the teacher's "close" take turns:
+        // whichever comes second sees the first one's result.
+        const [locked] = await tx.$queryRaw<{ testLockedAt: Date | null }[]>(
+          Prisma.sql`SELECT "testLockedAt" FROM "ScheduledLesson" WHERE "id" = ${scheduledLessonId} FOR SHARE`,
+        );
+        if (locked?.testLockedAt) {
+          throw new ForbiddenException(
+            'Your teacher has closed this test, so it can no longer be started.',
+          );
+        }
         const created = await tx.assessmentAttempt.create({
           data: {
             assessmentId,
@@ -529,8 +551,44 @@ export class AssessmentsService {
       startedAt: attempt.startedAt,
       submittedAt: attempt.submittedAt,
       gradedAt: attempt.gradedAt,
+      // Set when the teacher locked the test (it was submitted for the student).
+      lockedAt: attempt.lockedAt,
+      lockedByTeacher: !!attempt.lockedAt,
+      // The clock the student's stopwatch is measured against — the browser's
+      // own clock may be minutes off, which must not start the test at 03:12.
+      serverTime: new Date(),
       report: report ? { id: report.id, status: report.status } : null,
       result: result ?? legacyResult,
+    };
+  }
+
+  /** The cheap, frequent question a test tab asks: "is my test still open?"
+   *  — answered without loading any questions. */
+  async getAttemptState(attemptId: string, requester: Requester) {
+    const attempt = await this.prisma.assessmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: {
+        id: true,
+        status: true,
+        startedAt: true,
+        submittedAt: true,
+        lockedAt: true,
+        studentUserId: true,
+        student: { select: { assignedTeacher: { select: { userId: true } } } },
+        scheduledLesson: { select: { teacher: { select: { userId: true } } } },
+      },
+    });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    this.assertCanView(attempt, requester);
+    return {
+      id: attempt.id,
+      status: attempt.status,
+      released: attempt.status === AttemptStatus.GRADED,
+      startedAt: attempt.startedAt,
+      submittedAt: attempt.submittedAt,
+      lockedAt: attempt.lockedAt,
+      lockedByTeacher: !!attempt.lockedAt,
+      serverTime: new Date(),
     };
   }
 
@@ -572,16 +630,23 @@ export class AssessmentsService {
   ): Promise<T> {
     return this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<
-        { studentUserId: string; status: AttemptStatus; assessmentId: string }[]
+        {
+          studentUserId: string;
+          status: AttemptStatus;
+          assessmentId: string;
+          lockedAt: Date | null;
+        }[]
       >(
-        Prisma.sql`SELECT "studentUserId", "status", "assessmentId" FROM "AssessmentAttempt" WHERE "id" = ${attemptId} FOR SHARE`,
+        Prisma.sql`SELECT "studentUserId", "status", "assessmentId", "lockedAt" FROM "AssessmentAttempt" WHERE "id" = ${attemptId} FOR SHARE`,
       );
       const row = rows[0];
       if (!row) throw new NotFoundException('Attempt not found');
       if (row.studentUserId !== studentUserId) throw new ForbiddenException();
       if (row.status !== AttemptStatus.IN_PROGRESS) {
         throw new ConflictException(
-          'This test has already been submitted, so answers can no longer be changed.',
+          row.lockedAt
+            ? 'Your teacher locked this test, so answers can no longer be changed.'
+            : 'This test has already been submitted, so answers can no longer be changed.',
         );
       }
       return fn(tx, { assessmentId: row.assessmentId });
@@ -691,19 +756,55 @@ export class AssessmentsService {
     if (pre.studentUserId !== studentUserId) throw new ForbiddenException();
     if (pre.status !== AttemptStatus.IN_PROGRESS)
       return this.submissionSummary(attemptId, true);
+    return this.finalizeSubmission(attemptId, studentUserId, dto, null);
+  }
 
+  /** The teacher's "Lock & submit" for one learner: submits the attempt exactly
+   *  as it was last saved, and closes the class's test. Called by
+   *  ClassTestsService, which has already checked the teacher may do this. */
+  async lockAttempt(
+    attemptId: string,
+    studentUserId: string,
+    scheduledLessonId: string,
+    lockedByUserId: string,
+  ) {
+    return this.finalizeSubmission(
+      attemptId,
+      studentUserId,
+      {},
+      { byUserId: lockedByUserId, scheduledLessonId },
+    );
+  }
+
+  /** Locks an attempt in and creates its report card. Used by the student's own
+   *  Submit and by the teacher's lock (`lock` set), which submits whatever was
+   *  saved — in the same transaction, so a lock can never leave an attempt
+   *  half-submitted. Whoever claims the attempt first wins; the other caller
+   *  gets the first result back. */
+  private async finalizeSubmission(
+    attemptId: string,
+    studentUserId: string,
+    dto: SubmitAttemptDto,
+    lock: { byUserId: string; scheduledLessonId: string } | null,
+  ) {
     const outcome = await this.prisma.$transaction(
       async (tx) => {
         // 1. Lock in. The UPDATE takes the row lock: it waits for any in-flight
         //    autosave (SHARE lock) and blocks new ones until we commit. Zero
         //    rows = another request submitted first.
+        const now = new Date();
         const claimed = await tx.assessmentAttempt.updateMany({
           where: {
             id: attemptId,
             studentUserId,
             status: AttemptStatus.IN_PROGRESS,
           },
-          data: { status: AttemptStatus.SUBMITTED, submittedAt: new Date() },
+          data: {
+            status: AttemptStatus.SUBMITTED,
+            submittedAt: now,
+            // A teacher's lock is stamped with the very same instant.
+            ...(lock ? { lockedAt: now, lockedByUserId: lock.byUserId } : {}),
+          },
         });
         if (claimed.count === 0) return null;
 
@@ -878,6 +979,13 @@ export class AssessmentsService {
             practicalMaxScore: coding?.maxScore ?? 0,
           },
         });
+        if (lock) {
+          // Remember that the teacher closed this student's test.
+          await tx.scheduledLesson.update({
+            where: { id: lock.scheduledLessonId },
+            data: { testLockedAt: now, testLockedByUserId: lock.byUserId },
+          });
+        }
         return { reportId: report.id, teacherId };
       },
       { timeout: 30_000, maxWait: 10_000 },
@@ -885,11 +993,14 @@ export class AssessmentsService {
 
     if (outcome === null) return this.submissionSummary(attemptId, true);
 
-    this.notifyTeacherOfSubmission(outcome.reportId).catch((err) =>
-      this.logger.warn(
-        `Could not alert the teacher about report ${outcome.reportId}: ${err}`,
-      ),
-    );
+    // A teacher who pressed lock does not need an alert about it.
+    if (!lock) {
+      this.notifyTeacherOfSubmission(outcome.reportId).catch((err) =>
+        this.logger.warn(
+          `Could not alert the teacher about report ${outcome.reportId}: ${err}`,
+        ),
+      );
+    }
     return this.submissionSummary(attemptId, false);
   }
 
@@ -950,6 +1061,7 @@ export class AssessmentsService {
         id: true,
         studentUserId: true,
         status: true,
+        testLockedAt: true,
         teacher: { select: { userId: true } },
         student: {
           select: {
@@ -978,6 +1090,7 @@ export class AssessmentsService {
             status: true,
             startedAt: true,
             submittedAt: true,
+            lockedAt: true,
             mcqQuestionIds: true,
             mcqAnswers: { select: { selectedIndex: true } },
             report: { select: { id: true, status: true } },
@@ -1008,12 +1121,17 @@ export class AssessmentsService {
             ...(await this.bankSummary(assessment)),
           }
         : null,
+      // The teacher closed this class's test before the student started it.
+      closedAt: attempt ? null : sl.testLockedAt,
+      serverTime: new Date(),
       attempt: attempt
         ? {
             id: attempt.id,
             status: attempt.status,
             startedAt: attempt.startedAt,
             submittedAt: attempt.submittedAt,
+            lockedAt: attempt.lockedAt,
+            lockedByTeacher: !!attempt.lockedAt,
             total: attempt.mcqQuestionIds.length,
             answered: attempt.mcqAnswers.filter((a) => a.selectedIndex !== null)
               .length,

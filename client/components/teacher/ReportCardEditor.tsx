@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, CheckCircle2, Copy, Loader2, Mail, Printer, RotateCcw, Save, XCircle } from 'lucide-react';
 import { approveReport, errorMessage, getReport, reopenReport, shareReport, updateReport, type ReportEdit } from '@/lib/assessment/api';
-import { formatMarks, formatPercent, questionHeadline, reportStatusMeta } from '@/lib/assessment/progress';
+import { formatElapsed, formatMarks, formatPercent, questionHeadline, reportStatusMeta } from '@/lib/assessment/progress';
 import { objectivePreview, rubricTotal, totalsPreview, validateMark } from '@/lib/assessment/reportMath';
 import type { ReportDetail, ReportQuestion } from '@/lib/assessment/types';
 import QuestionText from '@/components/assessment/QuestionText';
@@ -253,9 +253,20 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
           <Row label="Course" value={report.courseTitle} />
           <Row label="Assessment" value={`${report.typeLabel} — ${report.testTitle}`} />
           <Row label="Date taken" value={dateTaken} />
+          {report.timeline.timeTakenSeconds !== null && <Row label="Time taken" value={formatElapsed(report.timeline.timeTakenSeconds * 1000)} />}
           <Row label="Teacher" value={report.teacher.fullName} />
           <Row label="Pass mark" value={`${report.passScorePct}%`} />
         </dl>
+        {report.timeline.lockedByTeacherAt && (
+          <p
+            className="mx-5 mb-4 rounded-lg border border-[var(--t-warning)]/40 bg-[var(--t-warning)]/10 px-3 py-2 text-xs text-[var(--t-text)]"
+            data-testid="locked-by-teacher-note"
+          >
+            🔒 The teacher locked this test when time was up (
+            {new Date(report.timeline.lockedByTeacherAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}), so it contains only the answers{' '}
+            {report.student.fullName} had saved by then. Unanswered questions count as incorrect.
+          </p>
+        )}
 
         <div className="overflow-x-auto px-5 pb-5">
           <table className="w-full min-w-[22rem] text-sm">

@@ -41,7 +41,7 @@ import {
 } from '@livekit/components-react';
 import { AlertTriangle, Hand, PhoneOff, Minimize2, Monitor } from 'lucide-react';
 import Header from './Header';
-import Stage, { stageShowsLesson } from './Stage';
+import Stage from './Stage';
 import FilmStrip from './FilmStrip';
 import ParticipantRail from './ParticipantRail';
 import ControlBar, { PanelKind, RecordingUiState } from './ControlBar';
@@ -49,6 +49,7 @@ import ParticipantsPanel from './ParticipantsPanel';
 import ChatPanel from './ChatPanel';
 import LessonSidePanel from './LessonSidePanel';
 import ConnectionBanner from './ConnectionBanner';
+import ClassTestMonitor from '@/components/assessment/ClassTestMonitor';
 import ReactionsOverlay from './ReactionsOverlay';
 import EndClassModal from './EndClassModal';
 import { parseParticipantMeta } from '@/lib/classroom/types';
@@ -196,15 +197,15 @@ export default function ClassroomRoom({
   // demo example, so demo's main stage keeps showing the camera by default.
   const lessonPanelData = lessonData ?? (demo ? demoExampleLesson ?? null : null);
   const isRecordingLive = !!classroomState.recording;
-  // Is the main stage currently showing the lesson (and so hosting a live
-  // test)? If so the View Lesson side panel must not open a second copy.
-  const testHostedInStage = stageShowsLesson({
-    screenShareCount: screenShareRefs.length,
-    spotlightIdentity,
-    pinnedIdentity,
-    cameraTracks,
-    hasLesson: !!lessonData,
-  });
+  // A test session: students take the test in their OWN browser tab (they
+  // share their whole screen while they do, and a share takes over the stage),
+  // so the teacher's view of everyone's progress — and the lock buttons — is a
+  // dock that stays put whatever the stage shows: the lesson, a camera, one
+  // shared screen or four.
+  const testSessionId =
+    isTeacher && lessonData?.available && lessonData.isTest && lessonData.session.scheduledLessonId
+      ? lessonData.session.scheduledLessonId
+      : null;
   const presentationMode = !!screenShare;
   const expectedDurationMinutes = classType === 'BATCH' ? 60 : 45;
 
@@ -582,6 +583,26 @@ export default function ClassroomRoom({
             </div>
           )}
 
+          {/* One monitor, restyled (never remounted) when a screen share goes
+              fullscreen: then it floats over the video, below the header. */}
+          {testSessionId && (
+            <div
+              className={
+                fullscreenTrack
+                  ? 'pointer-events-none fixed inset-x-3 top-[60px] z-40 sm:right-[17rem]'
+                  : 'relative z-10 flex-shrink-0'
+              }
+            >
+              <div className={fullscreenTrack ? 'pointer-events-auto max-w-5xl' : ''}>
+                <ClassTestMonitor
+                  scheduledLessonId={testSessionId}
+                  variant="classroom"
+                  layout={fullscreenTrack ? 'overlay' : 'dock'}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 min-h-0 relative">
             <Stage
               cameraTracks={cameraTracks}
@@ -629,7 +650,6 @@ export default function ClassroomRoom({
             focused={lessonFocused}
             onToggleFocused={() => setLessonFocused((v) => !v)}
             overlay={!!fullscreenTrack}
-            testHostedElsewhere={testHostedInStage}
           />
         )}
 

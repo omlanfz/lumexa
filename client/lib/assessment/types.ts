@@ -82,8 +82,30 @@ export interface AttemptView {
   startedAt: string | null;
   submittedAt: string | null;
   gradedAt: string | null;
+  /** Set when the teacher locked the test: it was submitted with whatever had
+   *  been saved by then. */
+  lockedAt: string | null;
+  lockedByTeacher: boolean;
+  /** The server's clock when this was sent. */
+  serverTime: string;
+  /** Added by lib/assessment/api: server clock minus this computer's clock
+   *  (ms), so the stopwatch is right even when the local clock is not. */
+  clockOffsetMs: number;
   report: { id: string; status: ReportStatus } | null;
   result: AttemptResult | null;
+}
+
+/** The cheap "is my test still open?" answer a test tab polls. */
+export interface AttemptState {
+  id: string;
+  status: AttemptStatus;
+  released: boolean;
+  startedAt: string | null;
+  submittedAt: string | null;
+  lockedAt: string | null;
+  lockedByTeacher: boolean;
+  serverTime: string;
+  clockOffsetMs: number;
 }
 
 export interface LessonTestStatus {
@@ -98,15 +120,81 @@ export interface LessonTestStatus {
     totalMarks: number;
     meetsStandard: boolean;
   } | null;
+  /** The teacher closed this class's test before the student started it. */
+  closedAt: string | null;
+  serverTime: string;
+  clockOffsetMs: number;
   attempt: {
     id: string;
     status: AttemptStatus;
     startedAt: string | null;
     submittedAt: string | null;
+    lockedAt: string | null;
+    lockedByTeacher: boolean;
     total: number;
     answered: number;
   } | null;
   report: { id: string; status: ReportStatus } | null;
+}
+
+// ── Teacher's class monitor + lock ──────────────────────────────────────────
+
+/** NOT_STARTED · IN_PROGRESS · SUBMITTED (by the learner, or by the teacher's
+ *  lock — see attempt.lockedAt) · CLOSED (the teacher closed the test before
+ *  this learner started it). */
+export type ClassTestState = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'CLOSED';
+
+export interface ClassTestStudent {
+  scheduledLessonId: string;
+  studentUserId: string;
+  studentName: string;
+  state: ClassTestState;
+  closedAt: string | null;
+  attempt: {
+    id: string;
+    status: AttemptStatus;
+    startedAt: string | null;
+    submittedAt: string | null;
+    lockedAt: string | null;
+    total: number;
+    answered: number;
+    codingSaved: boolean;
+    report: { id: string; status: ReportStatus } | null;
+  } | null;
+}
+
+export interface ClassTestOverview {
+  scheduledLessonId: string;
+  serverTime: string;
+  clockOffsetMs: number;
+  assessment: {
+    id: string;
+    type: TestType;
+    title: string;
+    isPublished: boolean;
+    counts: { mcq: number; trueFalse: number; practical: number };
+    totalMarks: number;
+    meetsStandard: boolean;
+  } | null;
+  students: ClassTestStudent[];
+}
+
+export type LockOutcome = 'SUBMITTED' | 'ALREADY_SUBMITTED' | 'CLOSED' | 'ALREADY_CLOSED' | 'FAILED';
+
+export interface LockResult {
+  scheduledLessonId: string;
+  studentUserId: string;
+  studentName: string;
+  outcome: LockOutcome;
+  error?: string;
+}
+
+export interface LockClassResponse {
+  results: LockResult[];
+  submitted: number;
+  closed: number;
+  alreadyDone: number;
+  failed: number;
 }
 
 export interface SubmitResponse {
@@ -174,7 +262,17 @@ export interface ReportDetail {
   strengths: string | null;
   improvements: string | null;
   teacherEdited: boolean;
-  timeline: { submittedAt: string; lastEditedAt: string | null; approvedAt: string | null; sharedAt: string | null };
+  timeline: {
+    startedAt: string | null;
+    submittedAt: string;
+    /** Set when the teacher locked the test instead of the student handing it
+     *  in — the answers are whatever had been saved by then. */
+    lockedByTeacherAt: string | null;
+    timeTakenSeconds: number | null;
+    lastEditedAt: string | null;
+    approvedAt: string | null;
+    sharedAt: string | null;
+  };
   share: {
     recipient: { email: string; kind: 'BILLING_CONTACT' | 'STUDENT_ACCOUNT' };
     sharedAt: string | null;

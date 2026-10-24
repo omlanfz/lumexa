@@ -74,13 +74,55 @@ copying it — see `linked-assessment.ts`.
 Report states: `PENDING_REVIEW` · `PENDING_CODE_EVALUATION` (Final Tests, until
 every rubric criterion is marked) · `READY_TO_SHARE` · `SHARED_WITH_PARENTS`.
 
+## Running a test live: the class monitor and the lock
+
+There is **no fixed time limit**. Time is the teacher's call (and learners start
+at different moments), so the teacher ends the test; the stopwatch a student sees
+is only informational. It counts from the server's `startedAt` — the API sends
+`serverTime` with every attempt/status response and the client corrects for its
+own clock, so a test starts at 00:00 even on a computer whose clock is wrong.
+
+Students take the test in **their own browser tab** (the classroom's *Start test*
+opens `/assessment/<scheduledLessonId>?autostart=1`) while they share their whole
+screen — a screen share takes over the classroom stage, so a test living inside
+the classroom would vanish. The teacher watches everyone from a dock the
+classroom keeps above its stage whatever the stage shows
+(`client/components/assessment/ClassTestMonitor.tsx`).
+
+| Control | Endpoint (`/assessments/…`) | What it does |
+| ------- | --------------------------- | ------------ |
+| Class overview | `GET scheduled-lessons/:id/class-status` | every learner's state, answers so far, coding progress and the server clock |
+| **Lock & submit** (one learner) | `POST scheduled-lessons/:id/lock` | in progress → submitted exactly as last saved (report card created, nothing saved is lost); not started → the test is closed |
+| **Time's up — lock & submit all** | `POST scheduled-lessons/:id/lock-class` | the same for every learner of the class; one failing never stops the rest, and it is safe to press twice |
+| Reopen | `POST scheduled-lessons/:id/reopen` | undo a close for a learner who never started (a submitted test can never be reopened) |
+| Is my test still open? | `GET attempts/:id/state` | what a test tab polls every few seconds to learn it was locked |
+
+Only the class's teacher (or an admin) may use these. After a lock the learner's
+saves are refused with *"Your teacher locked this test…"* (409), they cannot start
+the test, and their report card says the teacher locked it (`timeline.lockedByTeacherAt`,
+plus time taken).
+
+**Who sits a test together?** The scheduling model has one `ScheduledLesson` per
+learner, so a group is every `UPCOMING` class of the same teacher, course and lesson
+number whose time overlaps the one being looked at — a 1:1 class is a group of one.
+That definition lives in one function, `classGroupWhere` (`class-tests.service.ts`);
+if batches ever get an entity of their own, only it changes.
+
+**Concurrency** (proved against Postgres in `class-tests.integration.spec.ts`): a
+lock and a learner's own *Submit* race through the attempt row (whoever claims it
+first wins, the other gets the first result); a lock and a *Start test* take turns
+through the class row (`FOR SHARE` on start, `FOR UPDATE` on close), so a learner
+can never be left with an open attempt behind a closed test. Columns:
+`AssessmentAttempt.lockedAt/lockedByUserId`, `ScheduledLesson.testLockedAt/testLockedByUserId`.
+
 ## Tests
 
 - Unit: `npx jest src/assessments` (grading math, report builder, bank
   validation/materialisation/verification, the content gate over every bank,
   the service rules with a mocked Prisma).
-- Real Postgres (skipped unless the variable is set): the bank sync and the whole
-  HTTP workflow. The database is **wiped** — use a throwaway one whose name
+- Real Postgres (skipped unless the variable is set): the bank sync, the whole
+  HTTP workflow and the teacher's lock (with a simulated four-student batch and
+  the lock/start/submit races). The database is **wiped** — use a throwaway one whose name
   contains `it`, `test` or `integration`:
 
   ```bash

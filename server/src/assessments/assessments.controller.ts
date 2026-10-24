@@ -18,6 +18,7 @@ import { Role } from '@prisma/client';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { AssessmentsService } from './assessments.service';
+import { ClassTestsService } from './class-tests.service';
 import {
   CreateMCQQuestionDto,
   CreatePracticalQuestionDto,
@@ -41,7 +42,10 @@ const AUTOSAVE_LIMIT = { default: { limit: 600, ttl: 60_000 } };
 @Controller('assessments')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 export class AssessmentsController {
-  constructor(private readonly assessments: AssessmentsService) {}
+  constructor(
+    private readonly assessments: AssessmentsService,
+    private readonly classTests: ClassTestsService,
+  ) {}
 
   // ── Student attempt flow ──────────────────────────────────────────────────
 
@@ -62,6 +66,14 @@ export class AssessmentsController {
   @Get('attempts/:attemptId')
   getAttempt(@Param('attemptId') attemptId: string, @Req() req: any) {
     return this.assessments.getAttempt(attemptId, req.user);
+  }
+
+  /** Is my test still open? Polled by the test tab every few seconds — and a
+   *  lab full of students shares one address, hence the generous ceiling. */
+  @Get('attempts/:attemptId/state')
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
+  getAttemptState(@Param('attemptId') attemptId: string, @Req() req: any) {
+    return this.assessments.getAttemptState(attemptId, req.user);
   }
 
   @Post('attempts/:attemptId/answers')
@@ -105,6 +117,51 @@ export class AssessmentsController {
     @Req() req: any,
   ) {
     return this.assessments.getLessonTestStatus(scheduledLessonId, req.user);
+  }
+
+  // ── Teacher: watch the class take the test, and lock it ───────────────────
+  // `scheduledLessonId` is the teacher's own class (any learner's class in the
+  // group works for the overview and for lock-class).
+
+  /** Every learner's progress in this class, at a glance. */
+  @Get('scheduled-lessons/:scheduledLessonId/class-status')
+  @Roles(Role.TEACHER, Role.ADMIN)
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  getClassStatus(
+    @Param('scheduledLessonId') scheduledLessonId: string,
+    @Req() req: any,
+  ) {
+    return this.classTests.getOverview(scheduledLessonId, req.user);
+  }
+
+  /** "Lock & submit" for ONE learner. */
+  @Post('scheduled-lessons/:scheduledLessonId/lock')
+  @Roles(Role.TEACHER, Role.ADMIN)
+  lockStudentTest(
+    @Param('scheduledLessonId') scheduledLessonId: string,
+    @Req() req: any,
+  ) {
+    return this.classTests.lockStudent(scheduledLessonId, req.user);
+  }
+
+  /** "Time's up" — lock & submit every learner in the class. */
+  @Post('scheduled-lessons/:scheduledLessonId/lock-class')
+  @Roles(Role.TEACHER, Role.ADMIN)
+  lockClassTests(
+    @Param('scheduledLessonId') scheduledLessonId: string,
+    @Req() req: any,
+  ) {
+    return this.classTests.lockClass(scheduledLessonId, req.user);
+  }
+
+  /** Reopen a test that was closed before the learner started it. */
+  @Post('scheduled-lessons/:scheduledLessonId/reopen')
+  @Roles(Role.TEACHER, Role.ADMIN)
+  reopenStudentTest(
+    @Param('scheduledLessonId') scheduledLessonId: string,
+    @Req() req: any,
+  ) {
+    return this.classTests.reopenStudent(scheduledLessonId, req.user);
   }
 
   /** Teacher's preview of the test they are running. Answers are only sent
