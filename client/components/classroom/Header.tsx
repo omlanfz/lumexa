@@ -10,6 +10,7 @@
 
 'use client';
 
+import { Lock, LockOpen, Loader2 } from 'lucide-react';
 import ClassTimer from './ClassTimer';
 import ThemeToggle from './ThemeToggle';
 import type { ClassroomTheme } from '@/lib/classroom/useClassroomTheme';
@@ -19,6 +20,12 @@ interface HeaderProps {
   sessionSubtitle?: string;
   isLive: boolean;
   recording?: boolean;
+  /** The teacher has locked the classroom: no one new can join. */
+  roomLocked?: boolean;
+  /** Teacher only — turns the lock on/off. Omitted for everyone else, who just
+   * see the chip while the room is locked. */
+  onToggleLock?: () => void;
+  lockBusy?: boolean;
   scheduledStart?: string;
   expectedDurationMinutes?: number;
   onTimerMilestone?: () => void;
@@ -35,6 +42,9 @@ export default function Header({
   sessionSubtitle,
   isLive,
   recording,
+  roomLocked,
+  onToggleLock,
+  lockBusy,
   scheduledStart,
   expectedDurationMinutes,
   onTimerMilestone,
@@ -71,6 +81,50 @@ export default function Header({
             expectedDurationMinutes={expectedDurationMinutes}
             onMilestone={onTimerMilestone}
           />
+        )}
+        {onToggleLock ? (
+          <button
+            type="button"
+            onClick={onToggleLock}
+            disabled={lockBusy}
+            data-testid="room-lock-toggle"
+            data-locked={roomLocked ? 'true' : 'false'}
+            aria-pressed={!!roomLocked}
+            data-tooltip={
+              roomLocked
+                ? 'Classroom locked — no one can join. Click to unlock.'
+                : 'Classroom open. Click to lock it so no one else can join.'
+            }
+            data-tooltip-pos="bottom"
+            data-tooltip-align="end"
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[11px] font-semibold transition-colors disabled:opacity-60 ${
+              roomLocked
+                ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25'
+                : 'border-[var(--cr-border)] text-[var(--cr-text-muted)] hover:text-[var(--cr-text)] hover:bg-[var(--cr-surface-2)]'
+            }`}
+          >
+            {lockBusy ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : roomLocked ? (
+              <Lock size={12} />
+            ) : (
+              <LockOpen size={12} />
+            )}
+            <span className="hidden sm:inline">{roomLocked ? 'Locked' : 'Open'}</span>
+          </button>
+        ) : (
+          roomLocked && (
+            <span
+              data-testid="room-locked-chip"
+              data-tooltip="The teacher has locked the classroom, so no one else can join."
+              data-tooltip-pos="bottom"
+              data-tooltip-align="end"
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-amber-500/40 bg-amber-500/15 text-[11px] font-semibold text-amber-400"
+            >
+              <Lock size={12} />
+              <span className="hidden sm:inline">Locked</span>
+            </span>
+          )
         )}
         {recording && (
           <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-[11px] font-bold uppercase tracking-wide">

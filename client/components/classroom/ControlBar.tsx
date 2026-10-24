@@ -2,7 +2,7 @@
 //
 // The bottom control bar. Order is role-specific per the design brief:
 //   Student: Mic | Camera | Screen Share | Effects | Raise Hand | Chat | More | Leave
-//   Teacher: Mic | Camera | Screen Share | Record | Effects | Raise Hand | Chat | Participants | More | End Class
+//   Teacher: Mic | Camera | Screen Share | Record | Effects | Raise Hand | Chat | Participants | Award Badge | More | End Class
 // Every popover here (device menus, effects, more/class-controls) shares
 // one "which popover is open" state plus useClickOutside, so opening one
 // always closes any other and Esc/outside-click always closes whichever is
@@ -28,18 +28,22 @@ import {
   Circle,
   Square,
   Loader2,
+  Award,
 } from 'lucide-react';
 import IconButton from './IconButton';
 import DeviceMenu from './DeviceMenu';
 import ClassControlsMenu from './ClassControlsMenu';
 import VideoEffectsPanel from './VideoEffectsPanel';
+import AwardBadgePanel from './AwardBadgePanel';
 import { useClickOutside } from '@/lib/classroom/useClickOutside';
+import type { AwardResponse } from '@/lib/classroom/badgeAward';
+import type { StudentInRoom } from '@/lib/classroom/people';
 import type { ClassroomState } from '@/lib/classroom/types';
 import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
 import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 
 export type PanelKind = 'chat' | 'participants' | 'lesson' | null;
-type PopoverKind = 'mic' | 'cam' | 'effects' | 'more' | null;
+type PopoverKind = 'mic' | 'cam' | 'effects' | 'more' | 'badges' | null;
 export type RecordingUiState = 'inactive' | 'active' | 'starting' | 'stopping';
 
 interface ControlBarProps {
@@ -88,6 +92,19 @@ interface ControlBarProps {
    * of the room's own theme — used only when floating over a fullscreened
    * shared screen (see ClassroomRoom). */
   floating?: boolean;
+
+  /** Teacher only: whether the classroom is locked (no one new can join) and how
+   * to flip it — shown in the More menu. */
+  roomLocked?: boolean;
+  onToggleRoomLock?: () => void;
+
+  /** Teacher only: the Award Badge button and its popover. */
+  awardBadge?: {
+    roomName: string;
+    isBatch: boolean;
+    students: StudentInRoom[];
+    onAwarded: (result: AwardResponse) => void;
+  };
 }
 
 export default function ControlBar({
@@ -122,6 +139,9 @@ export default function ControlBar({
   endClassDisabledReason,
   onViewLesson,
   floating,
+  roomLocked,
+  onToggleRoomLock,
+  awardBadge,
 }: ControlBarProps) {
   const [openPopover, setOpenPopover] = useState<PopoverKind>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -262,6 +282,30 @@ export default function ControlBar({
     />
   );
 
+  // On a phone the popover spans the bar (it is positioned against the bar
+  // itself); from `sm` up it hangs from the button.
+  const awardBadgeButton = isTeacher && awardBadge && (
+    <div className="sm:relative">
+      <IconButton
+        icon={Award}
+        label="Award badge"
+        onClick={() => toggle('badges')}
+        active={openPopover === 'badges'}
+      />
+      {openPopover === 'badges' && (
+        <div className="absolute bottom-full mb-2 left-3 right-3 sm:left-auto sm:right-0 sm:w-[26rem] z-30">
+          <AwardBadgePanel
+            roomName={awardBadge.roomName}
+            isBatch={awardBadge.isBatch}
+            students={awardBadge.students}
+            onClose={() => setOpenPopover(null)}
+            onAwarded={awardBadge.onAwarded}
+          />
+        </div>
+      )}
+    </div>
+  );
+
   const moreButton = (
     <div className="relative">
       <IconButton icon={MoreHorizontal} label="More" onClick={() => toggle('more')} active={openPopover === 'more'} />
@@ -274,6 +318,8 @@ export default function ControlBar({
             onMuteAll={onMuteAll}
             onClose={() => setOpenPopover(null)}
             onViewLesson={onViewLesson}
+            roomLocked={roomLocked}
+            onToggleRoomLock={onToggleRoomLock}
           />
         </div>
       )}
@@ -283,7 +329,10 @@ export default function ControlBar({
   return (
     <div
       ref={containerRef}
-      className={`flex items-center justify-between gap-2 px-3 sm:px-5 h-[76px] flex-shrink-0 ${
+      // On a phone the buttons wrap onto a second row instead of running off the
+      // edge of the screen (the teacher's bar is ~620px wide, the student's ~460px);
+      // from `md` up it is the single 76px row it always was.
+      className={`relative flex flex-wrap md:flex-nowrap items-center justify-between gap-x-2 gap-y-1.5 px-3 sm:px-5 py-1.5 md:py-0 min-h-[76px] md:h-[76px] flex-shrink-0 ${
         floating ? 'bg-black/40 backdrop-blur-xl border-t border-white/10' : 'border-t border-[var(--cr-border)] bg-[var(--cr-bg)]'
       }`}
     >
@@ -300,6 +349,7 @@ export default function ControlBar({
           <div className="flex items-center gap-2">
             {chatButton}
             {participantsButton}
+            {awardBadgeButton}
             {moreButton}
             <button
               onClick={onOpenEndClass}

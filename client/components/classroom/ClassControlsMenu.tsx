@@ -1,7 +1,7 @@
 // FILE PATH: client/components/classroom/ClassControlsMenu.tsx
 //
 // The "More" popover. Teacher-only classroom management (mute all, allow
-// students to unmute, lock chat) — End Class now lives as its own bottom-bar
+// students to unmute, lock chat, lock the classroom) — End Class now lives as its own bottom-bar
 // button + EndClassModal, not buried in here. Students get the same
 // trigger button in the bar (see ControlBar) but never see any of the
 // teacher-only moderation actions.
@@ -25,6 +25,10 @@ interface ClassControlsMenuProps {
   /** Omitted (undefined) when this room has no lesson material at all — the
    * item is hidden rather than shown disabled. */
   onViewLesson?: () => void;
+  /** Whether the teacher has locked the classroom (no one new can join), and
+   * how to flip it. */
+  roomLocked?: boolean;
+  onToggleRoomLock?: () => void;
 }
 
 export default function ClassControlsMenu({
@@ -34,6 +38,8 @@ export default function ClassControlsMenu({
   onMuteAll,
   onClose,
   onViewLesson,
+  roomLocked,
+  onToggleRoomLock,
 }: ClassControlsMenuProps) {
   const studentsCanUnmute = !state.studentsMuted;
 
@@ -74,6 +80,34 @@ export default function ClassControlsMenu({
 
       <div className="p-2">
         {viewLessonButton}
+
+        {onToggleRoomLock && (
+          <button
+            onClick={onToggleRoomLock}
+            data-testid="menu-lock-classroom"
+            aria-pressed={!!roomLocked}
+            className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--cr-text)] hover:bg-[var(--cr-surface-2)] transition-colors"
+          >
+            <span className="flex flex-col items-start">
+              <span className="flex items-center gap-3">
+                {roomLocked ? (
+                  <Lock size={16} className="text-amber-400" />
+                ) : (
+                  <Unlock size={16} className="text-[var(--cr-text-muted)]" />
+                )}
+                Lock classroom
+              </span>
+              <span className="pl-7 text-[11px] text-[var(--cr-text-faint)]">
+                {roomLocked ? 'No one new can join' : 'Anyone in the class can join'}
+              </span>
+            </span>
+            {roomLocked ? (
+              <ToggleRight size={22} className="text-[var(--cr-accent)]" />
+            ) : (
+              <ToggleLeft size={22} className="text-[var(--cr-text-faint)]" />
+            )}
+          </button>
+        )}
 
         <button
           onClick={() => {

@@ -1,17 +1,25 @@
 // FILE PATH: client/components/classroom/ParticipantTile.tsx
 //
-// A single participant's camera tile — used in the main stage, the
-// filmstrip, and the default grid. Shows name/role, mic/cam state,
-// connection quality and raised-hand, with an optional pin affordance.
+// A single PERSON's camera tile — used in the main stage, the filmstrip, and
+// the default grid. Shows name/role, mic/cam state, connection quality and
+// raised-hand, with an optional pin affordance.
+//
+// A person may be connected from several devices (see lib/classroom/
+// identity.ts). The tile shows the video of whichever device has the camera on
+// (the caller picks it, see pickPersonTiles) while the microphone, speaking and
+// screen-share indicators reflect ALL of that person's devices.
 
 'use client';
 
 import { Mic, MicOff, Hand, Pin, PinOff, Wifi, WifiOff, GraduationCap, MonitorUp } from 'lucide-react';
 import type { Participant } from 'livekit-client';
 import { ConnectionQuality } from 'livekit-client';
-import { isTrackReference, VideoTrack, useConnectionQualityIndicator, useIsSpeaking } from '@livekit/components-react';
+import { isTrackReference, VideoTrack, useConnectionQualityIndicator, useRoomContext } from '@livekit/components-react';
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import { parseParticipantMeta } from '@/lib/classroom/types';
+import { samePerson } from '@/lib/classroom/identity';
+import { usePersonStatus } from '@/lib/classroom/usePersonStatus';
+import { usePeersOf } from './PeopleContext';
 
 interface ParticipantTileProps {
   trackRef: TrackReferenceOrPlaceholder;
@@ -51,11 +59,15 @@ export default function ParticipantTile({
   spotlighted,
 }: ParticipantTileProps) {
   const participant = trackRef.participant;
+  const room = useRoomContext();
   const meta = parseParticipantMeta(participant.identity, participant.name || participant.identity);
   const hasVideo = isTrackReference(trackRef) && !trackRef.publication.isMuted;
-  const micEnabled = participant.isMicrophoneEnabled;
+  const status = usePersonStatus(usePeersOf(participant));
+  const micEnabled = status.micEnabled;
   const isTeacher = meta.role === 'TEACHER';
-  const isSpeaking = useIsSpeaking(participant);
+  const isSpeaking = status.speaking;
+  // "You" — on this device or on another device of yours.
+  const isSelf = participant.isLocal || samePerson(participant.identity, room.localParticipant.identity);
 
   const nameTextSize = size === 'main' ? 'text-sm' : 'text-xs';
   const avatarTextSize = size === 'main' ? 'text-3xl' : size === 'strip' ? 'text-lg' : 'text-xl';
@@ -73,7 +85,7 @@ export default function ParticipantTile({
       {hasVideo ? (
         <VideoTrack
           trackRef={trackRef}
-          className={`w-full h-full object-cover ${participant.isLocal ? '-scale-x-100' : ''}`}
+          className={`w-full h-full object-cover ${isSelf ? '-scale-x-100' : ''}`}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[var(--cr-surface-2)] to-[var(--cr-surface-3)]">
@@ -123,12 +135,12 @@ export default function ParticipantTile({
       {/* Bottom row: name + mic state */}
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent">
         <span className={`${nameTextSize} font-medium text-white truncate drop-shadow flex items-center gap-1.5 min-w-0`}>
-          {participant.isScreenShareEnabled && (
+          {status.sharingScreen && (
             <span data-tooltip="Sharing screen" className="flex-shrink-0 text-[var(--cr-accent)]">
               <MonitorUp size={12} />
             </span>
           )}
-          <span className="truncate">{participant.isLocal ? 'You' : meta.displayName}</span>
+          <span className="truncate">{isSelf ? 'You' : meta.displayName}</span>
         </span>
         <span className={`flex-shrink-0 ${micEnabled ? 'text-white/80' : 'text-red-400'}`}>
           {micEnabled ? <Mic size={13} /> : <MicOff size={13} />}

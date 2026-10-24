@@ -5,13 +5,16 @@
 // Students see a read-only version of the same list. Teachers also see a
 // "Waiting to join" section here for anyone who was removed and is asking
 // to be re-admitted (see AdmissionService / useAdmissionRequests).
+//
+// One row per PERSON: someone connected from two devices is one row (marked
+// "2 devices"), and a moderation action on them applies to all their devices.
 
 'use client';
 
 import { useRef, useState } from 'react';
 import type { Participant } from 'livekit-client';
 import { ConnectionQuality } from 'livekit-client';
-import { useConnectionQualityIndicator, useIsSpeaking } from '@livekit/components-react';
+import { useConnectionQualityIndicator } from '@livekit/components-react';
 import {
   X,
   Mic,
@@ -32,6 +35,9 @@ import {
   MonitorOff,
 } from 'lucide-react';
 import { parseParticipantMeta } from '@/lib/classroom/types';
+import { MAX_PEOPLE_PER_CLASSROOM, personKey } from '@/lib/classroom/identity';
+import { groupByPerson } from '@/lib/classroom/people';
+import { usePersonStatus } from '@/lib/classroom/usePersonStatus';
 import { muteParticipant, removeParticipant, setParticipantMicLocked } from '@/lib/classroom/api';
 import { useClickOutside } from '@/lib/classroom/useClickOutside';
 import type { PendingAdmission } from '@/lib/classroom/api';
@@ -75,6 +81,7 @@ function QualityBadge({ participant }: { participant: Participant }) {
 
 function ParticipantRow({
   participant,
+  peers,
   isTeacher,
   roomName,
   raised,
@@ -87,7 +94,10 @@ function ParticipantRow({
   onCloseMenu,
   onNotifyStopScreenShare,
 }: {
+  /** The connection to show (the one with the camera on, if any). */
   participant: Participant;
+  /** All of this person's connections, this one included. */
+  peers: Participant[];
   isTeacher: boolean;
   roomName: string;
   raised: boolean;
@@ -105,9 +115,10 @@ function ParticipantRow({
   useClickOutside(menuRef, menuOpen, onCloseMenu);
 
   const meta = parseParticipantMeta(participant.identity, participant.name || participant.identity);
-  const micOn = participant.isMicrophoneEnabled;
-  const camOn = participant.isCameraEnabled;
-  const isSpeaking = useIsSpeaking(participant);
+  const status = usePersonStatus(peers);
+  const micOn = status.micEnabled;
+  const camOn = status.cameraEnabled;
+  const isSpeaking = status.speaking;
   const canManage = isTeacher && !isSelf;
 
   const handleMute = async (kind: 'audio' | 'video') => {
@@ -173,7 +184,10 @@ function ParticipantRow({
           </span>
           {meta.role === 'TEACHER' && <GraduationCap size={12} className="text-violet-300 flex-shrink-0" />}
         </div>
-        <span className="text-[11px] text-[var(--cr-text-faint)]">{meta.role === 'TEACHER' ? 'Teacher' : 'Student'}</span>
+        <span className="text-[11px] text-[var(--cr-text-faint)]">
+          {meta.role === 'TEACHER' ? 'Teacher' : 'Student'}
+          {peers.length > 1 && ` · ${peers.length} devices`}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 flex-shrink-0">
@@ -186,7 +200,7 @@ function ParticipantRow({
             <Hand size={12} />
           </button>
         )}
-        {participant.isScreenShareEnabled && (
+        {status.sharingScreen && (
           <span data-tooltip="Sharing screen" className="text-[var(--cr-accent)]">
             <MonitorUp size={14} />
           </span>
@@ -241,7 +255,7 @@ function ParticipantRow({
                 >
                   <VideoOff size={13} /> Turn off camera
                 </button>
-                {participant.isScreenShareEnabled && (
+                {status.sharingScreen && (
                   <button
                     onClick={handleStopScreenShare}
                     className="w-full text-left px-3 py-2 text-xs text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] flex items-center gap-2"
@@ -279,13 +293,21 @@ export default function ParticipantsPanel({
   onDecideAdmission,
   onNotifyStopScreenShare,
 }: ParticipantsPanelProps) {
-  const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
+  const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 
-  const sorted = [...participants].sort((a, b) => {
-    const aTeacher = parseParticipantMeta(a.identity, a.name || '').role === 'TEACHER';
-    const bTeacher = parseParticipantMeta(b.identity, b.name || '').role === 'TEACHER';
+  const localKey = personKey(localIdentity);
+  const people = [...groupByPerson(participants)].map(([key, peers]) => {
+    // Show the connection that has the camera on, else the first one.
+    const shown = peers.find((p) => p.isCameraEnabled) ?? peers[0];
+    return { key, peers, shown };
+  });
+  const sorted = people.sort((a, b) => {
+    const aTeacher = parseParticipantMeta(a.shown.identity, a.shown.name || '').role === 'TEACHER';
+    const bTeacher = parseParticipantMeta(b.shown.identity, b.shown.name || '').role === 'TEACHER';
     if (aTeacher !== bTeacher) return aTeacher ? -1 : 1;
-    if (a.isLocal !== b.isLocal) return a.isLocal ? -1 : 1;
+    const aSelf = a.key === localKey;
+    const bSelf = b.key === localKey;
+    if (aSelf !== bSelf) return aSelf ? -1 : 1;
     return 0;
   });
 
@@ -293,7 +315,10 @@ export default function ParticipantsPanel({
     <div className="w-full h-full flex flex-col bg-[var(--cr-surface)]">
       <div className="flex items-center justify-between px-4 h-12 border-b border-[var(--cr-border)] flex-shrink-0">
         <p className="text-sm font-semibold text-[var(--cr-text)]">
-          Participants <span className="text-[var(--cr-text-faint)] font-normal">({participants.length})</span>
+          Participants{' '}
+          <span className="text-[var(--cr-text-faint)] font-normal" data-testid="participant-count">
+            ({sorted.length}/{MAX_PEOPLE_PER_CLASSROOM})
+          </span>
         </p>
         <button
           onClick={onClose}
@@ -339,20 +364,21 @@ export default function ParticipantsPanel({
       )}
 
       <div className="flex-1 overflow-y-auto cr-scroll px-2 py-2">
-        {sorted.map((p) => (
+        {sorted.map(({ key, peers, shown }) => (
           <ParticipantRow
-            key={p.identity}
-            participant={p}
+            key={key}
+            participant={shown}
+            peers={peers}
             isTeacher={isTeacher}
             roomName={roomName}
-            raised={!!raisedHands[p.identity]}
-            onLowerHand={() => onLowerHand(p.identity)}
-            isSelf={p.identity === localIdentity}
-            spotlighted={spotlightIdentity === p.identity}
-            onSetSpotlight={() => onSetSpotlight(spotlightIdentity === p.identity ? null : p.identity)}
-            menuOpen={openMenuIdentity === p.identity}
-            onOpenMenu={() => setOpenMenuIdentity(p.identity)}
-            onCloseMenu={() => setOpenMenuIdentity(null)}
+            raised={!!raisedHands[key]}
+            onLowerHand={() => onLowerHand(key)}
+            isSelf={key === localKey}
+            spotlighted={spotlightIdentity === key}
+            onSetSpotlight={() => onSetSpotlight(spotlightIdentity === key ? null : key)}
+            menuOpen={openMenuKey === key}
+            onOpenMenu={() => setOpenMenuKey(key)}
+            onCloseMenu={() => setOpenMenuKey(null)}
             onNotifyStopScreenShare={onNotifyStopScreenShare}
           />
         ))}

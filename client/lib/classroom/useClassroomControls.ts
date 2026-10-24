@@ -5,10 +5,16 @@
 // this is persisted server-side; it's UI courtesy state, not an access
 // control mechanism (moderation actions like mute/remove go through the
 // authenticated REST endpoints in ./api.ts instead).
+//
+// Everything here is keyed by PERSON (see ./identity.ts), not by connection: a
+// student on two devices has one raised hand, and lowering it on either device
+// lowers it on both. The `identity` in each message is a person key; a full
+// `<userId>~<deviceId>` identity from an older client is reduced to one.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDataChannel, useLocalParticipant } from '@livekit/components-react';
 import { CLASSROOM_CONTROL_TOPIC, ControlMessage } from './types';
+import { personKey } from './identity';
 
 export interface Reaction {
   id: string;
@@ -32,10 +38,11 @@ export function useClassroomControls(onForceStopScreenShare?: () => void) {
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [spotlightIdentity, setSpotlightIdentityState] = useState<string | null>(null);
   const reactionCounter = useRef(0);
-  const localIdentityRef = useRef(localParticipant.identity);
+  const localKey = personKey(localParticipant.identity);
+  const localKeyRef = useRef(localKey);
   const onForceStopScreenShareRef = useRef(onForceStopScreenShare);
   useEffect(() => {
-    localIdentityRef.current = localParticipant.identity;
+    localKeyRef.current = localKey;
     onForceStopScreenShareRef.current = onForceStopScreenShare;
   });
 
@@ -48,22 +55,24 @@ export function useClassroomControls(onForceStopScreenShare?: () => void) {
     }
     switch (msg.type) {
       case 'raise-hand':
-        setRaisedHands((prev) => ({ ...prev, [msg.identity]: msg.raised }));
+        setRaisedHands((prev) => ({ ...prev, [personKey(msg.identity)]: msg.raised }));
         break;
       case 'lower-hand':
-        setRaisedHands((prev) => ({ ...prev, [msg.identity]: false }));
+        setRaisedHands((prev) => ({ ...prev, [personKey(msg.identity)]: false }));
         break;
       case 'reaction': {
         reactionCounter.current += 1;
-        const id = `${msg.identity}-${reactionCounter.current}`;
-        setReactions((prev) => [...prev, { id, emoji: msg.emoji, identity: msg.identity, at: Date.now() }]);
+        const who = personKey(msg.identity);
+        const id = `${who}-${reactionCounter.current}`;
+        setReactions((prev) => [...prev, { id, emoji: msg.emoji, identity: who, at: Date.now() }]);
         break;
       }
       case 'spotlight':
-        setSpotlightIdentityState(msg.identity);
+        setSpotlightIdentityState(msg.identity === null ? null : personKey(msg.identity));
         break;
       case 'stop-screen-share':
-        if (msg.identity === localIdentityRef.current) onForceStopScreenShareRef.current?.();
+        // The teacher stopped this PERSON's sharing: every device of theirs stops.
+        if (personKey(msg.identity) === localKeyRef.current) onForceStopScreenShareRef.current?.();
         break;
     }
   }, []);
@@ -89,43 +98,43 @@ export function useClassroomControls(onForceStopScreenShare?: () => void) {
 
   const setOwnHandRaised = useCallback(
     (raised: boolean) => {
-      const identity = localParticipant.identity;
-      setRaisedHands((prev) => ({ ...prev, [identity]: raised }));
-      broadcast({ type: 'raise-hand', raised, identity });
+      setRaisedHands((prev) => ({ ...prev, [localKey]: raised }));
+      broadcast({ type: 'raise-hand', raised, identity: localKey });
     },
-    [broadcast, localParticipant.identity],
+    [broadcast, localKey],
   );
 
   const lowerHand = useCallback(
     (identity: string) => {
-      setRaisedHands((prev) => ({ ...prev, [identity]: false }));
-      broadcast({ type: 'lower-hand', identity });
+      const who = personKey(identity);
+      setRaisedHands((prev) => ({ ...prev, [who]: false }));
+      broadcast({ type: 'lower-hand', identity: who });
     },
     [broadcast],
   );
 
   const sendReaction = useCallback(
     (emoji: string) => {
-      const identity = localParticipant.identity;
       reactionCounter.current += 1;
-      const id = `${identity}-${reactionCounter.current}`;
-      setReactions((prev) => [...prev, { id, emoji, identity, at: Date.now() }]);
-      broadcast({ type: 'reaction', emoji, identity });
+      const id = `${localKey}-${reactionCounter.current}`;
+      setReactions((prev) => [...prev, { id, emoji, identity: localKey, at: Date.now() }]);
+      broadcast({ type: 'reaction', emoji, identity: localKey });
     },
-    [broadcast, localParticipant.identity],
+    [broadcast, localKey],
   );
 
   const setSpotlight = useCallback(
     (identity: string | null) => {
-      setSpotlightIdentityState(identity);
-      broadcast({ type: 'spotlight', identity });
+      const who = identity === null ? null : personKey(identity);
+      setSpotlightIdentityState(who);
+      broadcast({ type: 'spotlight', identity: who });
     },
     [broadcast],
   );
 
   const notifyStopScreenShare = useCallback(
     (identity: string) => {
-      broadcast({ type: 'stop-screen-share', identity });
+      broadcast({ type: 'stop-screen-share', identity: personKey(identity) });
     },
     [broadcast],
   );

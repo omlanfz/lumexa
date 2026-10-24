@@ -17,6 +17,7 @@ interface StudentTopNavProps {
 const NAV_ITEMS = [
   { href: '/student-dashboard', label: 'Home', exact: true },
   { href: '/student-dashboard/learning', label: 'Learning', exact: false },
+  { href: '/student-dashboard/badges', label: 'My Badges', exact: false },
   { href: '/student-dashboard/profile', label: 'Profile', exact: false },
 ];
 

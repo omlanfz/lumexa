@@ -85,3 +85,10 @@ export async function decideAdmission(
 ): Promise<void> {
   await api.post(`/classroom/${room}/admissions/${admissionId}/decide`, { decision });
 }
+
+/** Lock or unlock the classroom. While locked, no student can join; people
+ * already inside stay. */
+export async function setRoomLocked(room: string, locked: boolean): Promise<boolean> {
+  const res = await api.post<{ locked: boolean }>(`/classroom/${room}/lock`, { locked });
+  return res.data.locked;
+}

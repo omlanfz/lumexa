@@ -7,9 +7,12 @@
 
 import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
+import { personKey } from '@/lib/classroom/identity';
 
 interface FilmStripProps {
+  /** One tile per person (see pickPersonTiles). */
   tracks: TrackReferenceOrPlaceholder[];
+  /** Keyed by person (see lib/classroom/identity.ts). */
   raisedHands: Record<string, boolean>;
   pinnedIdentity: string | null;
   onTogglePin: (identity: string) => void;
@@ -26,17 +29,20 @@ export default function FilmStrip({ tracks, raisedHands, pinnedIdentity, onToggl
         compact ? 'h-20' : 'h-28 sm:h-32'
       } ${className ?? ''}`}
     >
-      {tracks.map((t) => (
-        <div key={t.participant.identity} className={`${compact ? 'w-32' : 'w-40 sm:w-48'} h-full flex-shrink-0`}>
-          <ParticipantTile
-            trackRef={t}
-            size="strip"
-            raised={!!raisedHands[t.participant.identity]}
-            pinned={pinnedIdentity === t.participant.identity}
-            onTogglePin={() => onTogglePin(t.participant.identity)}
-          />
-        </div>
-      ))}
+      {tracks.map((t) => {
+        const who = personKey(t.participant.identity);
+        return (
+          <div key={who} className={`${compact ? 'w-32' : 'w-40 sm:w-48'} h-full flex-shrink-0`}>
+            <ParticipantTile
+              trackRef={t}
+              size="strip"
+              raised={!!raisedHands[who]}
+              pinned={pinnedIdentity === who}
+              onTogglePin={() => onTogglePin(who)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
