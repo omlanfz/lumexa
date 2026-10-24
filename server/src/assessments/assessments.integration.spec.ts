@@ -786,9 +786,23 @@ describeDb('Assessment workflow (real Postgres, over HTTP)', () => {
         student,
       );
       expect(list.status).toBe(200);
-      expect(list.body[0].report).toBeNull();
-      expect(list.body[0].totalScore).toBeNull();
-      expect(JSON.stringify(list.body)).not.toContain('80');
+      expect(list.body[0]).toMatchObject({
+        report: null,
+        totalScore: null,
+        passed: null,
+      });
+      // Checked by field name: ids and timestamps contain every digit pair, so
+      // looking for the score's digits in the JSON would fail at random.
+      const listJson = JSON.stringify(list.body);
+      for (const key of [
+        'percentage',
+        'objectiveScore',
+        'mcqScore',
+        'autoObjectiveScore',
+        'correctIndex',
+      ]) {
+        expect(listJson).not.toContain(`"${key}"`);
+      }
     });
 
     it('alerts the teacher the moment a test lands', async () => {

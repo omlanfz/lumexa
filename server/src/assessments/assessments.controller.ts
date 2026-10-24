@@ -68,9 +68,10 @@ export class AssessmentsController {
     return this.assessments.getAttempt(attemptId, req.user);
   }
 
-  /** Is my test still open? Polled by the test tab every few seconds. */
+  /** Is my test still open? Polled by the test tab every few seconds — and a
+   *  lab full of students shares one address, hence the generous ceiling. */
   @Get('attempts/:attemptId/state')
-  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @Throttle({ default: { limit: 300, ttl: 60_000 } })
   getAttemptState(@Param('attemptId') attemptId: string, @Req() req: any) {
     return this.assessments.getAttemptState(attemptId, req.user);
   }

@@ -13,6 +13,11 @@
 //                   the TestReport for the teacher. A second submit (double
 //                   click, two tabs, retry after a dropped response) is a
 //                   harmless no-op that returns the first result.
+//   lockAttempt   → the TEACHER's "Lock & submit" (see class-tests.service.ts):
+//                   the same transaction, from whatever was last saved, plus a
+//                   mark that the teacher closed the test. There is no deadline
+//                   anywhere — the teacher ends the test, so a student is never
+//                   cut off by a clock they cannot see.
 //
 // The questions of a test live on its "root bank" (see linked-assessment.ts) —
 // the assessment itself, or the original assessment a custom curriculum's
@@ -787,7 +792,7 @@ export class AssessmentsService {
         // 1. Lock in. The UPDATE takes the row lock: it waits for any in-flight
         //    autosave (SHARE lock) and blocks new ones until we commit. Zero
         //    rows = another request submitted first.
-        const lockedAt = new Date();
+        const now = new Date();
         const claimed = await tx.assessmentAttempt.updateMany({
           where: {
             id: attemptId,
@@ -796,8 +801,9 @@ export class AssessmentsService {
           },
           data: {
             status: AttemptStatus.SUBMITTED,
-            submittedAt: lockedAt,
-            ...(lock ? { lockedAt, lockedByUserId: lock.byUserId } : {}),
+            submittedAt: now,
+            // A teacher's lock is stamped with the very same instant.
+            ...(lock ? { lockedAt: now, lockedByUserId: lock.byUserId } : {}),
           },
         });
         if (claimed.count === 0) return null;
@@ -977,7 +983,7 @@ export class AssessmentsService {
           // Remember that the teacher closed this student's test.
           await tx.scheduledLesson.update({
             where: { id: lock.scheduledLessonId },
-            data: { testLockedAt: lockedAt, testLockedByUserId: lock.byUserId },
+            data: { testLockedAt: now, testLockedByUserId: lock.byUserId },
           });
         }
         return { reportId: report.id, teacherId };
