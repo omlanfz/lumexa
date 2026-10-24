@@ -86,6 +86,7 @@ model User {
   scheduledLessons   ScheduledLesson[]
   assessmentAttempts AssessmentAttempt[] @relation("StudentAssessmentAttempts")
   submissions        Submission[]        @relation("StudentSubmissions")
+  testReports        TestReport[]        @relation("StudentTestReports")
 
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
@@ -156,6 +157,7 @@ model TeacherProfile {
   scheduledLessons      ScheduledLesson[]
   vivaRecords           VivaRecord[]
   submissions           Submission[]
+  testReports           TestReport[]
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -1210,17 +1212,32 @@ enum PurchaseStatus {
 // FINAL_TEST — see SessionType), 1:1 via Lesson.assessment. Its
 // MCQQuestion/PracticalQuestion rows ARE its question bank: admin manages
 // them scoped to that one assessment, which is itself already organized by
-// curriculum → module → course/test via the Lesson it belongs to, so a
-// separate cross-cutting "question bank" model would just be indirection
-// without a real use case here (no requirement to share one question pool
-// across multiple tests). Final tests additionally carry a VivaRecord
-// (Part C) per attempt.
+// curriculum → module → course/test via the Lesson it belongs to.
+//
+// The one exception is a CUSTOM curriculum that imports a default
+// curriculum's test session: that lesson gets its own Assessment row (own
+// attempts, own publish/pass settings) whose questions are NOT copied —
+// `sourceAssessmentId` points at the original bank, and every read/write of
+// questions resolves through it (see AssessmentsService.resolveBank). So a
+// question fixed once in the original course is fixed everywhere it is used.
+//
+// Standardized banks (see server/src/assessments/bank):
+//   COURSE_TEST / STAGE_TEST — 30 four-option MCQs + 10 True/False
+//   FINAL_TEST               — 25 four-option MCQs + 5 True/False + one
+//                              15-minute coding project (manually marked)
+// Every attempt presents the whole published bank, one mark per question.
+// Submitting generates a TestReport (below) for the teacher to evaluate.
 
 enum AttemptStatus {
   NOT_STARTED
   IN_PROGRESS
-  SUBMITTED
-  GRADED
+  SUBMITTED // answers locked, objective part auto-graded, report awaiting the teacher
+  GRADED // teacher approved the report — results released
+}
+
+enum QuestionKind {
+  MCQ // four options, exactly one correct
+  TRUE_FALSE // options are always ["True", "False"]
 }
 
 model Assessment {
@@ -1230,12 +1247,24 @@ model Assessment {
   type               SessionType // COURSE_TEST | STAGE_TEST | FINAL_TEST
   title              String
   instructions       String?
-  mcqCount           Int         @default(0) // how many MCQs are drawn per attempt from the bank below
+  // Legacy: used to cap how many MCQs were drawn per attempt. Standardized
+  // tests always present the whole bank, so this is no longer read.
+  mcqCount           Int          @default(0)
   randomizeQuestions Boolean     @default(true)
   randomizeOptions   Boolean     @default(true)
   passScorePct       Int         @default(60)
-  vivaMaxScore       Float       @default(20) // Part C, FINAL_TEST only
+  // Legacy Part C (live viva) — superseded by the coding project on Final
+  // Tests. Kept so historical VivaRecord/attempt data stays readable.
+  vivaMaxScore       Float        @default(20)
   isPublished        Boolean     @default(false)
+  // See the block comment above: when set, this assessment's questions are
+  // read from (and edited on) that assessment instead of its own rows.
+  sourceAssessmentId String?
+  sourceAssessment   Assessment?  @relation("AssessmentQuestionBank", fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
+  linkedAssessments  Assessment[] @relation("AssessmentQuestionBank")
+  // Version of the maintained bank content (server/src/assessments/bank)
+  // last applied to this assessment; 0 = never synced (legacy generated bank).
+  bankVersion        Int          @default(0)
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -1244,25 +1273,35 @@ model Assessment {
   attempts           AssessmentAttempt[]
 
   @@index([type])
+  @@index([sourceAssessmentId])
 }
 
 model MCQQuestion {
   id           String     @id @default(uuid())
   assessmentId String
   assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionType  QuestionKind @default(MCQ)
   questionText String
-  options      Json // string[]
+  options       Json // string[] — four for MCQ, ["True", "False"] for TRUE_FALSE
   correctIndex Int
   explanation  String?
   difficulty   String? // "EASY" | "MEDIUM" | "HARD"
   tags         String[]   @default([])
   order        Int        @default(0)
   isPublished  Boolean    @default(true)
+  // Stable identity of a question that comes from the maintained bank
+  // content, so the idempotent bank sync updates it in place instead of
+  // inserting a duplicate on every boot. Null for admin-authored questions.
+  bankKey       String?
+  // Set when an admin edits the question on the Question Bank page — a later
+  // bank-content release never overwrites an admin's edit.
+  editedByAdmin Boolean      @default(false)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   answers MCQAnswer[]
 
+  @@unique([assessmentId, bankKey])
   @@index([assessmentId])
 }
 
@@ -1279,11 +1318,13 @@ model PracticalQuestion {
   maxScore     Int        @default(100)
   order        Int        @default(0)
   isPublished  Boolean    @default(true)
+  bankKey      String? // see MCQQuestion.bankKey
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   submissions PracticalSubmission[]
 
+  @@unique([assessmentId, bankKey])
   @@index([assessmentId])
 }
 
@@ -1320,6 +1361,7 @@ model AssessmentAttempt {
   mcqAnswers           MCQAnswer[]
   practicalSubmissions PracticalSubmission[]
   vivaRecord           VivaRecord?
+  report               TestReport?
 
   @@index([studentUserId])
   @@index([assessmentId])
@@ -1343,12 +1385,11 @@ model MCQAnswer {
   @@index([attemptId])
 }
 
-// AI evaluation is advisory context alongside deterministic test-case
-// results, never a silent override — see AiGradingService. `score` is the
-// final persisted score PracticalGradingService computes (deterministic
-// test-case pass rate as the primary signal; the AI evaluation's own score
-// is kept inside aiEvaluation for teacher/admin review, not written here
-// directly).
+// The student's coding-project code. Autosaved as a draft while the attempt is
+// IN_PROGRESS, frozen on submit. `score` is only ever written by the teacher's
+// manual evaluation (TestReport.codingScore mirrors it) — automated test-case
+// results (deterministicResult) and AI notes (aiEvaluation) are advisory
+// context for the teacher, never the mark.
 model PracticalSubmission {
   id                  String            @id @default(uuid())
   attemptId           String
@@ -1365,6 +1406,119 @@ model PracticalSubmission {
 
   @@unique([attemptId, questionId])
   @@index([attemptId])
+}
+
+// ─── Test Evaluation Report Cards ────────────────────────────────────────────
+//
+// One per submitted AssessmentAttempt, created in the SAME transaction that
+// submits it (AssessmentsService.submitAttempt) so a submission can never
+// exist without its report. The objective section (MCQ + True/False) is graded
+// automatically at that moment; the teacher then reviews, may override
+// individual questions, marks the coding project (Final Tests), approves the
+// report, and finally shares it with the parent.
+//
+//   Course/Stage test:  PENDING_REVIEW ──approve──▶ READY_TO_SHARE ──share──▶ SHARED_WITH_PARENTS
+//   Final test:         PENDING_CODE_EVALUATION ──approve (all rubric criteria scored)──▶ READY_TO_SHARE ──share──▶ SHARED_WITH_PARENTS
+//
+// Automatic results are never rewritten: `autoObjectiveScore` and each
+// question's `autoCorrect` stay as graded, and a teacher's change is stored
+// next to it (`questionResults[].override`, `objectiveScore`, `teacherEdited`)
+// so a report always shows what the system graded vs. what the teacher
+// changed. Course/lesson/test titles are snapshotted (plain ids, no FKs —
+// same approach as Certificate) so the report stays a faithful record even if
+// the curriculum or a question is edited later. SHARED_WITH_PARENTS is only
+// ever set after EmailService confirmed the message was accepted for delivery
+// — never optimistically (see TestReportsService.share).
+enum TestReportStatus {
+  PENDING_REVIEW
+  PENDING_CODE_EVALUATION
+  READY_TO_SHARE
+  SHARED_WITH_PARENTS
+}
+
+model TestReport {
+  id            String            @id @default(uuid())
+  attemptId     String            @unique
+  attempt       AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  assessmentId  String
+  studentUserId String
+  student       User              @relation("StudentTestReports", fields: [studentUserId], references: [id])
+  // The teacher who evaluates it — the class's teacher at submission time.
+  teacherId     String
+  teacher       TeacherProfile    @relation(fields: [teacherId], references: [id])
+
+  courseId          String
+  courseTitle       String
+  lessonId          String?
+  scheduledLessonId String?
+  assessmentType    SessionType
+  testTitle         String
+  status            TestReportStatus
+  passScorePct      Int
+
+  // Objective section. `autoObjectiveScore` is the automatic grade and never
+  // changes; `objectiveScore` = auto grade adjusted by teacher overrides.
+  mcqTotal           Int
+  trueFalseTotal     Int
+  autoObjectiveScore Float
+  objectiveScore     Float
+  objectiveMaxScore  Float
+  // [{ questionId, order, kind, text, options, selectedIndex, correctIndex,
+  //    autoCorrect, explanation, override: { correct, note, at } | null }]
+  // options/selectedIndex/correctIndex are in the order the student saw.
+  questionResults    Json
+
+  // Coding project — Final Tests only, marked manually by the teacher.
+  hasCodingProject   Boolean   @default(false)
+  // { questionId, title, instructions, language, code, submittedAt }
+  codingProject      Json?
+  codingMaxScore     Float?
+  // [{ criterion, maxPoints, score: number | null }] — score null = not marked yet
+  codingRubricScores Json?
+  codingScore        Float? // null until every rubric criterion has a mark
+  codingFeedback     String?
+  codingEvaluatedAt  DateTime?
+
+  // Recomputed on every edit. total/percentage/passed stay null while the
+  // coding project is still unmarked, so a half-finished report never shows
+  // a misleading total.
+  totalMaxScore Float
+  totalScore    Float?
+  percentage    Float?
+  passed        Boolean?
+
+  feedback      String?
+  strengths     String?
+  improvements  String?
+  // True once a teacher changed anything (a question override, marks or text).
+  teacherEdited Boolean @default(false)
+
+  submittedAt        DateTime
+  lastEditedAt       DateTime?
+  lastEditedByUserId String?
+  approvedAt         DateTime?
+  approvedByUserId   String?
+
+  // Parent sharing (the only parent-facing channel in the app is email to the
+  // student's billing contact, falling back to the account email — the same
+  // recipient rule certificates and package alerts use).
+  sharedAt           DateTime?
+  sharedByUserId     String?
+  sharedToEmail      String?
+  shareRecipientKind String? // 'BILLING_CONTACT' | 'STUDENT_ACCOUNT'
+  shareEmailLogId    String? // EmailLog row, for the real delivery status
+  shareAttempts      Int       @default(0)
+  // Set while an email send is in flight (cleared when it finishes), so a second
+  // click can never start another send while the first is still going out.
+  shareStartedAt     DateTime?
+  lastShareError     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teacherId, status])
+  @@index([studentUserId])
+  @@index([status, createdAt])
 }
 
 // ─── Centralized email notification system ───────────────────────────────────
