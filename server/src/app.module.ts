@@ -31,6 +31,7 @@ import { PayoutsModule } from './payouts/payouts.module';
 import { RescheduleModule } from './reschedule/reschedule.module';
 import { AuditModule } from './audit/audit.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
+import { BatchesModule } from './batches/batches.module';
 import { CurriculumModule } from './curriculum/curriculum.module';
 import { AssessmentsModule } from './assessments/assessments.module';
 import { AlertsModule } from './alerts/alerts.module';
@@ -88,6 +89,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
     PayoutsModule,
     RescheduleModule,
     SchedulingModule,
+    BatchesModule,
     CurriculumModule,
     AssessmentsModule,
     DisputesModule,

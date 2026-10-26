@@ -426,6 +426,9 @@ export class StudentsService {
           lessonNumber: nextScheduledLesson.lessonNumber,
           lessonTitle: nextScheduledLesson.lessonTitle,
           classType: nextScheduledLesson.classType,
+          // A batch class: the group the student learns with, shown instead of
+          // "Batch" alone. Null for a 1-to-1 class.
+          batchName: nextScheduledLesson.batch?.name ?? null,
         }
       : null;
     const chosen =

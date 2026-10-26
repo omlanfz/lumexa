@@ -93,6 +93,9 @@ model User {
   classroomBadgesReceived ClassroomBadgeAward[] @relation("ClassroomBadgeRecipient")
   classroomBadgesAwarded  ClassroomBadgeAward[] @relation("ClassroomBadgeAwarder")
 
+  // Batch placements over time (see BatchMember) — at most one is active.
+  batchMemberships BatchMember[] @relation("StudentBatchMemberships")
+
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
 }
@@ -160,6 +163,8 @@ model TeacherProfile {
   assignedStudents      User[]                @relation("AssignedTeacher")
   recurringSlots        RecurringSlot[]
   scheduledLessons      ScheduledLesson[]
+  batches               Batch[]
+  batchSessions         BatchSession[]
   vivaRecords           VivaRecord[]
   submissions           Submission[]
   testReports           TestReport[]
@@ -471,6 +476,8 @@ model Course {
   ledgerEntries    StudentLedgerEntry[]
   recurringSlots   RecurringSlot[]
   scheduledLessons ScheduledLesson[]
+  batches          Batch[]
+  batchSessions    BatchSession[]
 
   @@index([isActive])
   @@index([category])
@@ -708,6 +715,20 @@ model ScheduledLesson {
   end             DateTime // UTC instant
   classType       ClassType
   status          LessonStatus   @default(UPCOMING)
+
+  // Batch classes: this row is ONE STUDENT'S PARTICIPATION in a shared class
+  // (see BatchSession). It keeps everything that is the student's own —
+  // attendance, outcome, test attempt, homework, ledger, badges, progress —
+  // while the class itself (time, teacher, room, status, earning) belongs to
+  // the session. start/end/status/teacherId/lessonNumber are mirrored from the
+  // session by the code that writes the session, never edited on their own.
+  // A BATCH row always has both set and a 1:1 row never does (CHECK constraint
+  // in the batches migration).
+  batchId         String?
+  batch           Batch?         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchSessionId  String?
+  batchSession    BatchSession?  @relation(fields: [batchSessionId], references: [id], onDelete: Restrict)
+
   // Attendance timestamps, set when each side's LiveKit token is first
   // issued for this lesson (see ClassroomService.joinScheduledLesson).
   // Teacher lateness is always derived from teacherJoinedAt - start, never
@@ -761,9 +782,154 @@ model ScheduledLesson {
   // SchedulingService.insertMakeupOccurrence). Prisma can't express a
   // filtered unique index natively, so this stays a plain index for query
   // planning and the real constraint lives only in the migration.
+  @@unique([batchSessionId, studentUserId])
   @@index([studentUserId, courseId, lessonNumber])
   @@index([teacherId, start])
   @@index([studentUserId, start])
+  @@index([start])
+  @@index([lessonId])
+  @@index([batchId, studentUserId])
+}
+
+// ─── Batches ─────────────────────────────────────────────────────────────────
+//
+// A Batch is a group of students who learn one curriculum together with one
+// teacher on a shared weekly schedule. It is a real record — the membership,
+// the schedule and every class it holds live here — not students whose
+// individual schedules happen to coincide.
+//
+//   Batch         the group: teacher, curriculum, capacity, weekly slots.
+//   BatchMember   a student's placement in it over time (joinedAt/leftAt). At
+//                 most one placement is active per student (partial unique
+//                 index in the migration).
+//   BatchSession  ONE real live class of the batch: one time, one teacher, one
+//                 lesson of the curriculum, one room, one status, one teacher
+//                 earning. This is what "the class" is, whatever the number of
+//                 students in it.
+//   ScheduledLesson (batchSessionId set) a student's own participation in a
+//                 session: attendance, outcome, test attempt, homework, ledger
+//                 and badges stay per student.
+//
+// The batch has ONE lesson sequence. A session carries the batch's lesson
+// number and every participant row carries the same number, so lesson
+// materials, homework and tests move together. A student whose own progress
+// does not match the batch's is only ever placed through an explicit admin
+// decision (see batches/batch-enrollment.ts) — progress is never rewritten.
+//
+// Sessions only exist while the batch has a participating student; they are a
+// derived projection of (weekly slots, lesson pointer, membership) maintained
+// by BatchSessionsService, so an empty batch holds no teacher time.
+
+enum BatchStatus {
+  ACTIVE // accepting students and holding classes
+  COMPLETED // every lesson of the curriculum has been taught
+  ARCHIVED // closed by Operations; no students, no classes
+}
+
+model Batch {
+  id          String      @id @default(uuid())
+  name        String
+  notes       String?
+  status      BatchStatus @default(ACTIVE)
+
+  teacherId String
+  teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
+  courseId  String
+  course    Course         @relation(fields: [courseId], references: [id])
+
+  // Ideal batch size is 4; Operations may raise it up to the classroom limit
+  // of 9 students (MAX_STUDENTS_PER_CLASSROOM).
+  maxStudents Int @default(4)
+
+  // Where the batch starts in the curriculum until it has taught a class (a
+  // batch built around students who are already on lesson 10 starts at 10).
+  startLessonNumber Int @default(1)
+  // First class date, 'YYYY-MM-DD' in Asia/Dhaka. Classes are never generated
+  // before it.
+  startDate         String
+
+  createdByAdminId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  slots    BatchSlot[]
+  members  BatchMember[]
+  sessions BatchSession[]
+  lessons  ScheduledLesson[]
+
+  @@index([teacherId])
+  @@index([courseId])
+  @@index([status])
+}
+
+// One weekly meeting time of a batch (Asia/Dhaka local wall-clock time).
+model BatchSlot {
+  id      String @id @default(uuid())
+  batchId String
+  batch   Batch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  weekday Int // 0 = Sunday .. 6 = Saturday
+  hour    Int // 0-23
+  minute  Int // 0-59
+
+  @@unique([batchId, weekday, hour, minute])
+  @@index([batchId])
+}
+
+model BatchMember {
+  id            String    @id @default(uuid())
+  batchId       String
+  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  studentUserId String
+  student       User      @relation("StudentBatchMemberships", fields: [studentUserId], references: [id])
+  joinedAt      DateTime  @default(now())
+  // Set when the student leaves or is moved; the row is kept as history.
+  leftAt        DateTime?
+  // The explicit alignment decision taken when the student joined, so the
+  // record shows why a student started at a lesson other than their own next
+  // one: ALIGNED | SKIPPED_TO_BATCH | BATCH_REBASED | MIGRATED.
+  alignment      String?
+  joinedAtLesson Int?
+  addedByAdminId String?
+
+  @@index([batchId])
+  @@index([studentUserId])
+}
+
+model BatchSession {
+  id           String         @id @default(uuid())
+  batchId      String
+  batch        Batch          @relation(fields: [batchId], references: [id])
+  // Kept on the session so history stays correct if the batch changes teacher.
+  teacherId    String
+  teacher      TeacherProfile @relation(fields: [teacherId], references: [id])
+  courseId     String
+  course       Course         @relation(fields: [courseId], references: [id])
+  lessonNumber Int
+  lessonId     String?
+  lesson       Lesson?        @relation(fields: [lessonId], references: [id])
+  start        DateTime // UTC instant
+  end          DateTime // UTC instant
+  status       LessonStatus   @default(UPCOMING)
+
+  // The teacher's attendance is the class's, not each student's: set when
+  // their LiveKit token is first issued for this session. Late-join penalty
+  // and the 75-minute failsafe key off this one value.
+  teacherJoinedAt DateTime?
+
+  // Set once, when the class is finalized (see ClassFinalizationService.
+  // finalizeBatchSession). Each participant row also records its own outcome.
+  endedAt     DateTime?
+  endedByRole String?
+  endReason   ClassEndReason?
+  endNote     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ScheduledLesson[]
+
+  @@index([batchId, start])
+  @@index([teacherId, start])
   @@index([start])
   @@index([lessonId])
 }
@@ -865,6 +1031,7 @@ model Lesson {
   sourceRefs      Json? // traceability: source repo file paths this content was imported from
 
   scheduledLessons ScheduledLesson[]
+  batchSessions    BatchSession[]
   assessment       Assessment?
   submissions      Submission[]
 

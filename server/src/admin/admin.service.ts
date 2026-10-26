@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma } from '@prisma/client';
+import { LessonStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
@@ -14,6 +14,7 @@ import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ClassroomService } from '../classroom/classroom.service';
+import { BatchesService } from '../batches/batches.service';
 import { signedDocumentUrl } from '../lib/cloudinary';
 
 // Friendly labels for verification document types — keep in sync with
@@ -63,6 +64,22 @@ const CLASS_LESSON_INCLUDE = {
   course: { select: { id: true, title: true } },
 } satisfies Prisma.ScheduledLessonInclude;
 
+const CLASS_SESSION_INCLUDE = {
+  batch: { select: { id: true, name: true } },
+  teacher: { select: { id: true, user: { select: { fullName: true } } } },
+  course: { select: { id: true, title: true } },
+  participants: {
+    select: {
+      status: true,
+      recordingUrl: true,
+      recordingStatus: true,
+      recordingMergeError: true,
+      student: { select: { id: true, fullName: true, email: true } },
+    },
+    orderBy: { id: 'asc' },
+  },
+} satisfies Prisma.BatchSessionInclude;
+
 function dayRange(dateStr?: string) {
   const base = dateStr ? new Date(dateStr) : new Date();
   const start = new Date(base);
@@ -89,14 +106,15 @@ export class AdminService {
     private scheduling: SchedulingService,
     private notifications: NotificationsService,
     private classroom: ClassroomService,
+    private batches: BatchesService,
     private jwt: JwtService,
   ) {}
 
-  async joinLiveClass(kind: 'BOOKING' | 'LESSON', id: string) {
+  async joinLiveClass(kind: 'BOOKING' | 'LESSON' | 'SESSION', id: string) {
     return this.classroom.adminJoinLiveClass(kind, id);
   }
 
-  async retryRecording(kind: 'BOOKING' | 'LESSON', id: string) {
+  async retryRecording(kind: 'BOOKING' | 'LESSON' | 'SESSION', id: string) {
     return this.classroom.retryRecordingMerge(kind, id);
   }
 
@@ -338,6 +356,19 @@ export class AdminService {
     return where;
   }
 
+  /** The same Classes-page filters, applied to batch classes. */
+  private buildSessionWhere(lessonWhere: any): Prisma.BatchSessionWhereInput {
+    const where: Prisma.BatchSessionWhereInput = {};
+    if (lessonWhere.start) where.start = lessonWhere.start;
+    if (lessonWhere.teacherId) where.teacherId = lessonWhere.teacherId;
+    if (lessonWhere.courseId) where.courseId = lessonWhere.courseId;
+    if (lessonWhere.status) where.status = lessonWhere.status;
+    if (lessonWhere.studentUserId) {
+      where.participants = { some: { studentUserId: lessonWhere.studentUserId } };
+    }
+    return where;
+  }
+
   // Bounded per source rather than DB-paginated — this is an internal
   // Operations tool at a scale (hundreds, not millions, of classes) where
   // fetching-then-merging in memory is simple and fast enough, and it's what
@@ -359,7 +390,7 @@ export class AdminService {
     const bookingWhere = this.buildBookingWhere(filters);
     const lessonWhere = this.buildLessonWhere(filters);
 
-    const [bookings, lessons] = await Promise.all([
+    const [bookings, lessons, sessions] = await Promise.all([
       this.prisma.booking.findMany({
         where: bookingWhere,
         include: {
@@ -391,7 +422,8 @@ export class AdminService {
       }),
       lessonWhere
         ? this.prisma.scheduledLesson.findMany({
-            where: lessonWhere,
+            // A batch student's row is part of a class shown once, below.
+            where: { ...lessonWhere, batchSessionId: null },
             include: CLASS_LESSON_INCLUDE,
             orderBy: { start: 'desc' },
             take: this.CLASS_MERGE_CAP,
@@ -399,6 +431,18 @@ export class AdminService {
         : Promise.resolve(
             [] as Prisma.ScheduledLessonGetPayload<{
               include: typeof CLASS_LESSON_INCLUDE;
+            }>[],
+          ),
+      lessonWhere
+        ? this.prisma.batchSession.findMany({
+            where: this.buildSessionWhere(lessonWhere),
+            include: CLASS_SESSION_INCLUDE,
+            orderBy: { start: 'desc' },
+            take: this.CLASS_MERGE_CAP,
+          })
+        : Promise.resolve(
+            [] as Prisma.BatchSessionGetPayload<{
+              include: typeof CLASS_SESSION_INCLUDE;
             }>[],
           ),
     ]);
@@ -460,7 +504,46 @@ export class AdminService {
       raw: l,
     }));
 
-    const merged = [...bookingRows, ...lessonRows].sort(
+    // A batch class is ONE class: one row with its students, however many
+    // there are.
+    const sessionRows = sessions.map((c) => {
+      const attending = c.participants.filter(
+        (p) => p.status !== LessonStatus.CANCELLED,
+      );
+      const withRecording = attending.find((p) => p.recordingStatus !== 'NONE');
+      return {
+        id: c.id,
+        kind: 'SESSION' as const,
+        start: c.start,
+        end: c.end,
+        studentName: `${c.batch.name} · ${attending.length} student${attending.length === 1 ? '' : 's'}`,
+        studentEmail: null as string | null,
+        studentUserId: null as string | null,
+        batch: c.batch,
+        students: attending.map((p) => ({
+          id: p.student.id,
+          fullName: p.student.fullName,
+          email: p.student.email,
+        })),
+        teacherName: c.teacher?.user?.fullName ?? '—',
+        teacherId: c.teacherId,
+        courseTitle: c.course?.title ?? '—',
+        courseId: c.courseId,
+        classType: 'BATCH' as string | null,
+        lessonNumber: c.lessonNumber as number | null,
+        paymentStatus: null as string | null,
+        amountCents: null as number | null,
+        // Every student's row mirrors the class's one recording.
+        recordingUrl: withRecording?.recordingUrl ?? null,
+        recordingStatus: (withRecording?.recordingStatus ?? 'NONE') as string,
+        recordingMergeError: withRecording?.recordingMergeError ?? null,
+        isLive: c.status === 'UPCOMING' && !!c.teacherJoinedAt,
+        displayStatus: c.status === 'UPCOMING' ? 'SCHEDULED' : c.status,
+        raw: c,
+      };
+    });
+
+    const merged = [...bookingRows, ...lessonRows, ...sessionRows].sort(
       (a, b) => new Date(b.start).getTime() - new Date(a.start).getTime(),
     );
     const total = merged.length;
@@ -947,6 +1030,12 @@ export class AdminService {
             },
           },
           assignedCourse: { select: { id: true, title: true } },
+          assignedClassType: true,
+          batchMemberships: {
+            where: { leftAt: null },
+            take: 1,
+            select: { batch: { select: { id: true, name: true } } },
+          },
         },
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
@@ -958,10 +1047,13 @@ export class AdminService {
     const ledgerSummaries = await this.studentLedger.getSummariesFor(
       students.map((s) => s.id),
     );
-    const studentsWithPaymentBadge = students.map((s) => ({
-      ...s,
-      paymentBadge: ledgerSummaries.get(s.id)?.paymentBadge ?? null,
-    }));
+    const studentsWithPaymentBadge = students.map(
+      ({ batchMemberships, ...s }) => ({
+        ...s,
+        batch: batchMemberships[0]?.batch ?? null,
+        paymentBadge: ledgerSummaries.get(s.id)?.paymentBadge ?? null,
+      }),
+    );
 
     return {
       students: studentsWithPaymentBadge,
@@ -998,6 +1090,11 @@ export class AdminService {
         },
         assignedCourse: { select: { id: true, title: true, category: true } },
         assignedClassType: true,
+        batchMemberships: {
+          where: { leftAt: null },
+          take: 1,
+          select: { batch: { select: { id: true, name: true } } },
+        },
       },
     });
     if (!student) throw new NotFoundException('Student not found.');
@@ -1016,8 +1113,10 @@ export class AdminService {
 
     const ledgerSummary = await this.studentLedger.getSummary(studentUserId);
 
+    const { batchMemberships, ...studentFields } = student;
     return {
-      ...student,
+      ...studentFields,
+      batch: batchMemberships[0]?.batch ?? null,
       classHistory,
       rescheduleHistory,
       auditHistory,
@@ -1051,6 +1150,7 @@ export class AdminService {
         include: {
           teacher: { select: { user: { select: { fullName: true } } } },
           course: { select: { title: true } },
+          batch: { select: { name: true } },
         },
         orderBy: { start: 'desc' },
         take: 100,
@@ -1075,6 +1175,8 @@ export class AdminService {
       end: l.end,
       teacherName: l.teacher?.user?.fullName ?? '—',
       courseTitle: l.course?.title ?? null,
+      classType: l.classType as string | null,
+      batchName: l.batch?.name ?? null,
       paymentStatus: null as string | null,
       displayStatus: l.status === 'UPCOMING' ? 'SCHEDULED' : l.status,
       endedByRole: l.endedByRole,
@@ -1300,6 +1402,11 @@ export class AdminService {
       });
       if (!teacher) throw new NotFoundException('Teacher not found.');
     }
+    await this.assertNotInBatch(
+      studentUserId,
+      teacherProfileId === student.assignedTeacherId,
+      'change their teacher',
+    );
 
     const updated = await this.prisma.user.update({
       where: { id: studentUserId },
@@ -1384,6 +1491,11 @@ export class AdminService {
       });
       if (!newCourse) throw new NotFoundException('Course not found.');
     }
+    await this.assertNotInBatch(
+      studentUserId,
+      courseId === student.assignedCourseId,
+      'change their curriculum',
+    );
 
     const updated = await this.prisma.user.update({
       where: { id: studentUserId },
@@ -1426,6 +1538,26 @@ export class AdminService {
     return updated;
   }
 
+  /** A batch student's teacher and curriculum are their batch's: changing one
+   * on its own would split the student from the batch's classes. Move them to
+   * another batch (or remove them from this one) instead. */
+  private async assertNotInBatch(
+    studentUserId: string,
+    unchanged: boolean,
+    action: string,
+  ) {
+    if (unchanged) return;
+    const placement = await this.prisma.batchMember.findFirst({
+      where: { studentUserId, leftAt: null },
+      include: { batch: { select: { name: true } } },
+    });
+    if (placement) {
+      throw new BadRequestException(
+        `This student is in the batch "${placement.batch.name}", so you cannot ${action} on their own. Move them to another batch, or remove them from this one first.`,
+      );
+    }
+  }
+
   async pauseStudent(
     studentUserId: string,
     reason: string,
@@ -1452,6 +1584,8 @@ export class AdminService {
     // (weekday/time/teacher) is left untouched so resumeStudent can replay
     // it later.
     await this.scheduling.cancelUpcomingLessonsForPause(studentUserId);
+    // A batch student keeps their place in the batch; they just do not attend.
+    await this.batches.suspendParticipation(studentUserId);
 
     await this.audit.log({
       actorId: adminUserId,
@@ -1489,6 +1623,11 @@ export class AdminService {
         studentUserId,
         adminUserId,
       );
+    // A batch student rejoins the batch where it is now.
+    const batch = await this.batches.resumeParticipation(
+      studentUserId,
+      adminUserId,
+    );
 
     await this.audit.log({
       actorId: adminUserId,
@@ -1504,6 +1643,7 @@ export class AdminService {
       ...updated,
       scheduleRestored: restored,
       scheduleSkipped: skipped,
+      batch,
     };
   }
 

@@ -13,6 +13,7 @@
 
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -23,7 +24,6 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SetScheduleDto } from './dto/set-schedule.dto';
 import {
-  addDaysToDateStr,
   dhakaToUtc,
   todayDhakaDateStr,
   utcToDhakaParts,
@@ -31,14 +31,16 @@ import {
 } from './dhaka-time.util';
 import { computeLateMinutes } from './lesson-window.util';
 import { COUNTS_AS_COMPLETED } from './lesson-state.util';
-import { MAX_STUDENTS_PER_CLASSROOM } from '../classroom/room-ref.util';
+import { CLASS_DURATION_MINUTES } from './class-duration';
+import { generateOccurrences } from './occurrences.util';
+import {
+  describeDhakaMoment,
+  findTeacherConflict,
+  type TeacherConflict,
+} from './teacher-conflict.util';
+import { leaveCurrentBatchInTx } from '../batches/batch-membership.util';
 
-export const CLASS_DURATION_MINUTES: Record<ClassType, number> = {
-  ONE_TO_ONE: 45,
-  BATCH: 60,
-};
-
-const MAX_OCCURRENCE_SCAN_DAYS = 365 * 4; // guards against an impossible/empty slot config
+export { CLASS_DURATION_MINUTES } from './class-duration';
 
 @Injectable()
 export class SchedulingService {
@@ -68,7 +70,7 @@ export class SchedulingService {
       throw new NotFoundException('Student not found.');
     }
 
-    const [slots, lessons] = await Promise.all([
+    const [personalSlots, lessons, membership] = await Promise.all([
       this.prisma.recurringSlot.findMany({
         where: { studentUserId },
         orderBy: [{ weekday: 'asc' }, { hour: 'asc' }, { minute: 'asc' }],
@@ -81,7 +83,46 @@ export class SchedulingService {
           course: { select: { title: true } },
         },
       }),
+      this.prisma.batchMember.findFirst({
+        where: { studentUserId, leftAt: null },
+        include: {
+          batch: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+              maxStudents: true,
+              startDate: true,
+              teacher: {
+                select: { id: true, user: { select: { fullName: true } } },
+              },
+              slots: {
+                orderBy: [
+                  { weekday: 'asc' },
+                  { hour: 'asc' },
+                  { minute: 'asc' },
+                ],
+              },
+              _count: { select: { members: { where: { leftAt: null } } } },
+            },
+          },
+        },
+      }),
     ]);
+
+    // A batch student has no weekly slots of their own: they follow the batch's.
+    const slots = membership ? membership.batch.slots : personalSlots;
+    const nextSession = membership
+      ? await this.prisma.batchSession.findFirst({
+          where: {
+            batchId: membership.batchId,
+            status: LessonStatus.UPCOMING,
+            end: { gt: new Date() },
+          },
+          orderBy: { start: 'asc' },
+          select: { id: true, start: true, end: true, lessonNumber: true },
+        })
+      : null;
 
     const upcoming = lessons.filter((l) => l.status === LessonStatus.UPCOMING);
     // PARTIALLY_COMPLETED counts as completed (paid, lesson unlocked); the
@@ -99,6 +140,22 @@ export class SchedulingService {
       classType: student.assignedClassType,
       assignedTeacherId: student.assignedTeacherId,
       assignedCourse: student.assignedCourse,
+      // Set when the student is placed in a batch (null for 1-to-1 and for a
+      // "Batch" student who has not been placed yet).
+      batch: membership
+        ? {
+            id: membership.batch.id,
+            name: membership.batch.name,
+            status: membership.batch.status,
+            teacherName: membership.batch.teacher.user.fullName,
+            memberCount: membership.batch._count.members,
+            maxStudents: membership.batch.maxStudents,
+            joinedAt: membership.joinedAt,
+            joinedAtLesson: membership.joinedAtLesson,
+            alignment: membership.alignment,
+            nextSession,
+          }
+        : null,
       slots,
       lessons: {
         upcoming,
@@ -137,6 +194,11 @@ export class SchedulingService {
     if (!student || student.role !== 'STUDENT') {
       throw new NotFoundException('Student not found.');
     }
+    if (dto.classType === ClassType.BATCH) {
+      throw new BadRequestException(
+        "A batch student is scheduled through their batch, not on their own. Place the student in a batch from the Schedule tab or from Admin → Batches.",
+      );
+    }
     if (!student.assignedTeacherId) {
       throw new BadRequestException(
         'Assign a teacher to this student before scheduling classes.',
@@ -146,6 +208,22 @@ export class SchedulingService {
       throw new BadRequestException(
         'Assign a curriculum to this student before scheduling classes.',
       );
+    }
+
+    // Switching a batch student to 1-to-1 takes them out of the batch (what
+    // they have already taken stays). That must be an explicit choice.
+    const placement = await this.prisma.batchMember.findFirst({
+      where: { studentUserId, leftAt: null },
+      include: { batch: { select: { id: true, name: true } } },
+    });
+    if (placement && !dto.leaveBatch) {
+      throw new ConflictException({
+        message: `${student.fullName} is in the batch "${placement.batch.name}". Switching to 1-to-1 removes them from it; completed classes are kept.`,
+        details: {
+          code: 'LEAVES_BATCH',
+          batch: { id: placement.batch.id, name: placement.batch.name },
+        },
+      });
     }
 
     const course = await this.prisma.course.findUnique({
@@ -204,7 +282,7 @@ export class SchedulingService {
       );
     }
 
-    const occurrences = this.generateOccurrences(
+    const occurrences = generateOccurrences(
       dto.firstClassDate,
       dto.slots,
       remaining,
@@ -236,8 +314,15 @@ export class SchedulingService {
       );
     }
 
-    await this.prisma.$transaction(
+    const leftBatch = await this.prisma.$transaction(
       async (tx) => {
+        // Leaving a batch first: the student's classes still ahead in it go
+        // (what they have taken stays), so the batch's own sessions are the
+        // only thing the new schedule can clash with.
+        const left = placement
+          ? await leaveCurrentBatchInTx(tx, studentUserId, new Date())
+          : null;
+
         // Replace any not-yet-happened lessons for this student+course — they
         // were never attended, so regenerating them is not "modifying
         // completed/past lessons" and never creates duplicates. Includes
@@ -245,10 +330,13 @@ export class SchedulingService {
         // page) as well as UPCOMING: leaving a cancelled row behind would
         // occupy its lessonNumber and collide with the freshly generated
         // sequence below (@@unique([studentUserId, courseId, lessonNumber])).
+        // Only the student's own 1-to-1 rows: a batch participant row belongs to
+        // a shared class and is never replaced from here.
         await tx.scheduledLesson.deleteMany({
           where: {
             studentUserId,
             courseId,
+            batchSessionId: null,
             status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
           },
         });
@@ -262,20 +350,10 @@ export class SchedulingService {
             teacherId,
             lesson.start,
             lesson.end,
-            undefined,
-            classType === ClassType.BATCH,
           );
           if (conflict) {
-            const when = lesson.start.toLocaleString('en-US', {
-              timeZone: 'Asia/Dhaka',
-            });
             throw new BadRequestException(
-              classType === ClassType.BATCH &&
-              'classType' in conflict &&
-              conflict.classType === ClassType.BATCH &&
-              conflict.start.getTime() === lesson.start.getTime()
-                ? `The batch on ${when} (Asia/Dhaka) already has ${MAX_STUDENTS_PER_CLASSROOM} students, the most a classroom holds. Choose a different day/time.`
-                : `Teacher is already booked on ${when} (Asia/Dhaka). Choose a different day/time.`,
+              `Teacher is already booked on ${describeDhakaMoment(lesson.start)} (Asia/Dhaka). Choose a different day/time.`,
             );
           }
         }
@@ -311,10 +389,7 @@ export class SchedulingService {
           data: { assignedClassType: classType },
         });
 
-        return tx.scheduledLesson.findMany({
-          where: { studentUserId, courseId },
-          orderBy: { lessonNumber: 'asc' },
-        });
+        return left;
       },
       { timeout: 20_000, maxWait: 10_000 },
     );
@@ -325,11 +400,13 @@ export class SchedulingService {
       action: 'STUDENT_SCHEDULE_SET',
       entityType: 'User',
       entityId: studentUserId,
+      beforeData: leftBatch ? { classType: 'BATCH', batch: leftBatch.name } : undefined,
       afterData: {
         classType,
         firstClassDate: dto.firstClassDate,
         slots: dto.slots,
         lessonsGenerated: newLessons.length,
+        leftBatch: leftBatch?.name ?? null,
       },
     });
 
@@ -355,6 +432,30 @@ export class SchedulingService {
     return this.getStudentSchedule(studentUserId);
   }
 
+  /** A batch student's lesson is their row in a class the whole batch shares:
+   * changing it alone would pull it out of step with the class itself. */
+  private assertNotBatchParticipant(
+    lesson: { batchSessionId: string | null },
+    verb: string,
+  ) {
+    if (lesson.batchSessionId) {
+      throw new BadRequestException(
+        `This class is shared by a batch and cannot be ${verb} for one student. Change the batch class itself, or take the student out of the batch.`,
+      );
+    }
+  }
+
+  /** The shared class a lesson belongs to (null for a 1-to-1 lesson), so
+   * callers can route a batch student's lesson to its class. */
+  async getBatchSessionIdOfLesson(lessonId: string): Promise<string | null> {
+    const lesson = await this.prisma.scheduledLesson.findUnique({
+      where: { id: lessonId },
+      select: { batchSessionId: true },
+    });
+    if (!lesson) throw new NotFoundException('Class not found.');
+    return lesson.batchSessionId;
+  }
+
   // ─── Admin: single-lesson overrides from the Classes page ───────────────
   //
   // Unlike setStudentSchedule (regenerates the whole remaining schedule),
@@ -375,6 +476,7 @@ export class SchedulingService {
       where: { id: lessonId },
     });
     if (!lesson) throw new NotFoundException('Class not found.');
+    this.assertNotBatchParticipant(lesson, 'rescheduled');
     if (lesson.status !== LessonStatus.UPCOMING) {
       throw new BadRequestException(
         'Only upcoming classes can be rescheduled.',
@@ -387,7 +489,6 @@ export class SchedulingService {
       newStart,
       newEnd,
       lessonId,
-      lesson.classType === ClassType.BATCH,
     );
     if (conflict) {
       throw new BadRequestException(
@@ -442,6 +543,7 @@ export class SchedulingService {
       where: { id: lessonId },
     });
     if (!lesson) throw new NotFoundException('Class not found.');
+    this.assertNotBatchParticipant(lesson, 'cancelled');
     if (lesson.status !== LessonStatus.UPCOMING) {
       throw new BadRequestException('Only upcoming classes can be cancelled.');
     }
@@ -515,6 +617,7 @@ export class SchedulingService {
       where: { id: lessonId },
     });
     if (!lesson) throw new NotFoundException('Class not found.');
+    this.assertNotBatchParticipant(lesson, 'deleted');
 
     await this.prisma.scheduledLesson.delete({ where: { id: lessonId } });
 
@@ -539,21 +642,76 @@ export class SchedulingService {
   // used to.
 
   async getTeacherUpcomingLessonsForAdmin(teacherId: string) {
-    const lessons = await this.prisma.scheduledLesson.findMany({
-      where: { teacherId, status: LessonStatus.UPCOMING },
-      orderBy: { start: 'asc' },
-      take: 50,
-      include: {
-        student: { select: { id: true, fullName: true, email: true } },
-        course: { select: { id: true, title: true } },
-      },
-    });
-    return this.attachLessonTitles(lessons);
+    // One row per CLASS: a 1-to-1 lesson, or a batch class (however many
+    // students are in it) shown once with its roster.
+    const [lessons, sessions] = await Promise.all([
+      this.prisma.scheduledLesson.findMany({
+        where: { teacherId, batchSessionId: null, status: LessonStatus.UPCOMING },
+        orderBy: { start: 'asc' },
+        take: 50,
+        include: {
+          student: { select: { id: true, fullName: true, email: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.batchSession.findMany({
+        where: {
+          teacherId,
+          status: LessonStatus.UPCOMING,
+          participants: { some: {} },
+        },
+        orderBy: { start: 'asc' },
+        take: 50,
+        include: {
+          batch: { select: { id: true, name: true } },
+          course: { select: { id: true, title: true } },
+          participants: {
+            where: { status: { not: LessonStatus.CANCELLED } },
+            select: { student: { select: { id: true, fullName: true } } },
+          },
+        },
+      }),
+    ]);
+    const rows = [
+      ...(await this.attachLessonTitles(lessons)).map((l) => ({
+        ...l,
+        kind: 'LESSON' as const,
+        batch: null as { id: string; name: string } | null,
+        students: null as { id: string; fullName: string }[] | null,
+      })),
+      ...(await this.attachLessonTitles(sessions)).map((s) => ({
+        id: s.id,
+        kind: 'BATCH_SESSION' as const,
+        start: s.start,
+        end: s.end,
+        classType: ClassType.BATCH,
+        status: s.status,
+        lessonNumber: s.lessonNumber,
+        courseId: s.courseId,
+        course: s.course,
+        lessonTitle: s.lessonTitle,
+        student: null,
+        batch: s.batch,
+        students: s.participants.map((p) => p.student),
+      })),
+    ];
+    return rows
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .slice(0, 50);
   }
 
   // ─── Admin: wipe a student's schedule (called on teacher/course reassignment) ──
 
   async clearStudentSchedule(studentUserId: string) {
+    const placement = await this.prisma.batchMember.findFirst({
+      where: { studentUserId, leftAt: null },
+      include: { batch: { select: { name: true } } },
+    });
+    if (placement) {
+      throw new BadRequestException(
+        `This student is in the batch "${placement.batch.name}", whose classes are not theirs to clear. Remove them from the batch instead.`,
+      );
+    }
     await this.prisma.$transaction([
       // See the matching comment in setStudentSchedule — a leftover
       // CANCELLED row (from an admin override on the Classes page) would
@@ -562,6 +720,7 @@ export class SchedulingService {
       this.prisma.scheduledLesson.deleteMany({
         where: {
           studentUserId,
+          batchSessionId: null,
           status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
         },
       }),
@@ -578,32 +737,134 @@ export class SchedulingService {
     });
     if (!teacher) throw new NotFoundException('Teacher profile not found.');
 
-    const lessons = await this.prisma.scheduledLesson.findMany({
-      where: {
-        teacherId: teacher.id,
-        status: {
-          in: [
-            LessonStatus.UPCOMING,
-            LessonStatus.COMPLETED,
-            LessonStatus.PARTIALLY_COMPLETED,
-            LessonStatus.INCOMPLETE,
-          ],
+    const visible = [
+      LessonStatus.UPCOMING,
+      LessonStatus.COMPLETED,
+      LessonStatus.PARTIALLY_COMPLETED,
+      LessonStatus.INCOMPLETE,
+    ];
+    // 1-to-1 lessons, and batch classes — each batch class once, with its
+    // students. Only this teacher's own classes are ever read.
+    const [lessons, sessions] = await Promise.all([
+      this.prisma.scheduledLesson.findMany({
+        where: {
+          teacherId: teacher.id,
+          batchSessionId: null,
+          status: { in: visible },
         },
-      },
-      orderBy: { start: 'asc' },
-      include: {
-        student: { select: { id: true, fullName: true, avatarUrl: true } },
-        course: { select: { id: true, title: true } },
-      },
-    });
+        orderBy: { start: 'asc' },
+        include: {
+          student: { select: { id: true, fullName: true, avatarUrl: true } },
+          course: { select: { id: true, title: true } },
+        },
+      }),
+      this.prisma.batchSession.findMany({
+        where: { teacherId: teacher.id, status: { in: visible } },
+        orderBy: { start: 'asc' },
+        include: {
+          batch: { select: { id: true, name: true, maxStudents: true } },
+          course: { select: { id: true, title: true, sessions: true } },
+          participants: {
+            where: { status: { not: LessonStatus.CANCELLED } },
+            orderBy: { student: { fullName: 'asc' } },
+            select: {
+              id: true,
+              status: true,
+              studentJoinedAt: true,
+              endReason: true,
+              student: {
+                select: {
+                  id: true,
+                  fullName: true,
+                  avatarUrl: true,
+                  grade: true,
+                  age: true,
+                  spaceRank: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
 
-    const withTitles = await this.attachLessonTitles(lessons);
-    return withTitles.map((l) => ({
+    // Each student's own progress in the curriculum of the class they are in.
+    const studentIds = [
+      ...new Set(sessions.flatMap((s) => s.participants.map((p) => p.student.id))),
+    ];
+    const courseIds = [...new Set(sessions.map((s) => s.courseId))];
+    const completedRows =
+      studentIds.length > 0
+        ? await this.prisma.scheduledLesson.findMany({
+            where: {
+              studentUserId: { in: studentIds },
+              courseId: { in: courseIds },
+              status: { in: COUNTS_AS_COMPLETED },
+            },
+            select: { studentUserId: true, courseId: true, lessonNumber: true },
+          })
+        : [];
+    const completedBy = new Map<string, Set<number>>();
+    for (const r of completedRows) {
+      const key = `${r.studentUserId}:${r.courseId}`;
+      if (!completedBy.has(key)) completedBy.set(key, new Set());
+      completedBy.get(key)!.add(r.lessonNumber);
+    }
+
+    const lessonItems = (await this.attachLessonTitles(lessons)).map((l) => ({
       ...l,
+      kind: 'LESSON' as const,
       teacherLateMinutes: l.teacherJoinedAt
         ? computeLateMinutes(l.start, l.teacherJoinedAt)
         : null,
     }));
+    const sessionItems = (await this.attachLessonTitles(sessions)).map((s) => ({
+      id: s.id,
+      kind: 'BATCH_SESSION' as const,
+      start: s.start,
+      end: s.end,
+      classType: ClassType.BATCH,
+      status: s.status,
+      lessonNumber: s.lessonNumber,
+      lessonTitle: s.lessonTitle,
+      course: { id: s.course.id, title: s.course.title },
+      batch: {
+        id: s.batch.id,
+        name: s.batch.name,
+        maxStudents: s.batch.maxStudents,
+      },
+      // The lesson the teacher opens from here (the same material for every
+      // student of the class; one student's row is just the way in).
+      viewLessonId: s.participants[0]?.id ?? null,
+      students: s.participants.map((p) => ({
+        id: p.student.id,
+        lessonId: p.id,
+        fullName: p.student.fullName,
+        avatarUrl: p.student.avatarUrl,
+        grade: p.student.grade,
+        age: p.student.age,
+        spaceRank: p.student.spaceRank,
+        lessonsCompleted:
+          completedBy.get(`${p.student.id}:${s.courseId}`)?.size ?? 0,
+        totalLessons: s.course.sessions,
+        // What happened to this student in this class.
+        attendance:
+          p.status === LessonStatus.UPCOMING
+            ? p.studentJoinedAt
+              ? 'JOINED'
+              : 'PENDING'
+            : p.studentJoinedAt
+              ? 'ATTENDED'
+              : 'ABSENT',
+      })),
+      teacherLateMinutes: s.teacherJoinedAt
+        ? computeLateMinutes(s.start, s.teacherJoinedAt)
+        : null,
+    }));
+
+    return [...lessonItems, ...sessionItems].sort(
+      (a, b) => a.start.getTime() - b.start.getTime(),
+    );
   }
 
   // ─── Student: own generated lessons for the Learning hub ─────────────────
@@ -638,6 +899,7 @@ export class SchedulingService {
           },
         },
         course: { select: { id: true, title: true } },
+        batch: { select: { id: true, name: true } },
       },
     });
 
@@ -725,6 +987,7 @@ export class SchedulingService {
           },
         },
         course: { select: { id: true, title: true, emoji: true } },
+        batch: { select: { id: true, name: true } },
       },
     });
     if (!lesson) return null;
@@ -732,22 +995,63 @@ export class SchedulingService {
     return withTitle;
   }
 
+  /** The class to show front-and-center for a teacher: the earliest one that
+   * has not ended — a 1-to-1 lesson, or a batch class (once, with its
+   * students). */
   async getTeacherLiveOrNextLesson(teacherId: string) {
-    const lesson = await this.prisma.scheduledLesson.findFirst({
-      where: {
-        teacherId,
-        status: LessonStatus.UPCOMING,
-        end: { gte: new Date() },
-      },
-      orderBy: { start: 'asc' },
-      include: {
-        student: { select: { id: true, fullName: true, avatarUrl: true } },
-        course: { select: { id: true, title: true, emoji: true } },
-      },
-    });
-    if (!lesson) return null;
-    const [withTitle] = await this.attachLessonTitles([lesson]);
-    return withTitle;
+    const now = new Date();
+    const [lesson, session] = await Promise.all([
+      this.prisma.scheduledLesson.findFirst({
+        where: {
+          teacherId,
+          batchSessionId: null,
+          status: LessonStatus.UPCOMING,
+          end: { gte: now },
+        },
+        orderBy: { start: 'asc' },
+        include: {
+          student: { select: { id: true, fullName: true, avatarUrl: true } },
+          course: { select: { id: true, title: true, emoji: true } },
+        },
+      }),
+      this.prisma.batchSession.findFirst({
+        where: {
+          teacherId,
+          status: LessonStatus.UPCOMING,
+          end: { gte: now },
+          participants: { some: { status: LessonStatus.UPCOMING } },
+        },
+        orderBy: { start: 'asc' },
+        include: {
+          batch: { select: { id: true, name: true } },
+          course: { select: { id: true, title: true, emoji: true } },
+          participants: {
+            where: { status: LessonStatus.UPCOMING },
+            orderBy: { student: { fullName: 'asc' } },
+            select: {
+              // One student's row of the class: the way to its lesson page.
+              id: true,
+              student: { select: { id: true, fullName: true, avatarUrl: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const [lessonWithTitle] = lesson ? await this.attachLessonTitles([lesson]) : [];
+    const [sessionWithTitle] = session
+      ? await this.attachLessonTitles([session])
+      : [];
+    if (lessonWithTitle && sessionWithTitle) {
+      return lessonWithTitle.start <= sessionWithTitle.start
+        ? ({ kind: 'LESSON' as const, ...lessonWithTitle })
+        : ({ kind: 'BATCH_SESSION' as const, ...sessionWithTitle });
+    }
+    if (lessonWithTitle) return { kind: 'LESSON' as const, ...lessonWithTitle };
+    if (sessionWithTitle) {
+      return { kind: 'BATCH_SESSION' as const, ...sessionWithTitle };
+    }
+    return null;
   }
 
   // ─── Classroom join support ───────────────────────────────────────────────
@@ -759,49 +1063,76 @@ export class SchedulingService {
         teacher: { include: { user: true } },
         student: true,
         course: { select: { title: true } },
+        batchSession: {
+          select: {
+            id: true,
+            batchId: true,
+            start: true,
+            end: true,
+            status: true,
+            teacherId: true,
+            teacherJoinedAt: true,
+            lessonNumber: true,
+            batch: { select: { name: true } },
+            teacher: {
+              select: { userId: true, user: { select: { fullName: true } } },
+            },
+          },
+        },
       },
     });
     if (!lesson) throw new NotFoundException('Class not found.');
     return lesson;
   }
 
+  /** A batch class for the teacher's entry to its classroom. */
+  async getSessionForClassroom(sessionId: string) {
+    const session = await this.prisma.batchSession.findUnique({
+      where: { id: sessionId },
+      include: {
+        teacher: { include: { user: true } },
+        course: { select: { title: true } },
+        batch: { select: { name: true } },
+        participants: {
+          where: { status: { not: LessonStatus.CANCELLED } },
+          select: {
+            id: true,
+            studentUserId: true,
+            status: true,
+            lessonNumber: true,
+            courseId: true,
+            teacherJoinedAt: true,
+          },
+        },
+      },
+    });
+    if (!session) throw new NotFoundException('Class not found.');
+    return session;
+  }
+
   /** Records the first time each side's LiveKit token was issued for this
    * lesson — teacherJoinedAt is the sole source for lateness (see
    * lesson-window.util computeLateMinutes), never a manually entered value.
-   * A batch has one classroom for all its students, so the teacher entering it
-   * has joined every student's lesson in it. */
+   * A batch class has ONE teacher attendance: it belongs to the class (the
+   * session) and is mirrored onto the students' rows, so a student added to
+   * the class after the teacher came in is counted as joined too. */
   async recordLessonJoin(lessonId: string, role: 'TEACHER' | 'STUDENT') {
-    const field = role === 'TEACHER' ? 'teacherJoinedAt' : 'studentJoinedAt';
     const lesson = await this.prisma.scheduledLesson.findUnique({
       where: { id: lessonId },
       select: {
         teacherJoinedAt: true,
         studentJoinedAt: true,
-        classType: true,
-        teacherId: true,
-        start: true,
+        batchSessionId: true,
       },
     });
     if (!lesson) return;
 
-    // The teacher entering a batch's classroom has joined EVERY student's lesson
-    // in it — also one added to the slot after they first came in, which is why
-    // this runs even when this lesson already has a join time. It only fills in
-    // lessons that have none (the first join time is always kept).
-    if (role === 'TEACHER' && lesson.classType === ClassType.BATCH) {
-      await this.prisma.scheduledLesson.updateMany({
-        where: {
-          teacherId: lesson.teacherId,
-          classType: ClassType.BATCH,
-          start: lesson.start,
-          status: LessonStatus.UPCOMING,
-          teacherJoinedAt: null,
-        },
-        data: { teacherJoinedAt: new Date() },
-      });
+    if (role === 'TEACHER' && lesson.batchSessionId) {
+      await this.recordSessionTeacherJoin(lesson.batchSessionId);
       return;
     }
 
+    const field = role === 'TEACHER' ? 'teacherJoinedAt' : 'studentJoinedAt';
     if (lesson[field]) return; // already recorded — keep the first join time
 
     await this.prisma.scheduledLesson.update({
@@ -810,36 +1141,32 @@ export class SchedulingService {
     });
   }
 
-  /** Every class still to be held by this teacher at this start that is a BATCH
-   * class — one lesson per student, all taught in one classroom. */
-  async getUpcomingBatchLessons(
-    teacherId: string,
-    start: Date,
-    client: PrismaService | Prisma.TransactionClient = this.prisma,
-  ) {
-    return client.scheduledLesson.findMany({
-      where: {
-        teacherId,
-        classType: ClassType.BATCH,
-        start,
-        status: LessonStatus.UPCOMING,
-      },
-      orderBy: { id: 'asc' },
-    });
+  /** The teacher came into a batch class. Only the first arrival is kept. */
+  async recordSessionTeacherJoin(sessionId: string) {
+    const now = new Date();
+    await this.prisma.$transaction([
+      this.prisma.batchSession.updateMany({
+        where: { id: sessionId, teacherJoinedAt: null },
+        data: { teacherJoinedAt: now },
+      }),
+      this.prisma.scheduledLesson.updateMany({
+        where: {
+          batchSessionId: sessionId,
+          status: LessonStatus.UPCOMING,
+          teacherJoinedAt: null,
+        },
+        data: { teacherJoinedAt: now },
+      }),
+    ]);
   }
 
   // ─── Conflict detection (also used by ShiftsService) ─────────────────────
 
   /**
    * Is this teacher busy during [start, end)? Returns what they are busy with,
-   * or null.
-   *
-   * `batch` is true when the class being placed is a BATCH class. Students of
-   * one batch share a slot — the same teacher, the same start — and a
-   * classroom holds the teacher plus at most MAX_STUDENTS_PER_CLASSROOM
-   * students, so lessons already in exactly this batch slot are NOT conflicts
-   * until the batch is full. Everything else that overlaps (a 1:1 class, a
-   * batch at another time, a marketplace shift) still is.
+   * or null. A teacher is in one class at a time: another 1-to-1 lesson, a
+   * batch class (however many students are in it) or a booked marketplace
+   * shift all count (see teacher-conflict.util).
    */
   async findTeacherConflict(
     prismaOrTx: PrismaService | Prisma.TransactionClient,
@@ -847,86 +1174,10 @@ export class SchedulingService {
     start: Date,
     end: Date,
     excludeLessonId?: string,
-    batch = false,
-  ) {
-    const notThisLesson = excludeLessonId
-      ? { id: { not: excludeLessonId } }
-      : {};
-
-    const lessonConflict = await prismaOrTx.scheduledLesson.findFirst({
-      where: {
-        teacherId,
-        status: LessonStatus.UPCOMING,
-        ...notThisLesson,
-        start: { lt: end },
-        end: { gt: start },
-        ...(batch ? { NOT: { classType: ClassType.BATCH, start, end } } : {}),
-      },
+  ): Promise<TeacherConflict | null> {
+    return findTeacherConflict(prismaOrTx, teacherId, start, end, {
+      excludeLessonId,
     });
-    if (lessonConflict) return lessonConflict;
-
-    if (batch) {
-      const mates = await prismaOrTx.scheduledLesson.findMany({
-        where: {
-          teacherId,
-          classType: ClassType.BATCH,
-          status: LessonStatus.UPCOMING,
-          start,
-          end,
-          ...notThisLesson,
-        },
-      });
-      const students = new Set(mates.map((m) => m.studentUserId));
-      if (students.size >= MAX_STUDENTS_PER_CLASSROOM) return mates[0];
-    }
-
-    const shiftConflict = await prismaOrTx.shift.findFirst({
-      where: {
-        teacherId,
-        isBooked: true,
-        start: { lt: end },
-        end: { gt: start },
-      },
-    });
-    return shiftConflict;
-  }
-
-  // ─── Occurrence generation ────────────────────────────────────────────────
-
-  private generateOccurrences(
-    firstDateStr: string,
-    slots: { weekday: number; time: string }[],
-    count: number,
-  ): { dateStr: string; hour: number; minute: number }[] {
-    const byWeekday = new Map<number, { hour: number; minute: number }[]>();
-    for (const s of slots) {
-      const [hh, mm] = s.time.split(':').map(Number);
-      const list = byWeekday.get(s.weekday) ?? [];
-      list.push({ hour: hh, minute: mm });
-      byWeekday.set(s.weekday, list);
-    }
-    for (const list of byWeekday.values()) {
-      list.sort((a, b) => a.hour * 60 + a.minute - (b.hour * 60 + b.minute));
-    }
-
-    const results: { dateStr: string; hour: number; minute: number }[] = [];
-    let cursor = firstDateStr;
-    let scanned = 0;
-
-    while (results.length < count && scanned < MAX_OCCURRENCE_SCAN_DAYS) {
-      const weekday = weekdayForDateStr(cursor);
-      const times = byWeekday.get(weekday);
-      if (times) {
-        for (const t of times) {
-          if (results.length >= count) break;
-          results.push({ dateStr: cursor, hour: t.hour, minute: t.minute });
-        }
-      }
-      cursor = addDaysToDateStr(cursor, 1);
-      scanned++;
-    }
-
-    return results;
   }
 
   // ─── Curriculum-change reconciliation ────────────────────────────────────
@@ -1002,6 +1253,9 @@ export class SchedulingService {
       select: { assignedTeacherId: true, assignedClassType: true },
     });
     if (!student?.assignedTeacherId || !student.assignedClassType) return false;
+    // A batch student's classes are their batch's (BatchesService rebuilds
+    // them); this per-student rebuild is for 1-to-1 schedules only.
+    if (student.assignedClassType === ClassType.BATCH) return false;
 
     const teacherId = student.assignedTeacherId;
     const classType = student.assignedClassType;
@@ -1022,13 +1276,14 @@ export class SchedulingService {
         where: {
           studentUserId,
           courseId,
+          batchSessionId: null,
           status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
         },
       });
       return true;
     }
 
-    const occurrences = this.generateOccurrences(
+    const occurrences = generateOccurrences(
       todayDhakaDateStr(),
       slots.map((s) => ({
         weekday: s.weekday,
@@ -1067,6 +1322,7 @@ export class SchedulingService {
             where: {
               studentUserId,
               courseId,
+              batchSessionId: null,
               status: { in: [LessonStatus.UPCOMING, LessonStatus.CANCELLED] },
             },
           });
@@ -1076,8 +1332,6 @@ export class SchedulingService {
               teacherId,
               lesson.start,
               lesson.end,
-              undefined,
-              classType === ClassType.BATCH,
             );
             if (conflict) {
               throw new Error(
@@ -1131,8 +1385,14 @@ export class SchedulingService {
   // reconcileCourseSchedules replays it after a curriculum change.
 
   async cancelUpcomingLessonsForPause(studentUserId: string) {
+    // A batch student's classes are the batch's: BatchesService.
+    // suspendParticipation takes them out of the ones still ahead.
     await this.prisma.scheduledLesson.updateMany({
-      where: { studentUserId, status: LessonStatus.UPCOMING },
+      where: {
+        studentUserId,
+        batchSessionId: null,
+        status: LessonStatus.UPCOMING,
+      },
       data: { status: LessonStatus.CANCELLED },
     });
   }
@@ -1310,7 +1570,7 @@ export class SchedulingService {
     // back to the same weekly cadence as the class itself.
     const candidates: Date[] =
       slots.length > 0
-        ? this.generateOccurrences(
+        ? generateOccurrences(
             this.dateStrOf(lastStart),
             slots.map((s) => ({
               weekday: s.weekday,
@@ -1325,14 +1585,7 @@ export class SchedulingService {
     let trailing: { start: Date; end: Date } | null = null;
     for (const start of candidates) {
       const end = new Date(start.getTime() + durationMs);
-      const conflict = await this.findTeacherConflict(
-        tx,
-        teacherId,
-        start,
-        end,
-        undefined,
-        classType === ClassType.BATCH,
-      );
+      const conflict = await this.findTeacherConflict(tx, teacherId, start, end);
       if (!conflict) {
         trailing = { start, end };
         break;

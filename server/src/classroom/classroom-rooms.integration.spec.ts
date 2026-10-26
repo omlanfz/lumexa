@@ -1,11 +1,12 @@
-// Simple classrooms against a REAL Postgres: a batch's students sharing one
-// room, the teacher's lock and the 10-people limit at join time, one person on
-// several devices, a batch slot that holds up to nine students, and ending a
-// batch class (one lesson per student, each paid or not on its own).
+// Simple classrooms against a REAL Postgres: a batch's students sharing the one
+// room of their class, the teacher's lock and the 10-people limit at join time,
+// one person on several devices, the teacher's calendar (a batch class is one
+// class), and ending a batch class (finalized once, the teacher paid once, one
+// lesson per student on their own record).
 //
 // LiveKit is replaced by an in-memory fake (there is no LiveKit server in the
 // test environment); everything else — Prisma, the scheduling rules, the
-// finalization transaction — is the real thing.
+// finalization transaction, the payout ledger — is the real thing.
 //
 // Skipped unless ASSESSMENT_INTEGRATION_DATABASE_URL points at a throwaway,
 // fully migrated database — see ../assessments/testing/integration-db.ts.
@@ -28,8 +29,15 @@ delete process.env.SMTP_PASS;
 import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ClassType, LessonStatus, Role } from '@prisma/client';
+import {
+  addParticipant,
+  createBatchWithSession,
+} from '../batches/testing/batch-fixtures';
+import { BatchSessionsService } from '../batches/batch-sessions.service';
+import { PayoutsService } from '../payouts/payouts.service';
 import { PrismaModule } from '../prisma.module';
 import { PrismaService } from '../prisma.service';
+import { findTeacherConflict } from '../scheduling/teacher-conflict.util';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AdmissionService } from './admission.service';
 import { ClassFinalizationService } from './class-finalization.service';
@@ -40,6 +48,7 @@ import { RoomDirectoryService } from './room-directory.service';
 import {
   buildIdentity,
   roomForBatch,
+  roomForBatchSession,
   roomForLessonRecord,
 } from './room-ref.util';
 
@@ -85,12 +94,10 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
   let directory: RoomDirectoryService;
   let finalization: ClassFinalizationService;
   let classroom: ClassroomService;
+  let payouts: PayoutsService;
+  let batchSessions: BatchSessionsService;
   let releaseLock: () => void;
 
-  const payouts = {
-    recordScheduledLessonEarningInTx: jest.fn(() => Promise.resolve({})),
-    triggerLateJoinPenalty: jest.fn(() => Promise.resolve({})),
-  };
   const ledger = {
     consumeLessonForScheduledLessonInTx: jest.fn(() => Promise.resolve(true)),
   };
@@ -126,20 +133,18 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     return { id: user.id, profileId, name: user.fullName };
   }
 
+  /** A 1-to-1 class. */
   async function makeLesson(
     who: Person,
     by: Person,
     opts: {
-      classType?: ClassType;
       start?: Date;
       lessonNumber?: number;
       status?: LessonStatus;
       studentJoined?: boolean;
     } = {},
   ) {
-    const classType = opts.classType ?? ClassType.BATCH;
     const start = opts.start ?? slot;
-    const minutes = classType === ClassType.BATCH ? 60 : 45;
     return prisma.scheduledLesson.create({
       data: {
         studentUserId: who.id,
@@ -147,11 +152,35 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         courseId,
         lessonNumber: opts.lessonNumber ?? 3,
         start,
-        end: new Date(start.getTime() + minutes * 60_000),
-        classType,
+        end: new Date(start.getTime() + 45 * 60_000),
+        classType: ClassType.ONE_TO_ONE,
         status: opts.status ?? LessonStatus.UPCOMING,
         studentJoinedAt: opts.studentJoined ? new Date() : null,
       },
+    });
+  }
+
+  /** ONE batch class with a row for each of the given students. */
+  function makeBatchClass(
+    who: Person[],
+    opts: {
+      by?: Person;
+      start?: Date;
+      lessonNumber?: number;
+      joined?: Person[];
+      teacherJoinedAt?: Date | null;
+      name?: string;
+    } = {},
+  ) {
+    return createBatchWithSession(prisma, {
+      name: opts.name,
+      teacherProfileId: (opts.by ?? teacher).profileId!,
+      courseId,
+      studentUserIds: who.map((s) => s.id),
+      start: opts.start ?? slot,
+      lessonNumber: opts.lessonNumber ?? 3,
+      joined: opts.joined?.map((s) => s.id),
+      teacherJoinedAt: opts.teacherJoinedAt,
     });
   }
 
@@ -172,6 +201,13 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
 
     rooms = new FakeRooms();
     scheduling = new SchedulingService(prisma, audit as never, {} as never);
+    // The real payout ledger: what the teacher is paid is read back from it.
+    payouts = new PayoutsService(prisma, audit as never, alerts as never);
+    batchSessions = new BatchSessionsService(
+      prisma,
+      audit as never,
+      notifications as never,
+    );
     directory = new RoomDirectoryService(prisma);
     access = new RoomAccessService(prisma, rooms as never);
     finalization = new ClassFinalizationService(
@@ -179,16 +215,17 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       audit as never,
       alerts as never,
       notifications as never,
-      payouts as never,
+      payouts,
       ledger as never,
       scheduling,
       recording as never,
+      batchSessions,
     );
     classroom = new ClassroomService(
       prisma,
       {} as never,
       scheduling,
-      payouts as never,
+      payouts,
       alerts as never,
       {} as never,
       recording as never,
@@ -196,6 +233,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       finalization,
       access,
       directory,
+      batchSessions,
     );
   });
 
@@ -230,79 +268,113 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     }
   });
 
-  // ─── One room for a batch ───────────────────────────────────────────────────
+  // ─── One room for a batch class ─────────────────────────────────────────────
 
   describe('joining', () => {
-    it('puts every student of a batch, and their teacher, in the same room', async () => {
-      for (const s of students) await makeLesson(s, teacher);
+    it('puts every student of a batch class, and their teacher, in the same room', async () => {
+      const batch = await makeBatchClass(students);
 
       const joins: object[] = [];
       for (const s of students) {
         joins.push(
           await classroom.joinScheduledLesson(
             s.id,
-            (await lessonOf(s)).id,
+            batch.lessonIds[s.id],
             'aaaa1111',
           ),
         );
       }
       const teacherJoin = await classroom.joinScheduledLesson(
         teacher.id,
-        (await lessonOf(students[0])).id,
+        batch.lessonIds[students[0].id],
         'tdev0001',
       );
 
-      const expectedRoom = roomForBatch(teacher.profileId!, slot);
+      const expectedRoom = roomForBatchSession(batch.sessionId);
       for (const j of [...joins, teacherJoin]) {
         expect(claims(tokenOf(j)).room).toBe(expectedRoom);
-        expect(j).toMatchObject({ roomName: expectedRoom, classType: 'BATCH' });
+        expect(j).toMatchObject({
+          roomName: expectedRoom,
+          classType: 'BATCH',
+          batchName: expect.any(String),
+        });
       }
     });
 
     it('keeps a 1:1 class in a room of its own', async () => {
-      const lesson = await makeLesson(students[0], teacher, {
-        classType: ClassType.ONE_TO_ONE,
-      });
+      const lesson = await makeLesson(students[0], teacher);
       const j = await classroom.joinScheduledLesson(
         students[0].id,
         lesson.id,
         'aaaa1111',
       );
       expect(claims(tokenOf(j)).room).toBe(`lesson-${lesson.id}`);
-      expect(j).toMatchObject({ classType: 'ONE_TO_ONE' });
+      expect(j).toMatchObject({ classType: 'ONE_TO_ONE', batchName: null });
     });
 
-    it('two batches at different times, or with different teachers, are different rooms', async () => {
-      const a = await makeLesson(students[0], teacher);
-      const later = await makeLesson(students[1], teacher, {
+    it('two batch classes, at different times or with different teachers, are different rooms — and neither is a 1:1 room', async () => {
+      const a = await makeBatchClass([students[0]]);
+      const later = await makeBatchClass([students[1]], {
+        name: 'Later batch',
         start: new Date(slot.getTime() + 2 * 3_600_000),
       });
-      const c = await makeLesson(students[2], otherTeacher);
+      const c = await makeBatchClass([students[2]], {
+        by: otherTeacher,
+        name: 'Other teacher batch',
+      });
+      const solo = await makeLesson(students[3], teacher, {
+        start: new Date(slot.getTime() + 5 * 3_600_000),
+      });
       const joinedA = await classroom.joinScheduledLesson(
         students[0].id,
-        a.id,
+        a.lessonIds[students[0].id],
         'aaaa1111',
       );
       const joinedC = await classroom.joinScheduledLesson(
         students[2].id,
-        c.id,
+        c.lessonIds[students[2].id],
         'aaaa1111',
       );
       const roomOf = (j: object) => ('roomName' in j ? j.roomName : '');
       expect(
-        new Set([roomOf(joinedA), roomOf(joinedC), roomForLessonRecord(later)])
-          .size,
-      ).toBe(3);
+        new Set([
+          roomOf(joinedA),
+          roomOf(joinedC),
+          roomForBatchSession(later.sessionId),
+          roomForLessonRecord(solo),
+        ]).size,
+      ).toBe(4);
     });
 
-    it('a student who is not in the batch cannot get into its room', async () => {
-      await makeLesson(students[0], teacher);
-      const outsiderLesson = await makeLesson(students[1], otherTeacher);
+    it('a student who is not in the class cannot get into its room', async () => {
+      await makeBatchClass([students[0]]);
+      const outsiderClass = await makeBatchClass([students[1]], {
+        by: otherTeacher,
+        name: 'Other batch',
+      });
       await expect(
         classroom.joinScheduledLesson(
           students[0].id,
-          outsiderLesson.id,
+          outsiderClass.lessonIds[students[1].id],
           'aaaa1111',
+        ),
+      ).rejects.toThrow(/not assigned/);
+    });
+
+    it('a student of the batch cannot use a classmate’s row, and an unrelated teacher cannot enter', async () => {
+      const batch = await makeBatchClass([students[0], students[1]]);
+      await expect(
+        classroom.joinScheduledLesson(
+          students[0].id,
+          batch.lessonIds[students[1].id],
+          'aaaa1111',
+        ),
+      ).rejects.toThrow(/not assigned/);
+      await expect(
+        classroom.joinScheduledLesson(
+          otherTeacher.id,
+          batch.lessonIds[students[0].id],
+          'tdev0001',
         ),
       ).rejects.toThrow(/not assigned/);
     });
@@ -341,13 +413,60 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       }
     });
 
-    it('the teacher entering a batch has joined every student’s lesson; a student only their own', async () => {
-      for (const s of students) await makeLesson(s, teacher);
-      const first = await lessonOf(students[0]);
+    describe('by the batch class itself', () => {
+      it('the teacher enters a batch class by its own id and lands in its room', async () => {
+        const batch = await makeBatchClass(students);
+        const j = await classroom.joinBatchSession(
+          teacher.id,
+          batch.sessionId,
+          'tdev0001',
+        );
+        expect(claims(tokenOf(j)).room).toBe(
+          roomForBatchSession(batch.sessionId),
+        );
+        // …through one of the students' rows, which the response names.
+        expect(Object.values(batch.lessonIds)).toContain(
+          (j as { scheduledLessonId: string }).scheduledLessonId,
+        );
+      });
+
+      it('a student enters by the class id through their own row', async () => {
+        const batch = await makeBatchClass(students);
+        const j = await classroom.joinBatchSession(
+          students[2].id,
+          batch.sessionId,
+          'aaaa1111',
+        );
+        expect(j).toMatchObject({
+          roomName: roomForBatchSession(batch.sessionId),
+          scheduledLessonId: batch.lessonIds[students[2].id],
+        });
+      });
+
+      it('someone who is not in the class, or another teacher, is refused', async () => {
+        const batch = await makeBatchClass([students[0], students[1]]);
+        await expect(
+          classroom.joinBatchSession(students[3].id, batch.sessionId, 'x1'),
+        ).rejects.toThrow(/not assigned/);
+        await expect(
+          classroom.joinBatchSession(otherTeacher.id, batch.sessionId, 'x1'),
+        ).rejects.toThrow(/not assigned/);
+      });
+
+      it('a class with no student in it cannot be entered', async () => {
+        const batch = await makeBatchClass([]);
+        await expect(
+          classroom.joinBatchSession(teacher.id, batch.sessionId, 'tdev0001'),
+        ).rejects.toThrow(/no students/);
+      });
+    });
+
+    it('the teacher entering a batch class is on every student’s row at once; a student only on their own', async () => {
+      const batch = await makeBatchClass(students);
 
       await classroom.joinScheduledLesson(
         students[1].id,
-        (await lessonOf(students[1])).id,
+        batch.lessonIds[students[1].id],
         'aaaa1111',
       );
       let all = await prisma.scheduledLesson.findMany({
@@ -356,61 +475,119 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       expect(all.filter((l) => l.studentJoinedAt)).toHaveLength(1);
       expect(all.filter((l) => l.teacherJoinedAt)).toHaveLength(0);
 
-      await classroom.joinScheduledLesson(teacher.id, first.id, 'tdev0001');
+      await classroom.joinScheduledLesson(
+        teacher.id,
+        batch.lessonIds[students[0].id],
+        'tdev0001',
+      );
       all = await prisma.scheduledLesson.findMany();
       expect(all.every((l) => l.teacherJoinedAt)).toBe(true);
       expect(all.filter((l) => l.studentJoinedAt)).toHaveLength(1);
+      // The teacher's attendance is the CLASS's: recorded once, on the class.
+      const session = await prisma.batchSession.findUniqueOrThrow({
+        where: { id: batch.sessionId },
+      });
+      expect(session.teacherJoinedAt).not.toBeNull();
     });
 
-    it('a student added to the batch after the teacher came in is counted as joined when the teacher next comes in', async () => {
-      const first = await makeLesson(students[0], teacher);
-      await classroom.joinScheduledLesson(teacher.id, first.id, 'tdev0001');
-      const original = await prisma.scheduledLesson.findUniqueOrThrow({
-        where: { id: first.id },
+    it('a student added to the class after the teacher came in is counted as joined when the teacher next comes in; the first join time is kept', async () => {
+      const batch = await makeBatchClass([students[0]]);
+      await classroom.joinScheduledLesson(
+        teacher.id,
+        batch.lessonIds[students[0].id],
+        'tdev0001',
+      );
+      const original = await prisma.batchSession.findUniqueOrThrow({
+        where: { id: batch.sessionId },
       });
 
-      const addedLater = await makeLesson(students[1], teacher); // same slot
+      const addedLater = await addParticipant(prisma, {
+        batchId: batch.batchId,
+        sessionId: batch.sessionId,
+        studentUserId: students[1].id,
+        teacherProfileId: teacher.profileId!,
+        courseId,
+        lessonNumber: 3,
+        start: slot,
+        end: new Date(slot.getTime() + 60 * 60_000),
+      });
       expect(
         (
           await prisma.scheduledLesson.findUniqueOrThrow({
-            where: { id: addedLater.id },
+            where: { id: addedLater },
           })
         ).teacherJoinedAt,
       ).toBeNull();
 
-      // …the teacher comes back (another device) through the FIRST student's lesson
-      await classroom.joinScheduledLesson(teacher.id, first.id, 'tdev0002');
-      const after = await prisma.scheduledLesson.findMany({
-        where: { id: { in: [first.id, addedLater.id] } },
-      });
+      // …the teacher comes back (another device) through the FIRST student's row
+      await classroom.joinScheduledLesson(
+        teacher.id,
+        batch.lessonIds[students[0].id],
+        'tdev0002',
+      );
+      const after = await prisma.scheduledLesson.findMany();
       expect(after.every((l) => l.teacherJoinedAt)).toBe(true);
-      // the first join time is never overwritten
       expect(
-        after.find((l) => l.id === first.id)!.teacherJoinedAt!.getTime(),
+        (
+          await prisma.batchSession.findUniqueOrThrow({
+            where: { id: batch.sessionId },
+          })
+        ).teacherJoinedAt!.getTime(),
       ).toBe(original.teacherJoinedAt!.getTime());
     });
 
-    it('a teacher who joins late is penalised once per student’s lesson, never twice for one', async () => {
-      const late = new Date(Date.now() - 10 * 60_000);
-      for (const s of students) await makeLesson(s, teacher, { start: late });
-      const anyLesson = await lessonOf(students[0]);
+    describe('a teacher who joins late', () => {
+      const late = () => new Date(Date.now() - 10 * 60_000);
+      const penalties = () =>
+        prisma.payoutEntry.findMany({ where: { type: 'PENALTY' } });
 
-      await classroom.joinScheduledLesson(teacher.id, anyLesson.id, 'tdev0001');
-      expect(payouts.triggerLateJoinPenalty).toHaveBeenCalledTimes(4);
-      const penalised = payouts.triggerLateJoinPenalty.mock.calls.map(
-        (c) =>
-          (c as unknown as [{ scheduledLessonId: string }])[0]
-            .scheduledLessonId,
-      );
-      expect(new Set(penalised).size).toBe(4);
+      it('is penalised ONCE for a batch class, however many students it has — and never twice for the same class', async () => {
+        const batch = await makeBatchClass(students, { start: late() });
+        const spy = jest.spyOn(payouts, 'triggerLateJoinPenalty');
+
+        await classroom.joinScheduledLesson(
+          teacher.id,
+          batch.lessonIds[students[0].id],
+          'tdev0001',
+        );
+        // Back in through another student's row and another device.
+        await classroom.joinScheduledLesson(
+          teacher.id,
+          batch.lessonIds[students[3].id],
+          'tdev0002',
+        );
+
+        const rows = await penalties();
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({
+          teacherId: teacher.profileId,
+          referenceType: 'BATCH_SESSION_LATE_JOIN',
+          referenceId: batch.sessionId,
+        });
+        // Every call is about the class, never about one student's row.
+        for (const [p] of spy.mock.calls) {
+          expect(p).toMatchObject({ batchSessionId: batch.sessionId });
+          expect(p).not.toHaveProperty('scheduledLessonId');
+        }
+      });
+
+      it('is penalised once per 1:1 class, as before', async () => {
+        const lesson = await makeLesson(students[0], teacher, {
+          start: late(),
+        });
+        await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0001');
+        await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0002');
+        const rows = await penalties();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].referenceType).toBe('SCHEDULED_LESSON_LATE_JOIN');
+      });
     });
 
     it('a teacher who was on time is not fined by a later token request — pressing Join, a second device, a refresh', async () => {
-      const lesson = await makeLesson(students[0], teacher, {
-        classType: ClassType.ONE_TO_ONE,
-      }); // starts in 5 minutes
+      const lesson = await makeLesson(students[0], teacher); // starts in 5 minutes
+      const spy = jest.spyOn(payouts, 'triggerLateJoinPenalty');
       await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0001');
-      expect(payouts.triggerLateJoinPenalty).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
 
       // Twenty minutes into the class. (Time cannot be moved on, so the class is
       // moved back instead: it started 20 minutes ago and the teacher's first
@@ -426,35 +603,59 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       });
       await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0001'); // Join pressed
       await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0002'); // a second device
-      expect(payouts.triggerLateJoinPenalty).not.toHaveBeenCalled();
+      expect(spy).not.toHaveBeenCalled();
+      expect(
+        await prisma.payoutEntry.count({ where: { type: 'PENALTY' } }),
+      ).toBe(0);
     });
 
-    it('a student added to a batch after the teacher came in on time does not make the teacher late', async () => {
-      const first = await makeLesson(students[0], teacher); // starts in 5 minutes
-      await classroom.joinScheduledLesson(teacher.id, first.id, 'tdev0001');
+    it('a batch teacher who was on time is not fined later, nor by a student added after they came in', async () => {
+      const batch = await makeBatchClass([students[0]]); // starts in 5 minutes
+      await classroom.joinScheduledLesson(
+        teacher.id,
+        batch.lessonIds[students[0].id],
+        'tdev0001',
+      );
 
-      const addedLater = await makeLesson(students[1], teacher); // same slot
-      // Twenty minutes into the class (see the test above for how time is moved).
+      const addedLater = await addParticipant(prisma, {
+        batchId: batch.batchId,
+        sessionId: batch.sessionId,
+        studentUserId: students[1].id,
+        teacherProfileId: teacher.profileId!,
+        courseId,
+        lessonNumber: 3,
+        start: slot,
+        end: new Date(slot.getTime() + 60 * 60_000),
+      });
+      // Twenty minutes into the class (see the 1:1 test above for how time is moved).
       const started = new Date(Date.now() - 20 * 60_000);
-      await prisma.scheduledLesson.updateMany({
-        where: { teacherId: teacher.profileId! },
+      const end = new Date(started.getTime() + 60 * 60_000);
+      await prisma.batchSession.update({
+        where: { id: batch.sessionId },
         data: {
           start: started,
-          end: new Date(started.getTime() + 60 * 60_000),
+          end,
+          teacherJoinedAt: new Date(started.getTime() - 2 * 60_000),
         },
       });
-      await prisma.scheduledLesson.update({
-        where: { id: first.id },
-        data: { teacherJoinedAt: new Date(started.getTime() - 2 * 60_000) },
+      await prisma.scheduledLesson.updateMany({
+        where: { batchSessionId: batch.sessionId },
+        data: { start: started, end },
       });
 
-      await classroom.joinScheduledLesson(teacher.id, first.id, 'tdev0002');
-      expect(payouts.triggerLateJoinPenalty).not.toHaveBeenCalled();
-      // …while the newly added lesson is still counted as joined
+      await classroom.joinScheduledLesson(
+        teacher.id,
+        batch.lessonIds[students[0].id],
+        'tdev0002',
+      );
+      expect(
+        await prisma.payoutEntry.count({ where: { type: 'PENALTY' } }),
+      ).toBe(0);
+      // …while the newly added student's row is still counted as joined
       expect(
         (
           await prisma.scheduledLesson.findUniqueOrThrow({
-            where: { id: addedLater.id },
+            where: { id: addedLater },
           })
         ).teacherJoinedAt,
       ).not.toBeNull();
@@ -465,8 +666,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
 
   describe('the teacher’s lock', () => {
     it('only the class’s teacher can lock it', async () => {
-      const lesson = await makeLesson(students[0], teacher);
-      const room = roomForBatch(teacher.profileId!, slot);
+      const batch = await makeBatchClass([students[0]]);
+      const room = roomForBatchSession(batch.sessionId);
       await expect(
         classroom.setRoomLocked(students[0].id, room, true),
       ).rejects.toThrow(/Only the teacher/);
@@ -477,16 +678,16 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         ok: true,
         locked: true,
       });
-      expect(lesson.id).toBeTruthy();
     });
 
     it('is off by default, and while on keeps every student out but never the teacher', async () => {
-      const lesson = await makeLesson(students[0], teacher);
-      const room = roomForBatch(teacher.profileId!, slot);
+      const batch = await makeBatchClass([students[0]]);
+      const lessonId = batch.lessonIds[students[0].id];
+      const room = roomForBatchSession(batch.sessionId);
 
       const open = await classroom.joinScheduledLesson(
         students[0].id,
-        lesson.id,
+        lessonId,
         'aaaa1111',
       );
       expect(open).toMatchObject({ roomLocked: false });
@@ -494,7 +695,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.setRoomLocked(teacher.id, room, true);
       const blocked = await classroom.joinScheduledLesson(
         students[0].id,
-        lesson.id,
+        lessonId,
         'aaaa1111',
       );
       expect(blocked).toMatchObject({
@@ -506,7 +707,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
 
       const teacherIn = await classroom.joinScheduledLesson(
         teacher.id,
-        lesson.id,
+        lessonId,
         'tdev0001',
       );
       expect(teacherIn).toMatchObject({ roomLocked: true });
@@ -514,14 +715,15 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     });
 
     it('unlocking lets students in again; the lock survives the live room disappearing', async () => {
-      const lesson = await makeLesson(students[0], teacher);
-      const room = roomForBatch(teacher.profileId!, slot);
+      const batch = await makeBatchClass([students[0]]);
+      const lessonId = batch.lessonIds[students[0].id];
+      const room = roomForBatchSession(batch.sessionId);
       await classroom.setRoomLocked(teacher.id, room, true);
       rooms.people = []; // the LiveKit room emptied and is gone
       expect(
         await classroom.joinScheduledLesson(
           students[0].id,
-          lesson.id,
+          lessonId,
           'aaaa1111',
         ),
       ).toMatchObject({ blocked: true });
@@ -530,28 +732,37 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       expect(
         await classroom.joinScheduledLesson(
           students[0].id,
-          lesson.id,
+          lessonId,
           'aaaa1111',
         ),
       ).toHaveProperty('token');
     });
 
-    it('locks one classroom only — another batch of the same teacher is unaffected', async () => {
-      const a = await makeLesson(students[0], teacher);
-      const b = await makeLesson(students[1], teacher, {
+    it('locks one classroom only — another batch class of the same teacher is unaffected', async () => {
+      const a = await makeBatchClass([students[0]]);
+      const b = await makeBatchClass([students[1]], {
+        name: 'Later batch',
         start: new Date(slot.getTime() + 3_600_000),
       });
       await classroom.setRoomLocked(
         teacher.id,
-        roomForBatch(teacher.profileId!, slot),
+        roomForBatchSession(a.sessionId),
         true,
       );
       expect(
-        await classroom.joinScheduledLesson(students[0].id, a.id, 'aaaa1111'),
+        await classroom.joinScheduledLesson(
+          students[0].id,
+          a.lessonIds[students[0].id],
+          'aaaa1111',
+        ),
       ).toMatchObject({ blocked: true });
       // b is an hour later: not open yet, but certainly not "locked"
       await expect(
-        classroom.joinScheduledLesson(students[1].id, b.id, 'aaaa1111'),
+        classroom.joinScheduledLesson(
+          students[1].id,
+          b.lessonIds[students[1].id],
+          'aaaa1111',
+        ),
       ).rejects.toThrow(/opens 10 minutes before/);
     });
   });
@@ -574,8 +785,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const many: Person[] = [];
       for (let i = 0; i < 10; i++)
         many.push(await makeUser(`kid-${i}`, Role.STUDENT));
-      for (const s of many) await makeLesson(s, teacher);
-      const anyLesson = (s: Person) => lessonOf(s);
+      const batch = await makeBatchClass(many);
+      const rowOf = (s: Person) => batch.lessonIds[s.id];
 
       rooms.people = [
         inRoom(teacher.id, 'tdev0001'),
@@ -584,7 +795,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       expect(
         await classroom.joinScheduledLesson(
           many[8].id,
-          (await anyLesson(many[8])).id,
+          rowOf(many[8]),
           'aaaa1111',
         ),
       ).toHaveProperty('token');
@@ -595,7 +806,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       ];
       const tenth = await classroom.joinScheduledLesson(
         many[9].id,
-        (await anyLesson(many[9])).id,
+        rowOf(many[9]),
         'aaaa1111',
       );
       expect(tenth).toMatchObject({ blocked: true, reason: 'ROOM_FULL' });
@@ -606,16 +817,14 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       expect(
         await classroom.joinScheduledLesson(
           teacher.id,
-          (await anyLesson(many[0])).id,
+          rowOf(many[0]),
           'tdev0001',
         ),
       ).toHaveProperty('token');
     });
 
     it('limits a 1:1 class the same way', async () => {
-      const lesson = await makeLesson(students[0], teacher, {
-        classType: ClassType.ONE_TO_ONE,
-      });
+      const lesson = await makeLesson(students[0], teacher);
       const crowd: RoomConnection[] = [];
       for (let i = 0; i < 9; i++)
         crowd.push(inRoom(`someone-else-${i}`, 'aaaa1111', i));
@@ -630,120 +839,156 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     });
 
     it('refuses a fourth device, not a refresh of an existing one', async () => {
-      const lesson = await makeLesson(students[0], teacher);
+      const batch = await makeBatchClass([students[0]]);
+      const lessonId = batch.lessonIds[students[0].id];
       rooms.people = ['aaaa1111', 'bbbb2222', 'cccc3333'].map((d, i) =>
         inRoom(students[0].id, d, i),
       );
       expect(
         await classroom.joinScheduledLesson(
           students[0].id,
-          lesson.id,
+          lessonId,
           'dddd4444',
         ),
       ).toMatchObject({ blocked: true, reason: 'TOO_MANY_DEVICES' });
       expect(
         await classroom.joinScheduledLesson(
           students[0].id,
-          lesson.id,
+          lessonId,
           'bbbb2222',
         ),
       ).toHaveProperty('token');
     });
   });
 
-  // ─── A batch slot ──────────────────────────────────────────────────────────
+  // ─── The teacher's calendar ────────────────────────────────────────────────
 
-  describe('scheduling a batch', () => {
-    const conflict = (start: Date, classType: ClassType, exclude?: string) =>
-      scheduling.findTeacherConflict(
+  describe('the teacher’s calendar: a batch class is ONE class', () => {
+    const conflict = (
+      start: Date,
+      minutes = 60,
+      opts: { excludeLessonId?: string; excludeSessionId?: string } = {},
+    ) =>
+      findTeacherConflict(
         prisma,
         teacher.profileId!,
         start,
-        new Date(start.getTime() + (classType === 'BATCH' ? 60 : 45) * 60_000),
-        exclude,
-        classType === ClassType.BATCH,
+        new Date(start.getTime() + minutes * 60_000),
+        opts,
       );
 
-    it('another student can join a batch slot that is already taken — if they are batch too', async () => {
-      await makeLesson(students[0], teacher);
-      expect(await conflict(slot, ClassType.BATCH)).toBeNull();
-    });
-
-    it('a 1:1 class is a conflict in a batch’s slot, and the old rule (batch=false) still is', async () => {
-      await makeLesson(students[0], teacher);
-      expect(await conflict(slot, ClassType.ONE_TO_ONE)).not.toBeNull();
-      expect(
-        await scheduling.findTeacherConflict(
-          prisma,
-          teacher.profileId!,
-          slot,
-          new Date(slot.getTime() + 60 * 60_000),
-        ),
-      ).not.toBeNull();
-    });
-
-    it('a batch at an overlapping but different time is a conflict', async () => {
-      await makeLesson(students[0], teacher);
-      for (const offsetMin of [-30, 30]) {
-        expect(
-          await conflict(
-            new Date(slot.getTime() + offsetMin * 60_000),
-            ClassType.BATCH,
-          ),
-        ).not.toBeNull();
-      }
-    });
-
-    it('a batch holds nine students and then says it is full', async () => {
-      const kids: Person[] = [];
-      for (let i = 0; i < 10; i++)
-        kids.push(await makeUser(`kid-${i}`, Role.STUDENT));
-      for (let i = 0; i < 8; i++) await makeLesson(kids[i], teacher);
-      expect(await conflict(slot, ClassType.BATCH)).toBeNull(); // the ninth fits
-      await makeLesson(kids[8], teacher);
-      expect(await conflict(slot, ClassType.BATCH)).not.toBeNull(); // the tenth does not
-    });
-
-    it('moving an existing batch lesson does not count the lesson against itself', async () => {
+    it('a batch class with nine students blocks the teacher once; its own students never count against it', async () => {
       const kids: Person[] = [];
       for (let i = 0; i < 9; i++)
         kids.push(await makeUser(`kid-${i}`, Role.STUDENT));
-      const lessons: { id: string }[] = [];
-      for (const k of kids) lessons.push(await makeLesson(k, teacher));
-      expect(await conflict(slot, ClassType.BATCH, lessons[0].id)).toBeNull();
+      const batch = await makeBatchClass(kids);
+
+      // Anyone else wanting that time is in the way…
+      expect(await conflict(slot)).not.toBeNull();
+      // …but the class itself can be moved or rebuilt without clashing with its own rows.
+      expect(
+        await conflict(slot, 60, { excludeSessionId: batch.sessionId }),
+      ).toBeNull();
+    });
+
+    it('a 1:1 class, or another batch’s class, in a batch class’s time is a conflict', async () => {
+      const batch = await makeBatchClass([students[0]]);
+      expect(await conflict(slot)).not.toBeNull();
+      // another batch wanting the same time
+      expect(
+        await conflict(slot, 60, { excludeSessionId: 'some-other-session' }),
+      ).not.toBeNull();
+      // …and overlapping times either side
+      for (const offsetMin of [-30, 30]) {
+        expect(
+          await conflict(new Date(slot.getTime() + offsetMin * 60_000), 60, {
+            excludeSessionId: 'some-other-session',
+          }),
+        ).not.toBeNull();
+      }
+      // a class straight after it is fine
+      expect(
+        await conflict(new Date(slot.getTime() + 60 * 60_000), 45, {
+          excludeSessionId: batch.sessionId,
+        }),
+      ).toBeNull();
+    });
+
+    it('a batch class with nobody in it yet still holds the teacher’s time', async () => {
+      await makeBatchClass([]);
+      expect(await conflict(slot)).not.toBeNull();
+    });
+
+    it('a 1:1 class holds it too, and moving a lesson does not clash with itself', async () => {
+      const lesson = await makeLesson(students[0], teacher);
+      expect(await conflict(slot)).not.toBeNull();
+      expect(
+        await conflict(slot, 45, { excludeLessonId: lesson.id }),
+      ).toBeNull();
     });
 
     it('a different teacher is never in the way', async () => {
-      await makeLesson(students[0], otherTeacher);
-      expect(await conflict(slot, ClassType.ONE_TO_ONE)).toBeNull();
+      await makeBatchClass([students[0]], { by: otherTeacher });
+      expect(await conflict(slot)).toBeNull();
+    });
+
+    it('a finished or cancelled class no longer holds the time', async () => {
+      const batch = await makeBatchClass([students[0]]);
+      await prisma.batchSession.update({
+        where: { id: batch.sessionId },
+        data: { status: LessonStatus.CANCELLED },
+      });
+      await prisma.scheduledLesson.updateMany({
+        where: { batchSessionId: batch.sessionId },
+        data: { status: LessonStatus.CANCELLED },
+      });
+      expect(await conflict(slot)).toBeNull();
     });
   });
 
   // ─── Who is in a room ──────────────────────────────────────────────────────
 
   describe('room directory', () => {
-    it('a batch room is its teacher and every student’s lesson that is not cancelled', async () => {
-      await makeLesson(students[0], teacher);
-      await makeLesson(students[1], teacher);
-      await makeLesson(students[2], teacher, {
+    it('a batch class’s room is its teacher and every student’s row that is not cancelled', async () => {
+      const batch = await makeBatchClass([students[0], students[1]]);
+      // a student whose row for this class was cancelled, and another class's student
+      await addParticipant(prisma, {
+        batchId: batch.batchId,
+        sessionId: batch.sessionId,
+        studentUserId: students[2].id,
+        teacherProfileId: teacher.profileId!,
+        courseId,
+        lessonNumber: 3,
+        start: slot,
+        end: new Date(slot.getTime() + 60 * 60_000),
         status: LessonStatus.CANCELLED,
       });
-      await makeLesson(students[3], otherTeacher);
+      await makeBatchClass([students[3]], { by: otherTeacher, name: 'Other' });
 
-      const resolved = await directory.resolve(
-        roomForBatch(teacher.profileId!, slot),
-      );
+      const room = roomForBatchSession(batch.sessionId);
+      const resolved = await directory.resolve(room);
       expect(resolved.kind).toBe('batch');
       expect(resolved.classType).toBe('BATCH');
+      expect(resolved.batchSessionId).toBe(batch.sessionId);
       expect(resolved.lessons.map((l) => l.studentUserId).sort()).toEqual(
         [students[0].id, students[1].id].sort(),
       );
-      expect(
-        await directory.teacherUserIdOf(roomForBatch(teacher.profileId!, slot)),
-      ).toBe(teacher.id);
+      expect(await directory.teacherUserIdOf(room)).toBe(teacher.id);
+    });
+
+    it('a class that was running under the old room name still resolves to its students', async () => {
+      const batch = await makeBatchClass([students[0], students[1]]);
+      const legacy = roomForBatch(teacher.profileId!, slot);
+      const resolved = await directory.resolve(legacy);
+      expect(resolved.lessons.map((l) => l.id).sort()).toEqual(
+        Object.values(batch.lessonIds).sort(),
+      );
     });
 
     it('an unknown room is not found', async () => {
+      await expect(
+        directory.resolve(roomForBatchSession('nope')),
+      ).rejects.toThrow(/not found/i);
       await expect(
         directory.resolve(roomForBatch(teacher.profileId!, slot)),
       ).rejects.toThrow(/not found/i);
@@ -756,159 +1001,240 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
   // ─── Ending a batch class ──────────────────────────────────────────────────
 
   describe('ending a batch class', () => {
-    const room = () => roomForBatch(teacher.profileId!, slot);
-    const statuses = async () =>
-      Object.fromEntries(
-        (
-          await prisma.scheduledLesson.findMany({
-            where: { id: { in: allIds } },
-          })
-        ).map((l) => [l.studentUserId, l.status]),
-      );
-    let allIds: string[];
-
-    async function sessionOf(attended: boolean[]) {
-      allIds = [];
-      // One start for the whole batch (that is what makes it one classroom);
-      // it began 20 minutes ago, so End Class is open.
+    /** A class that began 20 minutes ago (so End Class is open), with the
+     * students who came marked as having joined. */
+    async function runningClass(attended: boolean[], lessonNumber = 3) {
       slot = new Date(Date.now() - 20 * 60_000);
-      for (let i = 0; i < attended.length; i++) {
-        const l = await makeLesson(students[i], teacher, {
-          studentJoined: attended[i],
-          start: slot,
-        });
-        allIds.push(l.id);
-      }
+      const who = students.slice(0, attended.length);
+      const batch = await makeBatchClass(who, {
+        start: slot,
+        lessonNumber,
+        joined: who.filter((_, i) => attended[i]),
+        teacherJoinedAt: new Date(slot.getTime() - 60_000),
+      });
+      return { batch, room: roomForBatchSession(batch.sessionId), who };
     }
+    const rowStatuses = async () =>
+      Object.fromEntries(
+        (await prisma.scheduledLesson.findMany()).map((l) => [
+          l.studentUserId,
+          l.status,
+        ]),
+      );
+    const earnings = () =>
+      prisma.payoutEntry.findMany({ where: { type: 'CLASS_COMPLETED' } });
 
-    it('Completed ends each student’s lesson on its own: paid if they came, Incomplete (no pay, a make-up) if they never joined', async () => {
-      await sessionOf([true, true, false]);
+    it('Completed ends the class once: the teacher is paid ONCE, each student who came is charged a lesson, a student who never joined is Incomplete with no make-up of their own', async () => {
+      const { room, who } = await runningClass([true, true, false]);
 
-      const done = await classroom.endClass(teacher.id, room(), {
+      const done = await classroom.endClass(teacher.id, room, {
         outcome: 'COMPLETED',
       });
       expect(done.ok).toBe(true);
+      expect(done.status).toBe('COMPLETED');
 
-      const s = await statuses();
-      expect(s[students[0].id]).toBe('COMPLETED');
-      expect(s[students[1].id]).toBe('COMPLETED');
-      expect(s[students[2].id]).toBe('INCOMPLETE');
-      expect(payouts.recordScheduledLessonEarningInTx).toHaveBeenCalledTimes(2);
+      const s = await rowStatuses();
+      expect(s[who[0].id]).toBe('COMPLETED');
+      expect(s[who[1].id]).toBe('COMPLETED');
+      expect(s[who[2].id]).toBe('INCOMPLETE');
+
+      // ONE payment for the class (not one per student)…
+      const paid = await earnings();
+      expect(paid).toHaveLength(1);
+      expect(paid[0]).toMatchObject({
+        teacherId: teacher.profileId,
+        referenceType: 'BATCH_SESSION',
+      });
+      // …and one lesson from each of the two students who were taught.
       expect(ledger.consumeLessonForScheduledLessonInTx).toHaveBeenCalledTimes(
         2,
       );
 
-      // the student who never came gets the class again, and a missed-class notice
-      const makeup = await prisma.scheduledLesson.findMany({
-        where: { studentUserId: students[2].id, status: LessonStatus.UPCOMING },
-      });
-      expect(makeup).toHaveLength(1);
-      expect(makeup[0].lessonNumber).toBe(3);
+      // The student who never came gets no private make-up (the batch's
+      // sequence does not split) — and a missed-class notice.
+      expect(
+        await prisma.scheduledLesson.count({
+          where: { studentUserId: who[2].id, status: LessonStatus.UPCOMING },
+        }),
+      ).toBe(0);
       expect(notifications.sendMissedClassNotice).toHaveBeenCalledTimes(1);
       const absent = await prisma.scheduledLesson.findFirstOrThrow({
-        where: { studentUserId: students[2].id, status: 'INCOMPLETE' },
+        where: { studentUserId: who[2].id, status: 'INCOMPLETE' },
       });
       expect(absent.endReason).toBe('STUDENT_NO_SHOW');
+      // The class record says who ended it, and how.
+      const session = await prisma.batchSession.findFirstOrThrow();
+      expect(session).toMatchObject({
+        status: 'COMPLETED',
+        endedByRole: 'TEACHER',
+      });
     });
 
-    it('wraps up the shared classroom (recording, live room) exactly once, for the batch room', async () => {
-      await sessionOf([true, true, true]);
-      await classroom.endClass(teacher.id, room(), { outcome: 'COMPLETED' });
+    it('wraps up the shared classroom (recording, live room) exactly once, for the class’s room', async () => {
+      const { room } = await runningClass([true, true, true]);
+      await classroom.endClass(teacher.id, room, { outcome: 'COMPLETED' });
       expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledTimes(1);
-      expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledWith(room());
+      expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledWith(room);
       expect(recording.finalizeAtClassEnd).toHaveBeenCalledTimes(1);
     });
 
-    it('an admin settling one student’s lesson does not end the class for the others', async () => {
-      await sessionOf([true, true]);
-      await finalization.finalizeLesson(allIds[0], {
+    it('an admin settling one student’s row settles the whole class — once, crediting everyone', async () => {
+      const { batch, who } = await runningClass([true, true]);
+      await finalization.finalizeLesson(batch.lessonIds[who[0].id], {
         outcome: 'COMPLETED',
         actor: { role: 'ADMIN', userId: 'admin' },
       });
-      expect(recording.stopActiveSegmentIfAny).not.toHaveBeenCalled();
+      expect(Object.values(await rowStatuses())).toEqual([
+        'COMPLETED',
+        'COMPLETED',
+      ]);
+      expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledTimes(1);
+      expect(await earnings()).toHaveLength(1);
 
-      await finalization.finalizeLesson(allIds[1], {
-        outcome: 'COMPLETED',
-        actor: { role: 'ADMIN', userId: 'admin' },
-      });
-      expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledTimes(1); // the last one out
+      // The second student's row is the same class: nothing more happens.
+      const again = await finalization.finalizeLesson(
+        batch.lessonIds[who[1].id],
+        { outcome: 'COMPLETED', actor: { role: 'ADMIN', userId: 'admin' } },
+      );
+      expect(again.finalized).toBe(false);
+      expect(await earnings()).toHaveLength(1);
+      expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledTimes(1);
     });
 
-    it('Incomplete applies the teacher’s reason to everyone', async () => {
-      await sessionOf([true, false]);
-      await classroom.endClass(teacher.id, room(), {
+    it('Incomplete applies the teacher’s reason to everyone, pays no one, and adds ONE make-up class for the whole batch', async () => {
+      const { batch, room, who } = await runningClass([true, false]);
+      const before = await prisma.batchSession.count();
+      await classroom.endClass(teacher.id, room, {
         outcome: 'INCOMPLETE',
         reason: 'TECHNICAL_ISSUE',
       });
-      const s = await statuses();
-      expect(Object.values(s)).toEqual(['INCOMPLETE', 'INCOMPLETE']);
-      expect(payouts.recordScheduledLessonEarningInTx).not.toHaveBeenCalled();
+      const ended = await prisma.scheduledLesson.findMany({
+        where: { batchSessionId: batch.sessionId },
+      });
+      expect(ended.map((l) => l.status)).toEqual(['INCOMPLETE', 'INCOMPLETE']);
+      expect(await earnings()).toHaveLength(0);
+      expect(ledger.consumeLessonForScheduledLessonInTx).not.toHaveBeenCalled();
+
+      // One extra class of the same lesson, with a row for each student.
+      const upcoming = await prisma.batchSession.findMany({
+        where: { status: LessonStatus.UPCOMING },
+        include: { participants: true },
+      });
+      expect(await prisma.batchSession.count()).toBe(before + 1);
+      expect(upcoming).toHaveLength(1);
+      expect(upcoming[0].lessonNumber).toBe(3);
+      expect(
+        upcoming[0].participants.map((p) => p.studentUserId).sort(),
+      ).toEqual(who.map((s) => s.id).sort());
     });
 
-    it('Partially Completed is refused up front, changing nothing, if any student has used theirs', async () => {
-      await sessionOf([true, true]);
-      await prisma.scheduledLesson.create({
+    it('Partially Completed pays like Completed and adds ONE extra class — and is refused up front, changing nothing, once the batch has used it for that lesson', async () => {
+      const { batch, room, who } = await runningClass([true, true]);
+      await classroom.endClass(teacher.id, room, {
+        outcome: 'PARTIALLY_COMPLETED',
+      });
+      expect(await earnings()).toHaveLength(1);
+      const extra = await prisma.batchSession.findFirstOrThrow({
+        where: { status: LessonStatus.UPCOMING },
+      });
+      expect(extra.lessonNumber).toBe(3);
+
+      // That extra class cannot itself be ended Partially Completed again.
+      await prisma.batchSession.update({
+        where: { id: extra.id },
         data: {
-          studentUserId: students[1].id,
-          teacherId: teacher.profileId!,
-          courseId,
-          lessonNumber: 3,
-          start: new Date(Date.now() - 7 * 86_400_000),
-          end: new Date(Date.now() - 7 * 86_400_000 + 3_600_000),
-          classType: 'BATCH',
-          status: LessonStatus.PARTIALLY_COMPLETED,
+          start: new Date(Date.now() - 20 * 60_000),
+          end: new Date(Date.now() + 40 * 60_000),
+          teacherJoinedAt: new Date(),
+        },
+      });
+      await prisma.scheduledLesson.updateMany({
+        where: { batchSessionId: extra.id },
+        data: {
+          start: new Date(Date.now() - 20 * 60_000),
+          end: new Date(Date.now() + 40 * 60_000),
+          studentJoinedAt: new Date(),
         },
       });
       await expect(
-        classroom.endClass(teacher.id, room(), {
+        classroom.endClass(teacher.id, roomForBatchSession(extra.id), {
           outcome: 'PARTIALLY_COMPLETED',
         }),
-      ).rejects.toThrow(/already been used for .*student/i);
-      expect(Object.values(await statuses())).toEqual(['UPCOMING', 'UPCOMING']);
+      ).rejects.toThrow(/already been used/i);
+      expect(
+        (
+          await prisma.batchSession.findUniqueOrThrow({
+            where: { id: extra.id },
+          })
+        ).status,
+      ).toBe('UPCOMING');
+      expect(batch.sessionId).not.toBe(extra.id);
+      expect(who).toHaveLength(2);
     });
 
-    it('ending the class again is harmless, and a lesson already settled by someone else is left alone', async () => {
-      await sessionOf([true, true]);
-      await finalization.finalizeLesson(allIds[0], {
-        outcome: 'INCOMPLETE',
-        reason: 'OTHER',
-        note: 'admin fix',
-        actor: { role: 'ADMIN', userId: 'admin' },
-      });
-      await classroom.endClass(teacher.id, room(), { outcome: 'COMPLETED' });
-      const s = await statuses();
-      expect(s[students[0].id]).toBe('INCOMPLETE'); // admin's choice stands
-      expect(s[students[1].id]).toBe('COMPLETED');
-
-      const again = await classroom.endClass(teacher.id, room(), {
+    it('ending the class again is harmless, and an identical repeat pays nothing twice', async () => {
+      const { room } = await runningClass([true, true]);
+      await classroom.endClass(teacher.id, room, { outcome: 'COMPLETED' });
+      const again = await classroom.endClass(teacher.id, room, {
         outcome: 'COMPLETED',
       });
       expect(again.ok).toBe(true);
-      expect(payouts.recordScheduledLessonEarningInTx).toHaveBeenCalledTimes(1);
+      expect(await earnings()).toHaveLength(1);
+      expect(ledger.consumeLessonForScheduledLessonInTx).toHaveBeenCalledTimes(
+        2,
+      );
+    });
+
+    it('a different outcome after it was ended is refused', async () => {
+      const { room } = await runningClass([true, true]);
+      await classroom.endClass(teacher.id, room, { outcome: 'COMPLETED' });
+      await expect(
+        classroom.endClass(teacher.id, room, {
+          outcome: 'INCOMPLETE',
+          reason: 'TECHNICAL_ISSUE',
+        }),
+      ).rejects.toThrow(/already been ended/);
     });
 
     it('only the teacher of the class can end it, and not before it has run ten minutes', async () => {
-      await sessionOf([true]);
+      const { batch, room, who } = await runningClass([true]);
       await expect(
-        classroom.endClass(otherTeacher.id, room(), { outcome: 'COMPLETED' }),
+        classroom.endClass(otherTeacher.id, room, { outcome: 'COMPLETED' }),
       ).rejects.toThrow(/Only the teacher/);
       await expect(
-        classroom.endClass(students[0].id, room(), { outcome: 'COMPLETED' }),
+        classroom.endClass(who[0].id, room, { outcome: 'COMPLETED' }),
       ).rejects.toThrow(/Only the teacher/);
-      await expect(classroom.endClass(teacher.id, room(), {})).rejects.toThrow(
+      await expect(classroom.endClass(teacher.id, room, {})).rejects.toThrow(
         /Choose Completed/,
       );
 
-      await prisma.scheduledLesson.updateMany({
-        data: {
-          start: new Date(Date.now() - 2 * 60_000),
-          end: new Date(Date.now() + 58 * 60_000),
-        },
+      const soon = new Date(Date.now() - 2 * 60_000);
+      await prisma.batchSession.update({
+        where: { id: batch.sessionId },
+        data: { start: soon, end: new Date(soon.getTime() + 60 * 60_000) },
       });
-      slot = (await prisma.scheduledLesson.findFirstOrThrow()).start;
       await expect(
-        classroom.endClass(teacher.id, room(), { outcome: 'COMPLETED' }),
+        classroom.endClass(teacher.id, room, { outcome: 'COMPLETED' }),
       ).rejects.toThrow(/You can end this class/);
+    });
+
+    it('a 1:1 class still ends on its own: one lesson, one payment, its own room', async () => {
+      const started = new Date(Date.now() - 20 * 60_000);
+      const lesson = await makeLesson(students[0], teacher, {
+        start: started,
+        studentJoined: true,
+      });
+      const room = `lesson-${lesson.id}`;
+      const done = await classroom.endClass(teacher.id, room, {
+        outcome: 'COMPLETED',
+      });
+      expect(done.status).toBe('COMPLETED');
+      const paid = await earnings();
+      expect(paid).toHaveLength(1);
+      expect(paid[0].referenceType).toBe('SCHEDULED_LESSON');
+      expect(ledger.consumeLessonForScheduledLessonInTx).toHaveBeenCalledTimes(
+        1,
+      );
     });
   });
 
@@ -916,8 +1242,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
 
   describe('removing a person', () => {
     it('removes them from every device they are on, and makes them knock to come back', async () => {
-      for (const s of students.slice(0, 2)) await makeLesson(s, teacher);
-      const room = roomForBatch(teacher.profileId!, slot);
+      const batch = await makeBatchClass(students.slice(0, 2));
+      const room = roomForBatchSession(batch.sessionId);
       const removed: string[] = [];
       const client = {
         listParticipants: jest.fn(() =>
@@ -959,21 +1285,20 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         buildIdentity(students[0].id, 'phone002'),
       ]);
       // keyed by the person, so any device is turned into a knock
-      const lesson = await lessonOf(students[0]);
       const again = await classroom.joinScheduledLesson(
         students[0].id,
-        lesson.id,
+        batch.lessonIds[students[0].id],
         'newdev01',
       );
       expect(again).toMatchObject({ waitingForAdmission: true });
     });
 
     it('the teacher cannot remove themselves', async () => {
-      await makeLesson(students[0], teacher);
+      const batch = await makeBatchClass([students[0]]);
       await expect(
         classroom.removeParticipant(
           teacher.id,
-          roomForBatch(teacher.profileId!, slot),
+          roomForBatchSession(batch.sessionId),
           buildIdentity(teacher.id, 'tdev0001'),
         ),
       ).rejects.toThrow(/cannot remove yourself/);

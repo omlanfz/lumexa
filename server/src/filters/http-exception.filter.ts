@@ -19,6 +19,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string | object = 'An unexpected error occurred.';
+    // Structured data a screen needs beyond the sentence (for example the
+    // list of things an admin must decide before a batch placement goes
+    // ahead). Only present when the exception carried it.
+    let details: unknown;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -31,6 +35,9 @@ export class AllExceptionsFilter implements ExceptionFilter {
         'message' in exceptionResponse
       ) {
         message = (exceptionResponse as any).message;
+        if ('details' in exceptionResponse) {
+          details = (exceptionResponse as any).details;
+        }
       } else if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;
       }
@@ -52,6 +59,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       message,
+      ...(details !== undefined ? { details } : {}),
       path: request.url,
       timestamp: new Date().toISOString(),
     });

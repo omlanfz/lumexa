@@ -267,6 +267,7 @@ export class CurriculumService {
         },
         teacher: { select: { userId: true } },
         course: { select: { id: true, title: true, slug: true } },
+        batch: { select: { id: true, name: true } },
         submission: {
           select: {
             id: true,
@@ -380,11 +381,16 @@ export class CurriculumService {
           : null,
       },
       assessment: await this.describeAssessment(sl.lesson.assessment),
-      submission: sl.lesson.homework
-        ? canonical && canonical.id !== sl.id
-          ? await this.findSubmission(canonical.id)
-          : sl.submission
-        : null,
+      // Homework hand-ins are each student's own. A batch class's lesson page
+      // is shared, so what the teacher or an admin opens through one student's
+      // row must not show that one student's work as if it were the class's —
+      // they review each student's work on that student's own homework.
+      submission:
+        sl.lesson.homework && !(sl.batchId && !isOwner)
+          ? canonical && canonical.id !== sl.id
+            ? await this.findSubmission(canonical.id)
+            : sl.submission
+          : null,
     };
   }
 
@@ -432,6 +438,7 @@ export class CurriculumService {
     end: Date;
     status: LessonStatus;
     course: { id: string; title: string };
+    batch?: { id: string; name: string } | null;
   }) {
     return {
       scheduledLessonId: sl.id,
@@ -441,6 +448,8 @@ export class CurriculumService {
       status: sl.status,
       courseId: sl.course.id,
       courseTitle: sl.course.title,
+      // The group this class is taught to — null for a 1-to-1 class.
+      batchName: sl.batch?.name ?? null,
     };
   }
 

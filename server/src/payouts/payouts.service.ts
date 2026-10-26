@@ -213,27 +213,93 @@ export class PayoutsService {
     });
   }
 
+  // ─── Trigger: batch class completed (+BDT 200, once per CLASS) ────────────
+  //
+  // A batch class is ONE class however many students are in it, so the teacher
+  // earns once for it — not once per student. The idempotency key is the
+  // BatchSession itself (same DB-level unique constraint as every trigger), so
+  // a retried or duplicated finalization can never pay it twice. Runs inside
+  // the finalize transaction, like recordScheduledLessonEarningInTx.
+  async recordBatchSessionEarningInTx(
+    tx: Prisma.TransactionClient,
+    session: {
+      id: string;
+      teacherId: string;
+      batchName: string;
+      students: number;
+      end: Date;
+    },
+  ) {
+    const existing = await tx.payoutEntry.findUnique({
+      where: {
+        referenceType_referenceId_type: {
+          referenceType: 'BATCH_SESSION',
+          referenceId: session.id,
+          type: PayoutEntryType.CLASS_COMPLETED,
+        },
+      },
+    });
+    if (existing) return existing;
+
+    return tx.payoutEntry.create({
+      data: {
+        teacherId: session.teacherId,
+        type: PayoutEntryType.CLASS_COMPLETED,
+        amountCents: CLASS_COMPLETED_AMOUNT_CENTS,
+        description: `Completed batch class: ${session.batchName} (${session.students} student${session.students === 1 ? '' : 's'})`,
+        month: session.end.getMonth() + 1,
+        year: session.end.getFullYear(),
+        referenceType: 'BATCH_SESSION',
+        referenceId: session.id,
+      },
+    });
+  }
+
   // ─── Trigger: teacher late-join penalty (-BDT 50, automatic) ──────────────
   //
-  // Fires at most once per class: idempotency key is the scheduledLessonId,
+  // Fires at most once per class: idempotency key is the scheduledLessonId
+  // (or, for a batch class, the BatchSession — one penalty for the class, not
+  // one per student),
   // backed by the same DB-level unique constraint as every other trigger, so
   // concurrent callers (the join-time check in ClassroomService and the
   // sweep cron below) can never double-penalize one class.
   async triggerLateJoinPenalty(params: {
     teacherId: string;
-    scheduledLessonId: string;
+    scheduledLessonId?: string;
+    batchSessionId?: string;
     lateMinutes: number;
   }) {
+    const referenceType = params.batchSessionId
+      ? 'BATCH_SESSION_LATE_JOIN'
+      : 'SCHEDULED_LESSON_LATE_JOIN';
+    const referenceId = (params.batchSessionId ?? params.scheduledLessonId)!;
     const existing = await this.prisma.payoutEntry.findUnique({
       where: {
         referenceType_referenceId_type: {
-          referenceType: 'SCHEDULED_LESSON_LATE_JOIN',
-          referenceId: params.scheduledLessonId,
+          referenceType,
+          referenceId,
           type: PayoutEntryType.PENALTY,
         },
       },
     });
     if (existing) return existing;
+
+    // A class that was already running when batches got real sessions was
+    // penalised per student's lesson — never penalise the same class twice.
+    if (params.batchSessionId) {
+      const participants = await this.prisma.scheduledLesson.findMany({
+        where: { batchSessionId: params.batchSessionId },
+        select: { id: true },
+      });
+      const legacy = await this.prisma.payoutEntry.findFirst({
+        where: {
+          referenceType: 'SCHEDULED_LESSON_LATE_JOIN',
+          type: PayoutEntryType.PENALTY,
+          referenceId: { in: participants.map((p) => p.id) },
+        },
+      });
+      if (legacy) return legacy;
+    }
 
     const teacher = await this.requireTeacherById(params.teacherId);
 
@@ -246,8 +312,8 @@ export class PayoutsService {
           ? 'Late-join penalty — teacher never joined the class.'
           : `Late-join penalty — joined ${params.lateMinutes} minute(s) after the scheduled start time.`,
       eventDate: new Date(),
-      referenceType: 'SCHEDULED_LESSON_LATE_JOIN',
-      referenceId: params.scheduledLessonId,
+      referenceType,
+      referenceId,
     });
 
     await this.alerts.create({
@@ -256,7 +322,9 @@ export class PayoutsService {
       type: 'LATE_JOIN_PENALTY',
       title: 'Automatic penalty applied',
       message: `Automatic penalty: ৳${Math.abs(LATE_JOIN_PENALTY_CENTS) / 100} deducted for joining this class late.`,
-      metadata: { scheduledLessonId: params.scheduledLessonId },
+      metadata: params.batchSessionId
+        ? { batchSessionId: params.batchSessionId }
+        : { scheduledLessonId: params.scheduledLessonId },
     });
 
     return entry;
@@ -276,6 +344,9 @@ export class PayoutsService {
 
     const candidates = await this.prisma.scheduledLesson.findMany({
       where: {
+        // A batch student's row is not a class of its own: the teacher's
+        // attendance belongs to the batch class (swept below).
+        batchSessionId: null,
         teacherJoinedAt: null,
         start: { lte: cutoff, gte: lookbackFloor },
       },
@@ -293,6 +364,33 @@ export class PayoutsService {
       } catch (err) {
         this.logger.error(
           `Failed to apply late-join penalty for lesson ${c.id}`,
+          err as Error,
+        );
+      }
+    }
+
+    // Batch classes: one penalty per class, and only for a class that had
+    // students to teach (a class with nobody in it never ran).
+    const sessions = await this.prisma.batchSession.findMany({
+      where: {
+        status: { not: 'CANCELLED' },
+        teacherJoinedAt: null,
+        start: { lte: cutoff, gte: lookbackFloor },
+        participants: { some: {} },
+      },
+      select: { id: true, teacherId: true },
+      take: 200,
+    });
+    for (const c of sessions) {
+      try {
+        await this.triggerLateJoinPenalty({
+          teacherId: c.teacherId,
+          batchSessionId: c.id,
+          lateMinutes: 999,
+        });
+      } catch (err) {
+        this.logger.error(
+          `Failed to apply late-join penalty for batch class ${c.id}`,
           err as Error,
         );
       }

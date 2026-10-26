@@ -36,7 +36,12 @@ export class ClassroomController {
   joinLab(
     @Request() req,
     @Body()
-    body: { bookingId?: string; scheduledLessonId?: string; deviceId?: string },
+    body: {
+      bookingId?: string;
+      scheduledLessonId?: string;
+      batchSessionId?: string;
+      deviceId?: string;
+    },
   ) {
     return this.classroomService.joinLab(req.user.userId, body);
   }

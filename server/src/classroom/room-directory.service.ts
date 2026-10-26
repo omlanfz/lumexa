@@ -7,8 +7,10 @@
 // without depending on each other.
 //
 //   lesson-<id>                one 1:1 lesson: its teacher and its student
-//   batch-<teacherId>-<start>  every BATCH lesson of that teacher at that
-//                              start: one teacher, one student per lesson
+//   batch-session-<id>         one batch class: its teacher and every student
+//                              taking part (one participant row each)
+//   batch-<teacherId>-<start>  LEGACY batch room (a class that was already
+//                              running when batches got real sessions)
 //   <bookingId>                a marketplace booking: its teacher
 //   the demo room              the QA demo teacher
 
@@ -34,6 +36,7 @@ export interface RoomLesson {
   end: Date;
   studentJoinedAt: Date | null;
   teacherJoinedAt: Date | null;
+  batchSessionId: string | null;
 }
 
 export interface ResolvedRoom {
@@ -44,6 +47,9 @@ export interface ResolvedRoom {
   /** The lessons held in this room: the one lesson of a 1:1 class, every
    * (non-cancelled) student's lesson of a batch, none for a booking/demo. */
   lessons: RoomLesson[];
+  /** Set for a batch class: the shared class and the batch it belongs to. */
+  batchSessionId?: string;
+  batch?: { id: string; name: string };
 }
 
 const LESSON_WITH_PEOPLE = {
@@ -88,6 +94,31 @@ export class RoomDirectoryService {
       };
     }
 
+    if (ref.kind === 'session') {
+      const session = await this.prisma.batchSession.findUnique({
+        where: { id: ref.batchSessionId },
+        include: {
+          teacher: { select: { userId: true } },
+          batch: { select: { id: true, name: true } },
+          participants: {
+            where: { status: { not: LessonStatus.CANCELLED } },
+            include: LESSON_WITH_PEOPLE,
+            orderBy: { id: 'asc' },
+          },
+        },
+      });
+      if (!session) throw new NotFoundException('Class not found.');
+      return {
+        room,
+        kind: 'batch',
+        teacherUserId: session.teacher.userId,
+        classType: ClassType.BATCH,
+        lessons: session.participants.map(toRoomLesson),
+        batchSessionId: session.id,
+        batch: session.batch,
+      };
+    }
+
     if (ref.kind === 'batch') {
       const lessons = await this.prisma.scheduledLesson.findMany({
         where: {
@@ -106,6 +137,7 @@ export class RoomDirectoryService {
         teacherUserId: lessons[0].teacher.userId,
         classType: ClassType.BATCH,
         lessons: lessons.map(toRoomLesson),
+        batchSessionId: lessons[0].batchSessionId ?? undefined,
       };
     }
 
@@ -140,6 +172,7 @@ function toRoomLesson(l: {
   end: Date;
   studentJoinedAt: Date | null;
   teacherJoinedAt: Date | null;
+  batchSessionId: string | null;
   student: { fullName: string };
 }): RoomLesson {
   return {
@@ -155,5 +188,6 @@ function toRoomLesson(l: {
     end: l.end,
     studentJoinedAt: l.studentJoinedAt,
     teacherJoinedAt: l.teacherJoinedAt,
+    batchSessionId: l.batchSessionId,
   };
 }

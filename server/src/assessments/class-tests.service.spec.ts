@@ -118,6 +118,31 @@ describe('classGroupWhere — who sits the test together', () => {
       OR: [{ id: 'sl-1' }, { status: LessonStatus.UPCOMING }],
     });
   });
+
+  it('is everyone in the batch class, whatever their time or lesson row says', () => {
+    expect(
+      classGroupWhere(
+        anchorRow({ batchSessionId: 'sess-1', lessonNumber: 12 }) as never,
+      ),
+    ).toEqual({
+      batchSessionId: 'sess-1',
+      OR: [{ id: 'sl-1' }, { status: LessonStatus.UPCOMING }],
+    });
+  });
+
+  it('never reaches into another batch class held by the same teacher at the same time', () => {
+    const a = classGroupWhere(
+      anchorRow({ batchSessionId: 'sess-a' }) as never,
+    ) as Row;
+    const b = classGroupWhere(
+      anchorRow({ id: 'sl-2', batchSessionId: 'sess-b' }) as never,
+    ) as Row;
+    expect(a.batchSessionId).toBe('sess-a');
+    expect(b.batchSessionId).toBe('sess-b');
+    // No teacher/time filter: the session alone is the group.
+    expect(a).not.toHaveProperty('teacherId');
+    expect(a).not.toHaveProperty('start');
+  });
 });
 
 describe('ClassTestsService — access', () => {

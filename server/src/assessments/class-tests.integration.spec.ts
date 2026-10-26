@@ -32,6 +32,10 @@ import { EmailModule } from '../email/email.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PrismaModule } from '../prisma.module';
 import { PrismaService } from '../prisma.service';
+import {
+  addParticipant,
+  createBatchWithSession,
+} from '../batches/testing/batch-fixtures';
 import { AssessmentsModule } from './assessments.module';
 import { BankRegistry } from './bank/bank.registry';
 import { syncAssessmentBanks } from './bank/bank.sync';
@@ -76,11 +80,12 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
   let finalLessonId: string;
   let testAssessmentId: string;
   let finalAssessmentId: string;
-  /** The batch: four learners, same teacher, same course, same lesson, same slot. */
+  /** The batch: four learners in ONE batch class — same teacher, course, lesson and slot. */
   let batch: { who: Person; classId: string }[];
-  /** Same lesson and slot but ANOTHER teacher's class — never part of the batch. */
+  let batchClass: { batchId: string; sessionId: string };
+  /** Same lesson and slot but ANOTHER teacher's 1-to-1 class — never part of the batch. */
   let outsider: { who: Person; classId: string };
-  /** Same teacher and lesson but two hours later — a different session. */
+  /** Same teacher and lesson but two hours later — a different class. */
   let laterSession: { who: Person; classId: string };
 
   const bearer = (p: Person) => ({
@@ -117,13 +122,32 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
   const inMinutes = (m: number) => new Date(Date.now() + m * 60_000);
   let slot: Date;
 
+  /** A learner's class: their row in a batch class when `session` is given,
+   *  otherwise a 1-to-1 class of their own. */
   async function makeClass(
     who: Person,
     by: Person,
     lessonId: string,
     lessonNumber: number,
     start = slot,
+    session?: { batchId: string; sessionId: string },
   ) {
+    const end = new Date(start.getTime() + 60 * 60_000);
+    if (session) {
+      await prisma.batchMember.create({
+        data: { batchId: session.batchId, studentUserId: who.id },
+      });
+      return addParticipant(prisma, {
+        ...session,
+        studentUserId: who.id,
+        teacherProfileId: by.profileId!,
+        courseId,
+        lessonNumber,
+        lessonId,
+        start,
+        end,
+      });
+    }
     return (
       await prisma.scheduledLesson.create({
         data: {
@@ -133,8 +157,8 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
           lessonNumber,
           lessonId,
           start,
-          end: new Date(start.getTime() + 60 * 60_000),
-          classType: 'BATCH',
+          end,
+          classType: 'ONE_TO_ONE',
           status: 'UPCOMING',
         },
       })
@@ -210,6 +234,14 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
       1,
     );
 
+    batchClass = await createBatchWithSession(prisma, {
+      teacherProfileId: teacher.profileId!,
+      courseId,
+      studentUserIds: [],
+      start: slot,
+      lessonNumber: 9,
+      lessonId: testLessonId,
+    });
     batch = [];
     for (const name of [
       'ada-lovelace',
@@ -222,7 +254,14 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
       });
       batch.push({
         who,
-        classId: await makeClass(who, teacher, testLessonId, 9),
+        classId: await makeClass(
+          who,
+          teacher,
+          testLessonId,
+          9,
+          slot,
+          batchClass,
+        ),
       });
     }
     const out = await makeUser('olive-outsider', Role.STUDENT, {
@@ -368,6 +407,35 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
         counts: { mcq: 30, trueFalse: 10, practical: 0 },
       });
       expect(Date.parse(res.body.serverTime)).not.toBeNaN();
+    });
+
+    it('the group is the batch CLASS itself: another batch class at the very same time, teacher and lesson is not part of it', async () => {
+      const second = await createBatchWithSession(prisma, {
+        name: 'Second batch',
+        teacherProfileId: teacher.profileId!,
+        courseId,
+        studentUserIds: [],
+        start: slot,
+        lessonNumber: 9,
+        lessonId: testLessonId,
+      });
+      const stranger = await makeUser('sam-second', Role.STUDENT, {
+        assignedTeacherId: teacher.profileId,
+      });
+      await makeClass(stranger, teacher, testLessonId, 9, slot, second);
+
+      const res = await overview();
+      expect(res.body.students).toHaveLength(4);
+      expect(
+        res.body.students.map((s: { studentName: string }) => s.studentName),
+      ).not.toContain('sam second');
+
+      // And locking the first class never closes the second one's test.
+      await lockAll();
+      const other = await prisma.scheduledLesson.findFirstOrThrow({
+        where: { studentUserId: stranger.id },
+      });
+      expect(other.testLockedAt).toBeNull();
     });
 
     it('is the same from any learner’s class in the group, and for an admin', async () => {
@@ -751,7 +819,14 @@ describeDb('Teacher class monitor and lock (real Postgres, over HTTP)', () => {
         // their own class row in the same slot.
         extra.push({
           who,
-          classId: await makeClass(who, teacher, testLessonId, 9),
+          classId: await makeClass(
+            who,
+            teacher,
+            testLessonId,
+            9,
+            slot,
+            batchClass,
+          ),
         });
       }
       const racers = [...batch, ...extra];

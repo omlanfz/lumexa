@@ -4,11 +4,13 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   Matches,
   Max,
   Min,
+  IsOptional,
   ValidateNested,
 } from 'class-validator';
 
@@ -41,4 +43,10 @@ export class SetScheduleDto {
   @ValidateNested({ each: true })
   @Type(() => ScheduleSlotDto)
   slots: ScheduleSlotDto[];
+
+  /** Confirms that switching a student who is in a batch to 1-to-1 removes
+   * them from it (what they have already taken is kept). */
+  @IsOptional()
+  @IsBoolean()
+  leaveBatch?: boolean;
 }

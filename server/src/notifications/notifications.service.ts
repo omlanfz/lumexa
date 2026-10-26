@@ -408,6 +408,7 @@ export class NotificationsService {
       studentName: string;
       teacherName: string;
       classStart: Date;
+      batchName?: string;
     },
   ): Promise<void> {
     const { subject, html } = missedClassEmail(data);
@@ -610,11 +611,15 @@ export class NotificationsService {
   async sendTeacherClassReminder(
     to: string,
     data: {
+      /** The class's id — a batch class's own id for a batch (the dedupe key,
+       * so a class with many students is still ONE reminder). */
       lessonId: string;
       teacherName: string;
       studentName: string;
       classStart: Date;
       classUrl: string;
+      batchName?: string;
+      studentCount?: number;
     },
   ): Promise<void> {
     const { subject, html } = teacherClassReminderEmail(data);
