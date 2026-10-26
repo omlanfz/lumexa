@@ -906,6 +906,41 @@ describeDb('Batches (real Postgres)', () => {
         );
       });
 
+      it('a 1-to-1 class ended Partially Completed still adds one extra class, in that student’s own schedule only', async () => {
+        const solo = await oneToOne('solo-partial');
+        const [first] = await rowsOf(solo);
+        const start = new Date(Date.now() - 30 * 60_000);
+        await prisma.scheduledLesson.update({
+          where: { id: first.id },
+          data: {
+            start,
+            end: new Date(start.getTime() + 45 * 60_000),
+            teacherJoinedAt: new Date(start.getTime() - 60_000),
+            studentJoinedAt: new Date(),
+          },
+        });
+        await w.finalization.finalizeLesson(first.id, {
+          outcome: 'PARTIALLY_COMPLETED',
+          actor: { role: 'TEACHER', userId: teacherA.id },
+        });
+        const rows = await rowsOf(solo);
+        expect(rows.map((r) => `${r.lessonNumber}:${r.status}`)).toEqual([
+          '1:PARTIALLY_COMPLETED',
+          '1:UPCOMING',
+          '2:UPCOMING',
+          '3:UPCOMING',
+          '4:UPCOMING',
+          '5:UPCOMING',
+          '6:UPCOMING',
+        ]);
+        expect(
+          rows.every(
+            (r) => r.classType === 'ONE_TO_ONE' && r.batchSessionId === null,
+          ),
+        ).toBe(true);
+        expect(await prisma.batchSession.count()).toBe(0);
+      });
+
       it('a batch student cannot be scheduled "as batch" on their own — that is done through the batch', async () => {
         const s = await student('solo-attempt');
         expect(

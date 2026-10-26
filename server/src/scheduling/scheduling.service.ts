@@ -1553,10 +1553,13 @@ export class SchedulingService {
     const { studentUserId, courseId, teacherId, classType, lessonNumber } =
       lesson;
 
+    // Only the student's own 1-to-1 classes shift: a batch class has one lesson
+    // sequence for the whole batch (BatchSessionsService.insertMakeupSession).
     const futureLessons = await tx.scheduledLesson.findMany({
       where: {
         studentUserId,
         courseId,
+        batchSessionId: null,
         status: LessonStatus.UPCOMING,
         start: { gt: lesson.start },
       },
