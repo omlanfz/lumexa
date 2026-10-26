@@ -355,16 +355,22 @@ function LearningHubContent() {
 
   const nextBookingLesson = upcomingData?.bookings[0] ?? null;
   const nextScheduledLesson = scheduledUpcoming[0] ?? null;
+  const fromBooking = nextBookingLesson
+    ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart, batchName: null as string | null }
+    : null;
+  const fromSchedule = nextScheduledLesson
+    ? {
+        teacherName: nextScheduledLesson.teacher.user.fullName,
+        classStart: nextScheduledLesson.start,
+        batchName: nextScheduledLesson.batch?.name ?? null,
+      }
+    : null;
   const nextLesson =
-    nextBookingLesson && nextScheduledLesson
-      ? new Date(nextBookingLesson.classStart) < new Date(nextScheduledLesson.start)
-        ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart }
-        : { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
-      : nextBookingLesson
-        ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart }
-        : nextScheduledLesson
-          ? { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
-          : null;
+    fromBooking && fromSchedule
+      ? new Date(fromBooking.classStart) < new Date(fromSchedule.classStart)
+        ? fromBooking
+        : fromSchedule
+      : (fromBooking ?? fromSchedule);
   interface RecordingEntry {
     key: string;
     teacherName: string;
@@ -445,6 +451,7 @@ function LearningHubContent() {
                 <p className="text-gray-900 dark:text-white text-sm font-medium">
                   With {nextLesson.teacherName} ·{' '}
                   {new Date(nextLesson.classStart).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {nextLesson.batchName && ` · 👥 ${nextLesson.batchName}`}
                 </p>
               </div>
             ) : (

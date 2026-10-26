@@ -184,11 +184,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     });
   }
 
-  const lessonOf = (who: Person) =>
-    prisma.scheduledLesson.findFirstOrThrow({
-      where: { studentUserId: who.id, status: LessonStatus.UPCOMING },
-    });
-
   beforeAll(async () => {
     releaseLock = await acquireDatabaseLock(IT_DB_URL!);
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);

@@ -65,7 +65,7 @@ function toClassRow(s: BatchSessionRow, batch: BatchSummary): ClassRow {
     isLive: false,
     displayStatus: s.status === "UPCOMING" ? "SCHEDULED" : s.status,
     batch: { id: batch.id, name: batch.name },
-    students: [],
+    students: s.participants ?? [],
   };
 }
 

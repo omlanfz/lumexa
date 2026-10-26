@@ -17,7 +17,6 @@ import {
 } from '../scheduling/lesson-window.util';
 import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
 import {
-  ClassType,
   LessonStatus,
   RecordingStatus,
   ClassEndReason,
@@ -379,8 +378,13 @@ export class ClassroomService {
    * and calendar know it by). Each person still joins through their own row
    * in it: the teacher through any student's, a student through their own — so
    * one set of rules (who may be here, the lock, the limits) applies to all. */
-  async joinBatchSession(userId: string, sessionId: string, deviceId?: unknown) {
-    const session = await this.schedulingService.getSessionForClassroom(sessionId);
+  async joinBatchSession(
+    userId: string,
+    sessionId: string,
+    deviceId?: unknown,
+  ) {
+    const session =
+      await this.schedulingService.getSessionForClassroom(sessionId);
     const open = session.participants.filter(
       (p) => p.status === LessonStatus.UPCOMING,
     );
@@ -940,8 +944,9 @@ export class ClassroomService {
   }
 
   /** Room names are `lesson-<scheduledLessonId>` (a 1:1 class),
-   * `batch-<teacherId>-<start>` (a batch), a raw bookingId (marketplace) or the
-   * demo room — see RoomDirectoryService. */
+   * `batch-session-<sessionId>` (a batch class; the old
+   * `batch-<teacherId>-<start>` still resolves), a raw bookingId (marketplace)
+   * or the demo room — see RoomDirectoryService. */
   private async getRoomTeacherUserId(roomName: string): Promise<string> {
     return this.roomDirectory.teacherUserIdOf(roomName);
   }

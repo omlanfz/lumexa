@@ -19,12 +19,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
-import {
-  IsISO8601,
-  IsNotEmpty,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsISO8601, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { BatchesService } from './batches.service';
@@ -45,6 +40,11 @@ class SessionRescheduleDto {
 
 class SessionReasonDto {
   @IsString() @IsNotEmpty() @MaxLength(1000) reason: string;
+}
+
+/** What the JWT guard puts on the request (see JwtStrategy.validate). */
+interface AuthedRequest {
+  user: { userId: string; role: string };
 }
 
 @Controller('admin')
@@ -75,7 +75,7 @@ export class BatchesController {
   }
 
   @Post('batches')
-  create(@Body() dto: CreateBatchDto, @Request() req: any) {
+  create(@Body() dto: CreateBatchDto, @Request() req: AuthedRequest) {
     return this.batches.createBatch(dto, req.user.userId);
   }
 
@@ -88,7 +88,7 @@ export class BatchesController {
   update(
     @Param('batchId') batchId: string,
     @Body() dto: UpdateBatchDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.updateBatch(batchId, dto, req.user.userId);
   }
@@ -98,7 +98,7 @@ export class BatchesController {
   changeSchedule(
     @Param('batchId') batchId: string,
     @Body() dto: BatchScheduleDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.changeSchedule(batchId, dto, req.user.userId);
   }
@@ -107,7 +107,7 @@ export class BatchesController {
   changeTeacher(
     @Param('batchId') batchId: string,
     @Body() dto: ChangeBatchTeacherDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.changeTeacher(batchId, dto.teacherId, req.user.userId);
   }
@@ -126,7 +126,7 @@ export class BatchesController {
   addStudent(
     @Param('batchId') batchId: string,
     @Body() dto: AddBatchStudentDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.enrollStudent({
       studentUserId: dto.studentUserId,
@@ -140,7 +140,7 @@ export class BatchesController {
   removeStudent(
     @Param('batchId') batchId: string,
     @Param('studentUserId') studentUserId: string,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.removeStudent(studentUserId, req.user.userId, batchId);
   }
@@ -159,7 +159,7 @@ export class BatchesController {
   enroll(
     @Param('studentUserId') studentUserId: string,
     @Body() dto: EnrollStudentInBatchDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.enrollStudent({
       studentUserId,
@@ -173,7 +173,7 @@ export class BatchesController {
   @Delete('students/:studentUserId/batch')
   leave(
     @Param('studentUserId') studentUserId: string,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.batches.removeStudent(studentUserId, req.user.userId);
   }
@@ -184,7 +184,7 @@ export class BatchesController {
   rescheduleSession(
     @Param('sessionId') sessionId: string,
     @Body() dto: SessionRescheduleDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.sessions.adminRescheduleSession(
       sessionId,
@@ -198,7 +198,7 @@ export class BatchesController {
   cancelSession(
     @Param('sessionId') sessionId: string,
     @Body() dto: SessionReasonDto,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.sessions.adminCancelSession(
       sessionId,
@@ -211,7 +211,7 @@ export class BatchesController {
   deleteSession(
     @Param('sessionId') sessionId: string,
     @Body('reason') reason: string | undefined,
-    @Request() req: any,
+    @Request() req: AuthedRequest,
   ) {
     return this.sessions.adminDeleteSession(sessionId, req.user.userId, reason);
   }

@@ -101,9 +101,7 @@ export function parseBatchRoom(
 
 /** Any batch classroom: a session's, or a legacy one. */
 export function isBatchRoom(room: string): boolean {
-  return (
-    parseBatchSessionRoom(room) !== null || parseBatchRoom(room) !== null
-  );
+  return parseBatchSessionRoom(room) !== null || parseBatchRoom(room) !== null;
 }
 
 /** A room that belongs to the curriculum (a lesson or a batch), as opposed to

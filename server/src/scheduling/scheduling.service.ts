@@ -196,7 +196,7 @@ export class SchedulingService {
     }
     if (dto.classType === ClassType.BATCH) {
       throw new BadRequestException(
-        "A batch student is scheduled through their batch, not on their own. Place the student in a batch from the Schedule tab or from Admin → Batches.",
+        'A batch student is scheduled through their batch, not on their own. Place the student in a batch from the Schedule tab or from Admin → Batches.',
       );
     }
     if (!student.assignedTeacherId) {
@@ -400,7 +400,9 @@ export class SchedulingService {
       action: 'STUDENT_SCHEDULE_SET',
       entityType: 'User',
       entityId: studentUserId,
-      beforeData: leftBatch ? { classType: 'BATCH', batch: leftBatch.name } : undefined,
+      beforeData: leftBatch
+        ? { classType: 'BATCH', batch: leftBatch.name }
+        : undefined,
       afterData: {
         classType,
         firstClassDate: dto.firstClassDate,
@@ -646,7 +648,11 @@ export class SchedulingService {
     // students are in it) shown once with its roster.
     const [lessons, sessions] = await Promise.all([
       this.prisma.scheduledLesson.findMany({
-        where: { teacherId, batchSessionId: null, status: LessonStatus.UPCOMING },
+        where: {
+          teacherId,
+          batchSessionId: null,
+          status: LessonStatus.UPCOMING,
+        },
         orderBy: { start: 'asc' },
         take: 50,
         include: {
@@ -790,7 +796,9 @@ export class SchedulingService {
 
     // Each student's own progress in the curriculum of the class they are in.
     const studentIds = [
-      ...new Set(sessions.flatMap((s) => s.participants.map((p) => p.student.id))),
+      ...new Set(
+        sessions.flatMap((s) => s.participants.map((p) => p.student.id)),
+      ),
     ];
     const courseIds = [...new Set(sessions.map((s) => s.courseId))];
     const completedRows =
@@ -1031,21 +1039,25 @@ export class SchedulingService {
             select: {
               // One student's row of the class: the way to its lesson page.
               id: true,
-              student: { select: { id: true, fullName: true, avatarUrl: true } },
+              student: {
+                select: { id: true, fullName: true, avatarUrl: true },
+              },
             },
           },
         },
       }),
     ]);
 
-    const [lessonWithTitle] = lesson ? await this.attachLessonTitles([lesson]) : [];
+    const [lessonWithTitle] = lesson
+      ? await this.attachLessonTitles([lesson])
+      : [];
     const [sessionWithTitle] = session
       ? await this.attachLessonTitles([session])
       : [];
     if (lessonWithTitle && sessionWithTitle) {
       return lessonWithTitle.start <= sessionWithTitle.start
-        ? ({ kind: 'LESSON' as const, ...lessonWithTitle })
-        : ({ kind: 'BATCH_SESSION' as const, ...sessionWithTitle });
+        ? { kind: 'LESSON' as const, ...lessonWithTitle }
+        : { kind: 'BATCH_SESSION' as const, ...sessionWithTitle };
     }
     if (lessonWithTitle) return { kind: 'LESSON' as const, ...lessonWithTitle };
     if (sessionWithTitle) {
@@ -1585,7 +1597,12 @@ export class SchedulingService {
     let trailing: { start: Date; end: Date } | null = null;
     for (const start of candidates) {
       const end = new Date(start.getTime() + durationMs);
-      const conflict = await this.findTeacherConflict(tx, teacherId, start, end);
+      const conflict = await this.findTeacherConflict(
+        tx,
+        teacherId,
+        start,
+        end,
+      );
       if (!conflict) {
         trailing = { start, end };
         break;

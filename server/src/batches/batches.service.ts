@@ -64,7 +64,7 @@ import {
   studentNextLesson,
   type Db,
 } from './batch-progress.util';
-import { DEFAULT_BATCH_STUDENTS, MAX_BATCH_STUDENTS } from './batch.constants';
+import { DEFAULT_BATCH_STUDENTS } from './batch.constants';
 import type {
   BatchScheduleDto,
   CreateBatchDto,
@@ -216,7 +216,10 @@ export class BatchesService {
         {
           teacher: {
             user: {
-              fullName: { contains: filters.search.trim(), mode: 'insensitive' },
+              fullName: {
+                contains: filters.search.trim(),
+                mode: 'insensitive',
+              },
             },
           },
         },
@@ -225,7 +228,10 @@ export class BatchesService {
             some: {
               leftAt: null,
               student: {
-                fullName: { contains: filters.search.trim(), mode: 'insensitive' },
+                fullName: {
+                  contains: filters.search.trim(),
+                  mode: 'insensitive',
+                },
               },
             },
           },
@@ -316,7 +322,16 @@ export class BatchesService {
           where: { batchId, status: LessonStatus.UPCOMING },
           orderBy: { start: 'asc' },
           take: 16,
-          include: { _count: { select: { participants: true } } },
+          include: {
+            // Who is in the class — the admin's class actions show it.
+            participants: {
+              where: { status: { not: LessonStatus.CANCELLED } },
+              select: {
+                student: { select: { id: true, fullName: true, email: true } },
+              },
+              orderBy: { id: 'asc' },
+            },
+          },
         }),
         this.prisma.batchSession.findMany({
           where: { batchId, status: { not: LessonStatus.UPCOMING } },
@@ -403,7 +418,8 @@ export class BatchesService {
         start: s.start,
         end: s.end,
         status: s.status,
-        students: s._count.participants,
+        students: s.participants.length,
+        participants: s.participants.map((p) => p.student),
       })),
       recentSessions: recent.map((s) => ({
         id: s.id,
@@ -440,7 +456,8 @@ export class BatchesService {
     const memberCount = batch._count.members;
     // Every lesson taught and nothing left to hold: nobody can join.
     const exhausted =
-      progress.nextLesson > batch.course.sessions && progress.futureSessions === 0;
+      progress.nextLesson > batch.course.sessions &&
+      progress.futureSessions === 0;
     return {
       id: batch.id,
       name: batch.name,
@@ -518,7 +535,11 @@ export class BatchesService {
     now = new Date(),
   ): Promise<{ batch: EnrollmentBatchInfo; student: EnrollmentStudentInfo }> {
     const batch = await this.loadBatchInfo(db, batchId, now);
-    const student = await this.loadStudentInfo(db, studentUserId, batch.courseId);
+    const student = await this.loadStudentInfo(
+      db,
+      studentUserId,
+      batch.courseId,
+    );
     return { batch, student };
   }
 
@@ -609,7 +630,11 @@ export class BatchesService {
       }
     > = [];
     for (const s of students) {
-      const inputs = await this.loadEnrollmentInputs(this.prisma, batchId, s.id);
+      const inputs = await this.loadEnrollmentInputs(
+        this.prisma,
+        batchId,
+        s.id,
+      );
       candidates.push({
         student: s,
         currentBatch: inputs.student.currentBatch,
@@ -634,7 +659,8 @@ export class BatchesService {
       }
       seen.add(key);
     }
-    const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+    const minutes = (t: string) =>
+      Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
     const byDay = new Map<number, number[]>();
     for (const s of slots) {
       byDay.set(s.weekday, [...(byDay.get(s.weekday) ?? []), minutes(s.time)]);
@@ -666,7 +692,13 @@ export class BatchesService {
     }
     const first = schedule.slots
       .filter((s) => s.weekday === firstWeekday)
-      .map((s) => dhakaToUtc(schedule.firstClassDate, Number(s.time.slice(0, 2)), Number(s.time.slice(3))))
+      .map((s) =>
+        dhakaToUtc(
+          schedule.firstClassDate,
+          Number(s.time.slice(0, 2)),
+          Number(s.time.slice(3)),
+        ),
+      )
       .sort((a, b) => a.getTime() - b.getTime());
     if (first.every((d) => d.getTime() <= freezeCutoff(now).getTime())) {
       throw new BadRequestException(
@@ -746,7 +778,11 @@ export class BatchesService {
     const [teacher, course] = await Promise.all([
       tx.teacherProfile.findUnique({
         where: { id: input.teacherId },
-        select: { id: true, isSuspended: true, user: { select: { fullName: true } } },
+        select: {
+          id: true,
+          isSuspended: true,
+          user: { select: { fullName: true } },
+        },
       }),
       tx.course.findUnique({
         where: { id: input.courseId },
@@ -814,23 +850,25 @@ export class BatchesService {
   }
 
   async createBatch(dto: CreateBatchDto, adminUserId: string) {
-    const created = await this.prisma.$transaction(
-      (tx) =>
-        this.createBatchInTx(
-          tx,
-          {
-            name: dto.name,
-            notes: dto.notes,
-            teacherId: dto.teacherId,
-            courseId: dto.courseId,
-            maxStudents: dto.maxStudents,
-            startLessonNumber: dto.startLessonNumber ?? 1,
-            schedule: dto,
-          },
-          adminUserId,
-        ),
-      { timeout: 20_000, maxWait: 10_000 },
-    ).catch((err) => this.mapUniqueViolation(err));
+    const created = await this.prisma
+      .$transaction(
+        (tx) =>
+          this.createBatchInTx(
+            tx,
+            {
+              name: dto.name,
+              notes: dto.notes,
+              teacherId: dto.teacherId,
+              courseId: dto.courseId,
+              maxStudents: dto.maxStudents,
+              startLessonNumber: dto.startLessonNumber ?? 1,
+              schedule: dto,
+            },
+            adminUserId,
+          ),
+        { timeout: 20_000, maxWait: 10_000 },
+      )
+      .catch((err) => this.mapUniqueViolation(err));
     return this.getBatchDetail(created.id);
   }
 
@@ -977,13 +1015,19 @@ export class BatchesService {
   async changeTeacher(batchId: string, teacherId: string, adminUserId: string) {
     const batch = await this.prisma.batch.findUnique({
       where: { id: batchId },
-      include: { teacher: { select: { user: { select: { fullName: true } } } } },
+      include: {
+        teacher: { select: { user: { select: { fullName: true } } } },
+      },
     });
     if (!batch) throw new NotFoundException('Batch not found.');
     if (batch.teacherId === teacherId) return this.getBatchDetail(batchId);
     const teacher = await this.prisma.teacherProfile.findUnique({
       where: { id: teacherId },
-      select: { id: true, isSuspended: true, user: { select: { fullName: true, email: true } } },
+      select: {
+        id: true,
+        isSuspended: true,
+        user: { select: { fullName: true, email: true } },
+      },
     });
     if (!teacher) throw new NotFoundException('Teacher not found.');
     if (teacher.isSuspended) {
@@ -1128,8 +1172,10 @@ export class BatchesService {
           await lockBatches(tx, [current?.batchId, params.batchId]);
 
           // ── 1. Decide ────────────────────────────────────────────────
-          let evaluation: EnrollmentEvaluation;
-          let inputs: { batch: EnrollmentBatchInfo; student: EnrollmentStudentInfo };
+          let inputs: {
+            batch: EnrollmentBatchInfo;
+            student: EnrollmentStudentInfo;
+          };
           if (params.batchId) {
             inputs = await this.loadEnrollmentInputs(
               tx,
@@ -1159,20 +1205,25 @@ export class BatchesService {
                 courseTitle: student.assignedCourse!.title,
                 teacherId: student.assignedTeacherId!,
                 teacherName: teacher.user.fullName,
-                maxStudents: params.newBatch!.maxStudents ?? DEFAULT_BATCH_STUDENTS,
+                maxStudents:
+                  params.newBatch!.maxStudents ?? DEFAULT_BATCH_STUDENTS,
                 memberCount: 0,
                 nextLesson: studentInfo.nextLesson,
                 anchored: false,
               },
             };
           }
-          evaluation = evaluateEnrollment(inputs.batch, inputs.student);
+          const evaluation = evaluateEnrollment(inputs.batch, inputs.student);
           if (!evaluation.allowed) throw this.blocked(evaluation);
           const unmet = unmetDecisions(evaluation.issues, params.decisions);
           if (unmet.length > 0) throw this.decisionRequired(evaluation, unmet);
 
           // ── 2. Clear the student's old placement ─────────────────────
-          const previousBatch = await this.leaveCurrentBatch(tx, studentUserId, now);
+          const previousBatch = await this.leaveCurrentBatch(
+            tx,
+            studentUserId,
+            now,
+          );
           const replaced = await tx.scheduledLesson.deleteMany({
             where: {
               studentUserId,
@@ -1208,7 +1259,12 @@ export class BatchesService {
                 select: { user: { select: { fullName: true, email: true } } },
               },
               course: {
-                select: { id: true, title: true, priceCents: true, sessions: true },
+                select: {
+                  id: true,
+                  title: true,
+                  priceCents: true,
+                  sessions: true,
+                },
               },
             },
           });
@@ -1244,7 +1300,11 @@ export class BatchesService {
           });
           const hasFuture =
             (await tx.batchSession.count({
-              where: { batchId, status: LessonStatus.UPCOMING, start: { gt: now } },
+              where: {
+                batchId,
+                status: LessonStatus.UPCOMING,
+                start: { gt: now },
+              },
             })) > 0;
           let leftOut: number[];
           if (evaluation.alignment === 'BATCH_REBASED' || !hasFuture) {
@@ -1264,7 +1324,9 @@ export class BatchesService {
           await this.audit.log({
             actorId: adminUserId,
             actorRole: 'ADMIN',
-            action: previousBatch ? 'STUDENT_BATCH_MOVED' : 'STUDENT_BATCH_JOINED',
+            action: previousBatch
+              ? 'STUDENT_BATCH_MOVED'
+              : 'STUDENT_BATCH_JOINED',
             entityType: 'User',
             entityId: studentUserId,
             beforeData: {
@@ -1284,7 +1346,10 @@ export class BatchesService {
               startsAtLesson: startsAt,
               lessonsNotTaken:
                 evaluation.alignment === 'SKIPPED_TO_BATCH'
-                  ? [evaluation.studentNextLesson, evaluation.batchNextLesson - 1]
+                  ? [
+                      evaluation.studentNextLesson,
+                      evaluation.batchNextLesson - 1,
+                    ]
                   : null,
               upcomingOneToOneRemoved: replaced.count,
               alreadyCompletedLessonsLeftOut: leftOut,
@@ -1388,7 +1453,10 @@ export class BatchesService {
         const membership = await tx.batchMember.findFirst({
           where: { studentUserId, leftAt: null },
         });
-        if (!membership || (onlyFromBatchId && membership.batchId !== onlyFromBatchId)) {
+        if (
+          !membership ||
+          (onlyFromBatchId && membership.batchId !== onlyFromBatchId)
+        ) {
           throw new BadRequestException('This student is not in that batch.');
         }
         return this.leaveCurrentBatch(tx, studentUserId, now);
@@ -1485,9 +1553,18 @@ export class BatchesService {
               },
             })) > 0;
           if (hasFuture) {
-            await this.sessions.attachMember(tx, membership.batchId, studentUserId, now);
+            await this.sessions.attachMember(
+              tx,
+              membership.batchId,
+              studentUserId,
+              now,
+            );
           } else {
-            await this.sessions.regenerateFutureSessions(tx, membership.batchId, { now });
+            await this.sessions.regenerateFutureSessions(
+              tx,
+              membership.batchId,
+              { now },
+            );
           }
           return inputs;
         },
@@ -1562,7 +1639,11 @@ export class BatchesService {
   /** The first upcoming class of the batch the student is in, as an email. */
   private async notifyFirstClass(batchId: string) {
     const session = await this.prisma.batchSession.findFirst({
-      where: { batchId, status: LessonStatus.UPCOMING, start: { gt: new Date() } },
+      where: {
+        batchId,
+        status: LessonStatus.UPCOMING,
+        start: { gt: new Date() },
+      },
       orderBy: { start: 'asc' },
       include: {
         teacher: { select: { user: { select: { fullName: true } } } },

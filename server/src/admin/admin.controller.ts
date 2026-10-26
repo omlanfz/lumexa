@@ -267,7 +267,7 @@ export class AdminController {
   async adminRescheduleLesson(
     @Param('lessonId') lessonId: string,
     @Body() dto: LessonRescheduleDto,
-    @Request() req: any,
+    @Request() req: { user: { userId: string } },
   ) {
     // A batch student's lesson is their row in a class the batch shares: the
     // class is what moves.
@@ -293,7 +293,7 @@ export class AdminController {
   async adminCancelLesson(
     @Param('lessonId') lessonId: string,
     @Body() dto: ReasonDto,
-    @Request() req: any,
+    @Request() req: { user: { userId: string } },
   ) {
     const sessionId =
       await this.schedulingService.getBatchSessionIdOfLesson(lessonId);
@@ -334,7 +334,7 @@ export class AdminController {
   adminFinalizeBatchSession(
     @Param('sessionId') sessionId: string,
     @Body() dto: FinalizeLessonDto,
-    @Request() req: any,
+    @Request() req: { user: { userId: string } },
   ) {
     return this.classFinalization.finalizeBatchSession(sessionId, {
       outcome: dto.outcome,

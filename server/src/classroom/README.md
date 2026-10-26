@@ -13,14 +13,16 @@ lessons held in it.
 | Room name                     | What                                                                           |
 | ----------------------------- | ------------------------------------------------------------------------------ |
 | `lesson-<scheduledLessonId>`  | a **1:1** class (45 minutes)                                                   |
-| `batch-<teacherId>-<startMs>` | a **batch** (60 minutes): every student's lesson of that teacher at that start |
+| `batch-session-<sessionId>`   | a **batch** class (60 minutes): ONE class for the whole batch (`BatchSession`) |
+| `batch-<teacherId>-<startMs>` | the old batch room name — still resolves, no new class uses it                 |
 | `<bookingId>`                 | a marketplace booking (always 1:1)                                             |
 | `lumexa-demo-classroom`       | the QA demo room                                                               |
 
-Each student keeps their **own `ScheduledLesson`** — their own payment to the
-teacher, lesson balance, attendance, test attempt and recording copy. A batch is
-simply those lessons sharing one room; there is no batch entity. Ideal sizes are
-1 student (1:1) and 4 (batch), but they are ideals, not limits.
+A batch is a real record (`../batches/README.md`) and a batch class is **one
+class**: one `BatchSession`, one room, one teacher earning. Each student's own
+`ScheduledLesson` is their **participant row** of it — their own lesson balance,
+attendance, test attempt, homework, badges and recording copy. Ideal sizes are 1
+student (1:1) and 4 (batch); a batch may hold up to 9.
 
 ## Who may be in a room (`room-access.service.ts`)
 
@@ -80,38 +82,40 @@ used:
 
 ## Batch classes
 
-- **Scheduling.** Students of one batch share a slot: the same teacher and start.
-  `SchedulingService.findTeacherConflict(…, batch = true)` does not count lessons
-  already in exactly that BATCH slot as a conflict, until it holds 9 students.
-  Anything else overlapping (a 1:1, a batch at another time, a marketplace shift)
-  still is.
-- **Joining.** Every student joins the shared room through their own lesson
-  (recorded as theirs). The teacher entering it has joined every student's lesson
-  (`teacherJoinedAt` on all of them).
-- **Ending (`ClassFinalizationService.finalizeBatch`).** The teacher ends the class
-  once and picks one outcome. Each student's lesson is then finalized through the
-  same `finalizeLesson` as a 1:1 class — so the money rules are the 1:1 rules, per
-  student. A student who **never joined** is ended **Incomplete (no-show)** — a
-  class cannot be paid for when the student did not attend, the same rule as the
-  75-minute failsafe — with a make-up class and the missed-class notice. Lessons an
-  admin already settled are left alone. If one lesson cannot be ended the rest still
-  are and the first problem is raised; ending the class again picks up the
-  remainder. The shared room (recording wrap-up, closing the live room) is wrapped
-  up when the **last** student's lesson ends, so an admin settling one student does
-  not end the class for the others.
-- **Recording.** One recording per batch, mirrored onto every student's lesson (they
+- **Scheduling.** A batch's classes come from its weekly slots
+  (`BatchSessionsService`): one `BatchSession` per class and one participant row
+  per student. The teacher's calendar is checked once per class
+  (`findTeacherConflict`); anything else overlapping (a 1:1, another batch, a
+  marketplace shift) is a conflict.
+- **Joining.** A student joins the shared room through their own lesson row
+  (recorded as theirs). The teacher joins through the session: `teacherJoinedAt` is
+  set once on the class (and mirrored on the rows) — that single value drives the
+  late-join penalty and the 75-minute failsafe. The hidden admin observer joins
+  through the session id as well.
+- **Ending (`ClassFinalizationService.finalizeBatchSession`).** The teacher ends
+  the class once and picks one outcome. The class moves out of `UPCOMING` once
+  (compare-and-set), in one transaction that pays the teacher once, gives each
+  student their own outcome and consumes one lesson from each attending student's
+  own ledger. A student who **never joined** is ended **Incomplete (no-show)** —
+  no payment, no lesson consumed, and no private make-up (a batch class cannot be
+  redone for one student; they catch up from the recording). Partially Completed /
+  Incomplete adds **one** extra class for the whole batch. An admin settling one
+  participant's row settles the whole class. The shared room (recording wrap-up,
+  closing the live room) is wrapped up once, with the class.
+- **Recording.** One recording per class, mirrored onto every participant row (they
   all get the same file); merged once; storage is counted per file.
 
-### Per-student economics (worth knowing)
+### Economics
 
-Everything that pays or penalises is per `ScheduledLesson`, as it always was:
-**teacher earning ৳200** and the teacher's **late-join / no-show penalty ৳50** — so
-a batch of 4 pays (and penalises) 4×. Nothing here changes those amounts; if the
-business wants a per-class amount for batches, it is the one place
-`CLASS_COMPLETED_AMOUNT_CENTS` / the late-join code in `joinScheduledLesson`.
+Everything that pays or penalises is **per class** for a batch and per lesson for a
+1:1: the **teacher earning ৳200** and the **late-join / no-show penalty ৳50**
+(`PayoutEntry` keyed `(BATCH_SESSION, sessionId, …)`, so a retry can never pay or
+fine twice). What is **per student** is the lesson consumed from their own ledger.
+If the business wants a per-student amount for batches, it is the one place
+`PayoutsService.recordBatchSessionEarningInTx` / `CLASS_COMPLETED_AMOUNT_CENTS`.
 
 Lateness is judged by the teacher's **first** arrival (the join time kept on the
-lesson), not by each later token request. A token is also requested when the
+class), not by each later token request. A token is also requested when the
 teacher presses Join, opens a second device or refreshes, and none of those may
 fine a teacher who was on time.
 

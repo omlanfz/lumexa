@@ -170,7 +170,9 @@ export class RecordingService {
   private entityKindForRoom(room: string): EntityKind | null {
     const ref = getRoomRef(room);
     if (ref.kind === 'demo') return null;
-    return ref.kind === 'lesson' || ref.kind === 'batch' || ref.kind === 'session'
+    return ref.kind === 'lesson' ||
+      ref.kind === 'batch' ||
+      ref.kind === 'session'
       ? 'lesson'
       : 'booking';
   }
@@ -211,7 +213,11 @@ export class RecordingService {
   private async readMirror(room: string): Promise<RecordingMirror | null> {
     if (room === DEMO_ROOM_NAME) return this.demoMirror;
     const ref = getRoomRef(room);
-    if (ref.kind === 'lesson' || ref.kind === 'batch' || ref.kind === 'session') {
+    if (
+      ref.kind === 'lesson' ||
+      ref.kind === 'batch' ||
+      ref.kind === 'session'
+    ) {
       const [anchor] = await this.lessonIdsForRoom(room);
       if (!anchor) return null;
       return this.prisma.scheduledLesson.findUnique({

@@ -35,7 +35,6 @@ export type EnrollmentIssueCode =
   | 'BATCH_FULL'
   | 'COURSE_MISMATCH'
   | 'PROGRESS_AHEAD'
-  | 'SCHEDULE_CONFLICT'
   | 'PROGRESS_BEHIND'
   | 'BATCH_REBASE'
   | 'TEACHER_CHANGE'

@@ -36,7 +36,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       ) {
         message = (exceptionResponse as any).message;
         if ('details' in exceptionResponse) {
-          details = (exceptionResponse as any).details;
+          details = (exceptionResponse as { details?: unknown }).details;
         }
       } else if (typeof exceptionResponse === 'string') {
         message = exceptionResponse;

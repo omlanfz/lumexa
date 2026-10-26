@@ -102,11 +102,11 @@ saves are refused with *"Your teacher locked this test…"* (409), they cannot s
 the test, and their report card says the teacher locked it (`timeline.lockedByTeacherAt`,
 plus time taken).
 
-**Who sits a test together?** The scheduling model has one `ScheduledLesson` per
-learner, so a group is every `UPCOMING` class of the same teacher, course and lesson
-number whose time overlaps the one being looked at — a 1:1 class is a group of one.
-That definition lives in one function, `classGroupWhere` (`class-tests.service.ts`);
-if batches ever get an entity of their own, only it changes.
+**Who sits a test together?** A batch class is one `BatchSession` and each of its
+students has their own `ScheduledLesson` row in it, so a group is the participant rows
+of the session being looked at — a 1:1 class is a group of one. That definition lives
+in one function, `classGroupWhere` (`class-tests.service.ts`). The test and the
+report card stay per learner; only *who is in the class* comes from the session.
 
 **Concurrency** (proved against Postgres in `class-tests.integration.spec.ts`): a
 lock and a learner's own *Submit* race through the attempt row (whoever claims it
@@ -121,7 +121,7 @@ can never be left with an open attempt behind a closed test. Columns:
   validation/materialisation/verification, the content gate over every bank,
   the service rules with a mocked Prisma).
 - Real Postgres (skipped unless the variable is set): the bank sync, the whole
-  HTTP workflow and the teacher's lock (with a simulated four-student batch and
+  HTTP workflow and the teacher's lock (with a real four-student batch session and
   the lock/start/submit races). The database is **wiped** — use a throwaway one whose name
   contains `it`, `test` or `integration`:
 

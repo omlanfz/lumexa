@@ -62,7 +62,12 @@ export async function leaveCurrentBatchInTx(
   });
   if (!membership) return null;
   await lockBatch(tx, membership.batchId);
-  await detachFutureParticipationInTx(tx, studentUserId, membership.batchId, now);
+  await detachFutureParticipationInTx(
+    tx,
+    studentUserId,
+    membership.batchId,
+    now,
+  );
   await tx.batchMember.update({
     where: { id: membership.id },
     data: { leftAt: now },

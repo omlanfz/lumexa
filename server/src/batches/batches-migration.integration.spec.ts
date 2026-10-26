@@ -125,7 +125,7 @@ describeDb('The batches migration (real Postgres)', () => {
     let t2: Person;
     let c1: { id: string; title: string };
     let c2: { id: string; title: string };
-    let people: Record<string, Person> = {};
+    const people: Record<string, Person> = {};
     let lessonIdsC1: Map<number, string>;
     let before: Awaited<ReturnType<typeof snapshot>>;
     let notices: string[] = [];

@@ -26,17 +26,16 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  BatchStatus,
-  ClassType,
-  LessonStatus,
-  Prisma,
-} from '@prisma/client';
+import { BatchStatus, ClassType, LessonStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CLASS_DURATION_MINUTES } from '../scheduling/class-duration';
-import { dhakaToUtc, todayDhakaDateStr, utcToDhakaParts } from '../scheduling/dhaka-time.util';
+import {
+  dhakaToUtc,
+  todayDhakaDateStr,
+  utcToDhakaParts,
+} from '../scheduling/dhaka-time.util';
 import {
   formatSlotTime,
   generateOccurrences,
@@ -170,7 +169,10 @@ export class BatchSessionsService {
     const cutoff = freezeCutoff(now);
     const batch = await tx.batch.findUnique({
       where: { id: batchId },
-      include: { slots: true, course: { select: { id: true, sessions: true } } },
+      include: {
+        slots: true,
+        course: { select: { id: true, sessions: true } },
+      },
     });
     if (!batch) throw new NotFoundException('Batch not found.');
 
@@ -191,7 +193,9 @@ export class BatchSessionsService {
     });
     if (stale.length > 0) {
       const ids = stale.map((s) => s.id);
-      await tx.scheduledLesson.deleteMany({ where: { batchSessionId: { in: ids } } });
+      await tx.scheduledLesson.deleteMany({
+        where: { batchSessionId: { in: ids } },
+      });
       await tx.batchSession.deleteMany({ where: { id: { in: ids } } });
     }
 
@@ -226,13 +230,16 @@ export class BatchSessionsService {
     // 3. The dates.
     const today = todayDhakaDateStr();
     const firstDate =
-      opts.fromDateStr ??
-      (batch.startDate > today ? batch.startDate : today);
+      opts.fromDateStr ?? (batch.startDate > today ? batch.startDate : today);
     const slots: WeeklySlot[] = batch.slots.map((s) => ({
       weekday: s.weekday,
       time: formatSlotTime(s.hour, s.minute),
     }));
-    const starts = generateOccurrences(firstDate, slots, count + slots.length + 2)
+    const starts = generateOccurrences(
+      firstDate,
+      slots,
+      count + slots.length + 2,
+    )
       .map((occ) => dhakaToUtc(occ.dateStr, occ.hour, occ.minute))
       .filter((start) => start.getTime() > cutoff.getTime())
       .slice(0, count);
@@ -252,7 +259,12 @@ export class BatchSessionsService {
     }
     for (const start of starts) {
       const end = new Date(start.getTime() + durationMs);
-      const conflict = await findTeacherConflict(tx, batch.teacherId, start, end);
+      const conflict = await findTeacherConflict(
+        tx,
+        batch.teacherId,
+        start,
+        end,
+      );
       if (conflict) {
         throw new BadRequestException(
           `The teacher is already booked on ${describeDhakaMoment(start)} (Asia/Dhaka). Choose a different day/time.`,
@@ -558,7 +570,9 @@ export class BatchSessionsService {
     const session = await this.sessionForOverride(sessionId);
     if (!session) throw new NotFoundException('Class not found.');
     if (session.status !== LessonStatus.UPCOMING) {
-      throw new BadRequestException('Only upcoming classes can be rescheduled.');
+      throw new BadRequestException(
+        'Only upcoming classes can be rescheduled.',
+      );
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {

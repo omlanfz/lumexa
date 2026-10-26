@@ -39,7 +39,6 @@
 
 import {
   BadRequestException,
-  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -295,7 +294,11 @@ export class ClassFinalizationService {
     params: FinalizeParams,
   ): Promise<
     FinalizeResult & {
-      lessons: { lessonId: string; studentUserId: string; status: LessonStatus }[];
+      lessons: {
+        lessonId: string;
+        studentUserId: string;
+        status: LessonStatus;
+      }[];
     }
   > {
     this.assertValidParams(params);
@@ -308,7 +311,9 @@ export class ClassFinalizationService {
         batch: { select: { id: true, name: true } },
         teacher: { select: { id: true, userId: true } },
         participants: {
-          include: { student: { select: { id: true, fullName: true, email: true } } },
+          include: {
+            student: { select: { id: true, fullName: true, email: true } },
+          },
           orderBy: { id: 'asc' },
         },
       },
@@ -316,7 +321,11 @@ export class ClassFinalizationService {
     if (!session) throw new NotFoundException('Class not found.');
 
     const rowsOf = (
-      participants: { id: string; studentUserId: string; status: LessonStatus }[],
+      participants: {
+        id: string;
+        studentUserId: string;
+        status: LessonStatus;
+      }[],
     ) =>
       participants.map((p) => ({
         lessonId: p.id,
@@ -386,7 +395,8 @@ export class ClassFinalizationService {
             status: outcome,
             endedAt: now,
             endedByRole: actor.role,
-            endReason: outcome === 'INCOMPLETE' ? (params.reason ?? null) : null,
+            endReason:
+              outcome === 'INCOMPLETE' ? (params.reason ?? null) : null,
             endNote:
               outcome === 'INCOMPLETE' ? params.note?.trim() || null : null,
           },
@@ -571,7 +581,9 @@ export class ClassFinalizationService {
         },
       })
       .catch((err) =>
-        this.logger.error(`Audit log failed for batch class ${session.id}: ${err}`),
+        this.logger.error(
+          `Audit log failed for batch class ${session.id}: ${err}`,
+        ),
       );
 
     if (isPaid) {

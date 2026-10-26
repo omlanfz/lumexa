@@ -1137,7 +1137,7 @@ describeDb('Batches (real Postgres)', () => {
         expect(ok).toHaveLength(2);
         expect(failed).toHaveLength(2);
         for (const f of failed) {
-          const e = (f as PromiseRejectedResult).reason as {
+          const e = f.reason as {
             getResponse?: () => { details?: { issues?: { code: string }[] } };
           };
           expect(
@@ -1767,6 +1767,10 @@ describeDb('Batches (real Postgres)', () => {
         lessonNumber: 1,
         students: 2,
       });
+      // The admin's class actions show who is in each upcoming class.
+      expect(
+        detail.upcomingSessions[0].participants.map((p) => p.fullName).sort(),
+      ).toEqual(['ada', 'ben']);
       expect(detail.warnings).toEqual([]);
       expect(await w.batches.getStudentPlacement(a.id)).toMatchObject({
         id: batch.id,

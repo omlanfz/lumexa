@@ -326,7 +326,7 @@ export class TeachersService {
             type: 'lesson' as const,
             id: nextLesson.id,
             studentName: nextLesson.student.fullName,
-            studentAvatarUrl: nextLesson.student.avatarUrl as string | null,
+            studentAvatarUrl: nextLesson.student.avatarUrl,
             start: nextLesson.start,
             end: nextLesson.end,
             courseTitle: nextLesson.course.title,
@@ -421,7 +421,11 @@ export class TeachersService {
               status: true,
               maxStudents: true,
               slots: {
-                orderBy: [{ weekday: 'asc' }, { hour: 'asc' }, { minute: 'asc' }],
+                orderBy: [
+                  { weekday: 'asc' },
+                  { hour: 'asc' },
+                  { minute: 'asc' },
+                ],
                 select: { weekday: true, hour: true, minute: true },
               },
               _count: { select: { members: { where: { leftAt: null } } } },

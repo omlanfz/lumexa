@@ -80,6 +80,16 @@ const CLASS_SESSION_INCLUDE = {
   },
 } satisfies Prisma.BatchSessionInclude;
 
+/** What the Classes-page filters ask of a class, in the shape both the lesson
+ * query and the batch-class query understand. */
+interface ClassWhere {
+  start?: Prisma.DateTimeFilter;
+  teacherId?: string;
+  courseId?: string;
+  studentUserId?: string;
+  status?: LessonStatus;
+}
+
 function dayRange(dateStr?: string) {
   const base = dateStr ? new Date(dateStr) : new Date();
   const start = new Date(base);
@@ -313,7 +323,7 @@ export class AdminService {
     teacherId?: string;
     studentUserId?: string;
     courseId?: string;
-  }): any | null {
+  }): ClassWhere | null {
     switch (filters.status) {
       case 'PENDING':
       case 'FAILED':
@@ -324,7 +334,7 @@ export class AdminService {
         break;
     }
 
-    const where: any = {};
+    const where: ClassWhere = {};
     if (filters.date) {
       const { start, end } = dayRange(filters.date);
       where.start = { gte: start, lte: end };
@@ -357,14 +367,18 @@ export class AdminService {
   }
 
   /** The same Classes-page filters, applied to batch classes. */
-  private buildSessionWhere(lessonWhere: any): Prisma.BatchSessionWhereInput {
+  private buildSessionWhere(
+    lessonWhere: ClassWhere,
+  ): Prisma.BatchSessionWhereInput {
     const where: Prisma.BatchSessionWhereInput = {};
     if (lessonWhere.start) where.start = lessonWhere.start;
     if (lessonWhere.teacherId) where.teacherId = lessonWhere.teacherId;
     if (lessonWhere.courseId) where.courseId = lessonWhere.courseId;
     if (lessonWhere.status) where.status = lessonWhere.status;
     if (lessonWhere.studentUserId) {
-      where.participants = { some: { studentUserId: lessonWhere.studentUserId } };
+      where.participants = {
+        some: { studentUserId: lessonWhere.studentUserId },
+      };
     }
     return where;
   }

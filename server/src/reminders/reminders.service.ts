@@ -100,7 +100,9 @@ export class RemindersService {
           select: { user: { select: { email: true, fullName: true } } },
         },
         _count: {
-          select: { participants: { where: { status: LessonStatus.UPCOMING } } },
+          select: {
+            participants: { where: { status: LessonStatus.UPCOMING } },
+          },
         },
       },
     });

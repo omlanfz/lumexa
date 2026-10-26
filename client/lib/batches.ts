@@ -64,6 +64,8 @@ export interface BatchSessionRow {
   end: string;
   status: string;
   students: number;
+  /** Who is in an upcoming class (not sent for past classes). */
+  participants?: { id: string; fullName: string; email: string }[];
   attended?: number;
 }
 
