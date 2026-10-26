@@ -15,6 +15,8 @@ export interface LiveClass {
   lessonNumber?: number;
   lessonTitle?: string | null;
   classType?: 'ONE_TO_ONE' | 'BATCH';
+  /** The batch this class is taught to (null for a 1-to-1 class). */
+  batchName?: string | null;
   isLive: boolean;
   hasEnded: boolean;
   joinable: boolean;
@@ -71,6 +73,7 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
           liveClass.lessonTitle ? `: ${liveClass.lessonTitle}` : ''
         }`
       : '1-to-1 Session';
+  const groupLabel = liveClass.batchName ? `👥 ${liveClass.batchName}` : null;
 
   const joinHref = `/classroom/${liveClass.id}?type=${liveClass.type}`;
 
@@ -112,6 +115,11 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
             </p>
             {subtitle && (
               <p className="text-gray-600 dark:text-gray-300 text-sm truncate">{subtitle}</p>
+            )}
+            {groupLabel && (
+              <p className="text-teal-700 dark:text-teal-300 text-xs font-medium truncate" title="Your batch — everyone in it is in the same class">
+                {groupLabel}
+              </p>
             )}
             <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
               {start.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}

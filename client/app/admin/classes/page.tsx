@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import {
@@ -257,7 +258,29 @@ export default function ClassesPage() {
                     <td className="px-4 py-3 whitespace-nowrap text-[var(--a-text)]">
                       {formatDateTime(r.start)}
                     </td>
-                    <td className="px-4 py-3 text-[var(--a-text)]">{r.studentName}</td>
+                    <td className="px-4 py-3 text-[var(--a-text)]">
+                      {r.kind === "SESSION" && r.batch ? (
+                        <>
+                          <Link
+                            href={`/admin/batches/${r.batch.id}`}
+                            className="font-medium hover:text-[var(--a-accent)]"
+                            title="Open this batch"
+                          >
+                            👥 {r.batch.name}
+                          </Link>
+                          <span className="block text-xs text-[var(--a-text-faint)]">
+                            {(r.students ?? []).length} student{(r.students ?? []).length === 1 ? "" : "s"}
+                            {(r.students ?? []).length > 0 &&
+                              ` · ${(r.students ?? [])
+                                .slice(0, 3)
+                                .map((s) => s.fullName)
+                                .join(", ")}${(r.students ?? []).length > 3 ? "…" : ""}`}
+                          </span>
+                        </>
+                      ) : (
+                        r.studentName
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-[var(--a-text)]">{r.teacherName}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">
                       {r.courseTitle}

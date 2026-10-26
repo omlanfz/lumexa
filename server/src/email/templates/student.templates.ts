@@ -95,6 +95,9 @@ export function missedClassEmail(params: {
   studentName: string;
   teacherName: string;
   classStart: Date;
+  /** Set for a batch class: it cannot be redone for one student, so there is
+   * no make-up — the recording is how they catch up. */
+  batchName?: string;
 }) {
   return {
     subject: `You missed your class with ${params.teacherName}`,
@@ -104,7 +107,11 @@ export function missedClassEmail(params: {
         <h2 style="margin: 0 0 12px; color: #0f172a;">We missed you in class</h2>
         <p style="margin: 0 0 8px;">Hi ${params.studentName},</p>
         <p style="margin: 0 0 8px;">Your class with <strong>${params.teacherName}</strong> scheduled for ${formatDateTime(params.classStart)} was marked as a no-show — our records show you didn't join.</p>
-        <p style="margin: 0 0 8px; color: #475569;">A make-up session has been scheduled automatically. Check your dashboard for the new time, and reach out to support if this doesn't look right.</p>
+        ${
+          params.batchName
+            ? `<p style="margin: 0 0 8px; color: #475569;"><strong>${params.batchName}</strong> is a small-group class, so it can't be repeated for one student. You can watch the class recording from your dashboard to catch up, and reach out to ${params.teacherName} if you need help with anything you missed.</p>`
+            : `<p style="margin: 0 0 8px; color: #475569;">A make-up session has been scheduled automatically. Check your dashboard for the new time, and reach out to support if this doesn't look right.</p>`
+        }
       `,
     }),
   };

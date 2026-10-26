@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/axios";
@@ -235,7 +236,23 @@ export default function TeacherDetailPage() {
                     {formatDhakaTime(l.start)} – {formatDhakaTime(l.end)}
                   </td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">
-                    {l.student?.fullName ?? "—"}
+                    {l.kind === "BATCH_SESSION" && l.batch ? (
+                      <>
+                        <Link href={`/admin/batches/${l.batch.id}`} className="text-[var(--a-text)] hover:text-[var(--a-accent)]">
+                          👥 {l.batch.name}
+                        </Link>
+                        <span className="block text-xs text-[var(--a-text-faint)]">
+                          {(l.students ?? []).length} student{(l.students ?? []).length === 1 ? "" : "s"}
+                          {(l.students ?? []).length > 0 &&
+                            ` · ${(l.students ?? [])
+                              .slice(0, 3)
+                              .map((st: { fullName: string }) => st.fullName)
+                              .join(", ")}${(l.students ?? []).length > 3 ? "…" : ""}`}
+                        </span>
+                      </>
+                    ) : (
+                      (l.student?.fullName ?? "—")
+                    )}
                   </td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">
                     {l.lessonTitle ?? l.course?.title ?? "—"}

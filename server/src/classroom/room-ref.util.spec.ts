@@ -8,8 +8,10 @@ import {
   isLessonRoom,
   isPersonIdentity,
   parseBatchRoom,
+  parseBatchSessionRoom,
   personKey,
   roomForBatch,
+  roomForBatchSession,
   roomForLessonRecord,
   sanitizeDeviceId,
 } from './room-ref.util';
@@ -24,8 +26,81 @@ describe('classroom limits', () => {
   });
 });
 
+describe('a batch class’s room', () => {
+  const SESSION_ID = '9b2f6a10-77c4-4d0e-a3d1-0c5e8f2b7a44';
+
+  it('every student’s row in the class takes the class’s ONE room; a 1:1 lesson keeps its own', () => {
+    const base = {
+      teacherId: TEACHER_ID,
+      start: START,
+      classType: 'BATCH' as const,
+      batchSessionId: SESSION_ID,
+    };
+    const a = roomForLessonRecord({ ...base, id: 'row-a' });
+    const b = roomForLessonRecord({ ...base, id: 'row-b' });
+    expect(a).toBe(roomForBatchSession(SESSION_ID));
+    expect(a).toBe(b);
+    expect(
+      roomForLessonRecord({ ...base, id: 'row-a', batchSessionId: 'other' }),
+    ).not.toBe(a);
+    expect(
+      roomForLessonRecord({
+        id: 'solo',
+        classType: 'ONE_TO_ONE',
+        teacherId: TEACHER_ID,
+        start: START,
+      }),
+    ).toBe('lesson-solo');
+  });
+
+  it('is keyed by the class, not by teacher and start — two classes at the same time are two rooms', () => {
+    expect(roomForBatchSession('s1')).not.toBe(roomForBatchSession('s2'));
+    expect(roomForBatchSession(SESSION_ID)).toBe(`batch-session-${SESSION_ID}`);
+  });
+
+  it('is parsed back to the class id, and recognised as a batch and curriculum room', () => {
+    const room = roomForBatchSession(SESSION_ID);
+    expect(parseBatchSessionRoom(room)).toBe(SESSION_ID);
+    expect(getRoomRef(room)).toEqual({
+      kind: 'session',
+      batchSessionId: SESSION_ID,
+    });
+    expect(isBatchRoom(room)).toBe(true);
+    expect(isCurriculumRoom(room)).toBe(true);
+    expect(isLessonRoom(room)).toBe(false);
+  });
+
+  it('is never mistaken for an old teacher-and-start batch room, whatever its id ends in', () => {
+    expect(parseBatchRoom('batch-session-123-456')).toBeNull();
+    expect(parseBatchRoom(roomForBatchSession('a-b-1700000000000'))).toBeNull();
+    expect(getRoomRef('batch-session-123-456')).toEqual({
+      kind: 'session',
+      batchSessionId: '123-456',
+    });
+  });
+
+  it.each(['batch-session-', 'batch-session', 'lesson-batch-session-x'])(
+    '%s is not a class room',
+    (room) => {
+      expect(parseBatchSessionRoom(room)).toBeNull();
+    },
+  );
+
+  it('a row that somehow has no class falls back to the old name rather than a room of its own', () => {
+    expect(
+      roomForLessonRecord({
+        id: 'x',
+        classType: 'BATCH',
+        teacherId: TEACHER_ID,
+        start: START,
+        batchSessionId: null,
+      }),
+    ).toBe(roomForBatch(TEACHER_ID, START));
+  });
+});
+
 describe('room names', () => {
-  it('gives a 1:1 lesson a room of its own and a batch one shared room', () => {
+  it('gives a 1:1 lesson a room of its own and a legacy batch one shared room', () => {
     const one = {
       id: 'lesson-a',
       classType: 'ONE_TO_ONE' as const,

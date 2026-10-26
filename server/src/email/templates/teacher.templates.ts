@@ -78,15 +78,25 @@ export function teacherClassReminderEmail(params: {
   studentName: string;
   classStart: Date;
   classUrl: string;
+  /** A batch class: one reminder for the whole class, naming the batch. */
+  batchName?: string;
+  studentCount?: number;
 }) {
+  const who = params.batchName
+    ? `${params.batchName}${
+        params.studentCount
+          ? ` (${params.studentCount} student${params.studentCount === 1 ? '' : 's'})`
+          : ''
+      }`
+    : params.studentName;
   return {
-    subject: `⏰ Your class with ${params.studentName} starts in 1 hour`,
+    subject: `⏰ Your class with ${who} starts in 1 hour`,
     html: emailLayout({
       title: 'Class starting soon',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">⏰ Your class starts in 1 hour</h2>
         <p style="margin: 0 0 8px;">Hi ${params.teacherName},</p>
-        <p style="margin: 0 0 8px;">Your class with <strong>${params.studentName}</strong> starts at ${formatDateTime(params.classStart)}.</p>
+        <p style="margin: 0 0 8px;">Your class with <strong>${who}</strong> starts at ${formatDateTime(params.classStart)}.</p>
         ${emailButton('Join classroom', params.classUrl)}
       `,
     }),

@@ -29,8 +29,9 @@ import {
   DEMO_STUDENT_EMAIL,
   DEMO_TEACHER_EMAIL,
   buildIdentity,
-  roomForBatch,
+  roomForBatchSession,
 } from '../room-ref.util';
+import { createBatchWithSession } from '../../batches/testing/batch-fixtures';
 import { BADGE_CATALOG } from './badge-catalog';
 import {
   BADGE_UNDO_WINDOW_MS,
@@ -209,11 +210,17 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
 
     batchStudents = [];
     for (const n of ['ada', 'ben', 'cleo', 'dev']) {
-      const s = await makeUser(`${n}-student`, Role.STUDENT);
-      batchStudents.push(s);
-      await makeLesson(s, teacher, ClassType.BATCH, slot);
+      batchStudents.push(await makeUser(`${n}-student`, Role.STUDENT));
     }
-    batchRoom = roomForBatch(teacher.profileId!, slot);
+    // ONE batch class: its own room, one row for each of the four students.
+    const batchClass = await createBatchWithSession(prisma, {
+      teacherProfileId: teacher.profileId!,
+      courseId,
+      studentUserIds: batchStudents.map((s) => s.id),
+      start: slot,
+      lessonNumber: 1,
+    });
+    batchRoom = roomForBatchSession(batchClass.sessionId);
 
     oneToOneStudent = await makeUser('olive-solo', Role.STUDENT);
     const solo = await makeLesson(
@@ -225,7 +232,13 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
     oneToOneRoom = `lesson-${solo.id}`;
 
     outsider = await makeUser('otto-outsider', Role.STUDENT);
-    await makeLesson(outsider, otherTeacher, ClassType.BATCH, slot);
+    await createBatchWithSession(prisma, {
+      teacherProfileId: otherTeacher.profileId!,
+      courseId,
+      studentUserIds: [outsider.id],
+      start: slot,
+      lessonNumber: 1,
+    });
   });
 
   // ─── Every badge ───────────────────────────────────────────────────────────

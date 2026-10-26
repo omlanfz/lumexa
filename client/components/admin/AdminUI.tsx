@@ -222,6 +222,7 @@ export function DropdownMenu({
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const anchorRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -244,7 +245,12 @@ export function DropdownMenu({
     document.addEventListener("keydown", handleEscape);
 
     function handleOutside(e: MouseEvent) {
-      if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) close();
+      // The menu is portalled to <body>, so it sits outside the anchor: a press
+      // on one of its items must not count as "outside", or the menu unmounts on
+      // mousedown and the click never lands.
+      const target = e.target as Node;
+      if (anchorRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      close();
     }
     function handleEscape(e: KeyboardEvent) {
       if (e.key === "Escape") close();
@@ -265,6 +271,7 @@ export function DropdownMenu({
         typeof document !== "undefined" &&
         createPortal(
           <div
+            ref={menuRef}
             style={{ position: "fixed", top: coords.top, left: coords.left, width: DROPDOWN_WIDTH }}
             className="rounded-lg border border-[var(--a-border)] bg-[var(--a-surface)] shadow-xl z-[110] overflow-hidden fade-in"
           >

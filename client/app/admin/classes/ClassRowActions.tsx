@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { DropdownMenu, DropdownItem, Modal, ReasonActionModal, StatusBadge, formatDateTime, CLASS_TYPE_LABELS } from "@/components/admin/AdminUI";
 
 export interface ClassRow {
   id: string;
-  kind: "BOOKING" | "LESSON";
+  // A SESSION is one batch class — shown once, with all its students.
+  kind: "BOOKING" | "LESSON" | "SESSION";
   start: string;
   end: string;
   studentName: string;
@@ -25,6 +27,9 @@ export interface ClassRow {
   recordingMergeError: string | null;
   isLive: boolean;
   displayStatus: string;
+  /** Batch classes: the batch and everyone in the class. */
+  batch?: { id: string; name: string } | null;
+  students?: { id: string; fullName: string; email: string }[];
 }
 
 // Kept as an alias so nothing outside this file needs to know the type was
@@ -112,7 +117,12 @@ export default function ClassRowActions({
           danger
           onClose={() => setModal(null)}
           onSubmit={async (reason) => {
-            const path = row.kind === "BOOKING" ? `/admin/bookings/${row.id}/cancel` : `/admin/lessons/${row.id}/cancel`;
+            const path =
+              row.kind === "BOOKING"
+                ? `/admin/bookings/${row.id}/cancel`
+                : row.kind === "SESSION"
+                  ? `/admin/batch-sessions/${row.id}/cancel`
+                  : `/admin/lessons/${row.id}/cancel`;
             await api.post(path, { reason });
             onChanged();
           }}
@@ -150,7 +160,12 @@ function ConfirmDeleteModal({
     setSubmitting(true);
     setError(null);
     try {
-      const path = row.kind === "BOOKING" ? `/admin/bookings/${row.id}` : `/admin/lessons/${row.id}`;
+      const path =
+        row.kind === "BOOKING"
+          ? `/admin/bookings/${row.id}`
+          : row.kind === "SESSION"
+            ? `/admin/batch-sessions/${row.id}`
+            : `/admin/lessons/${row.id}`;
       await api.delete(path);
       onDone();
       onClose();
@@ -166,6 +181,7 @@ function ConfirmDeleteModal({
       <div className="space-y-4">
         <p className="text-sm text-[var(--a-text)]">
           Permanently delete the {formatDateTime(row.start)} class ({row.studentName} · {row.teacherName})?
+          {row.kind === "SESSION" && " This is a batch class: it is removed for every student in it."}{" "}
           This removes it from the class log entirely and can&rsquo;t be undone.
         </p>
         {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
@@ -204,7 +220,37 @@ function DetailsModal({ row, onClose }: { row: ClassRow; onClose: () => void }) 
   return (
     <Modal title="Class details" onClose={onClose}>
       <div className="space-y-3 text-sm">
-        <Row label="Student" value={`${row.studentName}${row.studentEmail ? ` (${row.studentEmail})` : ""}`} />
+        {row.kind === "SESSION" ? (
+          <>
+            <Row
+              label="Batch"
+              value={
+                row.batch ? (
+                  <Link href={`/admin/batches/${row.batch.id}`} className="text-[var(--a-accent)] hover:underline">
+                    {row.batch.name}
+                  </Link>
+                ) : (
+                  "—"
+                )
+              }
+            />
+            <Row
+              label={`Students (${row.students?.length ?? 0})`}
+              value={
+                <span className="block text-right">
+                  {(row.students ?? []).map((s) => (
+                    <span key={s.id} className="block">
+                      {s.fullName}
+                    </span>
+                  ))}
+                  {(row.students ?? []).length === 0 && "—"}
+                </span>
+              }
+            />
+          </>
+        ) : (
+          <Row label="Student" value={`${row.studentName}${row.studentEmail ? ` (${row.studentEmail})` : ""}`} />
+        )}
         <Row label="Teacher" value={row.teacherName} />
         <Row label="Course" value={row.courseTitle} />
         <Row label="Scheduled" value={`${formatDateTime(row.start)} → ${formatDateTime(row.end)}`} />
@@ -212,12 +258,14 @@ function DetailsModal({ row, onClose }: { row: ClassRow; onClose: () => void }) 
         {row.kind === "BOOKING" && row.paymentStatus && (
           <Row label="Payment status" value={<StatusBadge status={row.paymentStatus} />} />
         )}
-        {row.kind === "LESSON" && (
+        {(row.kind === "LESSON" || row.kind === "SESSION") && (
           <>
             <Row label="Lesson #" value={row.lessonNumber ?? "—"} />
             <Row label="Class type" value={row.classType ? (CLASS_TYPE_LABELS[row.classType] ?? row.classType) : "—"} />
             <p className="text-xs text-[var(--a-text-faint)] pt-1">
-              Billed against the student&rsquo;s BDT ledger balance, not per-class — see the student&rsquo;s Payments tab.
+              {row.kind === "SESSION"
+                ? "One class for the whole batch: the teacher is paid once, and each student is billed against their own BDT ledger balance — see the student’s Payments tab."
+                : "Billed against the student’s BDT ledger balance, not per-class — see the student’s Payments tab."}
             </p>
           </>
         )}
@@ -266,7 +314,9 @@ function RescheduleModal({
           reason: reason.trim(),
         });
       } else {
-        await api.post(`/admin/lessons/${row.id}/reschedule`, {
+        const path =
+          row.kind === "SESSION" ? `/admin/batch-sessions/${row.id}/reschedule` : `/admin/lessons/${row.id}/reschedule`;
+        await api.post(path, {
           newStart: new Date(start).toISOString(),
           newEnd: new Date(end).toISOString(),
         });

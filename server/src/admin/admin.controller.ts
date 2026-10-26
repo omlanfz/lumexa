@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -26,6 +27,7 @@ import { PayoutsService } from '../payouts/payouts.service';
 import { RescheduleService } from '../reschedule/reschedule.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { BatchSessionsService } from '../batches/batch-sessions.service';
 import { DisputesService } from '../disputes/disputes.service';
 import {
   ClassFinalizationService,
@@ -142,6 +144,7 @@ export class AdminController {
     private readonly schedulingService: SchedulingService,
     private readonly disputesService: DisputesService,
     private readonly classFinalization: ClassFinalizationService,
+    private readonly batchSessions: BatchSessionsService,
   ) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
@@ -192,7 +195,7 @@ export class AdminController {
    * ClassRow.kind the classes list already returns ('BOOKING' | 'LESSON'). */
   @Post('classes/:kind/:id/join')
   joinLiveClass(
-    @Param('kind') kind: 'BOOKING' | 'LESSON',
+    @Param('kind') kind: 'BOOKING' | 'LESSON' | 'SESSION',
     @Param('id') id: string,
   ) {
     return this.adminService.joinLiveClass(kind, id);
@@ -201,7 +204,7 @@ export class AdminController {
   /** Retries a FAILED recording merge — see RecordingService.retryMerge. */
   @Post('classes/:kind/:id/recording-retry')
   retryRecording(
-    @Param('kind') kind: 'BOOKING' | 'LESSON',
+    @Param('kind') kind: 'BOOKING' | 'LESSON' | 'SESSION',
     @Param('id') id: string,
   ) {
     return this.adminService.retryRecording(kind, id);
@@ -261,11 +264,23 @@ export class AdminController {
   // ── Classes: single-lesson overrides (ScheduledLesson-based classes) ────
 
   @Post('lessons/:lessonId/reschedule')
-  adminRescheduleLesson(
+  async adminRescheduleLesson(
     @Param('lessonId') lessonId: string,
     @Body() dto: LessonRescheduleDto,
-    @Request() req: any,
+    @Request() req: { user: { userId: string } },
   ) {
+    // A batch student's lesson is their row in a class the batch shares: the
+    // class is what moves.
+    const sessionId =
+      await this.schedulingService.getBatchSessionIdOfLesson(lessonId);
+    if (sessionId) {
+      return this.batchSessions.adminRescheduleSession(
+        sessionId,
+        new Date(dto.newStart),
+        new Date(dto.newEnd),
+        req.user.userId,
+      );
+    }
     return this.schedulingService.adminRescheduleLesson(
       lessonId,
       new Date(dto.newStart),
@@ -275,11 +290,20 @@ export class AdminController {
   }
 
   @Post('lessons/:lessonId/cancel')
-  adminCancelLesson(
+  async adminCancelLesson(
     @Param('lessonId') lessonId: string,
     @Body() dto: ReasonDto,
-    @Request() req: any,
+    @Request() req: { user: { userId: string } },
   ) {
+    const sessionId =
+      await this.schedulingService.getBatchSessionIdOfLesson(lessonId);
+    if (sessionId) {
+      return this.batchSessions.adminCancelSession(
+        sessionId,
+        dto.reason,
+        req.user.userId,
+      );
+    }
     return this.schedulingService.adminCancelLesson(
       lessonId,
       dto.reason,
@@ -304,12 +328,35 @@ export class AdminController {
     });
   }
 
+  /** The same, for a batch class addressed by the class itself (the Classes
+   * page lists a batch class once). Finalizes it for every student in it. */
+  @Post('batch-sessions/:sessionId/finalize')
+  adminFinalizeBatchSession(
+    @Param('sessionId') sessionId: string,
+    @Body() dto: FinalizeLessonDto,
+    @Request() req: { user: { userId: string } },
+  ) {
+    return this.classFinalization.finalizeBatchSession(sessionId, {
+      outcome: dto.outcome,
+      reason: dto.reason,
+      note: dto.note,
+      actor: { role: 'ADMIN', userId: req.user.userId },
+    });
+  }
+
   @Delete('lessons/:lessonId')
-  deleteLesson(
+  async deleteLesson(
     @Param('lessonId') lessonId: string,
     @Body('reason') reason: string | undefined,
     @Request() req: any,
   ) {
+    const sessionId =
+      await this.schedulingService.getBatchSessionIdOfLesson(lessonId);
+    if (sessionId) {
+      throw new BadRequestException(
+        'This lesson belongs to a batch class. Delete the batch class itself, or take the student out of the batch.',
+      );
+    }
     return this.schedulingService.adminDeleteLesson(
       lessonId,
       req.user.userId,

@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AdminService } from './admin.service';
 import { PrismaService } from '../prisma.service';
@@ -10,18 +10,22 @@ import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ClassroomService } from '../classroom/classroom.service';
+import { BatchesService } from '../batches/batches.service';
 
 describe('AdminService - assignTeacherToStudent', () => {
   let service: AdminService;
   let prisma: {
     user: { findUnique: jest.Mock; update: jest.Mock };
     teacherProfile: { findUnique: jest.Mock };
+    batchMember: { findFirst: jest.Mock };
   };
 
   beforeEach(async () => {
     prisma = {
       user: { findUnique: jest.fn(), update: jest.fn() },
       teacherProfile: { findUnique: jest.fn() },
+      // Not in a batch unless a test says so.
+      batchMember: { findFirst: jest.fn().mockResolvedValue(null) },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -47,6 +51,7 @@ describe('AdminService - assignTeacherToStudent', () => {
         },
         { provide: JwtService, useValue: { sign: jest.fn() } },
         { provide: ClassroomService, useValue: {} },
+        { provide: BatchesService, useValue: {} },
       ],
     }).compile();
 
@@ -153,5 +158,49 @@ describe('AdminService - assignTeacherToStudent', () => {
     ).rejects.toThrow(NotFoundException);
 
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  describe('a student placed in a batch', () => {
+    beforeEach(() => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'student-1',
+        role: 'STUDENT',
+        assignedTeacherId: 'teacher-1',
+      });
+      prisma.batchMember.findFirst.mockResolvedValue({
+        id: 'm-1',
+        batch: { name: 'Odyssey Evening' },
+      });
+    });
+
+    it('cannot be given a different teacher on their own (it would split them from the batch)', async () => {
+      prisma.teacherProfile.findUnique.mockResolvedValue({ id: 'teacher-2' });
+
+      await expect(
+        service.assignTeacherToStudent('student-1', 'teacher-2', 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.assignTeacherToStudent('student-1', 'teacher-2', 'admin-1'),
+      ).rejects.toThrow(/Odyssey Evening/);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('can still be "assigned" the teacher they already have (nothing changes)', async () => {
+      prisma.teacherProfile.findUnique.mockResolvedValue({
+        id: 'teacher-1',
+        user: { email: 't@example.com', fullName: 'Mr T' },
+      });
+      prisma.user.update.mockResolvedValue({
+        id: 'student-1',
+        fullName: 'Ada',
+        assignedTeacherId: 'teacher-1',
+        assignedTeacher: null,
+      });
+
+      await expect(
+        service.assignTeacherToStudent('student-1', 'teacher-1', 'admin-1'),
+      ).resolves.toBeDefined();
+      expect(prisma.batchMember.findFirst).not.toHaveBeenCalled();
+    });
   });
 });

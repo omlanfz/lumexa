@@ -49,6 +49,8 @@ interface ScheduledLessonItem {
   start: string;
   end: string;
   classType: 'ONE_TO_ONE' | 'BATCH';
+  /** The batch the class belongs to (null for a 1-to-1 class). */
+  batch?: { id: string; name: string } | null;
   status: string;
   teacher: { id: string; user: { fullName: string; avatarUrl?: string | null } };
   course: { id: string; title: string };
@@ -239,7 +241,7 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium">
-            {CLASS_TYPE_LABELS[lesson.classType] ?? lesson.classType}
+            {lesson.batch ? `Batch · ${lesson.batch.name}` : (CLASS_TYPE_LABELS[lesson.classType] ?? lesson.classType)}
           </span>
           <span
             className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
@@ -353,16 +355,22 @@ function LearningHubContent() {
 
   const nextBookingLesson = upcomingData?.bookings[0] ?? null;
   const nextScheduledLesson = scheduledUpcoming[0] ?? null;
+  const fromBooking = nextBookingLesson
+    ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart, batchName: null as string | null }
+    : null;
+  const fromSchedule = nextScheduledLesson
+    ? {
+        teacherName: nextScheduledLesson.teacher.user.fullName,
+        classStart: nextScheduledLesson.start,
+        batchName: nextScheduledLesson.batch?.name ?? null,
+      }
+    : null;
   const nextLesson =
-    nextBookingLesson && nextScheduledLesson
-      ? new Date(nextBookingLesson.classStart) < new Date(nextScheduledLesson.start)
-        ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart }
-        : { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
-      : nextBookingLesson
-        ? { teacherName: nextBookingLesson.teacherName, classStart: nextBookingLesson.classStart }
-        : nextScheduledLesson
-          ? { teacherName: nextScheduledLesson.teacher.user.fullName, classStart: nextScheduledLesson.start }
-          : null;
+    fromBooking && fromSchedule
+      ? new Date(fromBooking.classStart) < new Date(fromSchedule.classStart)
+        ? fromBooking
+        : fromSchedule
+      : (fromBooking ?? fromSchedule);
   interface RecordingEntry {
     key: string;
     teacherName: string;
@@ -443,6 +451,7 @@ function LearningHubContent() {
                 <p className="text-gray-900 dark:text-white text-sm font-medium">
                   With {nextLesson.teacherName} ·{' '}
                   {new Date(nextLesson.classStart).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  {nextLesson.batchName && ` · 👥 ${nextLesson.batchName}`}
                 </p>
               </div>
             ) : (

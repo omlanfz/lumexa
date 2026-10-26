@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/axios";
 import { Avatar, Card, Pagination, PasswordReveal, PaymentBadge, StatusBadge, formatDate } from "@/components/admin/AdminUI";
+import { ClassTypePill } from "@/components/admin/batches/BatchUI";
 import { hardNavigate, startImpersonation } from "@/lib/storage";
 
 interface StudentRow {
@@ -18,6 +19,9 @@ interface StudentRow {
   createdAt: string;
   assignedTeacher: { id: string; user: { fullName: string } } | null;
   assignedCourse: { id: string; title: string } | null;
+  assignedClassType: "ONE_TO_ONE" | "BATCH" | null;
+  /** The batch the student is placed in (null for 1-to-1, or not placed yet). */
+  batch: { id: string; name: string } | null;
   paymentBadge: { level: string; label: string } | null;
 }
 
@@ -145,7 +149,14 @@ export default function StudentsPage() {
                       <p className="text-xs text-[var(--a-text-faint)]">{s.whatsappNumber || "No WhatsApp on file"}</p>
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedTeacher?.user.fullName ?? "Unassigned"}</td>
-                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{s.assignedCourse?.title ?? "—"}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      {s.assignedCourse?.title ?? "—"}
+                      {s.assignedClassType && (
+                        <span className="block mt-1">
+                          <ClassTypePill classType={s.assignedClassType} batch={s.batch} />
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3"><StatusBadge status={s.accountStatus} /></td>
                     <td className="px-4 py-3">
                       {s.paymentBadge ? <PaymentBadge badge={s.paymentBadge} /> : <span className="text-[var(--a-text-faint)]">—</span>}

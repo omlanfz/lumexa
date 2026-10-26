@@ -15,11 +15,11 @@
 // neither change the test nor start it. A learner who never started simply
 // cannot start any more (the teacher can reopen that — see reopenStudent).
 //
-// Who sits a test together? The scheduling model has one ScheduledLesson per
-// learner, so a group is every UPCOMING class of the same teacher, course and
-// lesson number whose time overlaps the one being looked at. A 1:1 class is a
-// group of one. This single definition (classGroupWhere) is the only place that
-// knows — if batches ever get an entity of their own, only it changes.
+// Who sits a test together? A batch class IS its group: every student taking
+// part in the same BatchSession sits the test together, each on their own
+// ScheduledLesson row (so each has their own attempt, result and report card).
+// A 1:1 class is a group of one. This single definition (classGroupWhere) is
+// the only place that knows.
 
 import {
   ConflictException,
@@ -90,7 +90,16 @@ export function classGroupWhere(anchor: {
   lessonNumber: number;
   start: Date;
   end: Date;
+  batchSessionId?: string | null;
 }): Prisma.ScheduledLessonWhereInput {
+  if (anchor.batchSessionId) {
+    return {
+      batchSessionId: anchor.batchSessionId,
+      // The class being looked at always belongs to its own group, whatever its
+      // state; others only while they are still to be taught.
+      OR: [{ id: anchor.id }, { status: LessonStatus.UPCOMING }],
+    };
+  }
   return {
     teacherId: anchor.teacherId,
     courseId: anchor.courseId,
@@ -293,6 +302,7 @@ export class ClassTestsService {
         lessonNumber: true,
         start: true,
         end: true,
+        batchSessionId: true,
         teacher: { select: { userId: true } },
         lesson: {
           select: {

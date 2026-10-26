@@ -170,7 +170,11 @@ export class RecordingService {
   private entityKindForRoom(room: string): EntityKind | null {
     const ref = getRoomRef(room);
     if (ref.kind === 'demo') return null;
-    return ref.kind === 'lesson' || ref.kind === 'batch' ? 'lesson' : 'booking';
+    return ref.kind === 'lesson' ||
+      ref.kind === 'batch' ||
+      ref.kind === 'session'
+      ? 'lesson'
+      : 'booking';
   }
 
   /** The lessons a room's recording belongs to: the one lesson of a 1:1 class,
@@ -179,6 +183,17 @@ export class RecordingService {
   private async lessonIdsForRoom(room: string): Promise<string[]> {
     const ref = getRoomRef(room);
     if (ref.kind === 'lesson') return [ref.scheduledLessonId];
+    if (ref.kind === 'session') {
+      const rows = await this.prisma.scheduledLesson.findMany({
+        where: {
+          batchSessionId: ref.batchSessionId,
+          status: { not: LessonStatus.CANCELLED },
+        },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      return rows.map((r) => r.id);
+    }
     if (ref.kind === 'batch') {
       const rows = await this.prisma.scheduledLesson.findMany({
         where: {
@@ -198,7 +213,11 @@ export class RecordingService {
   private async readMirror(room: string): Promise<RecordingMirror | null> {
     if (room === DEMO_ROOM_NAME) return this.demoMirror;
     const ref = getRoomRef(room);
-    if (ref.kind === 'lesson' || ref.kind === 'batch') {
+    if (
+      ref.kind === 'lesson' ||
+      ref.kind === 'batch' ||
+      ref.kind === 'session'
+    ) {
       const [anchor] = await this.lessonIdsForRoom(room);
       if (!anchor) return null;
       return this.prisma.scheduledLesson.findUnique({
@@ -229,7 +248,7 @@ export class RecordingService {
         where: { id: ref.scheduledLessonId },
         data: { recordingStatus },
       });
-    } else if (ref.kind === 'batch') {
+    } else if (ref.kind === 'batch' || ref.kind === 'session') {
       const ids = await this.lessonIdsForRoom(room);
       if (ids.length > 0) {
         await this.prisma.scheduledLesson.updateMany({
@@ -325,11 +344,11 @@ export class RecordingService {
             room,
             bookingId: ref.kind === 'booking' ? ref.bookingId : undefined,
             // A batch's segments hang off its first lesson; the room name is
-            // what ties them all to the whole batch.
+            // what ties them all to the whole batch class.
             scheduledLessonId:
               ref.kind === 'lesson'
                 ? ref.scheduledLessonId
-                : ref.kind === 'batch'
+                : ref.kind === 'batch' || ref.kind === 'session'
                   ? (await this.lessonIdsForRoom(room))[0]
                   : undefined,
             egressId: info.egressId,
@@ -513,9 +532,10 @@ export class RecordingService {
     const hasAnySegment =
       (await this.prisma.recordingSegment.count({ where: { room } })) > 0;
     if (!hasAnySegment) return;
-    if (getRoomRef(room).kind === 'batch') {
-      // Called once per student's lesson as each ends, so only move a lesson
-      // on that has not already been handed to (or finished with) the merge.
+    const roomKind = getRoomRef(room).kind;
+    if (roomKind === 'batch' || roomKind === 'session') {
+      // Only move a lesson on that has not already been handed to (or finished
+      // with) the merge.
       const ids = await this.lessonIdsForRoom(room);
       await this.prisma.scheduledLesson.updateMany({
         where: {
@@ -549,7 +569,13 @@ export class RecordingService {
           recordingStatus: RecordingStatus.PROCESSING,
           recordingMergedAt: null,
         },
-        select: { id: true, classType: true, teacherId: true, start: true },
+        select: {
+          id: true,
+          classType: true,
+          teacherId: true,
+          start: true,
+          batchSessionId: true,
+        },
         take: 20,
       }),
     ]);
@@ -619,7 +645,13 @@ export class RecordingService {
       // A batch's students share one recording, so retry it for all of them.
       const lesson = await this.prisma.scheduledLesson.findUniqueOrThrow({
         where: { id },
-        select: { id: true, classType: true, teacherId: true, start: true },
+        select: {
+          id: true,
+          classType: true,
+          teacherId: true,
+          start: true,
+          batchSessionId: true,
+        },
       });
       const ids = await this.lessonIdsForRoom(roomForLessonRecord(lesson));
       await this.prisma.scheduledLesson.updateMany({

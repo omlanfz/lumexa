@@ -54,7 +54,9 @@ export class RemindersService {
     });
 
     for (const lesson of lessons) {
-      const classUrl = `${process.env.FRONTEND_URL}/classroom/lesson-${lesson.id}`;
+      // Every student gets their own reminder — a batch student's row is their
+      // own place in the class — and goes in through that row.
+      const classUrl = `${process.env.FRONTEND_URL}/classroom/${lesson.id}?type=lesson`;
       this.notifications
         .sendClassReminderToStudent(lesson.student.email, {
           lessonId: lesson.id,
@@ -69,6 +71,8 @@ export class RemindersService {
           ),
         );
 
+      // A batch class is ONE class for its teacher: reminded below, once.
+      if (lesson.batchSessionId) continue;
       this.notifications
         .sendTeacherClassReminder(lesson.teacher.user.email, {
           lessonId: lesson.id,
@@ -80,6 +84,43 @@ export class RemindersService {
         .catch((err) =>
           this.logger.error(
             `Teacher reminder failed for lesson ${lesson.id}: ${err}`,
+          ),
+        );
+    }
+
+    const sessions = await this.prisma.batchSession.findMany({
+      where: {
+        status: LessonStatus.UPCOMING,
+        start: { gte: windowStart, lte: windowEnd },
+        participants: { some: { status: LessonStatus.UPCOMING } },
+      },
+      include: {
+        batch: { select: { name: true } },
+        teacher: {
+          select: { user: { select: { email: true, fullName: true } } },
+        },
+        _count: {
+          select: {
+            participants: { where: { status: LessonStatus.UPCOMING } },
+          },
+        },
+      },
+    });
+
+    for (const session of sessions) {
+      this.notifications
+        .sendTeacherClassReminder(session.teacher.user.email, {
+          lessonId: session.id,
+          teacherName: session.teacher.user.fullName,
+          studentName: session.batch.name,
+          classStart: session.start,
+          classUrl: `${process.env.FRONTEND_URL}/classroom/${session.id}?type=batch`,
+          batchName: session.batch.name,
+          studentCount: session._count.participants,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Teacher reminder failed for batch class ${session.id}: ${err}`,
           ),
         );
     }

@@ -16,7 +16,9 @@ interface PageProps {
 
 export default function AdminClassroomObserverPage({ params }: PageProps) {
   const { kind, id } = use(params);
+  // A batch class (SESSION) is observed through its own id too — the server
+  // resolves the class's shared room (see ClassroomService.adminJoinLiveClass).
   const isLesson = kind.toUpperCase() === 'LESSON';
 
-  return <ClassroomExperience id={id} isLesson={isLesson} adminObserve />;
+  return <ClassroomExperience id={id} isLesson={isLesson} adminKind={kind.toUpperCase()} adminObserve />;
 }

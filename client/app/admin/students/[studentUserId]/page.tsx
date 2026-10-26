@@ -17,11 +17,17 @@ import {
   formatDateTime,
   formatDhakaDate,
   formatDhakaTime,
-  todayDhakaDateStr,
-  WEEKDAY_NAMES,
   CLASS_TYPE_LABELS,
   PAYMENT_METHOD_LABELS,
 } from "@/components/admin/AdminUI";
+import { ClassTypePill, Notice } from "@/components/admin/batches/BatchUI";
+import ScheduleFields, {
+  EMPTY_SCHEDULE,
+  scheduleProblem,
+  type ScheduleDraft,
+} from "@/components/admin/batches/ScheduleFields";
+import StudentBatchPanel from "@/components/admin/batches/StudentBatchPanel";
+import { parseApiError } from "@/lib/batches";
 
 const TABS = ["Overview", "Schedule", "Class History", "Contact", "Payments", "Reschedule History"] as const;
 type Tab = (typeof TABS)[number];
@@ -76,13 +82,18 @@ export default function StudentDetailPage() {
     | "password"
   >(null);
 
-  const load = useCallback(() => {
-    setLoading(true);
-    return api
-      .get(`/admin/students/${studentUserId}`)
-      .then((res) => setStudent(res.data))
-      .finally(() => setLoading(false));
-  }, [studentUserId]);
+  // `silent`: refresh in place without blanking the page — used when a change
+  // made on a tab (a batch placement) must not throw that tab's state away.
+  const load = useCallback(
+    (silent = false) => {
+      if (!silent) setLoading(true);
+      return api
+        .get(`/admin/students/${studentUserId}`)
+        .then((res) => setStudent(res.data))
+        .finally(() => setLoading(false));
+    },
+    [studentUserId],
+  );
 
   useEffect(() => {
     load();
@@ -208,7 +219,17 @@ export default function StudentDetailPage() {
               Change
             </button>
           </Card>
-          <Card><Field label="Class Type" value={student.assignedClassType ? CLASS_TYPE_LABELS[student.assignedClassType] : "Not set"} /></Card>
+          <Card>
+            <Field
+              label="Class Type"
+              value={
+                <span className="flex flex-wrap items-center gap-2">
+                  <span>{student.assignedClassType ? CLASS_TYPE_LABELS[student.assignedClassType] : "Not set"}</span>
+                  <ClassTypePill classType={student.assignedClassType} batch={student.batch} />
+                </span>
+              }
+            />
+          </Card>
           <Card><Field label="Grade" value={student.grade ?? "—"} /></Card>
           <Card><Field label="Joined" value={formatDate(student.createdAt)} /></Card>
           <Card><Field label="Space Rank" value={student.spaceRank} /></Card>
@@ -231,8 +252,12 @@ export default function StudentDetailPage() {
       {tab === "Schedule" && (
         <ScheduleTab
           studentUserId={studentUserId}
+          studentName={student.fullName}
+          teacherName={student.assignedTeacher?.user?.fullName ?? null}
+          courseTitle={student.assignedCourse?.title ?? null}
           hasTeacher={!!student.assignedTeacher}
           hasCourse={!!student.assignedCourse}
+          onStudentChanged={() => load(true)}
         />
       )}
 
@@ -256,7 +281,10 @@ export default function StudentDetailPage() {
                 <tr key={`${c.kind}:${c.id}`} className="border-b border-[var(--a-border)] last:border-0">
                   <td className="px-4 py-3 text-[var(--a-text)]">{formatDateTime(c.start)}</td>
                   <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.teacherName ?? "—"}</td>
-                  <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.courseTitle ?? "—"}</td>
+                  <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                    {c.courseTitle ?? "—"}
+                    {c.batchName && <span className="block text-xs text-[var(--a-text-faint)]">Batch · {c.batchName}</span>}
+                  </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={c.paymentStatus ?? c.displayStatus} />
                     {c.endReason && (
@@ -691,6 +719,12 @@ function FinalizeLessonModal({
         <p className="text-sm text-[var(--a-text-muted)]">
           Lesson {lesson.lessonNumber} · {formatDhakaDate(lesson.start)} {formatDhakaTime(lesson.start)}
         </p>
+        {lesson.batchSessionId && (
+          <Notice tone="info">
+            This is a batch class. The status applies to the whole class — every student in it — and the teacher is
+            paid once for it, however many students there are.
+          </Notice>
+        )}
         <ul className="text-sm text-[var(--a-text)] space-y-1.5 list-disc list-inside">
           {copy.effects.map((e) => (
             <li key={e}>{e}</li>
@@ -749,44 +783,52 @@ function FinalizeLessonModal({
   );
 }
 
-interface ScheduleSlotDraft {
-  weekday: number;
-  time: string; // "HH:mm", Asia/Dhaka
-}
-
 function ScheduleTab({
   studentUserId,
+  studentName,
+  teacherName,
+  courseTitle,
   hasTeacher,
   hasCourse,
+  onStudentChanged,
 }: {
   studentUserId: string;
+  studentName: string;
+  teacherName: string | null;
+  courseTitle: string | null;
   hasTeacher: boolean;
   hasCourse: boolean;
+  /** The student's own record changed (class type, batch): refresh the page. */
+  onStudentChanged: () => void;
 }) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [classType, setClassType] = useState<"ONE_TO_ONE" | "BATCH">("ONE_TO_ONE");
-  const [firstClassDate, setFirstClassDate] = useState("");
-  const [slots, setSlots] = useState<ScheduleSlotDraft[]>([{ weekday: 1, time: "17:00" }]);
+  const [schedule, setSchedule] = useState<ScheduleDraft>(EMPTY_SCHEDULE);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState<{ lesson: any; outcome: LessonOutcome } | null>(null);
+  // Switching a batch student to 1-to-1 takes them out of the batch: asked first.
+  const [confirmLeave, setConfirmLeave] = useState<string | null>(null);
+  // What the last batch placement did (it outlives the panel's refresh).
+  const [batchNotice, setBatchNotice] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
-    api
+    return api
       .get(`/admin/students/${studentUserId}/schedule`)
       .then((res) => {
         setData(res.data);
-        if (res.data.classType) setClassType(res.data.classType);
-        if (res.data.slots?.length) {
-          setSlots(
-            res.data.slots.map((s: any) => ({
+        setClassType(res.data.batch || res.data.classType === "BATCH" ? "BATCH" : "ONE_TO_ONE");
+        if (!res.data.batch && res.data.slots?.length) {
+          setSchedule((prev) => ({
+            ...prev,
+            slots: res.data.slots.map((s: any) => ({
               weekday: s.weekday,
               time: `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}`,
             })),
-          );
+          }));
         }
       })
       .finally(() => setLoading(false));
@@ -806,52 +848,38 @@ function ScheduleTab({
       </Card>
     );
   }
-  if (loading) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
+  if (loading && !data) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
 
-  const addSlot = () => setSlots((s) => [...s, { weekday: 1, time: "17:00" }]);
-  const removeSlot = (i: number) => setSlots((s) => s.filter((_, idx) => idx !== i));
-  const updateSlot = (i: number, patch: Partial<ScheduleSlotDraft>) =>
-    setSlots((s) => s.map((sl, idx) => (idx === i ? { ...sl, ...patch } : sl)));
-
-  const firstDateWeekday = firstClassDate
-    ? new Date(`${firstClassDate}T00:00:00Z`).getUTCDay()
-    : null;
-  const weekdayMismatch =
-    !!firstClassDate && slots.length > 0 && !slots.some((s) => s.weekday === firstDateWeekday);
-
-  const save = async () => {
+  const save = async (leaveBatch = false) => {
     setError(null);
     setSuccess(null);
-    if (!firstClassDate) {
-      setError("Select the first class date.");
+    const problem = scheduleProblem(schedule);
+    if (problem) {
+      setError(problem);
       return;
     }
-    if (firstClassDate < todayDhakaDateStr()) {
-      setError("The first class date can't be in the past.");
-      return;
-    }
-    if (slots.length === 0) {
-      setError("Add at least one weekly time slot.");
-      return;
-    }
-    if (weekdayMismatch) {
-      setError(
-        `The first class date must fall on one of the selected weekdays. ${firstClassDate} is a ${WEEKDAY_NAMES[firstDateWeekday!]}.`,
-      );
+    if (data?.batch && !leaveBatch) {
+      setConfirmLeave(data.batch.name);
       return;
     }
     setSaving(true);
     try {
       const res = await api.post(`/admin/students/${studentUserId}/schedule`, {
-        classType,
-        firstClassDate,
-        slots,
+        classType: "ONE_TO_ONE",
+        firstClassDate: schedule.firstClassDate,
+        slots: schedule.slots,
+        ...(leaveBatch ? { leaveBatch: true } : {}),
       });
       setData(res.data);
-      setSuccess(`Saved — ${res.data.lessons.upcomingCount} upcoming lesson(s) scheduled.`);
-    } catch (e: any) {
-      const m = e.response?.data?.message;
-      setError(Array.isArray(m) ? m.join(", ") : (m ?? "Failed to save schedule."));
+      setConfirmLeave(null);
+      setSuccess(
+        `Saved — ${res.data.lessons.upcomingCount} upcoming lesson(s) scheduled${leaveBatch ? ", and removed from the batch" : ""}.`,
+      );
+      onStudentChanged();
+    } catch (e) {
+      const parsed = parseApiError(e, "Failed to save schedule.");
+      if (parsed.code === "LEAVES_BATCH") setConfirmLeave(parsed.batch?.name ?? data?.batch?.name ?? "their batch");
+      else setError(parsed.message);
     } finally {
       setSaving(false);
     }
@@ -866,6 +894,10 @@ function ScheduleTab({
       .map((l: any) => l.lessonNumber),
   );
 
+  const hasOneToOneClasses = (data?.lessons?.upcoming ?? []).some(
+    (l: { batchSessionId?: string | null }) => !l.batchSessionId,
+  );
+
   return (
     <div className="space-y-4">
       <Card className="space-y-4">
@@ -877,7 +909,12 @@ function ScheduleTab({
             {(["ONE_TO_ONE", "BATCH"] as const).map((ct) => (
               <button
                 key={ct}
-                onClick={() => setClassType(ct)}
+                onClick={() => {
+                  setClassType(ct);
+                  setError(null);
+                  setSuccess(null);
+                  setBatchNotice(null);
+                }}
                 className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                   classType === ct
                     ? "border-[var(--a-accent)] bg-[var(--a-accent)] text-white"
@@ -888,91 +925,54 @@ function ScheduleTab({
               </button>
             ))}
           </div>
-        </div>
-
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-2">
-            First Class Date <span className="normal-case font-normal">(Asia/Dhaka)</span>
-          </p>
-          <input
-            type="date"
-            value={firstClassDate}
-            min={todayDhakaDateStr()}
-            onChange={(e) => setFirstClassDate(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
-          />
-          {firstClassDate && firstClassDate < todayDhakaDateStr() && (
-            <p className="text-xs text-[var(--a-danger)] mt-1.5">
-              The first class date can&rsquo;t be in the past.
-            </p>
-          )}
-          {weekdayMismatch && (
-            <p className="text-xs text-[var(--a-danger)] mt-1.5">
-              This date is a {WEEKDAY_NAMES[firstDateWeekday!]} — pick a date on one of the
-              weekdays below, or add that weekday to the schedule.
+          {classType === "BATCH" && data?.classType !== "BATCH" && (
+            <p className="text-xs text-[var(--a-text-faint)] mt-2">
+              {studentName} stays 1-to-1 until you place them in a batch below.
             </p>
           )}
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
-              Weekly Time Slots <span className="normal-case font-normal">(Asia/Dhaka)</span>
-            </p>
-            <button
-              onClick={addSlot}
-              className="text-xs px-2.5 py-1.5 rounded-lg border border-[var(--a-border)] text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
-            >
-              + Add slot
-            </button>
-          </div>
-          <div className="space-y-2">
-            {slots.map((slot, i) => (
-              <div key={i} className="flex items-center gap-2 flex-wrap">
-                <select
-                  value={slot.weekday}
-                  onChange={(e) => updateSlot(i, { weekday: Number(e.target.value) })}
-                  className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
-                >
-                  {WEEKDAY_NAMES.map((d, idx) => (
-                    <option key={idx} value={idx}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="time"
-                  value={slot.time}
-                  onChange={(e) => updateSlot(i, { time: e.target.value })}
-                  className="px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
-                />
-                <button
-                  onClick={() => removeSlot(i)}
-                  className="px-2.5 py-2 rounded-lg text-xs font-medium text-[var(--a-danger)] hover:bg-[var(--a-nav-hover)]"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            {slots.length === 0 && (
-              <p className="text-sm text-[var(--a-text-muted)]">No slots yet — add at least one.</p>
+        {classType === "ONE_TO_ONE" && (
+          <>
+            {data?.batch && (
+              <Notice tone="warning">
+                {studentName} is in the batch <strong>{data.batch.name}</strong>. Saving a 1-to-1 schedule removes them
+                from it; classes already taught are kept.
+              </Notice>
             )}
-          </div>
-        </div>
-
-        {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
-        {success && <p className="text-sm text-[var(--a-success-text)]">{success}</p>}
-
-        <div className="flex justify-end">
-          <button
-            onClick={save}
-            disabled={saving}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Save Schedule"}
-          </button>
-        </div>
+            <ScheduleFields value={schedule} onChange={setSchedule} />
+            {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+            {success && <p className="text-sm text-[var(--a-success-text)]">{success}</p>}
+            <div className="flex justify-end">
+              <button
+                onClick={() => save(false)}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
+              >
+                {saving ? "Saving…" : "Save Schedule"}
+              </button>
+            </div>
+          </>
+        )}
       </Card>
+
+      {classType === "BATCH" && (
+        <StudentBatchPanel
+          key={data?.batch?.id ?? "unplaced"}
+          studentUserId={studentUserId}
+          studentName={studentName}
+          batch={data?.batch ?? null}
+          teacherName={teacherName}
+          courseTitle={courseTitle}
+          hasOneToOneClasses={hasOneToOneClasses}
+          notice={batchNotice}
+          onNotice={setBatchNotice}
+          onChanged={() => {
+            load();
+            onStudentChanged();
+          }}
+        />
+      )}
 
       {data?.lessons?.totalSessions != null && (
         <Card>
@@ -1020,6 +1020,9 @@ function ScheduleTab({
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">
                       {CLASS_TYPE_LABELS[l.classType] ?? l.classType}
+                      {l.batchSessionId && data?.batch && (
+                        <span className="block text-xs text-[var(--a-text-faint)]">Shared class · {data.batch.name}</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <select
@@ -1029,7 +1032,11 @@ function ScheduleTab({
                           if (outcome) setFinalizing({ lesson: l, outcome });
                         }}
                         className="px-2 py-1.5 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-xs font-semibold text-[var(--a-text)] a-focus"
-                        title="Set this class's final status — same rules as the teacher's End Class"
+                        title={
+                          l.batchSessionId
+                            ? "Set the final status of this batch class — it applies to every student in it"
+                            : "Set this class's final status — same rules as the teacher's End Class"
+                        }
                         aria-label={`Set status for lesson ${l.lessonNumber}`}
                       >
                         <option value="">Set status…</option>
@@ -1049,6 +1056,38 @@ function ScheduleTab({
             </table>
           </div>
         </Card>
+      )}
+
+      {confirmLeave && (
+        <Modal title="Switch to 1-to-1" onClose={saving ? () => {} : () => setConfirmLeave(null)}>
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--a-text)]">
+              {studentName} is in the batch <strong>{confirmLeave}</strong>. Switching to 1-to-1 removes them from it.
+            </p>
+            <ul className="text-sm text-[var(--a-text-muted)] list-disc list-inside space-y-1">
+              <li>Their upcoming batch classes are removed and replaced by the 1-to-1 schedule you entered.</li>
+              <li>Classes already taught stay on their record, and their 1-to-1 lessons continue from their next lesson.</li>
+              <li>The rest of the batch carries on without them.</li>
+            </ul>
+            {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmLeave(null)}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-medium border border-[var(--a-border)] text-[var(--a-text-muted)] hover:bg-[var(--a-nav-hover)] disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => save(true)}
+                disabled={saving}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--a-accent)] hover:bg-[var(--a-accent-hover)] disabled:opacity-60"
+              >
+                {saving ? "Switching…" : "Remove from batch and save"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {finalizing && (

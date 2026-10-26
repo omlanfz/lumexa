@@ -17,7 +17,6 @@ import {
 } from '../scheduling/lesson-window.util';
 import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
 import {
-  ClassType,
   LessonStatus,
   RecordingStatus,
   ClassEndReason,
@@ -37,6 +36,7 @@ import {
 } from './class-finalization.service';
 import { RoomAccessService } from './room-access.service';
 import { RoomDirectoryService } from './room-directory.service';
+import { BatchSessionsService } from '../batches/batch-sessions.service';
 import {
   DEMO_ROOM_NAME,
   DEMO_STUDENT_EMAIL,
@@ -48,6 +48,7 @@ import {
   isLessonRoom,
   lessonIdFromRoom,
   personKey,
+  roomForBatchSession,
   roomForLessonRecord,
   sanitizeDeviceId,
 } from './room-ref.util';
@@ -93,6 +94,7 @@ export class ClassroomService {
     private classFinalization: ClassFinalizationService,
     private roomAccess: RoomAccessService,
     private roomDirectory: RoomDirectoryService,
+    private batchSessions: BatchSessionsService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -250,7 +252,7 @@ export class ClassroomService {
    * live right now, mirroring the same "LIVE" definition AdminService uses
    * to show the badge in the first place. */
   async adminJoinLiveClass(
-    kind: 'BOOKING' | 'LESSON',
+    kind: 'BOOKING' | 'LESSON' | 'SESSION',
     id: string,
   ): Promise<{ token: string; url: string | undefined; roomName: string }> {
     const apiKey = process.env.LIVEKIT_API_KEY;
@@ -259,7 +261,20 @@ export class ClassroomService {
       throw new BadRequestException('Video service is not configured.');
 
     let room: string;
-    if (kind === 'LESSON') {
+    if (kind === 'SESSION') {
+      const session = await this.prisma.batchSession.findUnique({
+        where: { id },
+        select: { id: true, status: true, teacherJoinedAt: true },
+      });
+      if (
+        !session ||
+        session.status !== LessonStatus.UPCOMING ||
+        !session.teacherJoinedAt
+      ) {
+        throw new BadRequestException('This class is not currently live.');
+      }
+      room = roomForBatchSession(session.id);
+    } else if (kind === 'LESSON') {
       const lesson = await this.prisma.scheduledLesson.findUnique({
         where: { id },
       });
@@ -310,9 +325,20 @@ export class ClassroomService {
   }
 
   async retryRecordingMerge(
-    kind: 'BOOKING' | 'LESSON',
+    kind: 'BOOKING' | 'LESSON' | 'SESSION',
     id: string,
   ): Promise<{ ok: true }> {
+    if (kind === 'SESSION') {
+      // The recording belongs to the class's room; any student's row in it
+      // is the way in (every row mirrors the one recording).
+      const anchor = await this.prisma.scheduledLesson.findFirst({
+        where: { batchSessionId: id, status: { not: LessonStatus.CANCELLED } },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      if (!anchor) throw new BadRequestException('Class not found.');
+      return this.recordingService.retryMerge('lesson', anchor.id);
+    }
     return this.recordingService.retryMerge(
       kind === 'LESSON' ? 'lesson' : 'booking',
       id,
@@ -323,8 +349,16 @@ export class ClassroomService {
    * scheduled-lesson flow depending on which id was given. */
   async joinLab(
     userId: string,
-    dto: { bookingId?: string; scheduledLessonId?: string; deviceId?: string },
+    dto: {
+      bookingId?: string;
+      scheduledLessonId?: string;
+      batchSessionId?: string;
+      deviceId?: string;
+    },
   ) {
+    if (dto.batchSessionId) {
+      return this.joinBatchSession(userId, dto.batchSessionId, dto.deviceId);
+    }
     if (dto.scheduledLessonId) {
       return this.joinScheduledLesson(
         userId,
@@ -336,8 +370,34 @@ export class ClassroomService {
       return this.joinBooking(userId, dto.bookingId, dto.deviceId);
     }
     throw new BadRequestException(
-      'Either bookingId or scheduledLessonId is required.',
+      'Either bookingId, scheduledLessonId or batchSessionId is required.',
     );
+  }
+
+  /** Entry to a batch class by the class itself (what the teacher's dashboard
+   * and calendar know it by). Each person still joins through their own row
+   * in it: the teacher through any student's, a student through their own — so
+   * one set of rules (who may be here, the lock, the limits) applies to all. */
+  async joinBatchSession(
+    userId: string,
+    sessionId: string,
+    deviceId?: unknown,
+  ) {
+    const session =
+      await this.schedulingService.getSessionForClassroom(sessionId);
+    const open = session.participants.filter(
+      (p) => p.status === LessonStatus.UPCOMING,
+    );
+    const own = open.find((p) => p.studentUserId === userId);
+    const anchor = session.teacher.userId === userId ? open[0] : own;
+    if (!anchor) {
+      throw new BadRequestException(
+        session.teacher.userId === userId
+          ? 'There are no students in this class.'
+          : 'Access denied: you are not assigned to this classroom.',
+      );
+    }
+    return this.joinScheduledLesson(userId, anchor.id, deviceId);
   }
 
   // ─── Curriculum flow: Operations-scheduled recurring lessons ─────────────
@@ -349,15 +409,32 @@ export class ClassroomService {
   ) {
     const lesson = await this.schedulingService.getLessonForClassroom(lessonId);
 
+    // A batch student's row is their place in a class the whole batch shares.
+    // The class — its time, status, teacher and the teacher's arrival — is what
+    // decides who may come in; the row only says which student is asking.
+    const session = lesson.batchSession;
+    const classStatus = session ? session.status : lesson.status;
+    const classStart = session ? session.start : lesson.start;
+    const classEnd = session ? session.end : lesson.end;
+    const teacherUserId = session
+      ? session.teacher.userId
+      : lesson.teacher.userId;
+    const teacherName = session
+      ? session.teacher.user.fullName
+      : lesson.teacher.user.fullName;
+
     // A class is never closed by its own scheduled end time — only the
     // teacher manually ending it (see endClass) changes its status away
     // from UPCOMING. So the only time-based gate left is "hasn't opened
     // yet"; once open, the room stays joinable for as long as the lesson
     // is still UPCOMING, however long past its scheduled end that is.
-    if (lesson.status !== LessonStatus.UPCOMING) {
+    if (
+      classStatus !== LessonStatus.UPCOMING ||
+      lesson.status !== LessonStatus.UPCOMING
+    ) {
       throw new BadRequestException('This class has already ended.');
     }
-    const window = getClassWindow(lesson.start, lesson.end);
+    const window = getClassWindow(classStart, classEnd);
     if (window.msUntilStart > 10 * 60 * 1000) {
       const minutesUntilOpen = Math.ceil(
         (window.msUntilStart - 10 * 60 * 1000) / (1000 * 60),
@@ -370,8 +447,8 @@ export class ClassroomService {
     let participantName = '';
     let role: 'TEACHER' | 'STUDENT';
 
-    if (lesson.teacher.userId === userId) {
-      participantName = `${lesson.teacher.user.fullName} (Teacher)`;
+    if (teacherUserId === userId) {
+      participantName = `${teacherName} (Teacher)`;
       role = 'TEACHER';
     } else if (lesson.student.id === userId) {
       participantName = `${lesson.student.fullName} (Student)`;
@@ -389,7 +466,7 @@ export class ClassroomService {
     }
 
     // A 1:1 class has a room of its own; every student of a BATCH class takes
-    // the same room (see roomForLessonRecord).
+    // the class's one room (see roomForLessonRecord).
     const roomName = roomForLessonRecord(lesson);
     const device = sanitizeDeviceId(deviceId);
 
@@ -399,7 +476,7 @@ export class ClassroomService {
       userId,
       role,
       deviceId: device,
-      teacherUserId: lesson.teacher.userId,
+      teacherUserId,
     });
     if (blocked) return blocked;
 
@@ -436,15 +513,13 @@ export class ClassroomService {
       canPublishData: true,
     });
 
-    // The lessons this join counts for: just this one, except that a teacher
-    // entering a batch room has joined every student's lesson in it.
-    const joinedLessons =
-      role === 'TEACHER' && lesson.classType === ClassType.BATCH
-        ? await this.schedulingService.getUpcomingBatchLessons(
-            lesson.teacherId,
-            lesson.start,
-          )
-        : [lesson];
+    // When the teacher FIRST came in, read before this join is recorded: a
+    // token is also requested when the teacher presses Join, opens a second
+    // device or refreshes, and none of those may fine a teacher who was on
+    // time. (A class with no join time yet is genuinely being entered first.)
+    const firstTeacherArrival = session
+      ? session.teacherJoinedAt
+      : lesson.teacherJoinedAt;
 
     await this.schedulingService
       .recordLessonJoin(lessonId, role)
@@ -456,39 +531,31 @@ export class ClassroomService {
 
     // Immediate late-join check — a teacher who joins more than the grace
     // period after the scheduled start is penalized right away rather than
-    // waiting for PayoutsService's sweep cron. Idempotent either way. Each
-    // student's lesson is its own paid class, so each carries its own penalty
-    // (the same way each earns its own payment).
-    //
-    // Lateness is judged by when the teacher FIRST came in (the join time kept
-    // on the lesson), not by the moment of this token request: one is also
-    // made when the teacher presses Join on the pre-join screen, opens a second
-    // device or tab, or refreshes — none of which may fine a teacher who was
-    // on time. (`joinedLessons` was read before recordLessonJoin, so a lesson
-    // with no join time is genuinely the first.)
+    // waiting for PayoutsService's sweep cron. Idempotent either way. A batch
+    // class is one class: one penalty for it, however many students it has.
     if (role === 'TEACHER') {
-      const arrivals = joinedLessons
-        .map((l) => l.teacherJoinedAt)
-        .filter((at): at is Date => at !== null);
-      const arrivedAt =
-        arrivals.length > 0
-          ? new Date(Math.min(...arrivals.map((at) => at.getTime())))
-          : new Date();
-      const lateMinutes = computeLateMinutes(lesson.start, arrivedAt);
+      const arrivedAt = firstTeacherArrival ?? new Date();
+      const lateMinutes = computeLateMinutes(classStart, arrivedAt);
       if (lateMinutes > LATE_JOIN_GRACE_MINUTES) {
-        for (const joined of joinedLessons) {
-          await this.payoutsService
-            .triggerLateJoinPenalty({
-              teacherId: lesson.teacher.id,
-              scheduledLessonId: joined.id,
-              lateMinutes,
-            })
-            .catch((err) => {
-              this.logger.error(
-                `Failed to apply late-join penalty for lesson ${joined.id}: ${err}`,
-              );
-            });
-        }
+        await this.payoutsService
+          .triggerLateJoinPenalty(
+            session
+              ? {
+                  teacherId: session.teacherId,
+                  batchSessionId: session.id,
+                  lateMinutes,
+                }
+              : {
+                  teacherId: lesson.teacher.id,
+                  scheduledLessonId: lesson.id,
+                  lateMinutes,
+                },
+          )
+          .catch((err) => {
+            this.logger.error(
+              `Failed to apply late-join penalty for ${session ? `batch class ${session.id}` : `lesson ${lesson.id}`}: ${err}`,
+            );
+          });
       }
     }
 
@@ -496,14 +563,22 @@ export class ClassroomService {
       token: await at.toJwt(),
       url: process.env.LIVEKIT_URL,
       roomName,
-      scheduledStart: lesson.start.toISOString(),
+      scheduledStart: classStart.toISOString(),
+      // The row the person came in through — a teacher entering a batch class by
+      // the class's own id learns which student's row stands for them here.
+      scheduledLessonId: lesson.id,
       classType: lesson.classType,
+      batchName: session?.batch.name ?? null,
       // The teacher's Partially Completed option is only offered once per
-      // lesson — disabled on the extra class that option itself creates. In a
-      // batch it is only offered if every student can still use it.
-      partialCompletionAvailable: !(await this.anyPartialCompletionUsed(
-        joinedLessons.length > 0 ? joinedLessons : [lesson],
-      )),
+      // lesson — disabled on the extra class that option itself creates. For a
+      // batch it is the batch's one use of it for this lesson.
+      partialCompletionAvailable: session
+        ? !(await this.batchSessions.hasPartialCompletion(
+            this.prisma,
+            session.batchId,
+            session.lessonNumber,
+          ))
+        : !(await this.anyPartialCompletionUsed([lesson])),
       roomLocked: await this.roomAccess.isLocked(roomName),
       maxPeople: MAX_PEOPLE_PER_CLASSROOM,
     };
@@ -869,8 +944,9 @@ export class ClassroomService {
   }
 
   /** Room names are `lesson-<scheduledLessonId>` (a 1:1 class),
-   * `batch-<teacherId>-<start>` (a batch), a raw bookingId (marketplace) or the
-   * demo room — see RoomDirectoryService. */
+   * `batch-session-<sessionId>` (a batch class; the old
+   * `batch-<teacherId>-<start>` still resolves), a raw bookingId (marketplace)
+   * or the demo room — see RoomDirectoryService. */
   private async getRoomTeacherUserId(roomName: string): Promise<string> {
     return this.roomDirectory.teacherUserIdOf(roomName);
   }
@@ -1139,27 +1215,41 @@ export class ClassroomService {
     let status: LessonStatus | undefined;
     let lessons: { lessonId: string; status: LessonStatus }[] | undefined;
 
-    if (getRoomRef(room).kind === 'batch') {
-      // A batch is one class with one teacher and several students, each of
-      // whom has their own lesson (and their own payment and progress). The
-      // teacher ends the class once; every student's lesson is finalized.
+    const roomKind = getRoomRef(room).kind;
+    if (roomKind === 'session' || roomKind === 'batch') {
+      // A batch is ONE class with one teacher and several students, each of
+      // whom has their own row in it (their own attendance, outcome and
+      // ledger). The teacher ends the class once; the class is finalized once.
       const resolved = await this.roomDirectory.resolve(room);
       if (!outcome) {
         throw new BadRequestException(
           'Choose Completed, Partially Completed or Incomplete to end this class.',
         );
       }
-      const open = resolved.lessons.filter(
-        (l) => l.status === LessonStatus.UPCOMING,
-      );
+      const sessionId = resolved.batchSessionId;
+      const batchClass = sessionId
+        ? await this.prisma.batchSession.findUnique({
+            where: { id: sessionId },
+            select: { status: true, start: true },
+          })
+        : null;
+      if (!sessionId || !batchClass) {
+        throw new BadRequestException('Classroom not found.');
+      }
       // A repeat of an already-applied request (double click / retry) must
       // stay a harmless success, so only gate classes that are still open.
-      if (open.length > 0) this.assertEndClassWindowOpen(open[0].start);
-      lessons = await this.classFinalization.finalizeBatch(
-        open.map((l) => l.id),
+      if (batchClass.status === LessonStatus.UPCOMING) {
+        this.assertEndClassWindowOpen(batchClass.start);
+      }
+      const result = await this.classFinalization.finalizeBatchSession(
+        sessionId,
         { outcome, reason, note, actor: { role: 'TEACHER', userId } },
       );
-      status = lessons[0]?.status ?? resolved.lessons[0]?.status;
+      status = result.status;
+      lessons = result.lessons.map((l) => ({
+        lessonId: l.lessonId,
+        status: l.status,
+      }));
     } else if (isLessonRoom(room)) {
       const lessonId = lessonIdFromRoom(room);
       const lesson = await this.prisma.scheduledLesson.findUnique({

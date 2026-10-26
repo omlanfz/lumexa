@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { BatchesService } from '../batches/batches.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateLessonDto } from './dto/create-lesson.dto';
@@ -23,8 +24,20 @@ export class CoursesService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scheduling: SchedulingService,
+    private readonly batches: BatchesService,
     private readonly audit: AuditService,
   ) {}
+
+  /** A curriculum's lessons changed: every student's own schedule and every
+   * batch on it is rebuilt around the new sequence. */
+  private async reconcileEverything(courseId: string, actorId: string) {
+    const students = await this.scheduling.reconcileCourseSchedules(
+      courseId,
+      actorId,
+    );
+    await this.batches.reconcileCourseBatches(courseId);
+    return students;
+  }
 
   /** Ensures the default 7-course catalog (Odyssey + 6 specialized paths)
    *  exists on every boot — idempotent, so this never duplicates courses or
@@ -34,8 +47,7 @@ export class CoursesService implements OnModuleInit {
       const results = await seedCourseCatalog(
         this.prisma,
         this.logger,
-        (courseId, actorId) =>
-          this.scheduling.reconcileCourseSchedules(courseId, actorId),
+        (courseId, actorId) => this.reconcileEverything(courseId, actorId),
       );
       const created = results.filter((r) => r.created).length;
       if (created > 0) {
@@ -299,7 +311,7 @@ export class CoursesService implements OnModuleInit {
 
   private async reconcileSafely(courseId: string, actorId: string) {
     try {
-      await this.scheduling.reconcileCourseSchedules(courseId, actorId);
+      await this.reconcileEverything(courseId, actorId);
     } catch (err) {
       this.logger.error(
         `Schedule reconciliation failed for course ${courseId}`,

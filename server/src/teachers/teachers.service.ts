@@ -295,20 +295,55 @@ export class TeachersService {
           end: nextBooking.shift.end,
         }
       : null;
-    const lessonNext = nextLesson
-      ? {
-          type: 'lesson' as const,
-          id: nextLesson.id,
-          studentName: nextLesson.student.fullName,
-          studentAvatarUrl: nextLesson.student.avatarUrl,
-          start: nextLesson.start,
-          end: nextLesson.end,
-          courseTitle: nextLesson.course.title,
-          lessonNumber: nextLesson.lessonNumber,
-          lessonTitle: nextLesson.lessonTitle,
-          classType: nextLesson.classType,
-        }
-      : null;
+    // A batch class is shown once, as the batch: its name stands where a 1:1
+    // class shows the student's, with who is in it alongside.
+    const lessonNext = !nextLesson
+      ? null
+      : nextLesson.kind === 'BATCH_SESSION'
+        ? {
+            type: 'batch' as const,
+            id: nextLesson.id,
+            studentName: nextLesson.batch.name,
+            studentAvatarUrl: null as string | null,
+            start: nextLesson.start,
+            end: nextLesson.end,
+            courseTitle: nextLesson.course.title,
+            lessonNumber: nextLesson.lessonNumber,
+            lessonTitle: nextLesson.lessonTitle,
+            classType: 'BATCH' as const,
+            batch: nextLesson.batch,
+            studentCount: nextLesson.participants.length,
+            // The lesson page every student of the class shares (reached
+            // through one student's row).
+            viewLessonId: nextLesson.participants[0]?.id ?? null,
+            students: nextLesson.participants.map((p) => ({
+              id: p.student.id,
+              fullName: p.student.fullName,
+              avatarUrl: p.student.avatarUrl,
+            })),
+          }
+        : {
+            type: 'lesson' as const,
+            id: nextLesson.id,
+            studentName: nextLesson.student.fullName,
+            studentAvatarUrl: nextLesson.student.avatarUrl,
+            start: nextLesson.start,
+            end: nextLesson.end,
+            courseTitle: nextLesson.course.title,
+            lessonNumber: nextLesson.lessonNumber,
+            lessonTitle: nextLesson.lessonTitle,
+            classType: nextLesson.classType,
+            batch: null,
+            studentCount: 1,
+            viewLessonId: nextLesson.id as string | null,
+            students: [
+              {
+                id: nextLesson.student.id,
+                fullName: nextLesson.student.fullName,
+                avatarUrl: nextLesson.student.avatarUrl,
+              },
+            ],
+          };
 
     const chosen =
       bookingNext && lessonNext
@@ -363,11 +398,40 @@ export class TeachersService {
     const studentIds = students.map((s) => s.id);
     const now = new Date();
 
-    const [lessons, reviews] = await Promise.all([
+    const [lessons, placements, reviews] = await Promise.all([
       this.prisma.scheduledLesson.findMany({
         where: { teacherId: teacher.id, studentUserId: { in: studentIds } },
         select: { id: true, studentUserId: true, start: true, status: true },
         orderBy: { start: 'asc' },
+      }),
+      // Only batches THIS teacher teaches — a student's other placements are
+      // never read, so nothing about another teacher's batch leaves here.
+      this.prisma.batchMember.findMany({
+        where: {
+          studentUserId: { in: studentIds },
+          leftAt: null,
+          batch: { teacherId: teacher.id },
+        },
+        select: {
+          studentUserId: true,
+          batch: {
+            select: {
+              id: true,
+              name: true,
+              status: true,
+              maxStudents: true,
+              slots: {
+                orderBy: [
+                  { weekday: 'asc' },
+                  { hour: 'asc' },
+                  { minute: 'asc' },
+                ],
+                select: { weekday: true, hour: true, minute: true },
+              },
+              _count: { select: { members: { where: { leftAt: null } } } },
+            },
+          },
+        },
       }),
       this.prisma.review.findMany({
         where: {
@@ -418,6 +482,7 @@ export class TeachersService {
       statsMap.set(key, entry);
     }
 
+    const batchOf = new Map(placements.map((p) => [p.studentUserId, p.batch]));
     const latestReviewMap = new Map<
       string,
       { rating: number; comment: string | null }
@@ -450,6 +515,18 @@ export class TeachersService {
           totalSessions: s.totalSessions,
           assignedCourse: s.assignedCourse,
           classType: s.assignedClassType,
+          // Which batch the student is in (null for 1-to-1, and for a "Batch"
+          // student who has not been placed yet).
+          batch: batchOf.get(s.id)
+            ? {
+                id: batchOf.get(s.id)!.id,
+                name: batchOf.get(s.id)!.name,
+                status: batchOf.get(s.id)!.status,
+                memberCount: batchOf.get(s.id)!._count.members,
+                maxStudents: batchOf.get(s.id)!.maxStudents,
+                slots: batchOf.get(s.id)!.slots,
+              }
+            : null,
           totalClasses: stats.totalClasses,
           completedClasses: stats.completedClasses,
           pendingClasses: stats.pendingClasses,

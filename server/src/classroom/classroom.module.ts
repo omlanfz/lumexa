@@ -13,9 +13,16 @@ import { StudentsModule } from '../students/students.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { AlertsModule } from '../alerts/alerts.module';
+import { BatchesModule } from '../batches/batches.module';
 
 @Module({
-  imports: [StudentsModule, SchedulingModule, PayoutsModule, AlertsModule],
+  imports: [
+    StudentsModule,
+    SchedulingModule,
+    PayoutsModule,
+    AlertsModule,
+    BatchesModule,
+  ],
   controllers: [ClassroomController, ClassroomBadgesController],
   providers: [
     ClassroomService,

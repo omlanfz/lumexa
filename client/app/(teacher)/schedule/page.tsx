@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import LumiChat from "@/components/LumiChat";
 import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
+import { ATTENDANCE_LABELS, formatSeats, type BatchClassStudent } from "@/lib/batches";
 
 const HOUR_PX = 60;
 
@@ -39,7 +40,9 @@ interface EmergencyStatus {
   limit: number;
 }
 
-interface ScheduledLessonItem {
+/** A 1-to-1 class: one student, one class. */
+interface LessonClassItem {
+  kind?: "LESSON";
   id: string;
   start: string;
   end: string;
@@ -50,6 +53,37 @@ interface ScheduledLessonItem {
   student: { id: string; fullName: string; avatarUrl?: string | null };
   course: { id: string; title: string };
 }
+
+/** A batch class: ONE class however many students are in it — listed once,
+ * with the batch and every student taking part (only a batch this teacher
+ * teaches is ever sent). */
+interface BatchClassItem {
+  kind: "BATCH_SESSION";
+  id: string;
+  start: string;
+  end: string;
+  classType: "BATCH";
+  status: string;
+  lessonNumber: number;
+  lessonTitle: string | null;
+  course: { id: string; title: string };
+  batch: { id: string; name: string; maxStudents: number };
+  /** One student's row of this class — the way to its (shared) lesson page. */
+  viewLessonId: string | null;
+  students: BatchClassStudent[];
+}
+
+type ScheduledLessonItem = LessonClassItem | BatchClassItem;
+
+const isBatchClass = (l: ScheduledLessonItem): l is BatchClassItem => l.kind === "BATCH_SESSION";
+
+/** What names the class on the calendar: the student, or the batch. */
+const classTitle = (l: ScheduledLessonItem) => (isBatchClass(l) ? l.batch.name : l.student.fullName);
+/** "Batch · Evening Odyssey · 4 students" / "1-to-1 with Ada". */
+const classWho = (l: ScheduledLessonItem) =>
+  isBatchClass(l)
+    ? `Batch · ${l.batch.name} · ${l.students.length} student${l.students.length === 1 ? "" : "s"}`
+    : `${CLASS_TYPE_LABELS[l.classType]} with ${l.student.fullName}`;
 
 const CLASS_TYPE_COLORS: Record<string, string> = {
   ONE_TO_ONE: "bg-indigo-500",
@@ -74,11 +108,16 @@ function LessonInfoModal({ lesson, onClose }: { lesson: ScheduledLessonItem; onC
   const start = new Date(lesson.start);
   const end = new Date(lesson.end);
   const isPast = end < new Date();
+  const batch = isBatchClass(lesson) ? lesson : null;
+  // A class opens ten minutes before it starts, for as long as it is not ended.
+  const canEnter = !!batch && lesson.status === "UPCOMING" && new Date().getTime() >= start.getTime() - 10 * 60_000;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl">
+      <div
+        className={`relative w-full ${batch ? "max-w-md" : "max-w-sm"} max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl`}
+      >
         <div className="flex items-center justify-between mb-3">
           <span
             className={`text-xs px-2.5 py-1 rounded-full font-medium text-white ${isPast ? "bg-[var(--t-success)]" : CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
@@ -99,15 +138,89 @@ function LessonInfoModal({ lesson, onClose }: { lesson: ScheduledLessonItem; onC
           {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–
           {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
         </p>
-        <p className="text-sm text-[var(--t-text-muted)]">
-          {CLASS_TYPE_LABELS[lesson.classType]} with {lesson.student.fullName}
-        </p>
-        <button
-          onClick={() => router.push(`/lesson/${lesson.id}`)}
-          className="mt-4 w-full py-2.5 rounded-lg bg-[var(--t-accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          View Lesson
-        </button>
+        {batch ? (
+          <>
+            <p className="text-sm text-[var(--t-text)] font-medium mt-0.5 flex items-center gap-1.5">
+              <span aria-hidden>👥</span> Batch · {batch.batch.name}
+              <span className="text-xs font-normal text-[var(--t-text-muted)]">
+                {formatSeats(batch.students.length, batch.batch.maxStudents)}
+              </span>
+            </p>
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--t-text-faint)] mb-1.5">
+                Students in this class
+              </p>
+              <ul className="divide-y divide-[var(--t-nav-border)] rounded-xl border border-[var(--t-nav-border)] overflow-hidden">
+                {batch.students.length === 0 && (
+                  <li className="px-3 py-3 text-sm text-[var(--t-text-muted)]">No students are in this class.</li>
+                )}
+                {batch.students.map((st) => (
+                  <li key={st.id} className="px-3 py-2.5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-600 to-violet-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                      {st.fullName.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-[var(--t-text)] truncate">{st.fullName}</p>
+                      <p className="text-xs text-[var(--t-text-muted)] truncate">
+                        {[
+                          st.grade ? `Grade ${st.grade}` : null,
+                          st.age ? `Age ${st.age}` : null,
+                          `${st.lessonsCompleted} of ${st.totalLessons} lessons`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                    </div>
+                    {(isPast || lesson.status !== "UPCOMING" || st.attendance === "JOINED") && (
+                      <span
+                        className={`text-[11px] px-2 py-0.5 rounded-full flex-shrink-0 font-medium ${
+                          st.attendance === "ATTENDED" || st.attendance === "JOINED"
+                            ? "bg-[var(--t-success-bg)] text-[var(--t-success-text)]"
+                            : st.attendance === "ABSENT"
+                              ? "bg-red-500/15 text-red-500"
+                              : "bg-[var(--t-surface-2,transparent)] text-[var(--t-text-muted)]"
+                        }`}
+                      >
+                        {ATTENDANCE_LABELS[st.attendance]}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-[var(--t-text-faint)] mt-2">
+                One class for everyone: attendance, homework and test results stay each student&apos;s own.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {canEnter && (
+                <button
+                  onClick={() => router.push(`/classroom/${lesson.id}?type=batch`)}
+                  className="w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+                >
+                  Open classroom
+                </button>
+              )}
+              {batch.viewLessonId ? (
+                <button
+                  onClick={() => router.push(`/lesson/${batch.viewLessonId}`)}
+                  className="w-full py-2.5 rounded-lg bg-[var(--t-accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+                >
+                  View Lesson
+                </button>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-[var(--t-text-muted)]">{classWho(lesson)}</p>
+            <button
+              onClick={() => router.push(`/lesson/${lesson.id}`)}
+              className="mt-4 w-full py-2.5 rounded-lg bg-[var(--t-accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              View Lesson
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1005,15 +1118,27 @@ function ScheduleContent() {
                       >
                         {CLASS_TYPE_LABELS[lesson.classType]}
                       </span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--t-success-bg)] text-[var(--t-success-text)] flex-shrink-0">
-                        {lesson.student.fullName}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--t-success-bg)] text-[var(--t-success-text)] flex-shrink-0 max-w-[12rem] truncate">
+                        {isBatchClass(lesson)
+                          ? `👥 ${lesson.batch.name} · ${lesson.students.length}`
+                          : lesson.student.fullName}
                       </span>
-                      <a
-                        href={`/lesson/${lesson.id}`}
-                        className="text-xs px-2.5 py-1 rounded-full bg-[var(--t-accent)] text-white flex-shrink-0 hover:opacity-90 transition-opacity"
-                      >
-                        Lesson Details
-                      </a>
+                      {isBatchClass(lesson) && (
+                        <button
+                          onClick={() => setSelectedLesson(lesson)}
+                          className="text-xs px-2.5 py-1 rounded-full border border-[var(--t-nav-border)] text-[var(--t-text)] flex-shrink-0 hover:bg-[var(--t-accent)]/10 transition-colors"
+                        >
+                          Students
+                        </button>
+                      )}
+                      {(!isBatchClass(lesson) || lesson.viewLessonId) && (
+                        <a
+                          href={`/lesson/${isBatchClass(lesson) ? lesson.viewLessonId : lesson.id}`}
+                          className="text-xs px-2.5 py-1 rounded-full bg-[var(--t-accent)] text-white flex-shrink-0 hover:opacity-90 transition-opacity"
+                        >
+                          Lesson Details
+                        </a>
+                      )}
                     </div>
                   );
                 })}
@@ -1102,7 +1227,7 @@ function ScheduleContent() {
                             key={lesson.id}
                             className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity duration-200 ${isPast ? "opacity-40" : "opacity-100"}`}
                             style={{ top: top + 1, height: height - 2 }}
-                            title={`${lesson.course.title} · Lesson ${lesson.lessonNumber}${lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""} · ${CLASS_TYPE_LABELS[lesson.classType]} · ${lesson.student.fullName}`}
+                            title={`${lesson.course.title} · Lesson ${lesson.lessonNumber}${lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""} · ${classWho(lesson)}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedLesson(lesson);
@@ -1112,12 +1237,17 @@ function ScheduleContent() {
                               className={`h-full px-1.5 py-1 text-xs text-white cursor-pointer hover:opacity-90 transition-opacity ${CLASS_TYPE_COLORS[lesson.classType] ?? "bg-indigo-500"}`}
                             >
                               <p className="font-semibold truncate leading-tight">
-                                {lesson.student.fullName}
+                                {isBatchClass(lesson) ? `👥 ${classTitle(lesson)}` : classTitle(lesson)}
                               </p>
                               {height > 30 && (
                                 <p className="opacity-80 truncate">
                                   L{lesson.lessonNumber}
                                   {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ` · ${lesson.course.title}`}
+                                </p>
+                              )}
+                              {height > 48 && isBatchClass(lesson) && (
+                                <p className="opacity-80 truncate">
+                                  {lesson.students.length} student{lesson.students.length === 1 ? "" : "s"}
                                 </p>
                               )}
                             </div>
