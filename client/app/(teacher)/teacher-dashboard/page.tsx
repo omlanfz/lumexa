@@ -38,12 +38,19 @@ interface Stats {
 }
 
 interface NextClass {
-  type: 'lesson' | 'booking';
+  // 'batch': ONE class of a batch, with all its students (id = the class's id).
+  type: 'lesson' | 'booking' | 'batch';
   id: string;
   start: string;
   end: string;
+  /** The student's name — or, for a batch class, the batch's. */
   studentName: string;
   studentAvatarUrl?: string | null;
+  batch?: { id: string; name: string } | null;
+  studentCount?: number;
+  students?: { id: string; fullName: string; avatarUrl?: string | null }[];
+  /** The lesson page to open (a batch class's students all share it). */
+  viewLessonId?: string | null;
   courseTitle?: string;
   lessonNumber?: number;
   lessonTitle?: string | null;
@@ -312,9 +319,20 @@ function TeacherDashboardContent() {
                     </span>
                   )}
                   <p className="text-lg font-bold text-[var(--t-text)]">
-                    Class with {nextClass.studentName}
+                    {nextClass.type === "batch" ? `Batch class · ${nextClass.studentName}` : `Class with ${nextClass.studentName}`}
                   </p>
-                  {nextClass.type === "lesson" && (
+                  {nextClass.type === "batch" && (nextClass.students?.length ?? 0) > 0 && (
+                    <p className="text-sm text-[var(--t-text-muted)]">
+                      {nextClass.studentCount ?? nextClass.students!.length} student
+                      {(nextClass.studentCount ?? nextClass.students!.length) === 1 ? "" : "s"}:{" "}
+                      {nextClass.students!
+                        .slice(0, 4)
+                        .map((st) => st.fullName)
+                        .join(", ")}
+                      {nextClass.students!.length > 4 ? ` +${nextClass.students!.length - 4} more` : ""}
+                    </p>
+                  )}
+                  {(nextClass.type === "lesson" || nextClass.type === "batch") && (
                     <p className="text-sm text-[var(--t-text-muted)]">
                       {nextClass.courseTitle}
                       {nextClass.lessonNumber ? ` · Lesson ${nextClass.lessonNumber}` : ""}
@@ -340,7 +358,7 @@ function TeacherDashboardContent() {
                   </p>
                 </div>
                 <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#7B61FF] to-[#5B3FCF] flex items-center justify-center text-white font-bold flex-shrink-0">
-                  {nextClass.studentName.charAt(0).toUpperCase()}
+                  {nextClass.type === "batch" ? <span aria-hidden>👥</span> : nextClass.studentName.charAt(0).toUpperCase()}
                 </div>
               </div>
 
@@ -358,9 +376,15 @@ function TeacherDashboardContent() {
                   ))}
                 </div>
                 <div className="flex items-center gap-2">
-                  {nextClass.type === "lesson" && (
+                  {(nextClass.type === "lesson" || (nextClass.type === "batch" && nextClass.viewLessonId)) && (
                     <button
-                      onClick={() => window.open(`/lesson/${nextClass.id}`, "_blank", "noopener,noreferrer")}
+                      onClick={() =>
+                        window.open(
+                          `/lesson/${nextClass.type === "batch" ? nextClass.viewLessonId : nextClass.id}`,
+                          "_blank",
+                          "noopener,noreferrer",
+                        )
+                      }
                       className="px-4 py-2 bg-[var(--t-nav-active)] text-[var(--t-nav-active-text)] hover:bg-[var(--t-nav-hover)] text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
                     >
                       View Lesson

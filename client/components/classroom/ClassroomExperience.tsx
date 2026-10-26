@@ -42,8 +42,18 @@ import { DEFAULT_LIGHTING } from '@/lib/classroom/useVideoEffects';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
 interface ClassroomExperienceProps {
+  /** A booking id, a scheduled lesson id, or (with `isBatch`) a batch class id. */
   id: string;
+  /** A curriculum class (a scheduled lesson, or a batch class) rather than a
+   * marketplace booking. */
   isLesson: boolean;
+  /** `id` is a BATCH CLASS (one session shared by several students): the
+   * server finds the person's own place in it. Used for a teacher entering a
+   * batch class from their schedule or an email. */
+  isBatch?: boolean;
+  /** Which kind of live class an observing admin is joining
+   * (BOOKING | LESSON | SESSION). */
+  adminKind?: string;
   /** Temporary QA-only mode — joins the shared demo room instead of a real
    * booking/lesson. See client/lib/demoClassroom.ts. */
   demo?: boolean;
@@ -57,7 +67,12 @@ interface JoinResponse {
   url: string;
   roomName: string;
   scheduledStart?: string;
+  /** The class row the person came in through (a batch class names one
+   * student's row for the teacher). */
+  scheduledLessonId?: string;
   classType?: 'ONE_TO_ONE' | 'BATCH';
+  /** The batch this class belongs to (null for a 1-to-1 class). */
+  batchName?: string | null;
   partialCompletionAvailable?: boolean;
   /** The teacher had the classroom locked at the time of this join. */
   roomLocked?: boolean;
@@ -89,7 +104,14 @@ function dashboardPathFor(role: string | null): string {
   return '/dashboard';
 }
 
-export default function ClassroomExperience({ id, isLesson, demo, adminObserve }: ClassroomExperienceProps) {
+export default function ClassroomExperience({
+  id,
+  isLesson,
+  isBatch,
+  adminKind,
+  demo,
+  adminObserve,
+}: ClassroomExperienceProps) {
   const router = useRouter();
   const [join, setJoin] = useState<JoinResponse | null>(null);
   const [waiting, setWaiting] = useState<WaitingResponse | null>(null);
@@ -104,11 +126,21 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
   const [error, setError] = useState('');
   const [choices, setChoices] = useState<JoinChoices | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lessonRequested = useRef(false);
+
+  const fetchLessonDetails = (lessonId: string) => {
+    if (lessonRequested.current) return;
+    lessonRequested.current = true;
+    api
+      .get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${lessonId}/details`)
+      .then((res) => setLessonData(res.data))
+      .catch(() => setLessonData(null));
+  };
 
   const attemptJoin = async () => {
     try {
       const path = adminObserve
-        ? `/admin/classes/${isLesson ? 'LESSON' : 'BOOKING'}/${id}/join`
+        ? `/admin/classes/${adminKind ?? (isLesson ? 'LESSON' : 'BOOKING')}/${id}/join`
         : demo
           ? '/classroom/join-demo'
           : '/classroom/join';
@@ -116,9 +148,11 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         ? {}
         : demo
           ? { deviceId }
-          : isLesson
-            ? { scheduledLessonId: id, deviceId }
-            : { bookingId: id, deviceId };
+          : isBatch
+            ? { batchSessionId: id, deviceId }
+            : isLesson
+              ? { scheduledLessonId: id, deviceId }
+              : { bookingId: id, deviceId };
       const res = await api.post<JoinResponse | WaitingResponse | BlockedResponse>(path, body);
       if ('waitingForAdmission' in res.data) {
         setWaiting(res.data);
@@ -128,6 +162,11 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         setWaiting(null);
         setBlocked(null);
         setJoin(res.data);
+        // A batch class is entered by its own id: the lesson page is the one of
+        // the row the server let this person in through.
+        if (isBatch && !adminObserve && res.data.scheduledLessonId) {
+          fetchLessonDetails(res.data.scheduledLessonId);
+        }
       }
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } } };
@@ -144,11 +183,8 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
 
     void attemptJoin();
 
-    if (isLesson && !demo && !adminObserve) {
-      api
-        .get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${id}/details`)
-        .then((res) => setLessonData(res.data))
-        .catch(() => setLessonData(null));
+    if (isLesson && !isBatch && !demo && !adminObserve) {
+      fetchLessonDetails(id);
     }
 
     // The demo room has no real ScheduledLesson, so "View Lesson" there
@@ -163,7 +199,7 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         .catch(() => setDemoExampleLesson(null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isLesson, demo, adminObserve, router]);
+  }, [id, isLesson, isBatch, demo, adminObserve, router]);
 
   // While waiting to be re-admitted, poll the teacher's decision every 3s.
   useEffect(() => {
@@ -316,8 +352,10 @@ export default function ClassroomExperience({ id, isLesson, demo, adminObserve }
         ? `${lessonData.session.courseTitle} · Session ${lessonData.session.lessonNumber}`
         : 'Lumexa 1:1 Session';
   const sessionSubtitle = lessonData
-    ? `${lessonData.session.courseTitle}${lessonData.lesson?.title ? ` · Session ${lessonData.session.lessonNumber}` : ''}`
-    : undefined;
+    ? `${lessonData.session.courseTitle}${lessonData.lesson?.title ? ` · Session ${lessonData.session.lessonNumber}` : ''}${join.batchName ? ` · ${join.batchName}` : ''}`
+    : join.batchName
+      ? `Batch · ${join.batchName}`
+      : undefined;
 
   if (!adminObserve && !choices) {
     return (

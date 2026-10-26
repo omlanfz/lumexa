@@ -44,6 +44,8 @@ export interface LessonDetailsResponse {
     status: string | null;
     courseId: string;
     courseTitle: string;
+    /** The batch this class is taught to (null for a 1-to-1 class). */
+    batchName?: string | null;
   };
   lesson?: {
     id: string;
@@ -105,6 +107,7 @@ export default function LessonDetailsView({
       <div className="mt-3 mb-6">
         <p className="text-xs uppercase tracking-wide text-gray-400">
           {data.session.courseTitle} · Session {data.session.lessonNumber}
+          {data.session.batchName ? ` · Batch: ${data.session.batchName}` : ''}
         </p>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
           {data.lesson?.title || `Session ${data.session.lessonNumber}`}

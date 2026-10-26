@@ -1,10 +1,11 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Fragment, Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/axios';
 import LumiChat from '@/components/LumiChat';
 import TeacherPageSkeleton from '@/components/TeacherPageSkeleton';
+import { formatSeats, formatSlots, groupRosterByBatch, type RosterBatch } from '@/lib/batches';
 
 interface StudentEntry {
   studentId: string;
@@ -17,6 +18,8 @@ interface StudentEntry {
   totalSessions: number;
   assignedCourse: { id: string; title: string; sessions: number } | null;
   classType: 'ONE_TO_ONE' | 'BATCH' | null;
+  /** The batch this student learns in (a batch YOU teach); null for 1-to-1. */
+  batch: RosterBatch | null;
   totalClasses: number;
   completedClasses: number;
   pendingClasses: number;
@@ -41,6 +44,128 @@ const RANK_ICONS: Record<string, string> = {
   NAVIGATOR: '🧭', CAPTAIN: '🎖️', GALAXY_COMMANDER: '🌌',
 };
 
+/** "1-to-1", or "👥 Batch · <name>" — so a batch's students are easy to spot. */
+function ClassTypeChip({
+  classType,
+  batch,
+}: {
+  classType: 'ONE_TO_ONE' | 'BATCH';
+  batch: RosterBatch | null;
+}) {
+  if (classType === 'BATCH') {
+    return (
+      <span
+        className="inline-flex items-center gap-1 mt-1 text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/40 bg-indigo-100 dark:text-indigo-300 text-indigo-700 font-medium max-w-[12rem] truncate"
+        title={batch ? `Batch: ${batch.name}` : 'Batch student — not placed in a batch yet'}
+      >
+        <span aria-hidden>👥</span>
+        <span className="truncate">{batch ? `Batch · ${batch.name}` : 'Batch'}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-block mt-1 text-xs px-1.5 py-0.5 rounded-full dark:bg-gray-800/50 bg-gray-100 dark:text-gray-400 text-gray-600">
+      {CLASS_TYPE_LABELS[classType] ?? classType}
+    </span>
+  );
+}
+
+type RosterGroup = ReturnType<typeof groupRosterByBatch<StudentEntry>>[number];
+
+/** The row above a batch's students (and above the 1-to-1 students when there
+ * are batches too): the batch, how full it is, when it meets, and a way to
+ * prepare its next class once. */
+function BatchGroupHeader({
+  group,
+  onPrepare,
+}: {
+  group: RosterGroup;
+  onPrepare: (scheduledLessonId: string) => void;
+}) {
+  if (!group.batch) {
+    return (
+      <tr className="dark:bg-purple-900/10 bg-purple-50/60">
+        <td colSpan={7} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--t-text-muted)]">
+          1-to-1 students ({group.rows.length})
+        </td>
+      </tr>
+    );
+  }
+  const members = group.rows;
+  const info = members[0].batch!;
+  const prepare = members.find((m) => m.nextClassScheduledLessonId)?.nextClassScheduledLessonId ?? null;
+  const next = members
+    .map((m) => m.nextClassDate)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+  return (
+    <tr className="dark:bg-indigo-900/20 bg-indigo-50 border-l-2 border-l-indigo-500">
+      <td colSpan={7} className="px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[var(--t-text)] flex items-center gap-2">
+              <span aria-hidden>👥</span> {info.name}
+              <span className="text-xs font-normal text-[var(--t-text-muted)]">
+                {formatSeats(info.memberCount, info.maxStudents)}
+              </span>
+            </p>
+            <p className="text-xs text-[var(--t-text-muted)] mt-0.5">
+              {formatSlots(info.slots)} (Dhaka)
+              {next ? ` · next class ${new Date(next).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}` : ''}
+            </p>
+          </div>
+          {prepare ? (
+            <button
+              onClick={() => onPrepare(prepare)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium border dark:border-indigo-500/40 border-indigo-300 text-[var(--t-text)] hover:bg-indigo-500/10 transition-colors whitespace-nowrap"
+              title="Open the lesson this batch teaches next — the same for every student in it"
+            >
+              Prepare Batch Class
+            </button>
+          ) : (
+            <span className="text-xs text-[var(--t-text-faint)]">No upcoming class</span>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function MobileBatchHeader({
+  group,
+  onPrepare,
+}: {
+  group: RosterGroup;
+  onPrepare: (scheduledLessonId: string) => void;
+}) {
+  if (!group.batch) {
+    return (
+      <p className="px-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[var(--t-text-muted)]">
+        1-to-1 students ({group.rows.length})
+      </p>
+    );
+  }
+  const info = group.rows[0].batch!;
+  const prepare = group.rows.find((m) => m.nextClassScheduledLessonId)?.nextClassScheduledLessonId ?? null;
+  return (
+    <div className="px-3 py-2.5 rounded-xl dark:bg-indigo-900/20 bg-indigo-50 border-l-2 border-l-indigo-500">
+      <p className="text-sm font-semibold text-[var(--t-text)]">
+        👥 {info.name}{' '}
+        <span className="text-xs font-normal text-[var(--t-text-muted)]">{formatSeats(info.memberCount, info.maxStudents)}</span>
+      </p>
+      <p className="text-xs text-[var(--t-text-muted)] mt-0.5">{formatSlots(info.slots)} (Dhaka)</p>
+      {prepare && (
+        <button
+          onClick={() => onPrepare(prepare)}
+          className="mt-2 px-3 py-1.5 rounded-lg text-xs font-medium border dark:border-indigo-500/40 border-indigo-300 text-[var(--t-text)]"
+        >
+          Prepare Batch Class
+        </button>
+      )}
+    </div>
+  );
+}
+
 function TeacherStudentsContent() {
   const router = useRouter();
 
@@ -48,6 +173,7 @@ function TeacherStudentsContent() {
   const [filtered, setFiltered] = useState<StudentEntry[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'ALL' | 'BATCH' | 'ONE_TO_ONE'>('ALL');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,18 +204,25 @@ function TeacherStudentsContent() {
     setFiltered(
       students.filter(
         (s) =>
-          s.studentName?.toLowerCase().includes(q) ||
-          s.studentGrade?.toLowerCase().includes(q) ||
-          s.spaceRank?.toLowerCase().includes(q),
+          (typeFilter === 'ALL' ||
+            (typeFilter === 'BATCH' ? s.classType === 'BATCH' : s.classType !== 'BATCH')) &&
+          (s.studentName?.toLowerCase().includes(q) ||
+            s.studentGrade?.toLowerCase().includes(q) ||
+            s.spaceRank?.toLowerCase().includes(q) ||
+            s.batch?.name.toLowerCase().includes(q)),
       ),
     );
-  }, [search, students]);
+  }, [search, typeFilter, students]);
 
   const card = 't-card shadow-sm';
 
   if (loading) return <TeacherPageSkeleton />;
 
   const upcoming = students.filter((s) => (s.pendingClasses ?? 0) > 0).length;
+  const batchCount = students.filter((s) => s.classType === 'BATCH').length;
+  // Batch members sit together under their batch; 1-to-1 students follow.
+  const groups = groupRosterByBatch(filtered.map((s) => ({ ...s, batch: s.batch })));
+  const hasBatches = groups.some((g) => g.batch);
 
   return (
     <>
@@ -114,9 +247,31 @@ function TeacherStudentsContent() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, grade, or rank…"
+            placeholder="Search by name, grade, rank or batch…"
             className="w-full sm:w-80 px-4 py-2.5 rounded-xl border dark:border-purple-800/40 border-purple-200 dark:bg-[#1A1428] bg-purple-50 text-[var(--t-text)] text-sm placeholder-purple-400/50 focus:outline-none focus:ring-2 focus:ring-purple-500/30"
           />
+          {batchCount > 0 && (
+            <div className="flex gap-2 mt-3" role="group" aria-label="Filter by class type">
+              {([
+                ['ALL', `All (${students.length})`],
+                ['BATCH', `👥 Batch (${batchCount})`],
+                ['ONE_TO_ONE', `1-to-1 (${students.length - batchCount})`],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setTypeFilter(value)}
+                  aria-pressed={typeFilter === value}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    typeFilter === value
+                      ? 'bg-purple-600 border-purple-600 text-white'
+                      : 'dark:border-purple-700/30 border-purple-200 text-[var(--t-text-muted)] hover:text-[var(--t-text)]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {error && (
@@ -163,10 +318,17 @@ function TeacherStudentsContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y dark:divide-purple-900/20 divide-purple-100">
-                  {filtered.map((s) => (
+                  {groups.map((g) => (
+                    <Fragment key={g.key}>
+                      {(g.batch || hasBatches) && (
+                        <BatchGroupHeader group={g} onPrepare={(id) => router.push(`/lesson/${id}`)} />
+                      )}
+                      {g.rows.map((s) => (
                     <tr
                       key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`}
-                      className="dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors align-middle"
+                      className={`dark:hover:bg-purple-900/10 hover:bg-purple-50/50 transition-colors align-middle ${
+                        s.batch ? 'border-l-2 border-l-indigo-500/70' : ''
+                      }`}
                     >
                       {/* Name */}
                       <td className="px-4 py-4">
@@ -192,11 +354,7 @@ function TeacherStudentsContent() {
                         <p className="text-xs font-medium text-[var(--t-text)] truncate max-w-[10rem]">
                           {s.assignedCourse?.title ?? 'Not assigned'}
                         </p>
-                        {s.classType && (
-                          <span className="inline-block mt-1 text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/30 bg-indigo-100 dark:text-indigo-400 text-indigo-700">
-                            {CLASS_TYPE_LABELS[s.classType] ?? s.classType}
-                          </span>
-                        )}
+                        {s.classType && <ClassTypeChip classType={s.classType} batch={s.batch} />}
                       </td>
 
                       {/* Rank + grade */}
@@ -264,6 +422,8 @@ function TeacherStudentsContent() {
                         </div>
                       </td>
                     </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -271,8 +431,16 @@ function TeacherStudentsContent() {
 
             {/* Mobile cards */}
             <div className="sm:hidden space-y-3">
-              {filtered.map((s) => (
-                <div key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`} className={`${card} t-card-hover p-4`}>
+              {groups.map((g) => (
+                <Fragment key={g.key}>
+                  {(g.batch || hasBatches) && (
+                    <MobileBatchHeader group={g} onPrepare={(id) => router.push(`/lesson/${id}`)} />
+                  )}
+                  {g.rows.map((s) => (
+                <div
+                  key={`${s.isUserRef ? 'u' : 's'}-${s.studentId}`}
+                  className={`${card} t-card-hover p-4 ${s.batch ? 'border-l-2 border-l-indigo-500/70' : ''}`}
+                >
                   <div className="flex items-center gap-3 mb-3">
                     {s.avatarUrl ? (
                       <img src={s.avatarUrl} alt={s.studentName} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
@@ -294,11 +462,7 @@ function TeacherStudentsContent() {
                       <span className="text-xs font-medium text-[var(--t-text)]">
                         {s.assignedCourse?.title ?? 'Not assigned'}
                       </span>
-                      {s.classType && (
-                        <span className="text-xs px-1.5 py-0.5 rounded-full dark:bg-indigo-900/30 bg-indigo-100 dark:text-indigo-400 text-indigo-700">
-                          {CLASS_TYPE_LABELS[s.classType] ?? s.classType}
-                        </span>
-                      )}
+                      {s.classType && <ClassTypeChip classType={s.classType} batch={s.batch} />}
                     </div>
                   )}
 
@@ -338,6 +502,8 @@ function TeacherStudentsContent() {
                     </button>
                   </div>
                 </div>
+                  ))}
+                </Fragment>
               ))}
             </div>
           </>

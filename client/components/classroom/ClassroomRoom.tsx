@@ -219,7 +219,9 @@ export default function ClassroomRoom({
   // for this room (no real economics) and the lesson content shown there
   // isn't tied to any real progress. Legacy marketplace bookings get
   // neither — they're a different flow entirely.
-  // A 1:1 class is "lesson-<id>"; a batch's shared room is "batch-<teacher>-<start>".
+  // A 1:1 class is "lesson-<id>"; a batch class's one shared room is
+  // "batch-session-<id>" ("batch-<teacher>-<start>" for a class that was already
+  // running when batches became real).
   const isCurriculumLesson = roomName.startsWith('lesson-') || roomName.startsWith('batch-');
   const isLessonFlow = isCurriculumLesson || !!demo;
   // Stage's own default content (priority #3, see Stage.tsx) always uses

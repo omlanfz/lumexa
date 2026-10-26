@@ -49,6 +49,8 @@ interface ScheduledLessonItem {
   start: string;
   end: string;
   classType: 'ONE_TO_ONE' | 'BATCH';
+  /** The batch the class belongs to (null for a 1-to-1 class). */
+  batch?: { id: string; name: string } | null;
   status: string;
   teacher: { id: string; user: { fullName: string; avatarUrl?: string | null } };
   course: { id: string; title: string };
@@ -239,7 +241,7 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
 
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium">
-            {CLASS_TYPE_LABELS[lesson.classType] ?? lesson.classType}
+            {lesson.batch ? `Batch · ${lesson.batch.name}` : (CLASS_TYPE_LABELS[lesson.classType] ?? lesson.classType)}
           </span>
           <span
             className={`text-xs px-2.5 py-1 rounded-full border font-medium ${
