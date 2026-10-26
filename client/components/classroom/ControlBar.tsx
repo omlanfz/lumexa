@@ -70,6 +70,8 @@ interface ControlBarProps {
 
   recordingState: RecordingUiState;
   onToggleRecording: () => void;
+  /** False in a free trial class, which is never recorded. Defaults to true. */
+  recordingAvailable?: boolean;
 
   backgroundEffect: BackgroundEffect;
   onBackgroundChange: (e: BackgroundEffect) => void;
@@ -127,6 +129,7 @@ export default function ControlBar({
   onMuteAll,
   recordingState,
   onToggleRecording,
+  recordingAvailable = true,
   backgroundEffect,
   onBackgroundChange,
   lighting,
@@ -210,7 +213,7 @@ export default function ControlBar({
     />
   );
 
-  const recordButton = isTeacher && (
+  const recordButton = isTeacher && recordingAvailable && (
     <IconButton
       icon={recordingState === 'active' ? Square : recordingState === 'starting' || recordingState === 'stopping' ? Loader2 : Circle}
       label={

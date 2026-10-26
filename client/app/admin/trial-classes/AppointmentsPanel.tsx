@@ -27,13 +27,16 @@ function monthTitle(month: string): string {
 }
 
 function NotificationDot({ a }: { a: TrialAppointment }) {
-  if (a.status === "CANCELLED") return <span className="text-[var(--a-text-faint)]">—</span>;
+  if (a.status !== "CONFIRMED") return <span className="text-[var(--a-text-faint)]">—</span>;
   const failed = a.notifications.needsAttention;
   const pending = a.notifications.whatsapp.some((w) => w.status === "PENDING");
+  const reminderPending = pending && !!a.classroom.reminderDueAt && !a.classroom.reminderEmailSentAt;
   return failed ? (
     <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--a-danger-bg)] text-[var(--a-danger-text)]">Needs attention</span>
   ) : (
-    <span className="text-xs text-[var(--a-text-muted)]">{pending ? "Reminder scheduled" : "OK"}</span>
+    <span className="text-xs text-[var(--a-text-muted)]">
+      {!a.teacher ? "Link sent once a teacher is assigned" : reminderPending ? "Reminder scheduled" : "OK"}
+    </span>
   );
 }
 
@@ -41,6 +44,7 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
   const [view, setView] = useState<View>("list");
   const [scope, setScope] = useState("upcoming");
   const [status, setStatus] = useState("");
+  const [teacherFilter, setTeacherFilter] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [q, setQ] = useState("");
@@ -81,6 +85,7 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
         if (to) params.to = to;
       }
       if (status) params.status = status;
+      if (teacherFilter) params.teacher = teacherFilter;
       if (debouncedQ) params.q = debouncedQ;
       const res = await api.get("/admin/trial/appointments", { params });
       setRows(res.data.appointments ?? []);
@@ -91,7 +96,7 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
     } finally {
       setLoading(false);
     }
-  }, [view, month, page, scope, from, to, status, debouncedQ]);
+  }, [view, month, page, scope, from, to, status, teacherFilter, debouncedQ]);
 
   useEffect(() => {
     void load();
@@ -141,7 +146,7 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
           <button className={primaryBtn} onClick={() => setScheduling(true)}>+ Schedule a trial</button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {view === "list" && (
             <>
               <div>
@@ -166,8 +171,17 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
             <label className={labelCls}>Status</label>
             <select className={inputCls} value={status} onChange={(e) => resetPage(setStatus)(e.target.value)}>
               <option value="">All</option>
-              <option value="CONFIRMED">Confirmed</option>
+              <option value="CONFIRMED">Confirmed (upcoming)</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="MISSED">Missed</option>
               <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Teacher</label>
+            <select className={inputCls} value={teacherFilter} onChange={(e) => resetPage(setTeacherFilter)(e.target.value)}>
+              <option value="">Any</option>
+              <option value="unassigned">Needs a teacher</option>
             </select>
           </div>
           <div>
@@ -190,15 +204,16 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
                   <th className="px-4 py-3 font-semibold">Child</th>
                   <th className="px-4 py-3 font-semibold">Parent</th>
                   <th className="px-4 py-3 font-semibold">Program</th>
+                  <th className="px-4 py-3 font-semibold">Teacher</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                   <th className="px-4 py-3 font-semibold">Notifications</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--a-border)]">
                 {loading && rows.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-muted)]">Loading…</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-muted)]">Loading…</td></tr>
                 ) : rows.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-[var(--a-text-muted)]">No trial appointments match these filters.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-[var(--a-text-muted)]">No trial appointments match these filters.</td></tr>
                 ) : (
                   rows.map((a) => (
                     <tr key={a.id} onClick={() => setOpenId(a.id)} className="cursor-pointer hover:bg-[var(--a-nav-hover)] transition-colors">
@@ -212,6 +227,15 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
                         <div className="text-xs text-[var(--a-text-muted)]">{a.parentPhone ?? a.parentEmail}</div>
                       </td>
                       <td className="px-4 py-3 max-w-[14rem] truncate" title={a.program}>{a.program}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {a.teacher ? (
+                          <span className="text-[var(--a-text)]">{a.teacher.name}</span>
+                        ) : a.status === "CONFIRMED" ? (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]">Needs a teacher</span>
+                        ) : (
+                          <span className="text-[var(--a-text-faint)]">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col items-start gap-1">
                           <StatusBadge status={a.status} />
@@ -250,13 +274,17 @@ export default function AppointmentsPanel({ version, onChanged }: { version: num
                       <button
                         key={a.id}
                         onClick={() => setOpenId(a.id)}
-                        title={`${a.childName} · ${a.parentName}`}
+                        title={`${a.childName} · ${a.parentName} · ${a.teacher ? a.teacher.name : "needs a teacher"}`}
                         className={`w-full text-left truncate rounded px-1.5 py-0.5 ${
                           a.status === "CANCELLED"
                             ? "bg-[var(--a-surface-3)] text-[var(--a-text-faint)] line-through"
-                            : a.outsideAvailability
-                              ? "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]"
-                              : "bg-[var(--a-info-bg)] text-[var(--a-info)]"
+                            : a.status === "MISSED"
+                              ? "bg-[var(--a-danger-bg)] text-[var(--a-danger-text)]"
+                              : a.status === "COMPLETED"
+                                ? "bg-[var(--a-success-bg)] text-[var(--a-success-text)]"
+                                : !a.teacher || a.outsideAvailability
+                                  ? "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]"
+                                  : "bg-[var(--a-info-bg)] text-[var(--a-info)]"
                         }`}
                       >
                         {formatDhakaTime(a.startAt)} {a.childName}

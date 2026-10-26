@@ -89,7 +89,7 @@ function validate(form: FormState, slot: string | null): Errors {
     e.childAge = `Trial classes are for ages ${TRIAL_MIN_AGE} to ${TRIAL_MAX_AGE}.`;
   }
   if (!form.subject) e.subject = "Please choose a program (or “Not sure yet”).";
-  if (!form.consent) e.consent = "Please tick this box so we can send your confirmation and reminder on WhatsApp.";
+  if (!form.consent) e.consent = "Please tick this box so we can send your class details and reminder on WhatsApp.";
   return e;
 }
 
@@ -491,7 +491,8 @@ function TrialForm() {
                 />
                 <span>
                   I agree that Lumexa AI School may message me on WhatsApp at this number about this trial class only: a
-                  booking confirmation and one reminder.
+                  confirmation that we received my request, the class details with my private joining link, and one reminder
+                  an hour before the class.
                 </span>
               </label>
               <FieldError id="err-consent" message={errors.consent} />
@@ -546,11 +547,12 @@ function ConfirmedScreen({ c }: { c: Confirmation }) {
       <div className="max-w-md w-full text-center p-6 sm:p-8 bg-white dark:bg-gray-900/60 border border-green-200 dark:border-green-800/50 rounded-2xl shadow-xl">
         <div className="text-5xl mb-4" aria-hidden>🎉</div>
         <h1 className="text-2xl font-black text-[#0F172A] dark:text-white mb-2">
-          {c.alreadyBooked ? "This trial class is already booked" : "Your trial class is confirmed"}
+          {c.alreadyBooked ? "This trial class is already requested" : "We received your trial class request"}
         </h1>
         <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mb-5">
           <span className="text-[#0F172A] dark:text-white font-semibold">{booking.childName}</span>&apos;s free{" "}
-          {booking.durationMinutes}-minute trial class is booked. There&apos;s nothing more you need to do to hold this time.
+          {booking.durationMinutes}-minute trial class is reserved for the time below. There&apos;s nothing more you need to do to
+          hold it.
         </p>
 
         <div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800/40 rounded-xl mb-5 text-left text-sm">
@@ -571,11 +573,14 @@ function ConfirmedScreen({ c }: { c: Confirmation }) {
 
         <ul className="text-left text-xs text-[#64748B] dark:text-gray-400 space-y-1.5 mb-5">
           <li>
-            📧 We&apos;re sending a confirmation to{" "}
+            📧 We&apos;re emailing a confirmation to{" "}
             <span className="text-[#0F172A] dark:text-white font-semibold">{c.email}</span>.
           </li>
-          {c.whatsapp && <li>💬 We&apos;re also sending it to your WhatsApp, with one reminder before the class.</li>}
-          <li>⏰ Please help {booking.childName} join a few minutes early.</li>
+          <li>
+            🧑‍🏫 We&apos;re assigning a teacher now. As soon as that&apos;s done we&apos;ll send you the trial details and a private
+            link to join the online class{c.whatsapp ? " by email and WhatsApp" : " by email"} — no account needed.
+          </li>
+          <li>⏰ We&apos;ll remind you an hour before the class. Please help {booking.childName} join a few minutes early.</li>
           <li>
             🔁 Need to change the time? Message us on{" "}
             <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer" className="text-green-600 dark:text-green-400 font-semibold">

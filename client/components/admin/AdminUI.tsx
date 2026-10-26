@@ -22,6 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
   COMPLETED: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
   PARTIALLY_COMPLETED: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
   INCOMPLETE: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",
+  MISSED: "bg-[var(--a-danger-bg)] text-[var(--a-danger-text)]",
   CANCELLED: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
   REFUNDED: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
   PENDING: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",

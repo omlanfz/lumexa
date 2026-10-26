@@ -39,7 +39,8 @@ interface Stats {
 
 interface NextClass {
   // 'batch': ONE class of a batch, with all its students (id = the class's id).
-  type: 'lesson' | 'booking' | 'batch';
+  // 'trial': a free trial class — not a lesson (no course, no lesson balance).
+  type: 'lesson' | 'booking' | 'batch' | 'trial';
   id: string;
   start: string;
   end: string;
@@ -318,9 +319,23 @@ function TeacherDashboardContent() {
                       <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Live
                     </span>
                   )}
+                  {nextClass.type === "trial" && (
+                    <span className="inline-flex items-center gap-1.5 mb-1.5 mr-1.5 px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-500 text-xs font-bold uppercase tracking-wide">
+                      Trial Class
+                    </span>
+                  )}
                   <p className="text-lg font-bold text-[var(--t-text)]">
-                    {nextClass.type === "batch" ? `Batch class · ${nextClass.studentName}` : `Class with ${nextClass.studentName}`}
+                    {nextClass.type === "batch"
+                      ? `Batch class · ${nextClass.studentName}`
+                      : nextClass.type === "trial"
+                        ? `Free trial with ${nextClass.studentName}`
+                        : `Class with ${nextClass.studentName}`}
                   </p>
+                  {nextClass.type === "trial" && (
+                    <p className="text-sm text-[var(--t-text-muted)]">
+                      30-minute introductory session{nextClass.lessonTitle ? ` · Interested in ${nextClass.lessonTitle}` : ""}
+                    </p>
+                  )}
                   {nextClass.type === "batch" && (nextClass.students?.length ?? 0) > 0 && (
                     <p className="text-sm text-[var(--t-text-muted)]">
                       {nextClass.studentCount ?? nextClass.students!.length} student
@@ -401,10 +416,16 @@ function TeacherDashboardContent() {
                 </div>
               </div>
 
-              <p className="mt-3 pt-3 border-t border-[var(--t-nav-border)] text-xs text-[var(--t-warning)] flex items-center gap-1.5">
-                <span aria-hidden>⚠</span>
-                Please join within the first 3 minutes to avoid an automatic late-join penalty.
-              </p>
+              {nextClass.type === "trial" ? (
+                <p className="mt-3 pt-3 border-t border-[var(--t-nav-border)] text-xs text-[var(--t-text-muted)]">
+                  The classroom opens 10 minutes before the start. The parent joins with a private link — no account is needed.
+                </p>
+              ) : (
+                <p className="mt-3 pt-3 border-t border-[var(--t-nav-border)] text-xs text-[var(--t-warning)] flex items-center gap-1.5">
+                  <span aria-hidden>⚠</span>
+                  Please join within the first 3 minutes to avoid an automatic late-join penalty.
+                </p>
+              )}
             </div>
           ) : (
             <div className={`${card} p-6 flex flex-col items-center justify-center text-center`}>
