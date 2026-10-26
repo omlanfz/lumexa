@@ -1,6 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 
+/** The guest-join token is a credential: no list/update response carries it. */
+function withoutSecrets<T extends { guestToken: string | null }>(
+  lead: T,
+): Omit<T, 'guestToken'> {
+  const { guestToken: _omit, ...rest } = lead;
+  void _omit;
+  return rest;
+}
+
 /** Legacy lead pipeline (list + status). Booking lives in TrialBookingService. */
 @Injectable()
 export class TrialService {
@@ -15,13 +24,21 @@ export class TrialService {
       }),
       this.prisma.trialLead.count(),
     ]);
-    return { leads, total, page, limit, totalPages: Math.ceil(total / limit) };
+    return {
+      leads: leads.map(withoutSecrets),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async updateStatus(id: string, status: string) {
-    return this.prisma.trialLead.update({
-      where: { id },
-      data: { status },
-    });
+    return withoutSecrets(
+      await this.prisma.trialLead.update({
+        where: { id },
+        data: { status },
+      }),
+    );
   }
 }

@@ -19,7 +19,9 @@ import {
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { addDaysToDateStr, dhakaToUtc } from '../scheduling/dhaka-time.util';
+import { findTeacherConflict } from '../scheduling/teacher-conflict.util';
 import { TRIAL_TIMEZONE, TRIAL_TIMEZONE_LABEL } from './trial.constants';
+import { joinWindow, trialAccessState } from './trial-access.util';
 import {
   isCoveredByAvailability,
   isValidDateStr,
@@ -28,16 +30,32 @@ import {
 import { bookingReference } from './trial-notifications.service';
 import { TrialBookingService } from './trial-booking.service';
 import { TrialWhatsAppService } from './trial-whatsapp.service';
+import { TRIAL_DURATION_MINUTES } from './trial.constants';
+
+const TRIAL_SESSION_MS = TRIAL_DURATION_MINUTES * 60_000;
 
 export interface AppointmentListParams {
   from?: string;
   to?: string;
   status?: string;
   scope?: string;
+  /** "unassigned" or a TeacherProfile id. */
+  teacher?: string;
   q?: string;
   page: number;
   limit: number;
 }
+
+/** A trial with the assigned teacher's name loaded. */
+type WithTeacher = TrialLead & {
+  teacher?: { id: string; user: { fullName: string } } | null;
+};
+
+const TEACHER_INCLUDE = {
+  teacher: { select: { id: true, user: { select: { fullName: true } } } },
+} as const;
+
+const STATUS_FILTERS = ['CONFIRMED', 'CANCELLED', 'COMPLETED', 'MISSED'];
 
 const EMAIL_KINDS = [
   {
@@ -72,11 +90,20 @@ export class TrialAdminService {
       key: e.key(lead.id),
       kind: e.kind,
     }));
-    for (let r = 1; r <= lead.revision; r++) {
-      keys.push({
-        key: `trial:${lead.id}:rescheduled:r${r}`,
-        kind: 'PARENT_RESCHEDULED',
-      });
+    for (let r = 0; r <= lead.revision; r++) {
+      keys.push(
+        {
+          key: `trial:${lead.id}:class-details:r${r}`,
+          kind: 'PARENT_CLASS_DETAILS',
+        },
+        { key: `trial:${lead.id}:reminder:r${r}`, kind: 'PARENT_REMINDER' },
+      );
+      if (r > 0) {
+        keys.push({
+          key: `trial:${lead.id}:rescheduled:r${r}`,
+          kind: 'PARENT_RESCHEDULED',
+        });
+      }
     }
     return keys;
   }
@@ -103,7 +130,7 @@ export class TrialAdminService {
   }
 
   private shape(
-    lead: Appointment,
+    lead: Appointment & WithTeacher,
     cfg: AvailabilityConfig,
     whatsapp: TrialWhatsAppMessage[],
     emails: Map<string, EmailRow>,
@@ -146,6 +173,21 @@ export class TrialAdminService {
       id: lead.id,
       reference: bookingReference(lead.id),
       status: lead.appointmentStatus,
+      teacher: lead.teacher
+        ? { id: lead.teacher.id, name: lead.teacher.user.fullName }
+        : null,
+      teacherAssignedAt: lead.teacherAssignedAt,
+      teacherJoinedAt: lead.teacherJoinedAt,
+      guestJoinedAt: lead.guestJoinedAt,
+      // Whether the parent has (or will be sent) a working classroom link. The
+      // token itself is NEVER returned by any API.
+      classroom: {
+        state: trialAccessState(lead),
+        opensAt: joinWindow(lead.startAt, lead.endAt).opensAt,
+        closesAt: joinWindow(lead.startAt, lead.endAt).closesAt,
+        reminderDueAt: lead.reminderDueAt,
+        reminderEmailSentAt: lead.reminderEmailSentAt,
+      },
       bookedBy: lead.bookedBy,
       startAt: lead.startAt.toISOString(),
       endAt: lead.endAt.toISOString(),
@@ -179,9 +221,15 @@ export class TrialAdminService {
     };
     const now = new Date();
 
-    if (params.status === 'CONFIRMED' || params.status === 'CANCELLED') {
-      where.appointmentStatus = params.status;
+    if (params.status && STATUS_FILTERS.includes(params.status)) {
+      where.appointmentStatus = params.status as
+        | 'CONFIRMED'
+        | 'CANCELLED'
+        | 'COMPLETED'
+        | 'MISSED';
     }
+    if (params.teacher === 'unassigned') where.teacherId = null;
+    else if (params.teacher) where.teacherId = params.teacher;
     const startAt: Prisma.DateTimeNullableFilter = {};
     if (params.from) {
       if (!isValidDateStr(params.from))
@@ -217,7 +265,10 @@ export class TrialAdminService {
         orderBy: { startAt: params.scope === 'past' ? 'desc' : 'asc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { whatsappMessages: { orderBy: { createdAt: 'asc' } } },
+        include: {
+          whatsappMessages: { orderBy: { createdAt: 'asc' } },
+          ...TEACHER_INCLUDE,
+        },
       }),
       this.prisma.trialLead.count({ where }),
     ]);
@@ -238,7 +289,7 @@ export class TrialAdminService {
   /** Header counts for the admin page: what needs a human. */
   async summary() {
     const now = new Date();
-    const [upcoming, failedWhatsApp] = await Promise.all([
+    const [upcoming, failedWhatsApp, needsTeacher] = await Promise.all([
       this.prisma.trialLead.findMany({
         where: { appointmentStatus: 'CONFIRMED', startAt: { gt: now } },
         select: { startAt: true },
@@ -250,10 +301,18 @@ export class TrialAdminService {
           trialLead: { appointmentStatus: 'CONFIRMED', startAt: { gt: now } },
         },
       }),
+      this.prisma.trialLead.count({
+        where: {
+          appointmentStatus: 'CONFIRMED',
+          teacherId: null,
+          endAt: { gt: now },
+        },
+      }),
     ]);
     const cfg = await this.booking.loadConfig();
     return {
       upcoming: upcoming.length,
+      needsTeacher,
       outsideAvailability: upcoming.filter(
         (u) => !isCoveredByAvailability(cfg, u.startAt as Date),
       ).length,
@@ -264,7 +323,10 @@ export class TrialAdminService {
   async detail(id: string) {
     const lead = await this.prisma.trialLead.findUnique({
       where: { id },
-      include: { whatsappMessages: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        whatsappMessages: { orderBy: { createdAt: 'asc' } },
+        ...TEACHER_INCLUDE,
+      },
     });
     if (!lead || !lead.appointmentStatus || !lead.startAt) {
       throw new NotFoundException('Trial appointment not found.');
@@ -284,6 +346,70 @@ export class TrialAdminService {
         afterData: h.afterData,
       })),
     };
+  }
+
+  /**
+   * Teachers the admin may pick for a trial, each with whether they are free
+   * for its whole session — judged by the same conflict function the server
+   * enforces on assignment (their lessons, batch classes, booked shifts and
+   * other trials). `startAt` previews a different time (reschedule picker).
+   * Only active, non-suspended teacher accounts are listed. Names only: no
+   * contact details leave this endpoint.
+   */
+  async assignableTeachers(trialId?: string, startAt?: string) {
+    let start: Date | null = null;
+    let end: Date | null = null;
+    if (startAt) {
+      const d = new Date(startAt);
+      if (Number.isNaN(d.getTime())) {
+        throw new BadRequestException('startAt must be a valid date-time.');
+      }
+      start = d;
+      end = new Date(d.getTime() + TRIAL_SESSION_MS);
+    } else if (trialId) {
+      const lead = await this.prisma.trialLead.findUnique({
+        where: { id: trialId },
+        select: { startAt: true, endAt: true },
+      });
+      if (!lead?.startAt || !lead.endAt) {
+        throw new NotFoundException('Trial appointment not found.');
+      }
+      start = lead.startAt;
+      end = lead.endAt;
+    }
+
+    const teachers = await this.prisma.teacherProfile.findMany({
+      where: {
+        isSuspended: false,
+        user: { role: 'TEACHER', accountStatus: 'ACTIVE' },
+      },
+      select: {
+        id: true,
+        subjects: true,
+        user: { select: { fullName: true, avatarUrl: true } },
+      },
+      orderBy: { user: { fullName: 'asc' } },
+      take: 200,
+    });
+
+    return Promise.all(
+      teachers.map(async (t) => {
+        const conflict =
+          start && end
+            ? await findTeacherConflict(this.prisma, t.id, start, end, {
+                excludeTrialId: trialId,
+              })
+            : null;
+        return {
+          id: t.id,
+          name: t.user.fullName,
+          avatarUrl: t.user.avatarUrl,
+          subjects: t.subjects,
+          available: !conflict,
+          busyReason: conflict ? 'Already has a class at this time' : null,
+        };
+      }),
+    );
   }
 
   async updateNotes(

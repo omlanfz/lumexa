@@ -223,6 +223,9 @@ export default function ClassroomRoom({
   // "batch-session-<id>" ("batch-<teacher>-<start>" for a class that was already
   // running when batches became real).
   const isCurriculumLesson = roomName.startsWith('lesson-') || roomName.startsWith('batch-');
+  // "trial-<id>": a free 30-minute trial class. Not a lesson (no material, no
+  // outcome flow) and never recorded.
+  const isTrialClass = roomName.startsWith('trial-');
   const isLessonFlow = isCurriculumLesson || !!demo;
   // Stage's own default content (priority #3, see Stage.tsx) always uses
   // `lessonData` untouched — only the View Lesson panel falls back to the
@@ -239,7 +242,7 @@ export default function ClassroomRoom({
       ? lessonData.session.scheduledLessonId
       : null;
   const presentationMode = !!screenShare;
-  const expectedDurationMinutes = classType === 'BATCH' ? 60 : 45;
+  const expectedDurationMinutes = isTrialClass ? 30 : classType === 'BATCH' ? 60 : 45;
 
   // The database decides whether the room is locked; the live room's metadata
   // mirrors it so every screen updates at once. What we show is whichever
@@ -816,6 +819,7 @@ export default function ClassroomRoom({
             onMuteAll={() => void muteAllParticipants(roomName)}
             recordingState={recordingState}
             onToggleRecording={() => void handleToggleRecording()}
+            recordingAvailable={!isTrialClass}
             backgroundEffect={effects.backgroundEffect}
             onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
             lighting={effects.lighting}

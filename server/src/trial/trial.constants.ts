@@ -56,3 +56,26 @@ export const LUMEXA_CONTACT = {
   whatsappDisplay: '+880 1522 122194',
   whatsappUrl: 'https://wa.me/8801522122194',
 } as const;
+
+// ─── Classroom joining window ────────────────────────────────────────────────
+
+/** The trial classroom opens this long before the scheduled start (the same
+ *  10 minutes a regular class opens). */
+export const TRIAL_JOIN_OPENS_BEFORE_MINUTES = 10;
+/** …and stays open this long after the scheduled END, so a class that starts a
+ *  little late (or a parent who drops and rejoins) is not locked out. */
+export const TRIAL_JOIN_CLOSES_AFTER_END_MINUTES = 30;
+/** The parent is reminded this long before the start. */
+export const TRIAL_REMINDER_LEAD_MINUTES = 60;
+
+/** FRONTEND_URL may be a comma-separated list (see main.ts CORS setup); the
+ *  first entry is the canonical public site. */
+export function frontendBaseUrl(): string {
+  const first = (process.env.FRONTEND_URL || '').split(',')[0].trim();
+  return (first || 'http://localhost:3000').replace(/\/+$/, '');
+}
+
+/** The parent's secure guest link. The token is the only secret in it. */
+export function trialJoinUrl(guestToken: string): string {
+  return `${frontendBaseUrl()}/trial/join/${encodeURIComponent(guestToken)}`;
+}

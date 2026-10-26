@@ -7,13 +7,17 @@ import {
   isCurriculumRoom,
   isLessonRoom,
   isPersonIdentity,
+  isTrialRoom,
   parseBatchRoom,
   parseBatchSessionRoom,
+  parseTrialRoom,
   personKey,
   roomForBatch,
   roomForBatchSession,
   roomForLessonRecord,
+  roomForTrial,
   sanitizeDeviceId,
+  trialGuestKey,
 } from './room-ref.util';
 
 const TEACHER_ID = '3f2b8a7e-5c1d-4e9a-8f60-1a2b3c4d5e6f';
@@ -215,5 +219,49 @@ describe('participant identities', () => {
     expect(isPersonIdentity('agent-1')).toBe(false);
     expect(isPersonIdentity('user-1~abcd1234', 2)).toBe(false); // non-standard kind
     expect(isPersonIdentity('user-1~abcd1234', 0)).toBe(true);
+  });
+});
+
+describe('a free trial class’s room', () => {
+  const LEAD_ID = '5d1c7e92-4a3b-4f60-9e1d-2b8c6a0f3d71';
+
+  it('is "trial-<id>" and parses back to the trial', () => {
+    expect(roomForTrial(LEAD_ID)).toBe(`trial-${LEAD_ID}`);
+    expect(parseTrialRoom(`trial-${LEAD_ID}`)).toBe(LEAD_ID);
+    expect(getRoomRef(roomForTrial(LEAD_ID))).toEqual({
+      kind: 'trial',
+      trialLeadId: LEAD_ID,
+    });
+    expect(isTrialRoom(roomForTrial(LEAD_ID))).toBe(true);
+  });
+
+  it('is not a lesson, batch, curriculum or marketplace room (no payout / gem / recording flow)', () => {
+    const room = roomForTrial(LEAD_ID);
+    expect(isLessonRoom(room)).toBe(false);
+    expect(isBatchRoom(room)).toBe(false);
+    expect(isCurriculumRoom(room)).toBe(false);
+    expect(getRoomRef(room).kind).not.toBe('booking');
+  });
+
+  it('other room names are never mistaken for a trial', () => {
+    for (const room of [
+      'trial-',
+      'lesson-trial-1',
+      'batch-session-trial-1',
+      LEAD_ID,
+      'lumexa-demo-classroom',
+    ]) {
+      expect(isTrialRoom(room)).toBe(false);
+    }
+  });
+
+  it('a guest has a LiveKit identity of their own, one person across devices, never a real user id', () => {
+    const key = trialGuestKey(LEAD_ID);
+    expect(key).toBe(`trial-guest-${LEAD_ID}`);
+    const phone = buildIdentity(key, 'aaaa1111');
+    const laptop = buildIdentity(key, 'bbbb2222');
+    expect(personKey(phone)).toBe(key);
+    expect(personKey(phone)).toBe(personKey(laptop));
+    expect(isPersonIdentity(phone)).toBe(true);
   });
 });

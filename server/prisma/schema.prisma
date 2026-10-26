@@ -168,6 +168,7 @@ model TeacherProfile {
   vivaRecords           VivaRecord[]
   submissions           Submission[]
   testReports           TestReport[]
+  trialClasses          TrialLead[]           @relation("TrialClassTeacher")
 
   @@index([ratingAvg(sort: Desc)])
   @@index([isSuspended])
@@ -1240,17 +1241,49 @@ model TrialLead {
   cancelReason      String?
   adminNotes        String?                 @db.Text
 
+  // ─── Teacher assignment + guest classroom access ──────────────────────────
+  // A trial has no student account and no ScheduledLesson: it is a standalone
+  // 30-minute session between this lead's child and the assigned teacher, held
+  // in the LiveKit room "trial-<id>" (see classroom/room-ref.util.ts). Nothing
+  // here touches lesson balance, curriculum progress, payouts or enrolment.
+  //
+  // `guestToken` is the secret in the parent's join link (/trial/join/<token>).
+  // It is generated when the booking is created, only sent once a teacher is
+  // assigned, never returned by any admin/teacher/public API, and only ever
+  // grants entry to THIS trial's room, inside the joining window, while the
+  // appointment is CONFIRMED (see trial-access.util.ts).
+  guestToken        String?   @unique
+  teacherId         String?
+  teacher           TeacherProfile? @relation("TrialClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  teacherAssignedAt DateTime?
+  teacherJoinedAt   DateTime?
+  guestJoinedAt     DateTime?
+  // When the 1-hour reminder (email) becomes due, and when it was sent. Null
+  // due-date = no reminder (no teacher yet, or the link went out less than an
+  // hour before the start). Reset on every reschedule; the WhatsApp reminder
+  // has its own durable row in TrialWhatsAppMessage.
+  reminderDueAt       DateTime?
+  reminderEmailSentAt DateTime?
+
   whatsappMessages TrialWhatsAppMessage[]
 
   @@index([status])
+  @@index([teacherId, startAt])
+  @@index([reminderDueAt])
   @@index([appointmentStatus, startAt])
   @@index([startAt])
   @@index([parentEmail])
 }
 
+// CONFIRMED = the slot is held (and, with a teacher, the class is on their
+// calendar). COMPLETED / MISSED are set after the start time (by the admin, or
+// by the teacher ending the class) and release nothing: only CONFIRMED rows
+// hold a slot (see the TrialLead_no_overlapping_slots constraint).
 enum TrialAppointmentStatus {
   CONFIRMED
   CANCELLED
+  COMPLETED
+  MISSED
 }
 
 // Weekly recurring availability, evaluated in `timezone` (Asia/Dhaka). Several
@@ -1311,6 +1344,7 @@ model TrialBlockedPeriod {
 // Trial *emails* are not stored here: they go through EmailService/EmailLog.
 enum TrialWhatsAppKind {
   PARENT_CONFIRMATION
+  PARENT_CLASS_DETAILS
   PARENT_REMINDER
   ADMIN_ALERT
 }

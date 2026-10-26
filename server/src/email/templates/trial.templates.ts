@@ -1,8 +1,12 @@
 // FILE PATH: server/src/email/templates/trial.templates.ts
 //
-// The four trial-class emails. Same shared emailLayout as every other
-// Lumexa email. Wording rule: a *booking* email says "confirmed"; nothing
-// here ever calls a request a booking or a booking a request.
+// The trial-class emails. Same shared emailLayout as every other Lumexa email.
+//
+// Wording rule: the email sent at booking says the request was RECEIVED and the
+// time is RESERVED — a teacher has not been confirmed yet, so it never says the
+// class is "confirmed" and never contains a classroom link. The link arrives in
+// the "class details" email once a teacher is assigned, and again in the
+// one-hour reminder (the same secure link both times).
 //
 // Every value that came from the public form (names, message, program) is
 // HTML-escaped. Times are always shown in Bangladesh Time with the timezone
@@ -55,7 +59,7 @@ export interface TrialContact {
   whatsappUrl: string;
 }
 
-/** Parent: the booking exists and is confirmed. */
+/** Parent: the request was received and the time is reserved (no link yet). */
 export function trialBookingConfirmedParentEmail(params: {
   parentName: string;
   childName: string;
@@ -67,18 +71,85 @@ export function trialBookingConfirmedParentEmail(params: {
   const { parentName, childName, program, appointment, programsUrl, contact } =
     params;
   return {
-    subject: `Confirmed: ${childName}'s free trial class — ${appointment.date}`,
+    subject: `Trial class request received: ${childName} — ${appointment.date}`,
     html: emailLayout({
-      title: 'Trial class confirmed',
-      previewText: `Your 30-minute trial for ${childName} is booked for ${appointment.date}.`,
+      title: 'Trial class request received',
+      previewText: `We received your request and reserved ${escapeHtml(appointment.date)} for ${escapeHtml(childName)}'s 30-minute trial.`,
       bodyHtml: `
-        <h2 style="margin: 0 0 12px; color: #0f172a;">Your trial class is confirmed ✅</h2>
+        <h2 style="margin: 0 0 12px; color: #0f172a;">We received your trial class request ✅</h2>
         <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
-        <p style="margin: 0 0 8px;">Great news — <strong>${escapeHtml(childName)}</strong>'s free 30-minute trial class is booked. Nothing more is needed from you to hold this time.</p>
+        <p style="margin: 0 0 8px;">Thank you! We've received your request, and the time you chose is <strong>reserved</strong> for <strong>${escapeHtml(childName)}</strong>'s free 30-minute trial class. Nothing more is needed from you to hold it.</p>
         ${appointmentBox(appointment, program)}
-        <p style="margin: 0 0 8px;"><strong>What to expect:</strong> ${escapeHtml(childName)} will try a real, short learning activity with a Lumexa teacher, you'll see how we teach, and afterwards we'll suggest a suitable next step. There's no obligation to enrol.</p>
-        <p style="margin: 0 0 8px;">Please help ${escapeHtml(childName)} join a few minutes early. Our team will be in touch with the joining details before the session.</p>
+        <p style="margin: 0 0 8px;"><strong>What happens next:</strong> we're assigning a Lumexa teacher. As soon as that's done we'll email and WhatsApp you the trial details and a private link to join the online classroom — no account or sign-up needed. We'll also remind you an hour before the class.</p>
+        <p style="margin: 0 0 8px;"><strong>What to expect:</strong> ${escapeHtml(childName)} will try a real, short learning activity with a teacher, you'll see how we teach, and afterwards we'll suggest a suitable next step. There's no obligation to enrol.</p>
         ${emailButton('Explore our programs', programsUrl)}
+        ${contactLine(contact.email, contact.whatsappDisplay, contact.whatsappUrl)}
+      `,
+    }),
+  };
+}
+
+function joinBox(joinUrl: string, childName: string) {
+  return `
+    <div style="${BOX}">
+      <p style="margin: 0 0 6px;"><strong>🔗 Your private classroom link</strong></p>
+      <p style="margin: 0 0 6px; word-break: break-all;"><a href="${escapeHtml(joinUrl)}" style="color: #0d9488;">${escapeHtml(joinUrl)}</a></p>
+      <p style="margin: 0; ${MUTED} font-size: 13px;">It opens 10 minutes before the class starts. No account is needed. Please don't share this link — it's only for ${escapeHtml(childName)}'s class.</p>
+    </div>`;
+}
+
+/** Parent: a teacher is assigned — the trial details and the secure link. */
+export function trialClassDetailsParentEmail(params: {
+  parentName: string;
+  childName: string;
+  program: string;
+  appointment: TrialEmailAppointment;
+  joinUrl: string;
+  contact: TrialContact;
+}) {
+  const { parentName, childName, program, appointment, joinUrl, contact } =
+    params;
+  return {
+    subject: `Your trial class link: ${childName} — ${appointment.date}, ${appointment.timeRange}`,
+    html: emailLayout({
+      title: 'Your trial class is ready',
+      previewText: `${escapeHtml(childName)}'s trial class is confirmed with a teacher. Here is the link to join.`,
+      bodyHtml: `
+        <h2 style="margin: 0 0 12px; color: #0f172a;">Your trial class is ready 🎉</h2>
+        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        <p style="margin: 0 0 8px;">A Lumexa teacher has been assigned to <strong>${escapeHtml(childName)}</strong>'s free trial class. Here are the details and the link to join.</p>
+        ${appointmentBox(appointment, program)}
+        ${joinBox(joinUrl, childName)}
+        ${emailButton('Join the class', joinUrl)}
+        <p style="margin: 0 0 8px;">Please help ${escapeHtml(childName)} join a few minutes early, with a working camera and microphone if possible. We'll send a reminder an hour before the class.</p>
+        ${contactLine(contact.email, contact.whatsappDisplay, contact.whatsappUrl)}
+      `,
+    }),
+  };
+}
+
+/** Parent: one hour to go — same secure link. */
+export function trialReminderParentEmail(params: {
+  parentName: string;
+  childName: string;
+  appointment: TrialEmailAppointment;
+  joinUrl: string;
+  contact: TrialContact;
+}) {
+  const { parentName, childName, appointment, joinUrl, contact } = params;
+  return {
+    subject: `Starting in 1 hour: ${childName}'s trial class (${appointment.timeRange})`,
+    html: emailLayout({
+      title: 'Trial class reminder',
+      previewText: `${escapeHtml(childName)}'s trial class starts in about an hour. Your join link is inside.`,
+      bodyHtml: `
+        <h2 style="margin: 0 0 12px; color: #0f172a;">Reminder: the trial class starts in 1 hour ⏰</h2>
+        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        <p style="margin: 0 0 8px;"><strong>${escapeHtml(childName)}</strong>'s free trial class is about to start.</p>
+        ${appointmentBox(appointment, null)}
+        ${joinBox(joinUrl, childName)}
+        ${emailButton('Join the class', joinUrl)}
+        <p style="margin: 0 0 8px;">The classroom opens 10 minutes before the start. Please join a few minutes early so we can begin on time.</p>
         ${contactLine(contact.email, contact.whatsappDisplay, contact.whatsappUrl)}
       `,
     }),
@@ -105,7 +176,7 @@ export function trialBookingAdminAlertEmail(params: {
       title: 'New trial booking',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">New trial class booked</h2>
-        <p style="margin: 0 0 8px;">A parent booked a slot — it is already <strong>confirmed</strong>, no action needed to approve it.</p>
+        <p style="margin: 0 0 8px;">A parent booked a slot — the time is <strong>reserved</strong>. <strong>Assign a teacher</strong> in Trial Classes: that is what sends the parent the classroom link (and puts the class on the teacher's schedule).</p>
         ${appointmentBox(p.appointment, null)}
         <div style="${BOX}">
           <p style="margin: 0 0 6px;"><strong>Parent:</strong> ${escapeHtml(p.parentName)}</p>
@@ -116,7 +187,7 @@ export function trialBookingAdminAlertEmail(params: {
           <p style="margin: 0;"><strong>Message:</strong> ${p.message ? `<span style="white-space: pre-wrap;">${escapeHtml(p.message)}</span>` : '<span style="color:#94a3b8;">none</span>'}</p>
         </div>
         <p style="margin: 0 0 8px; color: #64748b; font-size: 13px;">Reference ${escapeHtml(p.bookingReference)}</p>
-        ${emailButton('Open Trial Classes', p.adminUrl)}
+        ${emailButton('Assign a teacher', p.adminUrl)}
       `,
     }),
   };
@@ -131,22 +202,36 @@ export function trialRescheduledParentEmail(params: {
   appointment: TrialEmailAppointment;
   programsUrl: string;
   contact: TrialContact;
+  /** Present once a teacher is assigned: the SAME private link as before. */
+  joinUrl?: string | null;
 }) {
-  const { parentName, childName, program, previous, appointment, contact } =
-    params;
+  const {
+    parentName,
+    childName,
+    program,
+    previous,
+    appointment,
+    contact,
+    joinUrl,
+  } = params;
   return {
     subject: `Updated time for ${childName}'s trial class — ${appointment.date}`,
     html: emailLayout({
       title: 'Trial class rescheduled',
-      previewText: `${childName}'s trial class has a new time: ${appointment.date}.`,
+      previewText: `${escapeHtml(childName)}'s trial class has a new time: ${escapeHtml(appointment.date)}.`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your trial class has a new time</h2>
         <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
-        <p style="margin: 0 0 8px;">We've moved <strong>${escapeHtml(childName)}</strong>'s free trial class. Your booking is still confirmed — here is the updated time:</p>
+        <p style="margin: 0 0 8px;">We've moved <strong>${escapeHtml(childName)}</strong>'s free trial class. Your time is still reserved — here is the updated time:</p>
         <div style="${BOX}">
           <p style="margin: 0; color: #94a3b8; text-decoration: line-through;"><strong>Previously:</strong> ${escapeHtml(previous.date)}, ${escapeHtml(previous.timeRange)}</p>
         </div>
         ${appointmentBox(appointment, program)}
+        ${
+          joinUrl
+            ? `<p style="margin: 0 0 8px;">Your private classroom link has not changed — it will open 10 minutes before the new start time:</p>${joinBox(joinUrl, childName)}${emailButton('Join the class', joinUrl)}`
+            : `<p style="margin: 0 0 8px;">We'll send your private classroom link once a teacher is assigned.</p>`
+        }
         <p style="margin: 0 0 8px;">Please help ${escapeHtml(childName)} join a few minutes early. If the new time doesn't suit you, just let us know and we'll find another.</p>
         ${contactLine(contact.email, contact.whatsappDisplay, contact.whatsappUrl)}
       `,

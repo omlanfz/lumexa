@@ -20,6 +20,15 @@
 //   - blocked: the server answered "not now" — the teacher has locked the
 //     classroom, it is full (10 people) or this person is already on 3
 //     devices. Shown with a Try again button; nothing connects.
+//   - isTrial: the assigned teacher entering a free trial class (POST
+//     /classroom/join { trialLeadId }) — a trial is not a lesson, so there is no
+//     lesson material, recording or outcome flow.
+//   - guestToken: the parent/child of a trial following their private link
+//     (/trial/join/<token>). No account and no login: the secret link token is
+//     exchanged for a short-lived, room-bound classroom token by
+//     POST /trial/guest/join, with a plain (credential-less) request. On leaving
+//     — or any error — they go back to the guest page via `onExit`, never to a
+//     dashboard they do not have.
 //   - adminObserve: an admin joining a live class from /admin/classes as a
 //     silent, non-publishing observer (see ClassroomService.
 //     adminJoinLiveClass) — skips the pre-join device screen entirely,
@@ -32,6 +41,7 @@ import { useRouter } from 'next/navigation';
 import { Lock } from 'lucide-react';
 import { LiveKitRoom } from '@livekit/components-react';
 import '@livekit/components-styles';
+import axios from 'axios';
 import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
 import PreJoinScreen, { JoinChoices } from './PreJoinScreen';
@@ -51,6 +61,13 @@ interface ClassroomExperienceProps {
    * server finds the person's own place in it. Used for a teacher entering a
    * batch class from their schedule or an email. */
   isBatch?: boolean;
+  /** `id` is a free TRIAL class (the assigned teacher's way in). */
+  isTrial?: boolean;
+  /** The secret token of a trial's guest link: joins as the trial's guest, with
+   * no login. `id` is ignored. */
+  guestToken?: string;
+  /** Guest mode: leaving the class (or an error) returns here. */
+  onExit?: () => void;
   /** Which kind of live class an observing admin is joining
    * (BOOKING | LESSON | SESSION). */
   adminKind?: string;
@@ -74,6 +91,9 @@ interface JoinResponse {
   /** The batch this class belongs to (null for a 1-to-1 class). */
   batchName?: string | null;
   partialCompletionAvailable?: boolean;
+  /** Set for a free trial class, with the child's name for the header. */
+  isTrial?: boolean;
+  trialChildName?: string;
   /** The teacher had the classroom locked at the time of this join. */
   roomLocked?: boolean;
 }
@@ -108,6 +128,9 @@ export default function ClassroomExperience({
   id,
   isLesson,
   isBatch,
+  isTrial,
+  guestToken,
+  onExit,
   adminKind,
   demo,
   adminObserve,
@@ -139,6 +162,21 @@ export default function ClassroomExperience({
 
   const attemptJoin = async () => {
     try {
+      if (guestToken) {
+        // Public endpoint: deliberately NOT the shared `api` instance, which
+        // would attach a stored login (or bounce to /login on a 401).
+        const res = await axios.post<JoinResponse | BlockedResponse>(
+          `${process.env.NEXT_PUBLIC_API_URL}/trial/guest/join`,
+          { token: guestToken, deviceId },
+        );
+        if ('blocked' in res.data) {
+          setBlocked(res.data);
+        } else {
+          setBlocked(null);
+          setJoin(res.data);
+        }
+        return;
+      }
       const path = adminObserve
         ? `/admin/classes/${adminKind ?? (isLesson ? 'LESSON' : 'BOOKING')}/${id}/join`
         : demo
@@ -148,6 +186,8 @@ export default function ClassroomExperience({
         ? {}
         : demo
           ? { deviceId }
+          : isTrial
+            ? { trialLeadId: id, deviceId }
           : isBatch
             ? { batchSessionId: id, deviceId }
             : isLesson
@@ -175,8 +215,9 @@ export default function ClassroomExperience({
   };
 
   useEffect(() => {
+    // A guest has no account: the link token is their only credential.
     const authToken = getStoredToken();
-    if (!authToken) {
+    if (!guestToken && !authToken) {
       router.push('/login');
       return;
     }
@@ -199,7 +240,7 @@ export default function ClassroomExperience({
         .catch(() => setDemoExampleLesson(null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, isLesson, isBatch, demo, adminObserve, router]);
+  }, [id, isLesson, isBatch, isTrial, guestToken, demo, adminObserve, router]);
 
   // While waiting to be re-admitted, poll the teacher's decision every 3s.
   useEffect(() => {
@@ -245,7 +286,22 @@ export default function ClassroomExperience({
     setRetrying(false);
   };
 
+  /** Where "Back" goes: a guest returns to their link page, everyone else to
+   * their dashboard. */
+  const leave = () => {
+    if (guestToken) {
+      onExit?.();
+      return;
+    }
+    router.push(adminObserve ? '/admin/classes' : dashboardPathFor(getStoredRole()));
+  };
+  const backLabel = guestToken ? 'Back' : adminObserve ? 'Back to classes' : 'Back to dashboard';
+
   const handleDisconnect = () => {
+    if (guestToken) {
+      onExit?.();
+      return;
+    }
     if (adminObserve) {
       router.push('/admin/classes');
       return;
@@ -262,10 +318,10 @@ export default function ClassroomExperience({
             The teacher didn&apos;t let you back into this class. Reach out to them directly if this seems wrong.
           </p>
           <button
-            onClick={() => router.push(dashboardPathFor(getStoredRole()))}
+            onClick={leave}
             className="mt-5 px-4 py-2 rounded-lg bg-[var(--cr-surface-2)] text-[var(--cr-text)] text-sm hover:bg-[var(--cr-surface-3)] transition-colors"
           >
-            Back to dashboard
+            {backLabel}
           </button>
         </div>
       </div>
@@ -305,10 +361,10 @@ export default function ClassroomExperience({
               Try again
             </button>
             <button
-              onClick={() => router.push(dashboardPathFor(getStoredRole()))}
+              onClick={leave}
               className="px-4 py-2 rounded-lg bg-[var(--cr-surface-2)] text-[var(--cr-text)] text-sm hover:bg-[var(--cr-surface-3)] transition-colors"
             >
-              Back to dashboard
+              {backLabel}
             </button>
           </div>
         </div>
@@ -323,10 +379,10 @@ export default function ClassroomExperience({
           <p className="text-red-400 font-medium mb-2">Couldn&apos;t join class</p>
           <p className="text-[var(--cr-text-muted)] text-sm">{error}</p>
           <button
-            onClick={() => router.push(adminObserve ? '/admin/classes' : dashboardPathFor(getStoredRole()))}
+            onClick={leave}
             className="mt-5 px-4 py-2 rounded-lg bg-[var(--cr-surface-2)] text-[var(--cr-text)] text-sm hover:bg-[var(--cr-surface-3)] transition-colors"
           >
-            {adminObserve ? 'Back to classes' : 'Back to dashboard'}
+            {backLabel}
           </button>
         </div>
       </div>
@@ -343,19 +399,27 @@ export default function ClassroomExperience({
   }
 
   const role = getStoredRole();
-  const roleLabel = role === 'TEACHER' ? 'Teacher' : 'Student';
+  // A guest is never the teacher, whoever else happens to be logged in here.
+  const roleLabel = !guestToken && role === 'TEACHER' ? 'Teacher' : 'Student';
+  const trialClass = !!guestToken || !!isTrial || !!join.isTrial;
   const sessionTitle = demo
     ? 'Lumexa Demo Classroom (QA)'
-    : lessonData?.lesson?.title
-      ? lessonData.lesson.title
-      : lessonData
-        ? `${lessonData.session.courseTitle} · Session ${lessonData.session.lessonNumber}`
-        : 'Lumexa 1:1 Session';
-  const sessionSubtitle = lessonData
-    ? `${lessonData.session.courseTitle}${lessonData.lesson?.title ? ` · Session ${lessonData.session.lessonNumber}` : ''}${join.batchName ? ` · ${join.batchName}` : ''}`
-    : join.batchName
-      ? `Batch · ${join.batchName}`
-      : undefined;
+    : trialClass
+      ? 'Lumexa Free Trial Class'
+      : lessonData?.lesson?.title
+        ? lessonData.lesson.title
+        : lessonData
+          ? `${lessonData.session.courseTitle} · Session ${lessonData.session.lessonNumber}`
+          : 'Lumexa 1:1 Session';
+  const sessionSubtitle = trialClass
+    ? join.trialChildName
+      ? `Trial class · ${join.trialChildName}`
+      : 'Trial class'
+    : lessonData
+      ? `${lessonData.session.courseTitle}${lessonData.lesson?.title ? ` · Session ${lessonData.session.lessonNumber}` : ''}${join.batchName ? ` · ${join.batchName}` : ''}`
+      : join.batchName
+        ? `Batch · ${join.batchName}`
+        : undefined;
 
   if (!adminObserve && !choices) {
     return (

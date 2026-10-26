@@ -17,11 +17,14 @@ function ClassroomPageContent({ params }: PageProps) {
   //   ?type=lesson  a scheduled lesson (a 1:1 class, or one student's row of a
   //                 batch class)
   //   ?type=batch   a batch class by its own id (the teacher's way in)
+  //   ?type=trial   a free trial class by its id (the assigned teacher's way
+  //                 in; the parent uses the public /trial/join/<token> page)
   const type = searchParams.get('type');
   const isBatch = type === 'batch';
+  const isTrial = type === 'trial';
   const isLesson = type === 'lesson' || isBatch;
 
-  return <ClassroomExperience id={id} isLesson={isLesson} isBatch={isBatch} />;
+  return <ClassroomExperience id={id} isLesson={isLesson} isBatch={isBatch} isTrial={isTrial} />;
 }
 
 export default function ClassroomPage({ params }: PageProps) {

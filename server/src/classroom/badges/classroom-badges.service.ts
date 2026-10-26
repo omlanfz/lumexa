@@ -313,7 +313,7 @@ export class ClassroomBadgesService {
         'Only the teacher of this class can award badges in it.',
       );
     }
-    if (resolved.kind === 'booking') {
+    if (resolved.kind === 'booking' || resolved.kind === 'trial') {
       throw new BadRequestException(
         'Badges are awarded in Lumexa curriculum classes.',
       );

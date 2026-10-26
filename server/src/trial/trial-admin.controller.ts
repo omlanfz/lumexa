@@ -23,10 +23,12 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import {
   AdminCreateTrialDto,
+  AssignTeacherDto,
   BlockDto,
   CancelTrialDto,
   RescheduleTrialDto,
   RuleDto,
+  TrialOutcomeDto,
   UpdateTrialNotesDto,
   WindowDto,
 } from './dto/trial.dto';
@@ -207,6 +209,7 @@ export class TrialAdminController {
     @Query('to') to?: string,
     @Query('status') status?: string,
     @Query('scope') scope?: string,
+    @Query('teacher') teacher?: string,
     @Query('q') q?: string,
     @Query('page') page = '1',
     @Query('limit') limit = '20',
@@ -216,10 +219,21 @@ export class TrialAdminController {
       to,
       status,
       scope,
+      teacher,
       q,
       page: Number(page),
       limit: Number(limit),
     });
+  }
+
+  /** Teachers who could take a trial, each marked free/busy for the trial's
+   *  time (or for `startAt`, when choosing a new time). */
+  @Get('teachers')
+  teachers(
+    @Query('trialId') trialId?: string,
+    @Query('startAt') startAt?: string,
+  ) {
+    return this.admin.assignableTeachers(trialId, startAt);
   }
 
   @Get('appointments/:id')
@@ -264,8 +278,36 @@ export class TrialAdminController {
       new Date(dto.startAt),
       actorOf(req),
       dto.reason,
+      { teacherId: dto.teacherId },
     );
     return { appointment: await this.admin.detail(id), availabilityChanges };
+  }
+
+  /** Assign — or change — the teacher. The first assignment puts the class on
+   *  the teacher's schedule and sends the parent the classroom link. */
+  @Post('appointments/:id/teacher')
+  async assignTeacher(
+    @Param('id') id: string,
+    @Body() dto: AssignTeacherDto,
+    @Request() req: AuthedRequest,
+  ) {
+    const { firstAssignment } = await this.booking.assignTeacher(
+      id,
+      dto.teacherId,
+      actorOf(req),
+    );
+    return { appointment: await this.admin.detail(id), firstAssignment };
+  }
+
+  /** Mark a trial whose start time has passed Completed or Missed. */
+  @Post('appointments/:id/outcome')
+  async outcome(
+    @Param('id') id: string,
+    @Body() dto: TrialOutcomeDto,
+    @Request() req: AuthedRequest,
+  ) {
+    await this.booking.markOutcome(id, dto.outcome, actorOf(req), dto.note);
+    return { appointment: await this.admin.detail(id) };
   }
 
   @Post('appointments/:id/cancel')

@@ -1,10 +1,18 @@
 import {
   ADMIN_ALERT_VARIABLES,
+  PARENT_CLASS_DETAILS_VARIABLES,
   PARENT_CONFIRMATION_VARIABLES,
   PARENT_REMINDER_VARIABLES,
   buildTemplateVariables,
-  computeReminderAt,
 } from './trial-whatsapp.templates';
+import { reminderDueAt } from './trial-access.util';
+
+const TOKEN = 'k3Jx9QmLw0pZ7vNc2RtYb5HdFgAe8UiOsXn1MqWjC4E';
+const JOIN_URL = `https://lumexa-one.vercel.app/trial/join/${TOKEN}`;
+
+beforeAll(() => {
+  process.env.FRONTEND_URL = 'https://lumexa-one.vercel.app';
+});
 
 const lead = {
   parentName: 'Sarah Rahman',
@@ -16,6 +24,7 @@ const lead = {
   message: 'He loves Minecraft.\nNo coding yet.',
   startAt: new Date('2026-11-04T10:00:00Z'),
   endAt: new Date('2026-11-04T10:30:00Z'),
+  guestToken: TOKEN as string | null,
 };
 
 describe('WhatsApp template variable mapping', () => {
@@ -48,7 +57,39 @@ describe('WhatsApp template variable mapping', () => {
     expect(v.programs_url).toMatch(/\/programs$/);
   });
 
-  it('parent reminder: only what a reminder needs', () => {
+  it('class details: the trial time plus the secure join link', () => {
+    expect(
+      buildTemplateVariables('PARENT_CLASS_DETAILS', lead).map((v) => v.name),
+    ).toEqual([...PARENT_CLASS_DETAILS_VARIABLES]);
+    expect(byName('PARENT_CLASS_DETAILS')).toEqual({
+      parent_name: 'Sarah Rahman',
+      child_name: 'Alex',
+      appointment_date: 'Wednesday, 4 November 2026',
+      appointment_time: '4:00 PM – 4:30 PM Bangladesh Time (GMT+6)',
+      duration: '30 minutes',
+      join_link: JOIN_URL,
+    });
+  });
+
+  it('the confirmation (sent at booking) never contains the classroom link', () => {
+    const values = Object.values(byName('PARENT_CONFIRMATION')).join(' ');
+    expect(values).not.toContain('/trial/join/');
+    expect(values).not.toContain(TOKEN);
+  });
+
+  it('the admin alert never contains the parent link either', () => {
+    expect(Object.values(byName('ADMIN_ALERT')).join(' ')).not.toContain(TOKEN);
+  });
+
+  it('a link message cannot be built without a token', () => {
+    for (const kind of ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER']) {
+      expect(() =>
+        buildTemplateVariables(kind as any, { ...lead, guestToken: null }),
+      ).toThrow(/token/i);
+    }
+  });
+
+  it('parent reminder: only what a reminder needs, plus the same link', () => {
     expect(
       buildTemplateVariables('PARENT_REMINDER', lead).map((v) => v.name),
     ).toEqual([...PARENT_REMINDER_VARIABLES]);
@@ -58,6 +99,7 @@ describe('WhatsApp template variable mapping', () => {
       appointment_date: 'Wednesday, 4 November 2026',
       appointment_time: '4:00 PM – 4:30 PM Bangladesh Time (GMT+6)',
       duration: '30 minutes',
+      join_link: JOIN_URL,
     });
     expect(v).not.toHaveProperty('parent_email');
   });
@@ -101,33 +143,20 @@ describe('reminder timing', () => {
   const HOUR = 3600_000;
   const start = new Date('2026-11-10T10:00:00Z');
 
-  it('24 hours before when booked more than 24h ahead', () => {
-    const now = new Date(start.getTime() - 72 * HOUR);
-    expect(computeReminderAt(start, now)?.toISOString()).toBe(
-      '2026-11-09T10:00:00.000Z',
-    );
+  it('is exactly one hour before the start, however far ahead it is planned', () => {
+    for (const hoursAhead of [72, 24, 5, 1.01]) {
+      const now = new Date(start.getTime() - hoursAhead * HOUR);
+      expect(reminderDueAt(start, now)?.toISOString()).toBe(
+        '2026-11-10T09:00:00.000Z',
+      );
+    }
   });
 
-  it('1 hour before when booked less than 24h ahead', () => {
-    const now = new Date(start.getTime() - 5 * HOUR);
-    expect(computeReminderAt(start, now)?.toISOString()).toBe(
-      '2026-11-10T09:00:00.000Z',
-    );
-    const justUnder24 = new Date(start.getTime() - 24 * HOUR + 1000);
-    expect(computeReminderAt(start, justUnder24)?.toISOString()).toBe(
-      '2026-11-10T09:00:00.000Z',
-    );
-  });
-
-  it('never schedules a pointless reminder (inside the last hour / after the start)', () => {
+  it('never schedules an outdated reminder (inside the last hour / after the start)', () => {
     expect(
-      computeReminderAt(start, new Date(start.getTime() - 30 * 60_000)),
+      reminderDueAt(start, new Date(start.getTime() - 30 * 60_000)),
     ).toBeNull();
-    expect(
-      computeReminderAt(start, new Date(start.getTime() - HOUR)),
-    ).toBeNull();
-    expect(
-      computeReminderAt(start, new Date(start.getTime() + 60_000)),
-    ).toBeNull();
+    expect(reminderDueAt(start, new Date(start.getTime() - HOUR))).toBeNull();
+    expect(reminderDueAt(start, new Date(start.getTime() + 60_000))).toBeNull();
   });
 });

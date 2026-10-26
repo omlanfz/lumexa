@@ -2,14 +2,15 @@
 //
 // Full detail for one trial appointment: who/when, the parent's message,
 // internal notes, delivery status of every email and WhatsApp message, and
-// the audit trail — plus reschedule / cancel.
+// the audit trail — plus assign / change teacher, reschedule, cancel and
+// recording the outcome (completed / missed).
 
 "use client";
 
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { Modal, StatusBadge, formatDhakaDate, formatDhakaDateTime, formatDhakaTime } from "@/components/admin/AdminUI";
-import { CancelModal, RescheduleModal } from "./AppointmentModals";
+import { AssignTeacherModal, CancelModal, OutcomeModal, RescheduleModal } from "./AppointmentModals";
 import { KIND_LABELS, TrialAppointment, errMessage } from "./types";
 import { inputCls, labelCls, primaryBtn, secondaryBtn, smallBtn, dangerBtn } from "./ui";
 
@@ -32,12 +33,17 @@ export default function AppointmentDetailModal({
   onChanged: () => void;
 }) {
   const [a, setA] = useState<TrialAppointment | null>(null);
-  // Whether the session is still ahead of us, decided when the data loads.
+  // Decided when the data loads (so render stays pure):
+  //   upcoming  – confirmed and not yet over (can be rescheduled / cancelled)
+  //   staffable – confirmed and the joining window has not closed (a teacher can still be assigned)
+  //   started   – the start time has passed (the outcome can be recorded)
   const [upcoming, setUpcoming] = useState(false);
+  const [staffable, setStaffable] = useState(false);
+  const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
-  const [dialog, setDialog] = useState<"reschedule" | "cancel" | null>(null);
+  const [dialog, setDialog] = useState<"reschedule" | "cancel" | "teacher" | "outcome" | null>(null);
   const [retryMsg, setRetryMsg] = useState<string | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
@@ -50,7 +56,10 @@ export default function AppointmentDetailModal({
       .then((res) => {
         if (cancelled) return;
         setA(res.data);
-        setUpcoming(res.data.status === "CONFIRMED" && new Date(res.data.endAt).getTime() > Date.now());
+        const now = Date.now();
+        setUpcoming(res.data.status === "CONFIRMED" && new Date(res.data.endAt).getTime() > now);
+        setStaffable(res.data.status === "CONFIRMED" && new Date(res.data.classroom.closesAt).getTime() > now);
+        setStarted(res.data.status !== "CANCELLED" && new Date(res.data.startAt).getTime() <= now);
         setNotes(res.data.adminNotes ?? "");
       })
       .catch((err) => {
@@ -119,13 +128,28 @@ export default function AppointmentDetailModal({
               )}
               <span className="text-xs text-[var(--a-text-faint)]">Ref {a.reference}</span>
             </div>
-            {upcoming && (
-              <div className="flex gap-2">
-                <button className={secondaryBtn} onClick={() => setDialog("reschedule")}>Reschedule</button>
-                <button className={dangerBtn} onClick={() => setDialog("cancel")}>Cancel trial</button>
-              </div>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {staffable && (
+                <button className={a.teacher ? secondaryBtn : primaryBtn} onClick={() => setDialog("teacher")}>
+                  {a.teacher ? "Change teacher" : "Assign teacher"}
+                </button>
+              )}
+              {upcoming && <button className={secondaryBtn} onClick={() => setDialog("reschedule")}>Reschedule</button>}
+              {started && (
+                <button className={secondaryBtn} onClick={() => setDialog("outcome")}>
+                  {a.status === "CONFIRMED" ? "Mark completed / missed" : "Change outcome"}
+                </button>
+              )}
+              {upcoming && <button className={dangerBtn} onClick={() => setDialog("cancel")}>Cancel trial</button>}
+            </div>
           </div>
+
+          {a.status === "CONFIRMED" && !a.teacher && (
+            <p className="rounded-lg bg-[var(--a-warning-bg)] text-[var(--a-warning-text)] text-sm p-3">
+              No teacher yet. The parent has been told their time is reserved; they get the class link as soon as you assign
+              a teacher.
+            </p>
+          )}
 
           {a.outsideAvailability && (
             <p className="rounded-lg bg-[var(--a-warning-bg)] text-[var(--a-warning-text)] text-sm p-3">
@@ -139,6 +163,31 @@ export default function AppointmentDetailModal({
               <strong>{formatDhakaDate(a.startAt)}</strong>, {formatDhakaTime(a.startAt)} – {formatDhakaTime(a.endAt)}{" "}
               <span className="text-[var(--a-text-muted)]">({a.timezoneLabel} · 30 min)</span>
             </Row>
+            <Row label="Teacher">
+              {a.teacher ? (
+                <>
+                  <strong>{a.teacher.name}</strong>
+                  {a.teacherAssignedAt && (
+                    <span className="text-xs text-[var(--a-text-muted)]"> · assigned {formatDhakaDateTime(a.teacherAssignedAt)}</span>
+                  )}
+                </>
+              ) : (
+                <span className="text-[var(--a-text-faint)]">not assigned yet</span>
+              )}
+            </Row>
+            {a.teacher && a.status !== "CANCELLED" && (
+              <Row label="Classroom">
+                <span className="text-[var(--a-text-muted)]">
+                  Parent&apos;s private link opens {formatDhakaTime(a.classroom.opensAt)} and closes {formatDhakaTime(a.classroom.closesAt)} (Bangladesh time).
+                  {a.teacherJoinedAt && <> Teacher joined {formatDhakaTime(a.teacherJoinedAt)}.</>}
+                  {a.guestJoinedAt ? <> Parent joined {formatDhakaTime(a.guestJoinedAt)}.</> : a.teacherJoinedAt ? <> Parent hasn’t joined yet.</> : null}
+                  {a.status === "CONFIRMED" && a.classroom.reminderDueAt && !a.classroom.reminderEmailSentAt && (
+                    <> 1-hour reminder due {formatDhakaDateTime(a.classroom.reminderDueAt)}.</>
+                  )}
+                  {a.classroom.reminderEmailSentAt && <> Reminder email sent {formatDhakaDateTime(a.classroom.reminderEmailSentAt)}.</>}
+                </span>
+              </Row>
+            )}
             <Row label="Parent">{a.parentName}</Row>
             <Row label="Email"><a className="text-[var(--a-accent)] underline" href={`mailto:${a.parentEmail}`}>{a.parentEmail}</a></Row>
             <Row label="WhatsApp">
@@ -256,6 +305,8 @@ export default function AppointmentDetailModal({
         <RescheduleModal appointment={a} onClose={() => setDialog(null)} onDone={changed} />
       )}
       {dialog === "cancel" && <CancelModal appointment={a} onClose={() => setDialog(null)} onDone={changed} />}
+      {dialog === "teacher" && <AssignTeacherModal appointment={a} onClose={() => setDialog(null)} onDone={changed} />}
+      {dialog === "outcome" && <OutcomeModal appointment={a} onClose={() => setDialog(null)} onDone={changed} />}
     </>
   );
 }

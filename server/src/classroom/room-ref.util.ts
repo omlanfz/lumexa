@@ -10,6 +10,8 @@
 //                                       had sessions. Still understood (a class
 //                                       that was running at deploy time) but
 //                                       never created any more
+//   "trial-<trialLeadId>"               a free TRIAL class (teacher + a guest
+//                                       who joins by a secure link, no account)
 //   a raw bookingId                     marketplace flow
 //   the fixed QA demo room name
 //
@@ -33,6 +35,14 @@ export const BATCH_ROOM_PREFIX = 'batch-';
 /** A batch session's classroom: "batch-session-<batchSessionId>". */
 export const BATCH_SESSION_ROOM_PREFIX = 'batch-session-';
 
+/** A free trial class: "trial-<trialLeadId>". Not a ScheduledLesson — a trial
+ * has no student account, no lesson balance and no curriculum progress. */
+export const TRIAL_ROOM_PREFIX = 'trial-';
+
+/** A trial guest (the parent/child following a secure link) has no account, so
+ * their LiveKit identity is built from the trial instead of a userId. */
+export const TRIAL_GUEST_PREFIX = 'trial-guest-';
+
 /** Most people (teacher included) who may be in one classroom at a time. The
  * same for a 1:1 class and a batch; four students is the ideal batch, not a
  * limit. */
@@ -50,6 +60,7 @@ export type RoomRef =
   | { kind: 'session'; batchSessionId: string }
   | { kind: 'batch'; teacherId: string; startMs: number } // legacy
   | { kind: 'booking'; bookingId: string }
+  | { kind: 'trial'; trialLeadId: string }
   | { kind: 'demo' };
 
 export function isLessonRoom(room: string): boolean {
@@ -128,8 +139,30 @@ export function roomForLessonRecord(lesson: {
     : roomForBatch(lesson.teacherId, lesson.start);
 }
 
+export function roomForTrial(trialLeadId: string): string {
+  return `${TRIAL_ROOM_PREFIX}${trialLeadId}`;
+}
+
+/** `trial-<id>` → the trial lead id, or null if it is not a trial room. */
+export function parseTrialRoom(room: string): string | null {
+  if (!room.startsWith(TRIAL_ROOM_PREFIX)) return null;
+  const id = room.slice(TRIAL_ROOM_PREFIX.length);
+  return id.length > 0 ? id : null;
+}
+
+export function isTrialRoom(room: string): boolean {
+  return parseTrialRoom(room) !== null;
+}
+
+/** The "user id" of a trial's guest in LiveKit identities and room checks. */
+export function trialGuestKey(trialLeadId: string): string {
+  return `${TRIAL_GUEST_PREFIX}${trialLeadId}`;
+}
+
 export function getRoomRef(room: string): RoomRef {
   if (room === DEMO_ROOM_NAME) return { kind: 'demo' };
+  const trialLeadId = parseTrialRoom(room);
+  if (trialLeadId) return { kind: 'trial', trialLeadId };
   if (isLessonRoom(room)) {
     return { kind: 'lesson', scheduledLessonId: lessonIdFromRoom(room) };
   }

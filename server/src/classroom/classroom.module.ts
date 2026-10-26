@@ -4,9 +4,8 @@ import { ClassroomController } from './classroom.controller';
 import { RecordingService } from './recording.service';
 import { ClassFinalizationService } from './class-finalization.service';
 import { AdmissionService } from './admission.service';
-import { LiveKitRoomsService } from './livekit-rooms.service';
-import { RoomAccessService } from './room-access.service';
 import { RoomDirectoryService } from './room-directory.service';
+import { TrialClassroomModule } from './trial-classroom.module';
 import { ClassroomBadgesController } from './badges/classroom-badges.controller';
 import { ClassroomBadgesService } from './badges/classroom-badges.service';
 import { StudentsModule } from '../students/students.module';
@@ -22,6 +21,8 @@ import { BatchesModule } from '../batches/batches.module';
     PayoutsModule,
     AlertsModule,
     BatchesModule,
+    // LiveKitRoomsService, RoomAccessService and TrialClassroomService
+    TrialClassroomModule,
   ],
   controllers: [ClassroomController, ClassroomBadgesController],
   providers: [
@@ -29,8 +30,6 @@ import { BatchesModule } from '../batches/batches.module';
     RecordingService,
     ClassFinalizationService,
     AdmissionService,
-    LiveKitRoomsService,
-    RoomAccessService,
     RoomDirectoryService,
     ClassroomBadgesService,
   ],

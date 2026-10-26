@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { getClassWindow } from '../scheduling/lesson-window.util';
+import { trialAccessState } from '../trial/trial-access.util';
 
 // ─── Badge Tier Definitions ───────────────────────────────────────────────────
 
@@ -258,7 +259,7 @@ export class TeachersService {
     });
     if (!teacher) return null;
 
-    const [nextBooking, nextLesson] = await Promise.all([
+    const [nextBooking, nextLesson, nextTrial] = await Promise.all([
       this.prisma.booking.findFirst({
         where: {
           shift: {
@@ -281,6 +282,15 @@ export class TeachersService {
         },
       }),
       this.scheduling.getTeacherLiveOrNextLesson(teacher.id),
+      // A free trial class assigned to this teacher (no lesson, no student).
+      this.prisma.trialLead.findFirst({
+        where: {
+          teacherId: teacher.id,
+          appointmentStatus: 'CONFIRMED',
+          endAt: { gte: new Date() },
+        },
+        orderBy: { startAt: 'asc' },
+      }),
     ]);
 
     const bookingNext = nextBooking
@@ -345,19 +355,48 @@ export class TeachersService {
             ],
           };
 
-    const chosen =
-      bookingNext && lessonNext
-        ? new Date(bookingNext.start) < new Date(lessonNext.start)
-          ? bookingNext
-          : lessonNext
-        : (bookingNext ?? lessonNext);
+    const trialNext =
+      nextTrial && nextTrial.startAt && nextTrial.endAt
+        ? {
+            type: 'trial' as const,
+            id: nextTrial.id,
+            studentName: nextTrial.childName,
+            studentAvatarUrl: null as string | null,
+            start: nextTrial.startAt,
+            end: nextTrial.endAt,
+            courseTitle: 'Trial Class',
+            lessonNumber: null as number | null,
+            lessonTitle: nextTrial.subject as string | null,
+            classType: 'TRIAL' as const,
+            batch: null,
+            studentCount: 1,
+            viewLessonId: null as string | null,
+            students: [] as {
+              id: string;
+              fullName: string;
+              avatarUrl: string | null;
+            }[],
+          }
+        : null;
+
+    const chosen = [bookingNext, lessonNext, trialNext]
+      .filter((c): c is NonNullable<typeof c> => c !== null)
+      .sort(
+        (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime(),
+      )[0];
 
     if (!chosen) return null;
 
-    return {
-      ...chosen,
-      ...getClassWindow(new Date(chosen.start), new Date(chosen.end)),
-    };
+    const window = getClassWindow(new Date(chosen.start), new Date(chosen.end));
+    if (chosen.type === 'trial' && nextTrial) {
+      // A trial's joining window is its own (see trial-access.util.ts).
+      return {
+        ...chosen,
+        ...window,
+        joinable: trialAccessState(nextTrial) === 'OPEN',
+      };
+    }
+    return { ...chosen, ...window };
   }
 
   // ─── Get My Students ──────────────────────────────────────────────────────

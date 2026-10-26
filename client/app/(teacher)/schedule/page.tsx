@@ -73,27 +73,124 @@ interface BatchClassItem {
   students: BatchClassStudent[];
 }
 
-type ScheduledLessonItem = LessonClassItem | BatchClassItem;
+/** A free trial class: one child (no student account, no course, no lesson
+ * number) and a 30-minute introductory session. Shown in its own colour and
+ * labelled "Trial Class" so it is never mistaken for a program lesson. The
+ * parent's contact details are never sent here. */
+interface TrialClassItem {
+  kind: "TRIAL";
+  id: string;
+  start: string;
+  end: string;
+  classType: "TRIAL";
+  status: "UPCOMING" | "COMPLETED" | "MISSED";
+  childName: string;
+  childAge: number;
+  program: string;
+  parentMessage: string | null;
+  /** Inside the joining window (10 min before the start until 30 min after the end). */
+  joinable: boolean;
+}
+
+type ScheduledLessonItem = LessonClassItem | BatchClassItem | TrialClassItem;
 
 const isBatchClass = (l: ScheduledLessonItem): l is BatchClassItem => l.kind === "BATCH_SESSION";
+const isTrialClass = (l: ScheduledLessonItem): l is TrialClassItem => l.kind === "TRIAL";
 
-/** What names the class on the calendar: the student, or the batch. */
-const classTitle = (l: ScheduledLessonItem) => (isBatchClass(l) ? l.batch.name : l.student.fullName);
-/** "Batch · Evening Odyssey · 4 students" / "1-to-1 with Ada". */
+/** What names the class on the calendar: the student, the batch, or the trial child. */
+const classTitle = (l: ScheduledLessonItem) =>
+  isBatchClass(l) ? l.batch.name : isTrialClass(l) ? l.childName : l.student.fullName;
+/** "Batch · Evening Odyssey · 4 students" / "1-to-1 with Ada" / "Trial Class with Rahul". */
 const classWho = (l: ScheduledLessonItem) =>
   isBatchClass(l)
     ? `Batch · ${l.batch.name} · ${l.students.length} student${l.students.length === 1 ? "" : "s"}`
-    : `${CLASS_TYPE_LABELS[l.classType]} with ${l.student.fullName}`;
+    : isTrialClass(l)
+      ? `Trial Class with ${l.childName}`
+      : `${CLASS_TYPE_LABELS[l.classType]} with ${l.student.fullName}`;
+/** The second line of a class: the lesson, or what a trial is about. */
+const classDetail = (l: ScheduledLessonItem) =>
+  isTrialClass(l)
+    ? `Trial Class · ${l.program}`
+    : `${l.course.title} · Lesson ${l.lessonNumber}${l.lessonTitle ? `: ${l.lessonTitle}` : ""}`;
 
 const CLASS_TYPE_COLORS: Record<string, string> = {
   ONE_TO_ONE: "bg-indigo-500",
   BATCH: "bg-amber-500",
+  // Distinct from every program lesson colour.
+  TRIAL: "bg-rose-500",
 };
 
 const CLASS_TYPE_LABELS: Record<string, string> = {
   ONE_TO_ONE: "1-to-1",
   BATCH: "Batch",
+  TRIAL: "Trial Class",
 };
+
+// ─── Trial Class Modal ──────────────────────────────────────────────────────
+//
+// A trial is not a lesson, so there is no "View Lesson": the teacher sees who
+// is coming and what they are interested in, and gets a clear Join Class action
+// once the classroom is open. The server re-checks who may enter and when.
+
+function TrialInfoModal({ trial, onClose }: { trial: TrialClassItem; onClose: () => void }) {
+  const router = useRouter();
+  const start = new Date(trial.start);
+  const end = new Date(trial.end);
+  const finished = trial.status !== "UPCOMING";
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-xs px-2.5 py-1 rounded-full font-semibold text-white bg-rose-500">Trial Class</span>
+          <button onClick={onClose} className="text-[var(--t-text-faint)] hover:text-[var(--t-text)]" aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <p className="text-xs uppercase tracking-wide text-[var(--t-text-faint)]">Free 30-minute trial</p>
+        <h3 className="text-lg font-bold text-[var(--t-text)] mt-0.5">{trial.childName}</h3>
+        <p className="text-sm text-[var(--t-text-muted)] mt-1">
+          {start.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} ·{" "}
+          {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–
+          {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+        </p>
+        <dl className="mt-3 text-sm space-y-1.5">
+          <div className="flex gap-2">
+            <dt className="text-[var(--t-text-faint)] w-24 flex-shrink-0">Age</dt>
+            <dd className="text-[var(--t-text)]">{trial.childAge}</dd>
+          </div>
+          <div className="flex gap-2">
+            <dt className="text-[var(--t-text-faint)] w-24 flex-shrink-0">Interested in</dt>
+            <dd className="text-[var(--t-text)]">{trial.program}</dd>
+          </div>
+          {trial.parentMessage && (
+            <div className="flex gap-2">
+              <dt className="text-[var(--t-text-faint)] w-24 flex-shrink-0">Parent&apos;s note</dt>
+              <dd className="text-[var(--t-text)] whitespace-pre-wrap">{trial.parentMessage}</dd>
+            </div>
+          )}
+        </dl>
+        <p className="text-xs text-[var(--t-text-faint)] mt-3">
+          A trial isn&apos;t part of a student&apos;s course: it doesn&apos;t use a lesson or change any progress. The parent joins with a
+          private link — no account needed.
+        </p>
+        {finished ? (
+          <p className="mt-4 text-sm text-[var(--t-text-muted)]">
+            {trial.status === "COMPLETED" ? "This trial class was completed." : "This trial class was marked as missed."}
+          </p>
+        ) : (
+          <button
+            disabled={!trial.joinable}
+            onClick={() => router.push(`/classroom/${trial.id}?type=trial`)}
+            className="mt-4 w-full py-2.5 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {trial.joinable ? "Join Class" : "Join Class (opens 10 min before)"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── Lesson Info Modal ──────────────────────────────────────────────────────
 //
@@ -108,6 +205,7 @@ function LessonInfoModal({ lesson, onClose }: { lesson: ScheduledLessonItem; onC
   const start = new Date(lesson.start);
   const end = new Date(lesson.end);
   const isPast = end < new Date();
+  if (isTrialClass(lesson)) return <TrialInfoModal trial={lesson} onClose={onClose} />;
   const batch = isBatchClass(lesson) ? lesson : null;
   // A class opens ten minutes before it starts, for as long as it is not ended.
   const canEnter = !!batch && lesson.status === "UPCOMING" && new Date().getTime() >= start.getTime() - 10 * 60_000;
@@ -963,6 +1061,9 @@ function ScheduleContent() {
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Batch class
             </span>
             <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" /> Trial Class
+            </span>
+            <span className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-[var(--t-accent)] inline-block" /> Open availability
             </span>
           </div>
@@ -1108,9 +1209,7 @@ function ScheduleContent() {
                         </p>
                         <p className="text-xs text-[var(--t-text-muted)]">
                           {start.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} –{" "}
-                          {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} ·{" "}
-                          {lesson.course.title} · Lesson {lesson.lessonNumber}
-                          {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""}
+                          {end.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} · {classDetail(lesson)}
                         </p>
                       </div>
                       <span
@@ -1121,8 +1220,20 @@ function ScheduleContent() {
                       <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--t-success-bg)] text-[var(--t-success-text)] flex-shrink-0 max-w-[12rem] truncate">
                         {isBatchClass(lesson)
                           ? `👥 ${lesson.batch.name} · ${lesson.students.length}`
-                          : lesson.student.fullName}
+                          : classTitle(lesson)}
                       </span>
+                      {isTrialClass(lesson) && lesson.status === "UPCOMING" && (
+                        <button
+                          onClick={() => setSelectedLesson(lesson)}
+                          className={`text-xs px-2.5 py-1 rounded-full flex-shrink-0 font-medium transition-opacity ${
+                            lesson.joinable
+                              ? "bg-emerald-600 text-white hover:opacity-90"
+                              : "border border-[var(--t-nav-border)] text-[var(--t-text)] hover:bg-[var(--t-accent)]/10"
+                          }`}
+                        >
+                          {lesson.joinable ? "Join Class" : "Details"}
+                        </button>
+                      )}
                       {isBatchClass(lesson) && (
                         <button
                           onClick={() => setSelectedLesson(lesson)}
@@ -1131,7 +1242,7 @@ function ScheduleContent() {
                           Students
                         </button>
                       )}
-                      {(!isBatchClass(lesson) || lesson.viewLessonId) && (
+                      {!isTrialClass(lesson) && (!isBatchClass(lesson) || lesson.viewLessonId) && (
                         <a
                           href={`/lesson/${isBatchClass(lesson) ? lesson.viewLessonId : lesson.id}`}
                           className="text-xs px-2.5 py-1 rounded-full bg-[var(--t-accent)] text-white flex-shrink-0 hover:opacity-90 transition-opacity"
@@ -1227,7 +1338,7 @@ function ScheduleContent() {
                             key={lesson.id}
                             className={`absolute inset-x-0.5 rounded-lg overflow-hidden z-20 transition-opacity duration-200 ${isPast ? "opacity-40" : "opacity-100"}`}
                             style={{ top: top + 1, height: height - 2 }}
-                            title={`${lesson.course.title} · Lesson ${lesson.lessonNumber}${lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ""} · ${classWho(lesson)}`}
+                            title={`${classDetail(lesson)} · ${classWho(lesson)}`}
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelectedLesson(lesson);
@@ -1241,8 +1352,14 @@ function ScheduleContent() {
                               </p>
                               {height > 30 && (
                                 <p className="opacity-80 truncate">
-                                  L{lesson.lessonNumber}
-                                  {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ` · ${lesson.course.title}`}
+                                  {isTrialClass(lesson) ? (
+                                    "Trial Class"
+                                  ) : (
+                                    <>
+                                      L{lesson.lessonNumber}
+                                      {lesson.lessonTitle ? `: ${lesson.lessonTitle}` : ` · ${lesson.course.title}`}
+                                    </>
+                                  )}
                                 </p>
                               )}
                               {height > 48 && isBatchClass(lesson) && (

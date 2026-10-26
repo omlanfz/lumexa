@@ -46,12 +46,22 @@ export default function TrialClassesPage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--a-text)]">Trial Classes</h1>
         <p className="text-sm text-[var(--a-text-muted)] mt-1">
-          Free 30-minute trials booked by parents, and the times they can book. Everything is in Bangladesh Time (GMT+6).
+          Free 30-minute trials booked by parents: assign a teacher, reschedule, cancel and record the outcome, and manage the times parents can book. Everything is in Bangladesh Time (GMT+6).
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Stat label="Upcoming trials" value={summary?.upcoming ?? "—"} />
+        <Stat
+          label="Need a teacher"
+          value={summary?.needsTeacher ?? "—"}
+          tone={summary && summary.needsTeacher > 0 ? "warn" : undefined}
+          hint={
+            summary && summary.needsTeacher > 0
+              ? "Assign a teacher — that sends the parent the class link"
+              : "Every upcoming trial has a teacher"
+          }
+        />
         <Stat
           label="Outside availability"
           value={summary?.outsideAvailability ?? "—"}

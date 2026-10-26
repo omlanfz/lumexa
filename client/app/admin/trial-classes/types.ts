@@ -30,10 +30,26 @@ export interface HistoryEntry {
   afterData: unknown;
 }
 
+export type TrialStatus = "CONFIRMED" | "CANCELLED" | "COMPLETED" | "MISSED";
+
+/** What the parent's private classroom link does right now (server-decided). */
+export type ClassroomState = "OPEN" | "NOT_YET" | "ENDED" | "CANCELLED" | "AWAITING_TEACHER";
+
 export interface TrialAppointment {
   id: string;
   reference: string;
-  status: "CONFIRMED" | "CANCELLED";
+  status: TrialStatus;
+  teacher: { id: string; name: string } | null;
+  teacherAssignedAt: string | null;
+  teacherJoinedAt: string | null;
+  guestJoinedAt: string | null;
+  classroom: {
+    state: ClassroomState;
+    opensAt: string;
+    closesAt: string;
+    reminderDueAt: string | null;
+    reminderEmailSentAt: string | null;
+  };
   bookedBy: "PARENT" | "ADMIN";
   startAt: string;
   endAt: string;
@@ -67,8 +83,18 @@ export interface AvailabilityChanges {
   noLongerBookable: string[];
 }
 
+export interface AssignableTeacher {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  subjects: string[];
+  available: boolean;
+  busyReason: string | null;
+}
+
 export interface Summary {
   upcoming: number;
+  needsTeacher: number;
   outsideAvailability: number;
   failedWhatsApp: number;
 }
@@ -122,7 +148,8 @@ export interface AffectedAppointment {
 
 export const KIND_LABELS: Record<string, string> = {
   PARENT_CONFIRMATION: "Parent confirmation",
-  PARENT_REMINDER: "Parent reminder",
+  PARENT_CLASS_DETAILS: "Class details + link",
+  PARENT_REMINDER: "1-hour reminder + link",
   ADMIN_ALERT: "Admin alert",
   PARENT_RESCHEDULED: "Reschedule notice",
   PARENT_CANCELLED: "Cancellation notice",

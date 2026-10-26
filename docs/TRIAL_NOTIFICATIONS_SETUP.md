@@ -1,11 +1,13 @@
-# Trial classes: booking, email & WhatsApp setup
+# Trial classes: booking, teacher assignment, guest classroom, email & WhatsApp setup
 
 Everything an operator has to configure for the free 30-minute **trial class**
-booking flow. Code never contains secrets: every value below is an environment
+workflow: booking → admin assigns a teacher → the parent gets a private
+classroom link → one-hour reminder → the class. Code never contains secrets: every value below is an environment
 variable (Render for the backend, a local `server/.env` for development; start
 from `server/.env.example`).
 
 - [1. How the flow works](#1-how-the-flow-works)
+- [1b. Teacher assignment, the guest classroom link and the reminder](#1b-teacher-assignment-the-guest-classroom-link-and-the-reminder)
 - [2. Admin: set availability](#2-admin-set-availability)
 - [3. Email](#3-email)
 - [4. WhatsApp Cloud API](#4-whatsapp-cloud-api)
@@ -19,16 +21,23 @@ from `server/.env.example`).
 
 1. Admin sets availability (Admin → **Trial Classes → Availability**).
 2. A parent opens `/trial`, picks a real open slot, fills the form and confirms.
-3. The backend re-validates the slot inside a locked transaction and saves a
-   **confirmed** booking. Only then does the parent see "Your trial class is
-   confirmed". No admin approval step exists.
+3. The backend re-validates the slot inside a locked transaction and saves the
+   booking. Only then does the parent see "We received your request". No admin
+   approval step exists: the time is **reserved** at once. A secret guest-join
+   token is generated and stored with the booking, but **not sent to anyone**.
 4. After the commit (never inside it, so Meta/SMTP can't slow or fail a booking):
-   - parent gets a confirmation **email** and a **WhatsApp** confirmation,
-   - admin gets an alert **email** and a **WhatsApp** alert,
-   - one WhatsApp **reminder** is scheduled (24 h before; if booked less than
-     24 h ahead, 1 h before; none if there is under an hour left).
-5. Admin can reschedule or cancel from Trial Classes; the parent is emailed
-   (no WhatsApp for those, by design).
+   - parent gets an **email** and a **WhatsApp** message saying the request was
+     received and the time is reserved (no classroom link yet),
+   - admin gets an alert **email** and a **WhatsApp** alert.
+5. The admin opens Admin → **Trial Classes** and **assigns a teacher**. That is
+   what puts the trial on the teacher's `/schedule` and **sends the parent the
+   details and the private classroom link** (email + WhatsApp). See section 1b.
+6. One hour before the class the parent gets a **reminder with the same link**
+   (email + WhatsApp).
+7. Admin can reschedule, change the teacher or cancel from Trial Classes; the
+   parent is emailed (and, once a teacher is assigned, WhatsApped the updated
+   details). After the class the admin (or the teacher ending the class) records
+   it as Completed or Missed.
 
 Rules enforced **on the server** (the UI is just a view of them):
 
@@ -46,6 +55,70 @@ Rules enforced **on the server** (the UI is just a view of them):
 
 The Asia/Dhaka timezone is a constant, not an env var: Bangladesh has no DST and
 the existing scheduling code assumes a fixed +6 offset.
+
+## 1b. Teacher assignment, the guest classroom link and the reminder
+
+**Assigning a teacher** (Admin → Trial Classes → open a trial → *Assign teacher*)
+
+- Only active (non-suspended) teacher accounts are listed, each marked free or
+  busy for the trial's time. The server re-checks on save with the same conflict
+  function every other class uses: a teacher with a 1-to-1 lesson, batch class,
+  booked marketplace shift or another trial that overlaps cannot be assigned
+  (HTTP 409). The check also runs the other way — a lesson, batch class or shift
+  placed over an assigned trial is refused.
+- The first assignment: the trial appears on that teacher's **/schedule** (rose
+  "Trial Class" colour and label, never mixed with program lessons) and their
+  dashboard's **Next class** card with a **Join Class** button; the parent is sent
+  the trial details + link; the reminder is planned.
+- Changing the teacher moves the class between the two teachers' calendars. The
+  time and the parent's link are unchanged, so the parent is not messaged again.
+- A trial is **not a lesson**: no student account or enrolment, no lesson
+  consumed, no payout, no curriculum progress, no recording.
+
+**The guest link** is `FRONTEND_URL/trial/join/<token>`
+
+- The token is 32 random bytes (43 URL-safe characters), generated when the
+  booking is created, unique, and returned by no API (not to the admin, the
+  teacher or the parent's booking response). It only ever appears in the
+  parent's email / WhatsApp. It travels in a POST body, never a URL the API logs.
+- It grants entry only while **all** of these hold, checked by the backend on
+  every request: the trial is `CONFIRMED`; a teacher is assigned; now is between
+  **10 minutes before the start and 30 minutes after the end**. Cancelled,
+  completed, missed, unstaffed, too-early and too-late links are refused.
+- A valid link is exchanged for a **short-lived LiveKit token bound to that one
+  room** (`trial-<id>`) and one guest identity, with ordinary participant rights
+  (publish audio/video, subscribe, chat). The LiveKit API key/secret and any
+  reusable credential never reach the browser. The teacher's lock, the 10-person
+  limit and the per-person device limit apply to the guest like any student.
+- The guest page (`/trial/join/<token>`) needs no login, shows a countdown until
+  the classroom opens (against the server's clock), and is `noindex` /
+  `no-referrer`. Endpoints are rate limited per IP.
+- The teacher enters the **same room** with `POST /classroom/join { trialLeadId }`
+  (only the assigned teacher; same window).
+
+**The one-hour reminder**
+
+- Planned when the teacher is assigned (and re-planned on every reschedule) as a
+  database column (`reminderDueAt`) plus, for WhatsApp, a durable outbox row — no
+  in-memory timers, so it survives restarts and deploys. A once-a-minute sweep
+  sends what is due; a backend that was down simply sends it late (never after
+  the class starts).
+- Exactly once: the email uses a unique key per trial **and time**
+  (`trial:<id>:reminder:r<n>`), and is marked done only after it was recorded; the
+  WhatsApp row is claimed with a conditional update.
+- **Assigned less than an hour before the start:** the link goes out immediately
+  and **no reminder** is scheduled (it would just repeat the same message).
+- **Reschedule:** the old reminder is retired, a new one is planned one hour
+  before the new time, and the parent gets the updated details with the **same
+  link** (email + WhatsApp). If the assigned teacher is busy at the new time the
+  reschedule is refused until you pick another time or teacher.
+- **Cancel:** reminders stop, unsent WhatsApp messages are skipped, the link stops
+  working immediately and the trial leaves the teacher's calendar.
+
+**Ending the class.** When the teacher ends a trial class the room closes; if both
+the teacher and the guest joined, it is recorded **Completed**. Otherwise it stays
+confirmed until the admin marks it **Completed** or **Missed** (allowed once the
+start time has passed; correctable between the two). Either closes the link.
 
 ## 2. Admin: set availability
 
@@ -111,12 +184,15 @@ layout (`email/templates/layout.ts`) and `NotificationsService`.
 
 | Email | Trigger | Recipient | Idempotency key |
 |---|---|---|---|
-| Trial confirmed | parent (or admin) books a trial | the parent | `trial:<id>:confirmation:parent` |
+| Trial request received | parent (or admin) books a trial — "received, time reserved", **no link** | the parent | `trial:<id>:confirmation:parent` |
 | New trial booked (alert) | parent books a trial (not sent when an admin books it) | `ADMIN_NOTIFICATION_EMAILS` | `trial:<id>:admin-alert` |
-| Trial rescheduled | admin reschedules | the parent | `trial:<id>:rescheduled:r<n>` |
+| Trial class details + link | a teacher is assigned | the parent | `trial:<id>:class-details:r<n>` |
+| Trial 1-hour reminder + link | one hour before the start | the parent | `trial:<id>:reminder:r<n>` |
+| Trial rescheduled | admin reschedules (carries the same link once staffed) | the parent | `trial:<id>:rescheduled:r<n>` |
 | Trial cancelled | admin cancels | the parent | `trial:<id>:cancelled` |
 
-No other email events were added.
+(`r<n>` is the number of times the trial was rescheduled, so each time gets its
+own copy and a retry can never duplicate one.) No other email events were added.
 
 ### What was missing / changed
 
@@ -150,8 +226,11 @@ emails are journaled as FAILED and retried once SMTP is configured.)
 2. Admin → Trial Classes → open the booking → **Notifications**: the two email
    rows should read **SENT** (FAILED shows the SMTP error).
 3. Check the inbox (and spam) of the parent address and of the admin address.
-   The sender should read "Lumexa AI School".
-4. Reschedule and cancel it from the admin dialogs and check the parent email.
+   The sender should read "Lumexa AI School". The parent email must say
+   "request received / time reserved" and contain **no** classroom link.
+4. **Assign a teacher.** The parent should now get "Your trial class link" with
+   the join URL, and the Notifications table gains a "Class details + link" row.
+5. Reschedule and cancel it from the admin dialogs and check the parent email.
 
 Gmail's sending limit for a free account is about 500 recipients/day, ample for
 this volume.
@@ -159,9 +238,10 @@ this volume.
 ## 4. WhatsApp Cloud API
 
 Direct integration with Meta's WhatsApp Business **Cloud API** (no Twilio). It is
-used for **three trial messages only**: parent confirmation, parent reminder,
-admin alert. Nothing else (no class, payment, homework, reschedule or cancel
-messages).
+used for **four trial messages only**: parent "request received" confirmation,
+parent class details + link (when a teacher is assigned, and again with the new
+time if it is rescheduled), parent 1-hour reminder + link, and the admin alert.
+Nothing else (no class, payment, homework or cancel messages).
 
 > Booking and email work with WhatsApp **off**. Leave `WHATSAPP_ENABLED=false`
 > until the steps below are done. While it is off, every WhatsApp message is
@@ -202,7 +282,7 @@ the versions currently supported and bump it before yours expires.
 5. Webhooks are **not** required for sending, so no app secret/verify token is
    used. (Delivery receipts are therefore not tracked; see limits.)
 
-### B. Create the three message templates
+### B. Create the four message templates
 
 WhatsApp Manager → **Message templates → Create template**. Category
 **Utility**, language **English** (use the code you put in
@@ -216,15 +296,22 @@ Marketing, send-rules and pricing change.
 
 #### 1) Parent confirmation: `lumexa_trial_confirmation` (`WHATSAPP_TEMPLATE_PARENT_CONFIRMATION`)
 
+Sent at booking. It says the request was **received** and the time **reserved**
+(a teacher is not assigned yet) and carries **no** classroom link. If you already
+have an approved template of this name with the old "…is confirmed" wording and
+the same seven variables, it keeps working, but its wording will no longer match
+the email; submit the text below as a new template (e.g.
+`lumexa_trial_received`) and point the env var at it.
+
 ```
-Hello {{1}}, your free trial class for {{2}} is confirmed.
+Hello {{1}}, we received your request for {{2}}'s free trial class and the time is reserved for you.
 
 Date: {{3}}
 Time: {{4}}
 Duration: {{5}}
 Program of interest: {{6}}
 
-Please help your child join a few minutes early. There is no obligation to enrol after the trial. We will suggest a suitable next step afterwards.
+We are assigning a Lumexa teacher now. As soon as that is done we will send you the trial details and a private link to join the online class. No account is needed. There is no obligation to enrol after the trial.
 
 Explore our programs: {{7}}
 
@@ -242,14 +329,45 @@ Lumexa AI School
 | {{6}} | `program_interest` | AI Builder (Ages 12–18) |
 | {{7}} | `programs_url` | https://lumexa-one.vercel.app/programs |
 
-#### 2) Parent reminder: `lumexa_trial_reminder` (`WHATSAPP_TEMPLATE_PARENT_REMINDER`)
+#### 2) Parent class details + link: `lumexa_trial_class_details` (`WHATSAPP_TEMPLATE_PARENT_CLASS_DETAILS`)
+
+Sent right after a teacher is assigned (immediately, even if the class is less
+than an hour away) and again with the new time if the trial is rescheduled.
 
 ```
-Reminder: {{1}}'s free Lumexa trial class is on {{2}} at {{3}}. The session lasts {{4}}.
+Hello {{1}}, here are the latest details for {{2}}'s free Lumexa trial class.
 
-Please help your child join a few minutes early so we can start on time.
+Date: {{3}}
+Time: {{4}}
+Duration: {{5}}
 
-Need to change something? WhatsApp +880 1522 122194 or email lumexa.school@gmail.com.
+Join with this private link (it opens 10 minutes before the start, no account needed): {{6}}
+
+Please do not share the link. Need to change something? WhatsApp +880 1522 122194 or email lumexa.school@gmail.com.
+Lumexa AI School
+```
+
+| # | Variable name (code) | Sample |
+|---|---|---|
+| {{1}} | `parent_name` | Sarah Rahman |
+| {{2}} | `child_name` | Alex |
+| {{3}} | `appointment_date` | Wednesday, 4 November 2026 |
+| {{4}} | `appointment_time` | 4:00 PM – 4:30 PM Bangladesh Time (GMT+6) |
+| {{5}} | `duration` | 30 minutes |
+| {{6}} | `join_link` | https://lumexa-one.vercel.app/trial/join/k3Jx9QmLw0pZ7vNc2RtYb5HdFgAe8UiOsXn1MqWjC4E |
+
+#### 3) Parent 1-hour reminder: `lumexa_trial_class_reminder` (`WHATSAPP_TEMPLATE_PARENT_REMINDER`)
+
+Sent one hour before the start with the same link. (This is a **new template
+name and a new variable list** — the old 24-hour reminder had no link — so it must
+be created and approved even if you had `lumexa_trial_reminder` before.)
+
+```
+Reminder: {{1}}'s free Lumexa trial class starts in about an hour, on {{2}} at {{3}}. The session lasts {{4}}.
+
+Join here (opens 10 minutes before the start): {{5}}
+
+Please help your child join a few minutes early so we can start on time. Need help? WhatsApp +880 1522 122194.
 Lumexa AI School
 ```
 
@@ -259,8 +377,12 @@ Lumexa AI School
 | {{2}} | `appointment_date` | Wednesday, 4 November 2026 |
 | {{3}} | `appointment_time` | 4:00 PM – 4:30 PM Bangladesh Time (GMT+6) |
 | {{4}} | `duration` | 30 minutes |
+| {{5}} | `join_link` | https://lumexa-one.vercel.app/trial/join/k3Jx9QmLw0pZ7vNc2RtYb5HdFgAe8UiOsXn1MqWjC4E |
 
-#### 3) Admin alert: `lumexa_trial_admin_alert` (`WHATSAPP_TEMPLATE_ADMIN_ALERT`)
+> Meta rejects templates whose body starts or ends with a variable, which is why
+> each body above ends with fixed text. Keep that when you edit the wording.
+
+#### 4) Admin alert: `lumexa_trial_admin_alert` (`WHATSAPP_TEMPLATE_ADMIN_ALERT`)
 
 ```
 New trial class booked.
@@ -306,7 +428,8 @@ WHATSAPP_ACCESS_TOKEN=<permanent system-user token>
 WHATSAPP_ADMIN_RECIPIENT=<admin's private WhatsApp in +880… format>
 WHATSAPP_TEMPLATE_LANGUAGE=en
 WHATSAPP_TEMPLATE_PARENT_CONFIRMATION=lumexa_trial_confirmation
-WHATSAPP_TEMPLATE_PARENT_REMINDER=lumexa_trial_reminder
+WHATSAPP_TEMPLATE_PARENT_CLASS_DETAILS=lumexa_trial_class_details
+WHATSAPP_TEMPLATE_PARENT_REMINDER=lumexa_trial_class_reminder
 WHATSAPP_TEMPLATE_ADMIN_ALERT=lumexa_trial_admin_alert
 ```
 
@@ -323,10 +446,12 @@ Set `WHATSAPP_ENABLED=true` **last**, after the templates show **Approved**.
    (e.g. `132001` template not found/not approved, `190` bad token, `131030`
    recipient not allowed while the app is in test mode) and **Retry failed
    WhatsApp** re-queues it.
-3. **Reminder.** Book a slot about 2 h 10 min ahead; the reminder row reads
-   *Scheduled for* start − 1 h and is sent by the once-a-minute sweep (it
-   survives restarts; it lives in the database, not in memory). For 24-hour
-   timing, book a slot more than 25 h ahead and confirm the scheduled time.
+3. **Class link + reminder.** Assign a teacher to a booking more than an hour
+   away. "Class details + link" is sent within a minute, and the reminder row
+   reads *Scheduled for* start − 1 h; the once-a-minute sweep sends it (it lives
+   in the database, not in memory, so it survives restarts). Assign a teacher to
+   a booking that is less than an hour away: the link goes out at once and the
+   reminder row reads SKIPPED ("sent less than an hour before the start").
 4. Automated tests never call Meta (the HTTP client is mocked), and local dev
    never needs WhatsApp credentials.
 
@@ -335,7 +460,7 @@ Set `WHATSAPP_ENABLED=true` **last**, after the templates show **Approved**.
 - Create the Meta app/portfolio, complete business verification, register and
   verify +880 1522 122194, get the display name approved.
 - Generate the system-user token.
-- Submit the 3 templates and wait for approval.
+- Submit the 4 templates and wait for approval.
 - Put the values in Render and flip `WHATSAPP_ENABLED`.
 
 Until then the system runs fine with WhatsApp off.
@@ -348,6 +473,8 @@ Added or changed (see `server/.env.example`; placeholders only):
 |---|---|---|
 | `EMAIL_FROM_NAME` | `Lumexa AI School` | email display name (address is `SMTP_USER`) |
 | `ADMIN_NOTIFICATION_EMAILS` | *(existing)* | now also receives "new trial booked"; set to the admin's private email on Render |
+| `FRONTEND_URL` | *(existing)* | **must be the public https site address**: the parent's link is `FRONTEND_URL/trial/join/<token>` |
+| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | *(existing)* | the same LiveKit project every class uses; trial classes need nothing extra |
 | `TRIAL_MIN_NOTICE_MINUTES` | `120` | earliest bookable start from now |
 | `TRIAL_BOOKING_HORIZON_DAYS` | `60` | how far ahead parents can book |
 | `WHATSAPP_ENABLED` | `false` | master switch |
@@ -356,7 +483,7 @@ Added or changed (see `server/.env.example`; placeholders only):
 | `WHATSAPP_ACCESS_TOKEN` | | **secret** |
 | `WHATSAPP_ADMIN_RECIPIENT` | | admin's private WhatsApp (never exposed to the frontend or API) |
 | `WHATSAPP_TEMPLATE_LANGUAGE` | `en` | template language code |
-| `WHATSAPP_TEMPLATE_PARENT_CONFIRMATION` / `_PARENT_REMINDER` / `_ADMIN_ALERT` | `lumexa_trial_*` | approved template names |
+| `WHATSAPP_TEMPLATE_PARENT_CONFIRMATION` / `_PARENT_CLASS_DETAILS` / `_PARENT_REMINDER` / `_ADMIN_ALERT` | `lumexa_trial_confirmation` / `lumexa_trial_class_details` / `lumexa_trial_class_reminder` / `lumexa_trial_admin_alert` | approved template names |
 | `WHATSAPP_TEMPLATE_PARAMETER_FORMAT` | `positional` | or `named` |
 
 The admin's personal email and number exist only in these server variables. They
@@ -365,16 +492,19 @@ are not in the client bundle, any public API response, or the repository.
 ## 6. Deploy checklist
 
 1. Merge, then deploy the backend. `npm run build` already runs
-   `prisma generate && nest build && prisma migrate deploy`, so migration
-   `20261023000000_trial_booking_availability_whatsapp` applies automatically. It
-   is additive (new nullable/defaulted columns, new tables); existing trial
-   leads are untouched. It adds a Postgres GiST **exclusion constraint** on a
-   built-in range type (no extension needed).
+   `prisma generate && nest build && prisma migrate deploy`, so the trial
+   migrations apply automatically: `20261023000000_trial_booking_availability_whatsapp`
+   (booking, availability, WhatsApp outbox; a GiST **exclusion constraint** on a
+   built-in range type, no extension needed) and
+   `20261028000000_trial_teacher_assignment_guest_access` (teacher, guest token,
+   reminder columns; two new `Completed`/`Missed` statuses and the class-details
+   message kind). Both are additive; existing leads keep working, and every
+   already-booked appointment is given its own guest token by the second one.
 2. Deploy the frontend (Vercel). `NEXT_PUBLIC_API_URL` must point at the backend.
 3. Set the env vars above on Render.
 4. **Scheduled jobs.** They run inside the backend process (`@nestjs/schedule`):
-   the WhatsApp reminder/retry sweep every minute and the email retry sweep
-   every 5 minutes. Render's free tier **sleeps idle services**: while asleep
+   the WhatsApp outbox sweep and the one-hour **reminder email** sweep every
+   minute, and the email retry sweep every 5 minutes. Render's free tier **sleeps idle services**: while asleep
    nothing runs, so a reminder could go out late. Use an always-on instance, or
    an uptime monitor pinging the backend every ≤ 5 minutes.
 5. Add availability in Admin → Trial Classes → Availability.
@@ -386,11 +516,23 @@ are not in the client bundle, any public API response, or the repository.
 - If the process dies in the instant between Meta accepting a message and the
   database recording it, that one message can be re-sent after 10 minutes. The
   Cloud API has no idempotency key.
-- A reminder is not created for bookings made while WhatsApp was disabled.
+- A WhatsApp message is not created for events that happen while WhatsApp is
+  disabled (they are recorded as SKIPPED); after enabling it, re-assigning is
+  not needed for new bookings, but earlier ones will not be back-filled.
 - A parent can hold one upcoming trial per child; changing it needs admin help.
-- Parent-facing "joining details": the system does not generate a trial
-  classroom/link. The confirmation says the team will be in touch with joining
-  details, so currently someone has to send them.
+- Trial classes are **not recorded** and have no lesson material; the teacher
+  and guest use the normal classroom (video, chat, screen share, hand raise).
+- A guest the teacher removes can rejoin by reloading the link while the window is
+  open (the "knock to rejoin" admission applies to accounts only). Lock the room
+  to keep someone out.
+- Teachers are not emailed when a trial is assigned to them; it appears on their
+  /schedule and dashboard. A teacher who is unassigned by deleting their profile
+  leaves the trial staffless (it shows as "Needs a teacher" again).
+- Teacher availability means "no overlapping class": the check covers lessons,
+  batch classes, booked marketplace shifts and other trials, not open (unbooked)
+  availability shifts, matching how lessons and batches are scheduled today.
+- Parent contact preferences: a parent who did not tick the WhatsApp box only
+  receives email.
 - Recurring windows can't span midnight; add two windows (e.g. 22:00–24:00 and
   00:00–02:00 the next day).
 - The 60-minute spacing is also hard-coded in the database constraint; changing
