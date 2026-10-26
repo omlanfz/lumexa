@@ -15,17 +15,27 @@ import {
   Prisma,
   ScheduledLesson,
   Shift,
+  TrialLead,
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 
-export type TeacherConflict = ScheduledLesson | BatchSession | Shift;
+export type TeacherConflict =
+  | ScheduledLesson
+  | BatchSession
+  | Shift
+  | TrialLead;
 
 export async function findTeacherConflict(
   client: PrismaService | Prisma.TransactionClient,
   teacherId: string,
   start: Date,
   end: Date,
-  opts: { excludeLessonId?: string; excludeSessionId?: string } = {},
+  opts: {
+    excludeLessonId?: string;
+    excludeSessionId?: string;
+    /** A trial being (re)placed must not conflict with itself. */
+    excludeTrialId?: string;
+  } = {},
 ): Promise<TeacherConflict | null> {
   const lessonConflict = await client.scheduledLesson.findFirst({
     where: {
@@ -59,6 +69,20 @@ export async function findTeacherConflict(
     },
   });
   if (sessionConflict) return sessionConflict;
+
+  // A free trial class assigned to this teacher is a real class on their
+  // calendar: only CONFIRMED ones hold time (cancelled / completed / missed
+  // trials are history).
+  const trialConflict = await client.trialLead.findFirst({
+    where: {
+      teacherId,
+      appointmentStatus: 'CONFIRMED',
+      startAt: { lt: end },
+      endAt: { gt: start },
+      ...(opts.excludeTrialId ? { id: { not: opts.excludeTrialId } } : {}),
+    },
+  });
+  if (trialConflict) return trialConflict;
 
   return client.shift.findFirst({
     where: {

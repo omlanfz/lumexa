@@ -153,6 +153,47 @@ export class RescheduleTrialDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  /** Optionally move the class to a different teacher at the same time. */
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(64)
+  teacherId?: string;
+}
+
+export class AssignTeacherDto {
+  /** TeacherProfile id (not the user id). */
+  @Transform(trim)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  teacherId: string;
+}
+
+export class TrialOutcomeDto {
+  @IsIn(['COMPLETED', 'MISSED'])
+  outcome: 'COMPLETED' | 'MISSED';
+
+  @IsOptional()
+  @Transform(emptyToUndefined)
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+/** Body of the public guest endpoints. The token is validated for shape in the
+ *  service (and again by the database lookup) — here it is only bounded. */
+export class GuestJoinDto {
+  @IsString()
+  @MinLength(32)
+  @MaxLength(128)
+  token: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  deviceId?: string;
 }
 
 export class CancelTrialDto {

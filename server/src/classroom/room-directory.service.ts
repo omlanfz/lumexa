@@ -11,6 +11,8 @@
 //                              taking part (one participant row each)
 //   batch-<teacherId>-<start>  LEGACY batch room (a class that was already
 //                              running when batches got real sessions)
+//   trial-<trialLeadId>        a free trial class: its assigned teacher (no
+//                              lessons — a trial has no ScheduledLesson)
 //   <bookingId>                a marketplace booking: its teacher
 //   the demo room              the QA demo teacher
 
@@ -41,7 +43,7 @@ export interface RoomLesson {
 
 export interface ResolvedRoom {
   room: string;
-  kind: 'lesson' | 'batch' | 'booking' | 'demo';
+  kind: 'lesson' | 'batch' | 'booking' | 'trial' | 'demo';
   teacherUserId: string;
   classType: ClassType;
   /** The lessons held in this room: the one lesson of a 1:1 class, every
@@ -74,6 +76,22 @@ export class RoomDirectoryService {
         room,
         kind: 'demo',
         teacherUserId: teacher.id,
+        classType: ClassType.ONE_TO_ONE,
+        lessons: [],
+      };
+    }
+
+    if (ref.kind === 'trial') {
+      const trial = await this.prisma.trialLead.findUnique({
+        where: { id: ref.trialLeadId },
+        select: { teacher: { select: { userId: true } } },
+      });
+      // An unassigned trial has no classroom: nobody is its teacher yet.
+      if (!trial?.teacher) throw new NotFoundException('Class not found.');
+      return {
+        room,
+        kind: 'trial',
+        teacherUserId: trial.teacher.userId,
         classType: ClassType.ONE_TO_ONE,
         lessons: [],
       };

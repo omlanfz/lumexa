@@ -39,6 +39,8 @@ import {
 import {
   trialBookingConfirmedParentEmail,
   trialBookingAdminAlertEmail,
+  trialClassDetailsParentEmail,
+  trialReminderParentEmail,
   trialRescheduledParentEmail,
   trialCancelledParentEmail,
   type TrialEmailAppointment,
@@ -857,6 +859,8 @@ export class NotificationsService {
     previous: TrialEmailAppointment;
     appointment: TrialEmailAppointment;
     contact: TrialContact;
+    /** The parent's secure link — only when a teacher is assigned. */
+    joinUrl?: string | null;
   }): Promise<void> {
     const { subject, html } = trialRescheduledParentEmail({
       parentName: data.parentName,
@@ -866,6 +870,7 @@ export class NotificationsService {
       appointment: data.appointment,
       programsUrl: `${frontendBaseUrl()}/programs`,
       contact: data.contact,
+      joinUrl: data.joinUrl,
     });
     await this.send(
       data.parentEmail,
@@ -873,6 +878,64 @@ export class NotificationsService {
       html,
       'TRIAL_RESCHEDULED',
       `trial:${data.leadId}:rescheduled:r${data.revision}`,
+    );
+  }
+
+  /** A teacher was assigned: the trial details + the secure classroom link.
+   *  One per time (revision), so a retry never duplicates and a reschedule
+   *  gets its own. */
+  async sendTrialClassDetailsToParent(data: {
+    leadId: string;
+    revision: number;
+    parentEmail: string;
+    parentName: string;
+    childName: string;
+    program: string;
+    appointment: TrialEmailAppointment;
+    joinUrl: string;
+    contact: TrialContact;
+  }): Promise<void> {
+    const { subject, html } = trialClassDetailsParentEmail({
+      parentName: data.parentName,
+      childName: data.childName,
+      program: data.program,
+      appointment: data.appointment,
+      joinUrl: data.joinUrl,
+      contact: data.contact,
+    });
+    await this.send(
+      data.parentEmail,
+      subject,
+      html,
+      'TRIAL_CLASS_DETAILS',
+      `trial:${data.leadId}:class-details:r${data.revision}`,
+    );
+  }
+
+  /** One hour before the start, with the same secure link. */
+  async sendTrialReminderToParent(data: {
+    leadId: string;
+    revision: number;
+    parentEmail: string;
+    parentName: string;
+    childName: string;
+    appointment: TrialEmailAppointment;
+    joinUrl: string;
+    contact: TrialContact;
+  }): Promise<void> {
+    const { subject, html } = trialReminderParentEmail({
+      parentName: data.parentName,
+      childName: data.childName,
+      appointment: data.appointment,
+      joinUrl: data.joinUrl,
+      contact: data.contact,
+    });
+    await this.send(
+      data.parentEmail,
+      subject,
+      html,
+      'TRIAL_REMINDER',
+      `trial:${data.leadId}:reminder:r${data.revision}`,
     );
   }
 

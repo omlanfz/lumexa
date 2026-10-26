@@ -31,6 +31,7 @@ import {
 } from './dhaka-time.util';
 import { computeLateMinutes } from './lesson-window.util';
 import { COUNTS_AS_COMPLETED } from './lesson-state.util';
+import { trialAccessState } from '../trial/trial-access.util';
 import { CLASS_DURATION_MINUTES } from './class-duration';
 import { generateOccurrences } from './occurrences.util';
 import {
@@ -751,7 +752,7 @@ export class SchedulingService {
     ];
     // 1-to-1 lessons, and batch classes — each batch class once, with its
     // students. Only this teacher's own classes are ever read.
-    const [lessons, sessions] = await Promise.all([
+    const [lessons, sessions, trials] = await Promise.all([
       this.prisma.scheduledLesson.findMany({
         where: {
           teacherId: teacher.id,
@@ -790,6 +791,26 @@ export class SchedulingService {
               },
             },
           },
+        },
+      }),
+      // Free trial classes assigned to this teacher. Not lessons: no student
+      // account, no course, no progress — only who is coming and when. The
+      // parent's contact details are deliberately not selected.
+      this.prisma.trialLead.findMany({
+        where: {
+          teacherId: teacher.id,
+          appointmentStatus: { in: ['CONFIRMED', 'COMPLETED', 'MISSED'] },
+        },
+        orderBy: { startAt: 'asc' },
+        select: {
+          id: true,
+          startAt: true,
+          endAt: true,
+          appointmentStatus: true,
+          childName: true,
+          childAge: true,
+          subject: true,
+          message: true,
         },
       }),
     ]);
@@ -870,7 +891,42 @@ export class SchedulingService {
         : null,
     }));
 
-    return [...lessonItems, ...sessionItems].sort(
+    const trialItems = trials.flatMap((t) =>
+      t.startAt && t.endAt
+        ? [
+            {
+              id: t.id,
+              kind: 'TRIAL' as const,
+              start: t.startAt,
+              end: t.endAt,
+              classType: 'TRIAL' as const,
+              status:
+                t.appointmentStatus === 'CONFIRMED'
+                  ? ('UPCOMING' as const)
+                  : t.appointmentStatus === 'COMPLETED'
+                    ? ('COMPLETED' as const)
+                    : ('MISSED' as const),
+              childName: t.childName,
+              childAge: t.childAge,
+              program: t.subject,
+              parentMessage: t.message,
+              // The same window the server enforces when the teacher joins.
+              joinable:
+                trialAccessState(
+                  {
+                    appointmentStatus: t.appointmentStatus,
+                    startAt: t.startAt,
+                    endAt: t.endAt,
+                    teacherId: teacher.id,
+                  },
+                  new Date(),
+                ) === 'OPEN',
+            },
+          ]
+        : [],
+    );
+
+    return [...lessonItems, ...sessionItems, ...trialItems].sort(
       (a, b) => a.start.getTime() - b.start.getTime(),
     );
   }

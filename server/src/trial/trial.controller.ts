@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Header,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -17,13 +18,15 @@ import { RolesGuard } from '../auth/roles.guard';
 import { whatsappConfig } from '../whatsapp/whatsapp.config';
 import { TrialService } from './trial.service';
 import { TrialBookingService, toPublicBooking } from './trial-booking.service';
-import { CreateTrialDto } from './dto/trial.dto';
+import { CreateTrialDto, GuestJoinDto } from './dto/trial.dto';
+import { TrialClassroomService } from '../classroom/trial-classroom.service';
 
 @Controller('trial')
 export class TrialController {
   constructor(
     private readonly trialService: TrialService,
     private readonly booking: TrialBookingService,
+    private readonly classroom: TrialClassroomService,
   ) {}
 
   /** Public — bookable slots between two Bangladesh dates (inclusive).
@@ -61,6 +64,32 @@ export class TrialController {
       confirmationEmailTo: lead.parentEmail,
       whatsappConfirmation: whatsappConfig.isEnabled() && lead.whatsappConsent,
     };
+  }
+
+  // ─── Guest access (no account) ────────────────────────────────────────────
+  // The secret link token is the credential, so it travels in the POST body
+  // (never a URL that proxies/access logs would record) and is rate limited per
+  // IP. An unknown or malformed token is an identical 404. The responses carry
+  // only what the link's holder needs; see TrialClassroomService.
+
+  /** Public — what the guest page should show for this link right now. */
+  @Post('guest/status')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store, max-age=0')
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  guestStatus(@Body() dto: GuestJoinDto) {
+    return this.classroom.guestStatus(dto.token);
+  }
+
+  /** Public — exchange a valid link for a short-lived, room-bound classroom
+   *  token. Refused unless the trial is CONFIRMED, has a teacher and "now" is
+   *  inside the joining window. */
+  @Post('guest/join')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store, max-age=0')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  guestJoin(@Body() dto: GuestJoinDto) {
+    return this.classroom.joinAsGuest(dto.token, dto.deviceId);
   }
 
   /** Admin only — list all trial leads */

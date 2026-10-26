@@ -1,7 +1,8 @@
 // FILE PATH: server/src/trial/trial-whatsapp.service.ts
 //
-// Durable outbox + sender for the three trial WhatsApp messages
-// (parent confirmation, parent reminder, admin alert) — and nothing else.
+// Durable outbox + sender for the four trial WhatsApp messages
+// (parent confirmation, parent class details + link, parent 1-hour reminder,
+// admin alert) — and nothing else.
 //
 // How it stays correct
 //   • Rows are written inside the booking transaction, so a committed booking
@@ -36,9 +37,9 @@ import { whatsappConfig } from '../whatsapp/whatsapp.config';
 import { normalizePhone, maskPhone } from './phone.util';
 import {
   buildTemplateVariables,
-  computeReminderAt,
   templateKeyFor,
 } from './trial-whatsapp.templates';
+import { reminderDueAt, trialAccessState } from './trial-access.util';
 
 export const WHATSAPP_MAX_ATTEMPTS = 5;
 const STALE_LOCK_MS = 10 * 60 * 1000;
@@ -56,23 +57,38 @@ export interface PlannedMessage {
   lastError: string | null;
 }
 
+/** Messages that describe the class time carry the revision, so a reschedule
+ *  gets its own copy (and the old one is superseded); the rest are once per
+ *  trial. */
+const REVISIONED_KINDS: readonly TrialWhatsAppKind[] = [
+  'PARENT_CLASS_DETAILS',
+  'PARENT_REMINDER',
+];
+
 export function whatsappDedupeKey(
   leadId: string,
   kind: TrialWhatsAppKind,
   revision: number,
 ): string {
-  return kind === 'PARENT_REMINDER'
+  return REVISIONED_KINDS.includes(kind)
     ? `trial:${leadId}:${kind}:r${revision}`
     : `trial:${leadId}:${kind}`;
 }
 
+type PlanLead = Pick<
+  TrialLead,
+  | 'id'
+  | 'revision'
+  | 'startAt'
+  | 'whatsappConsent'
+  | 'parentPhone'
+  | 'teacherId'
+>;
+
 /** Decides, for one appointment, which WhatsApp rows to queue and in what
  *  state. Pure — the service persists the result. */
 export function planTrialWhatsApp(params: {
-  lead: Pick<
-    TrialLead,
-    'id' | 'revision' | 'startAt' | 'whatsappConsent' | 'parentPhone'
-  >;
+  lead: PlanLead;
   now: Date;
   enabled: boolean;
   kinds: TrialWhatsAppKind[];
@@ -109,10 +125,22 @@ export function planTrialWhatsApp(params: {
         continue;
       }
     }
+    // The class link only exists for the parent once a teacher is assigned.
+    if (
+      (kind === 'PARENT_CLASS_DETAILS' || kind === 'PARENT_REMINDER') &&
+      !lead.teacherId
+    ) {
+      out.push(skipped('No teacher is assigned yet.'));
+      continue;
+    }
     if (kind === 'PARENT_REMINDER') {
-      const at = lead.startAt ? computeReminderAt(lead.startAt, now) : null;
+      const at = lead.startAt ? reminderDueAt(lead.startAt, now) : null;
       if (!at) {
-        out.push(skipped('Too close to the start time for a useful reminder.'));
+        out.push(
+          skipped(
+            'The class link was sent less than an hour before the start, so no separate reminder is needed.',
+          ),
+        );
         continue;
       }
       out.push({
@@ -147,10 +175,7 @@ export class TrialWhatsAppService {
   /** Queue messages for an appointment inside the caller's transaction. */
   async enqueue(
     db: Db,
-    lead: Pick<
-      TrialLead,
-      'id' | 'revision' | 'startAt' | 'whatsappConsent' | 'parentPhone'
-    >,
+    lead: PlanLead,
     kinds: TrialWhatsAppKind[],
     now = new Date(),
   ): Promise<void> {
@@ -265,11 +290,25 @@ export class TrialWhatsAppService {
     if (lead.appointmentStatus !== 'CONFIRMED') {
       return skip('Appointment is no longer confirmed.');
     }
-    if (!lead.startAt || lead.startAt.getTime() <= now.getTime()) {
+    if (row.kind === 'PARENT_CLASS_DETAILS') {
+      // The link is still worth sending while the classroom is joinable, even
+      // if the class has just started (a teacher assigned at the last minute).
+      const state = trialAccessState(lead, now);
+      if (state === 'ENDED' || state === 'CANCELLED') {
+        return skip('The joining window has already closed.');
+      }
+      if (state === 'AWAITING_TEACHER') return skip('No teacher is assigned.');
+    } else if (!lead.startAt || lead.startAt.getTime() <= now.getTime()) {
       return skip('Appointment has already started.');
     }
-    if (row.kind === 'PARENT_REMINDER' && row.revision !== lead.revision) {
+    if (
+      (row.kind === 'PARENT_REMINDER' || row.kind === 'PARENT_CLASS_DETAILS') &&
+      row.revision !== lead.revision
+    ) {
       return skip('Superseded by a reschedule.');
+    }
+    if (row.kind === 'PARENT_REMINDER' && !lead.teacherId) {
+      return skip('No teacher is assigned.');
     }
     if (row.kind !== 'ADMIN_ALERT' && !lead.whatsappConsent) {
       return skip('Parent did not consent to WhatsApp notifications.');

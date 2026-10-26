@@ -45,6 +45,7 @@ import { ClassroomService } from './classroom.service';
 import type { RoomConnection } from './livekit-rooms.service';
 import { RoomAccessService } from './room-access.service';
 import { RoomDirectoryService } from './room-directory.service';
+import { TrialClassroomService } from './trial-classroom.service';
 import {
   buildIdentity,
   roomForBatch,
@@ -229,6 +230,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       access,
       directory,
       batchSessions,
+      new TrialClassroomService(prisma, access, audit as never),
     );
   });
 
@@ -1297,6 +1299,192 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
           buildIdentity(teacher.id, 'tdev0001'),
         ),
       ).rejects.toThrow(/cannot remove yourself/);
+    });
+  });
+
+  // ─── Free trial classes ─────────────────────────────────────────────────────
+  // A trial shares the room machinery (lock, 10-people limit, teacher-only
+  // controls) but is not a lesson: no student account, no payout, no progress.
+
+  describe('free trial classes', () => {
+    let trialTrialClassroom: TrialClassroomService;
+    const HALF = 30 * 60_000;
+
+    async function makeTrial(over: Record<string, unknown> = {}) {
+      const start = Math.floor(Date.now() / HALF) * HALF; // started 0–30 min ago
+      return prisma.trialLead.create({
+        data: {
+          parentName: 'Rita',
+          parentEmail: 'rita@example.com',
+          parentPhone: '+8801712345678',
+          childName: 'Rahul',
+          childAge: 10,
+          subject: 'Scratch',
+          status: 'BOOKED',
+          startAt: new Date(start),
+          endAt: new Date(start + HALF),
+          appointmentStatus: 'CONFIRMED',
+          guestToken: 'g'.repeat(43),
+          teacherId: teacher.profileId,
+          ...over,
+        },
+      });
+    }
+
+    beforeAll(() => {
+      trialTrialClassroom = new TrialClassroomService(
+        prisma,
+        access,
+        audit as never,
+      );
+    });
+    beforeEach(async () => {
+      await prisma.trialLead.deleteMany();
+    });
+
+    it('the directory knows a trial room’s teacher, and has no lessons or students in it', async () => {
+      const trial = await makeTrial();
+      const resolved = await directory.resolve(`trial-${trial.id}`);
+      expect(resolved).toMatchObject({
+        kind: 'trial',
+        teacherUserId: teacher.id,
+        lessons: [],
+      });
+    });
+
+    it('an unassigned trial has no classroom (nobody is its teacher)', async () => {
+      const trial = await makeTrial({ teacherId: null });
+      await expect(directory.resolve(`trial-${trial.id}`)).rejects.toThrow(
+        /not found/i,
+      );
+    });
+
+    it('POST /classroom/join with a trialLeadId puts the assigned teacher in the trial room — no late penalty, no earning', async () => {
+      const trial = await makeTrial();
+      const join = await classroom.joinLab(teacher.id, {
+        trialLeadId: trial.id,
+        deviceId: 'tdev0001',
+      });
+      expect(claims(tokenOf(join)).room).toBe(`trial-${trial.id}`);
+      expect(join).toMatchObject({ isTrial: true, classType: 'ONE_TO_ONE' });
+      await expect(
+        classroom.joinLab(otherTeacher.id, { trialLeadId: trial.id }),
+      ).rejects.toThrow(/not assigned/);
+      expect(await prisma.payoutEntry.count()).toBe(0);
+    });
+
+    it('only the trial’s teacher can lock it; a locked room keeps the guest out, an unlocked one lets them in', async () => {
+      const trial = await makeTrial();
+      const room = `trial-${trial.id}`;
+      await expect(
+        classroom.setRoomLocked(otherTeacher.id, room, true),
+      ).rejects.toThrow(/Only the teacher/);
+      await classroom.setRoomLocked(teacher.id, room, true).catch(() => {
+        // (the live room does not exist in this fake — the DB lock is what counts)
+      });
+      expect(await access.isLocked(room)).toBe(true);
+      expect(
+        await trialTrialClassroom.joinAsGuest('g'.repeat(43), 'abcd1234'),
+      ).toMatchObject({ blocked: true, reason: 'ROOM_LOCKED' });
+      await classroom
+        .setRoomLocked(teacher.id, room, false)
+        .catch(() => undefined);
+      expect(
+        await trialTrialClassroom.joinAsGuest('g'.repeat(43), 'abcd1234'),
+      ).toHaveProperty('token');
+    });
+
+    it('a full trial room (10 people) refuses a further guest like any classroom', async () => {
+      const trial = await makeTrial();
+      const crowd = Array.from({ length: 9 }, (_, i) => ({
+        identity: buildIdentity(`someone-${i}`, 'aaaa1111'),
+        userId: `someone-${i}`,
+        name: `S${i}`,
+        joinedAtMs: Date.now(),
+      }));
+      rooms.people = [
+        {
+          identity: buildIdentity(teacher.id, 'tdev0001'),
+          userId: teacher.id,
+          name: 'T',
+          joinedAtMs: Date.now(),
+        },
+        ...crowd,
+      ];
+      expect(
+        await trialTrialClassroom.joinAsGuest(trial.guestToken!, 'abcd1234'),
+      ).toMatchObject({ blocked: true, reason: 'ROOM_FULL' });
+    });
+
+    it('recording is not offered in a trial', async () => {
+      const trial = await makeTrial();
+      await expect(
+        classroom.startTeacherRecording(teacher.id, `trial-${trial.id}`),
+      ).rejects.toThrow(/not recorded/);
+    });
+
+    it('ending a trial closes the room: Completed when both sides took part, otherwise left for the admin — never a lesson, payout or ledger entry', async () => {
+      const client = { deleteRoom: jest.fn(() => Promise.resolve()) };
+      jest
+        .spyOn(classroom as never, 'getRoomServiceClient')
+        .mockReturnValue(client as never);
+
+      const absent = await makeTrial();
+      await classroom.endClass(teacher.id, `trial-${absent.id}`, {});
+      expect(
+        (await prisma.trialLead.findUniqueOrThrow({ where: { id: absent.id } }))
+          .appointmentStatus,
+      ).toBe('CONFIRMED');
+      expect(client.deleteRoom).toHaveBeenCalledWith(`trial-${absent.id}`);
+
+      await prisma.trialLead.update({
+        where: { id: absent.id },
+        data: { teacherJoinedAt: new Date(), guestJoinedAt: new Date() },
+      });
+      await classroom.endClass(teacher.id, `trial-${absent.id}`, {});
+      expect(
+        (await prisma.trialLead.findUniqueOrThrow({ where: { id: absent.id } }))
+          .appointmentStatus,
+      ).toBe('COMPLETED');
+
+      await expect(
+        classroom.endClass(otherTeacher.id, `trial-${absent.id}`, {}),
+      ).rejects.toThrow(/Only the teacher/);
+      expect(await prisma.payoutEntry.count()).toBe(0);
+      expect(await prisma.scheduledLesson.count()).toBe(0);
+      expect(await prisma.studentLedgerEntry.count()).toBe(0);
+    });
+
+    it('a trial on the teacher’s calendar blocks a lesson or batch class from being placed over it', async () => {
+      const trial = await makeTrial();
+      const clash = await findTeacherConflict(
+        prisma,
+        teacher.profileId!,
+        new Date(trial.startAt!.getTime() + 10 * 60_000),
+        new Date(trial.startAt!.getTime() + 55 * 60_000),
+      );
+      expect((clash as { id: string }).id).toBe(trial.id);
+      // the other teacher is unaffected; a cancelled trial frees the time
+      expect(
+        await findTeacherConflict(
+          prisma,
+          otherTeacher.profileId!,
+          trial.startAt!,
+          trial.endAt!,
+        ),
+      ).toBeNull();
+      await prisma.trialLead.update({
+        where: { id: trial.id },
+        data: { appointmentStatus: 'CANCELLED' },
+      });
+      expect(
+        await findTeacherConflict(
+          prisma,
+          teacher.profileId!,
+          trial.startAt!,
+          trial.endAt!,
+        ),
+      ).toBeNull();
     });
   });
 });

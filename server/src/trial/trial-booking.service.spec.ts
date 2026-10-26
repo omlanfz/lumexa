@@ -35,8 +35,19 @@ const input = (start: Date, over: object = {}) => ({
   ...over,
 });
 
+const ACTIVE_TEACHER = {
+  id: 'teacher-1',
+  isSuspended: false,
+  user: { role: 'TEACHER', accountStatus: 'ACTIVE', fullName: 'Ms Karim' },
+};
+
 function build(
-  opts: { booked?: Date[]; existing?: any; windows?: any[] } = {},
+  opts: {
+    booked?: Date[];
+    existing?: any;
+    windows?: any[];
+    teacher?: any;
+  } = {},
 ) {
   const calls: string[] = [];
   const created: any[] = [];
@@ -78,9 +89,16 @@ function build(
         id: where.id,
         ...tx.__current,
         ...stripIncrement(data),
-        revision: (tx.__current?.revision ?? 0) + 1,
+        revision: (tx.__current?.revision ?? 0) + (data.revision ? 1 : 0),
       })),
     },
+    // Teacher validation + conflict check (see assertTeacherAssignable).
+    teacherProfile: {
+      findUnique: jest.fn(async () => opts.teacher ?? ACTIVE_TEACHER),
+    },
+    scheduledLesson: { findFirst: jest.fn().mockResolvedValue(null) },
+    batchSession: { findFirst: jest.fn().mockResolvedValue(null) },
+    shift: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const prisma: any = {
     ...tx,
@@ -91,6 +109,7 @@ function build(
     afterBooked: jest.fn(),
     afterRescheduled: jest.fn(),
     afterCancelled: jest.fn(),
+    afterTeacherAssigned: jest.fn(),
   };
   const whatsapp = {
     enqueue: jest.fn().mockResolvedValue(undefined),
@@ -156,9 +175,26 @@ describe('TrialBookingService.createBooking', () => {
     expect(whatsapp.enqueue).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      ['PARENT_CONFIRMATION', 'PARENT_REMINDER', 'ADMIN_ALERT'],
+      // No class link and no reminder yet: a teacher has not been assigned.
+      ['PARENT_CONFIRMATION', 'ADMIN_ALERT'],
       expect.any(Date),
     );
+  });
+
+  it('mints a unique, unguessable guest token at booking and never queues a link message', async () => {
+    const a = build();
+    const b = build();
+    await a.service.createBooking(input(slot('10:00')), 'PARENT');
+    await b.service.createBooking(input(slot('10:00')), 'PARENT');
+    const [t1, t2] = [a.created[0].guestToken, b.created[0].guestToken];
+    expect(t1).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(t2).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(t1).not.toBe(t2);
+    expect(a.created[0].teacherId).toBeUndefined();
+    expect(a.created[0].reminderDueAt).toBeUndefined();
+    const queued = a.whatsapp.enqueue.mock.calls.flatMap((c: any[]) => c[2]);
+    expect(queued).not.toContain('PARENT_CLASS_DETAILS');
+    expect(queued).not.toContain('PARENT_REMINDER');
   });
 
   it('a parent booking alerts the admin; an admin booking does not', async () => {
@@ -178,7 +214,6 @@ describe('TrialBookingService.createBooking', () => {
     });
     expect(b.whatsapp.enqueue.mock.calls[0][2]).toEqual([
       'PARENT_CONFIRMATION',
-      'PARENT_REMINDER',
     ]);
     expect(b.audit.log).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -293,7 +328,7 @@ describe('TrialBookingService.reschedule', () => {
   });
   const admin = { id: 'admin-1', role: 'ADMIN' };
 
-  it('moves the appointment, re-queues ONLY the reminder, and emails the parent', async () => {
+  it('moves an unstaffed appointment, queues no link or reminder, and emails the parent', async () => {
     const { service, tx, whatsapp, notifier, audit } = build();
     tx.trialLead.findUnique.mockResolvedValue(current());
     tx.__current = current();
@@ -308,17 +343,20 @@ describe('TrialBookingService.reschedule', () => {
       expect.anything(),
       'lead-1',
       expect.any(String),
-      ['PARENT_REMINDER'],
+      ['PARENT_REMINDER', 'PARENT_CLASS_DETAILS'],
     );
-    expect(whatsapp.enqueue).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.anything(),
-      ['PARENT_REMINDER'],
-      expect.any(Date),
-    );
+    // No teacher → nothing about a class link is (re)queued.
+    expect(whatsapp.enqueue).not.toHaveBeenCalled();
+    expect(tx.trialLead.update.mock.calls[0][0].data).toMatchObject({
+      reminderDueAt: null,
+      reminderEmailSentAt: null,
+    });
     expect(notifier.afterRescheduled).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'lead-1' }),
-      { startAt: slot('10:00'), endAt: slot('10:30') },
+      expect.objectContaining({
+        startAt: slot('10:00'),
+        endAt: slot('10:30'),
+      }),
     );
     expect(audit.log).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -327,6 +365,69 @@ describe('TrialBookingService.reschedule', () => {
         actorId: 'admin-1',
       }),
     );
+  });
+
+  it('a staffed trial: re-plans the 1-hour reminder for the new time and re-sends the details + link', async () => {
+    const { service, tx, whatsapp } = build();
+    const staffed = current({
+      teacherId: 'teacher-1',
+      guestToken: 'tok',
+      reminderDueAt: new Date('2020-01-01T00:00:00Z'),
+      reminderEmailSentAt: new Date('2020-01-01T00:00:00Z'),
+    });
+    tx.trialLead.findUnique.mockResolvedValue(staffed);
+    tx.__current = staffed;
+    await service.reschedule('lead-1', slot('12:00'), admin);
+    const data = tx.trialLead.update.mock.calls[0][0].data;
+    // exactly one hour before the NEW start, and the "already sent" flag reset
+    expect(data.reminderDueAt).toEqual(
+      new Date(slot('12:00').getTime() - 3600_000),
+    );
+    expect(data.reminderEmailSentAt).toBeNull();
+    expect(whatsapp.enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER'],
+      expect.any(Date),
+    );
+  });
+
+  it('refuses a new time when the assigned teacher is busy then (nothing is saved)', async () => {
+    const { service, tx } = build();
+    const staffed = current({ teacherId: 'teacher-1', guestToken: 'tok' });
+    tx.trialLead.findUnique.mockResolvedValue(staffed);
+    tx.scheduledLesson.findFirst.mockResolvedValue({ id: 'lesson-9' });
+    await expect(
+      service.reschedule('lead-1', slot('12:00'), admin),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.trialLead.update).not.toHaveBeenCalled();
+  });
+
+  it('can move the class to another teacher in the same step', async () => {
+    const { service, tx } = build();
+    const staffed = current({ teacherId: 'teacher-1', guestToken: 'tok' });
+    tx.trialLead.findUnique.mockResolvedValue(staffed);
+    tx.__current = staffed;
+    await service.reschedule('lead-1', slot('12:00'), admin, undefined, {
+      teacherId: 'teacher-2',
+    });
+    expect(tx.teacherProfile.findUnique.mock.calls[0][0].where).toEqual({
+      id: 'teacher-2',
+    });
+    expect(tx.trialLead.update.mock.calls[0][0].data.teacherId).toBe(
+      'teacher-2',
+    );
+  });
+
+  it('refuses to staff a trial as a side effect of rescheduling (assignment is its own step)', async () => {
+    const { service, tx } = build();
+    tx.trialLead.findUnique.mockResolvedValue(current());
+    await expect(
+      service.reschedule('lead-1', slot('12:00'), admin, undefined, {
+        teacherId: 'teacher-2',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.trialLead.update).not.toHaveBeenCalled();
   });
 
   it('applies the same buffer rule, ignoring the appointment itself', async () => {
@@ -392,6 +493,7 @@ describe('TrialBookingService.cancel', () => {
     expect(tx.trialLead.update.mock.calls[0][0].data).toMatchObject({
       appointmentStatus: 'CANCELLED',
       cancelReason: 'Teacher unavailable',
+      reminderDueAt: null, // no reminder for a cancelled class
     });
     expect(whatsapp.skipUnsent).toHaveBeenCalledWith(
       expect.anything(),
@@ -445,6 +547,254 @@ describe('TrialBookingService.cancel', () => {
     await expect(service.cancel('x', admin, 'reason')).rejects.toBeInstanceOf(
       BadRequestException,
     );
+  });
+});
+
+describe('TrialBookingService.assignTeacher', () => {
+  const lead = (over: object = {}) => ({
+    id: 'lead-1',
+    appointmentStatus: 'CONFIRMED',
+    revision: 0,
+    parentEmail: 'sarah@example.com',
+    parentName: 'Sarah',
+    childName: 'Alex',
+    startAt: new Date(Date.now() + 5 * 3600_000),
+    endAt: new Date(Date.now() + 5.5 * 3600_000),
+    teacherId: null,
+    guestToken: 'tok',
+    whatsappConsent: true,
+    parentPhone: '+8801712345678',
+    ...over,
+  });
+  const admin = { id: 'admin-1', role: 'ADMIN' };
+  const setup = (row: any, opts: Parameters<typeof build>[0] = {}) => {
+    const b = build(opts);
+    b.tx.trialLead.findUnique.mockResolvedValue(row);
+    b.tx.__current = row;
+    return b;
+  };
+
+  it('first assignment: saves the teacher, plans the reminder 1h before, queues link + reminder, notifies the parent', async () => {
+    const row = lead();
+    const { service, tx, whatsapp, notifier, audit } = setup(row);
+    const res = await service.assignTeacher('lead-1', 'teacher-1', admin);
+    expect(res.firstAssignment).toBe(true);
+    const data = tx.trialLead.update.mock.calls[0][0].data;
+    expect(data.teacherId).toBe('teacher-1');
+    expect(data.reminderDueAt).toEqual(
+      new Date(row.startAt.getTime() - 3600_000),
+    );
+    expect(data.reminderEmailSentAt).toBeNull();
+    expect(whatsapp.enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER'],
+      expect.any(Date),
+    );
+    expect(notifier.afterTeacherAssigned).toHaveBeenCalledTimes(1);
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'TRIAL_TEACHER_ASSIGNED' }),
+    );
+  });
+
+  it('assigned less than an hour before the start: the link goes out now and NO reminder is planned', async () => {
+    const row = lead({
+      startAt: new Date(Date.now() + 40 * 60_000),
+      endAt: new Date(Date.now() + 70 * 60_000),
+    });
+    const { service, tx, notifier } = setup(row);
+    await service.assignTeacher('lead-1', 'teacher-1', admin);
+    expect(tx.trialLead.update.mock.calls[0][0].data.reminderDueAt).toBeNull();
+    expect(notifier.afterTeacherAssigned).toHaveBeenCalledTimes(1);
+  });
+
+  it('changing the teacher moves the class but does not message the parent again or touch the reminder', async () => {
+    const row = lead({ teacherId: 'teacher-0' });
+    const { service, tx, whatsapp, notifier, audit } = setup(row);
+    const res = await service.assignTeacher('lead-1', 'teacher-1', admin);
+    expect(res.firstAssignment).toBe(false);
+    const data = tx.trialLead.update.mock.calls[0][0].data;
+    expect(data.teacherId).toBe('teacher-1');
+    expect(data).not.toHaveProperty('reminderDueAt');
+    expect(whatsapp.enqueue).not.toHaveBeenCalled();
+    expect(notifier.afterTeacherAssigned).not.toHaveBeenCalled();
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'TRIAL_TEACHER_CHANGED',
+        beforeData: { teacherId: 'teacher-0' },
+      }),
+    );
+  });
+
+  it('checks the teacher is free for the whole session, excluding this trial itself', async () => {
+    const { service, tx } = setup(lead());
+    await service.assignTeacher('lead-1', 'teacher-1', admin);
+    expect(tx.trialLead.findFirst.mock.calls.at(-1)![0].where).toMatchObject({
+      teacherId: 'teacher-1',
+      appointmentStatus: 'CONFIRMED',
+      id: { not: 'lead-1' },
+    });
+  });
+
+  it.each([
+    ['another lesson', 'scheduledLesson'],
+    ['a batch class', 'batchSession'],
+    ['a booked shift', 'shift'],
+  ])(
+    'refuses (409) a teacher who has %s then — nothing is saved or sent',
+    async (_l, table) => {
+      const { service, tx, whatsapp, notifier } = setup(lead());
+      (tx as any)[table].findFirst.mockResolvedValue({ id: 'busy' });
+      await expect(
+        service.assignTeacher('lead-1', 'teacher-1', admin),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.trialLead.update).not.toHaveBeenCalled();
+      expect(whatsapp.enqueue).not.toHaveBeenCalled();
+      expect(notifier.afterTeacherAssigned).not.toHaveBeenCalled();
+    },
+  );
+
+  it('refuses another trial of the same teacher at an overlapping time', async () => {
+    const { service, tx } = setup(lead());
+    tx.trialLead.findFirst.mockResolvedValue({ id: 'other-trial' });
+    await expect(
+      service.assignTeacher('lead-1', 'teacher-1', admin),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it.each([
+    ['unknown teacher', null],
+    [
+      'not a teacher account',
+      { ...ACTIVE_TEACHER, user: { ...ACTIVE_TEACHER.user, role: 'ADMIN' } },
+    ],
+  ])('refuses %s with 404', async (_l, teacher) => {
+    const { service, tx } = setup(lead(), { teacher });
+    tx.teacherProfile.findUnique.mockResolvedValue(teacher);
+    await expect(
+      service.assignTeacher('lead-1', 'teacher-1', admin),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it.each([
+    ['suspended profile', { ...ACTIVE_TEACHER, isSuspended: true }],
+    [
+      'deactivated account',
+      {
+        ...ACTIVE_TEACHER,
+        user: { ...ACTIVE_TEACHER.user, accountStatus: 'DEACTIVATED' },
+      },
+    ],
+  ])('refuses a %s', async (_l, teacher) => {
+    const { service } = setup(lead(), { teacher });
+    await expect(
+      service.assignTeacher('lead-1', 'teacher-1', admin),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it.each([
+    ['unknown trial', null, NotFoundException],
+    [
+      'cancelled trial',
+      lead({ appointmentStatus: 'CANCELLED' }),
+      BadRequestException,
+    ],
+    [
+      'completed trial',
+      lead({ appointmentStatus: 'COMPLETED' }),
+      BadRequestException,
+    ],
+    [
+      'trial whose joining window has closed',
+      lead({
+        startAt: new Date(Date.now() - 3 * 3600_000),
+        endAt: new Date(Date.now() - 2.5 * 3600_000),
+      }),
+      BadRequestException,
+    ],
+    [
+      'same teacher again',
+      lead({ teacherId: 'teacher-1' }),
+      BadRequestException,
+    ],
+  ])('refuses: %s', async (_l, row, err) => {
+    const { service, tx, notifier } = setup(row);
+    await expect(
+      service.assignTeacher('lead-1', 'teacher-1', admin),
+    ).rejects.toBeInstanceOf(err as any);
+    expect(tx.trialLead.update).not.toHaveBeenCalled();
+    expect(notifier.afterTeacherAssigned).not.toHaveBeenCalled();
+  });
+
+  it('a failing notifier can never fail a saved assignment', async () => {
+    const { service, notifier } = setup(lead());
+    notifier.afterTeacherAssigned.mockImplementation(() => {
+      throw new Error('smtp down');
+    });
+    await expect(
+      service.assignTeacher('lead-1', 'teacher-1', admin),
+    ).resolves.toMatchObject({ firstAssignment: true });
+  });
+});
+
+describe('TrialBookingService.markOutcome', () => {
+  const past = {
+    id: 'lead-1',
+    appointmentStatus: 'CONFIRMED',
+    startAt: new Date(Date.now() - 3600_000),
+    endAt: new Date(Date.now() - 1800_000),
+  };
+  const admin = { id: 'admin-1', role: 'ADMIN' };
+
+  it.each(['COMPLETED', 'MISSED'] as const)(
+    'marks a started trial %s, stops unsent messages and audits',
+    async (outcome) => {
+      const { service, tx, whatsapp, audit } = build();
+      tx.trialLead.findUnique.mockResolvedValue(past);
+      tx.__current = past;
+      await service.markOutcome('lead-1', outcome, admin, 'note');
+      expect(tx.trialLead.update.mock.calls[0][0].data).toMatchObject({
+        appointmentStatus: outcome,
+        reminderDueAt: null,
+      });
+      expect(whatsapp.skipUnsent).toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: outcome === 'COMPLETED' ? 'TRIAL_COMPLETED' : 'TRIAL_MISSED',
+        }),
+      );
+    },
+  );
+
+  it('can correct Missed → Completed', async () => {
+    const { service, tx } = build();
+    tx.trialLead.findUnique.mockResolvedValue({
+      ...past,
+      appointmentStatus: 'MISSED',
+    });
+    await expect(
+      service.markOutcome('lead-1', 'COMPLETED', admin),
+    ).resolves.toBeDefined();
+  });
+
+  it.each([
+    [
+      'before it has started',
+      {
+        ...past,
+        startAt: new Date(Date.now() + 3600_000),
+        endAt: new Date(Date.now() + 5400_000),
+      },
+    ],
+    ['a cancelled trial', { ...past, appointmentStatus: 'CANCELLED' }],
+    ['a lead without an appointment', { ...past, appointmentStatus: null }],
+  ])('refuses %s', async (_l, row) => {
+    const { service, tx } = build();
+    tx.trialLead.findUnique.mockResolvedValue(row);
+    await expect(
+      service.markOutcome('lead-1', 'MISSED', admin),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.trialLead.update).not.toHaveBeenCalled();
   });
 });
 

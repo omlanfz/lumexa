@@ -6,14 +6,20 @@
 //     (EmailLog journal, retry sweep, dedupeKey idempotency);
 //   • WhatsApp rows were already queued inside the booking transaction —
 //     this only nudges the sender so they go out immediately.
-// Scope is deliberately small: booked (parent + admin), rescheduled (parent),
-// cancelled (parent). No WhatsApp on reschedule/cancel, no other emails.
+// Scope is deliberately small:
+//   booked            parent (request received, time reserved — NO link) + admin
+//   teacher assigned  parent: details + the secure classroom link
+//   reminder          parent: 1 hour before, same link (sent by TrialReminderService)
+//   rescheduled       parent: new time (+ the same link once staffed)
+//   cancelled         parent
+// WhatsApp goes out for booked / assigned / reminder (and, with a teacher, the
+// updated details on a reschedule); a cancellation is email-only.
 
 import { Injectable, Logger } from '@nestjs/common';
 import type { TrialLead } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { TrialWhatsAppService } from './trial-whatsapp.service';
-import { LUMEXA_CONTACT } from './trial.constants';
+import { LUMEXA_CONTACT, trialJoinUrl } from './trial.constants';
 import { describeAppointment } from './trial-format.util';
 import type { TrialEmailAppointment } from '../email/templates/trial.templates';
 
@@ -102,6 +108,48 @@ export class TrialNotificationsService {
     this.whatsapp.kick();
   }
 
+  /** A teacher was just assigned: the parent gets the details and the secure
+   *  link (email now; the WhatsApp copy was queued in the same transaction as
+   *  the assignment and is released here). */
+  afterTeacherAssigned(lead: BookedLead): void {
+    if (lead.guestToken) {
+      this.notifications
+        .sendTrialClassDetailsToParent({
+          leadId: lead.id,
+          revision: lead.revision,
+          parentEmail: lead.parentEmail,
+          parentName: lead.parentName,
+          childName: lead.childName,
+          program: lead.subject,
+          appointment: toEmailAppointment(
+            lead.startAt,
+            lead.endAt,
+            lead.timezone,
+          ),
+          joinUrl: trialJoinUrl(lead.guestToken),
+          contact: CONTACT,
+        })
+        .catch(this.swallow('class details email', lead.id));
+    }
+    this.whatsapp.kick();
+  }
+
+  /** The one-hour reminder email. Awaited by the reminder sweep, which only
+   *  marks it done afterwards; the EmailLog dedupeKey makes a repeat harmless. */
+  async sendReminderEmail(lead: BookedLead): Promise<void> {
+    if (!lead.guestToken) return;
+    await this.notifications.sendTrialReminderToParent({
+      leadId: lead.id,
+      revision: lead.revision,
+      parentEmail: lead.parentEmail,
+      parentName: lead.parentName,
+      childName: lead.childName,
+      appointment: toEmailAppointment(lead.startAt, lead.endAt, lead.timezone),
+      joinUrl: trialJoinUrl(lead.guestToken),
+      contact: CONTACT,
+    });
+  }
+
   afterRescheduled(
     lead: BookedLead,
     previous: { startAt: Date; endAt: Date },
@@ -125,8 +173,14 @@ export class TrialNotificationsService {
           lead.timezone,
         ),
         contact: CONTACT,
+        joinUrl:
+          lead.teacherId && lead.guestToken
+            ? trialJoinUrl(lead.guestToken)
+            : null,
       })
       .catch(this.swallow('reschedule email', lead.id));
+    // With a teacher the updated details + link were queued on WhatsApp too.
+    if (lead.teacherId) this.whatsapp.kick();
   }
 
   afterCancelled(lead: BookedLead, parentNote?: string | null): void {

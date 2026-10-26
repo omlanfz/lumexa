@@ -9,6 +9,7 @@
 
 export type TemplateKey =
   | 'PARENT_CONFIRMATION'
+  | 'PARENT_CLASS_DETAILS'
   | 'PARENT_REMINDER'
   | 'ADMIN_ALERT';
 
@@ -19,9 +20,15 @@ const TEMPLATE_ENV: Record<TemplateKey, { env: string; fallback: string }> = {
     env: 'WHATSAPP_TEMPLATE_PARENT_CONFIRMATION',
     fallback: 'lumexa_trial_confirmation',
   },
+  PARENT_CLASS_DETAILS: {
+    env: 'WHATSAPP_TEMPLATE_PARENT_CLASS_DETAILS',
+    fallback: 'lumexa_trial_class_details',
+  },
+  // The reminder now carries the join link, so it is a different template
+  // (different variables) from the old 24-hour reminder: new default name.
   PARENT_REMINDER: {
     env: 'WHATSAPP_TEMPLATE_PARENT_REMINDER',
-    fallback: 'lumexa_trial_reminder',
+    fallback: 'lumexa_trial_class_reminder',
   },
   ADMIN_ALERT: {
     env: 'WHATSAPP_TEMPLATE_ADMIN_ALERT',

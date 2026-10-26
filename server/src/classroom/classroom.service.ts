@@ -36,6 +36,7 @@ import {
 } from './class-finalization.service';
 import { RoomAccessService } from './room-access.service';
 import { RoomDirectoryService } from './room-directory.service';
+import { TrialClassroomService } from './trial-classroom.service';
 import { BatchSessionsService } from '../batches/batch-sessions.service';
 import {
   DEMO_ROOM_NAME,
@@ -46,7 +47,9 @@ import {
   getRoomRef,
   isCurriculumRoom,
   isLessonRoom,
+  isTrialRoom,
   lessonIdFromRoom,
+  parseTrialRoom,
   personKey,
   roomForBatchSession,
   roomForLessonRecord,
@@ -95,6 +98,7 @@ export class ClassroomService {
     private roomAccess: RoomAccessService,
     private roomDirectory: RoomDirectoryService,
     private batchSessions: BatchSessionsService,
+    private trialClassroom: TrialClassroomService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -353,9 +357,19 @@ export class ClassroomService {
       bookingId?: string;
       scheduledLessonId?: string;
       batchSessionId?: string;
+      trialLeadId?: string;
       deviceId?: string;
     },
   ) {
+    if (dto.trialLeadId) {
+      // A free trial class (the assigned teacher's way in). The guest uses the
+      // public, token-based route instead — see TrialController.
+      return this.trialClassroom.joinAsTeacher(
+        userId,
+        dto.trialLeadId,
+        dto.deviceId,
+      );
+    }
     if (dto.batchSessionId) {
       return this.joinBatchSession(userId, dto.batchSessionId, dto.deviceId);
     }
@@ -370,7 +384,7 @@ export class ClassroomService {
       return this.joinBooking(userId, dto.bookingId, dto.deviceId);
     }
     throw new BadRequestException(
-      'Either bookingId, scheduledLessonId or batchSessionId is required.',
+      'Either bookingId, scheduledLessonId, batchSessionId or trialLeadId is required.',
     );
   }
 
@@ -749,6 +763,11 @@ export class ClassroomService {
     room: string,
   ): Promise<{ ok: true; recordingStatus: RecordingStatus }> {
     await this.assertTeacherOfRoom(userId, room);
+    if (isTrialRoom(room)) {
+      throw new BadRequestException(
+        'Trial classes are not recorded. Recording is available in regular Lumexa classes.',
+      );
+    }
     const { recordingStatus } = await this.recordingService.startSegment(room);
     return { ok: true, recordingStatus };
   }
@@ -790,7 +809,8 @@ export class ClassroomService {
 
         await this.recordingService.handleEgressEnded(event.egressInfo as any);
 
-        if (isCurriculumRoom(room)) return; // no payment/gem flow for curriculum lessons
+        // No payment/gem flow for curriculum lessons or free trial classes.
+        if (isCurriculumRoom(room) || isTrialRoom(room)) return;
         await this.finalizeBookingIfDue(room);
       }
     } catch (err) {
@@ -1272,6 +1292,13 @@ export class ClassroomService {
         note,
         actor: { role: 'TEACHER', userId },
       }));
+    } else if (isTrialRoom(room)) {
+      // A free trial: close the room. No outcome workflow, earning or lesson
+      // consumption — if both sides took part the trial is recorded Completed,
+      // otherwise the admin marks it Completed or Missed.
+      await this.trialClassroom.markEnded(parseTrialRoom(room)!, userId);
+      await this.deleteLiveKitRoom(room);
+      await this.roomAccess.setLocked(room, false, userId).catch(() => {});
     } else if (room !== DEMO_ROOM_NAME) {
       const booking = await this.prisma.booking.findUnique({
         where: { id: room },

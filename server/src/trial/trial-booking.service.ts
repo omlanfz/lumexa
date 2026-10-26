@@ -1,7 +1,13 @@
 // FILE PATH: server/src/trial/trial-booking.service.ts
 //
-// The one place trial appointments are created, moved and cancelled — for
-// parents (public form) and for admins alike, so the rules can never differ.
+// The one place trial appointments are created, moved, staffed and cancelled —
+// for parents (public form) and for admins alike, so the rules can never differ.
+//
+// A trial is staffed in a second step: booking reserves the time (and mints the
+// secret guest-join token); the admin then assigns a teacher, which — and only
+// which — puts the class on that teacher's calendar and sends the parent the
+// classroom link. Teacher conflicts are checked with the same function every
+// other class uses (scheduling/teacher-conflict.util), under the same lock.
 //
 // Race-safety
 //   Every change runs in a transaction that first takes a transaction-scoped
@@ -25,9 +31,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import { Prisma, type TrialLead } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
+import {
+  describeDhakaMoment,
+  findTeacherConflict,
+} from '../scheduling/teacher-conflict.util';
 import {
   addDaysToDateStr,
   dhakaToUtc,
@@ -58,6 +69,7 @@ import {
   type SlotRejection,
 } from './trial-slots.util';
 import { trialEnd } from './trial-format.util';
+import { joinWindow, reminderDueAt } from './trial-access.util';
 import { TrialWhatsAppService } from './trial-whatsapp.service';
 import {
   TrialNotificationsService,
@@ -116,6 +128,11 @@ export interface AvailabilityResponse {
 }
 
 type ConfirmedLead = TrialLead & { startAt: Date; endAt: Date };
+
+/** A fresh unguessable join token: 32 random bytes, URL-safe (43 chars). */
+export function newGuestToken(): string {
+  return randomBytes(32).toString('base64url');
+}
 
 /** Does this error come from the "no overlapping slots" exclusion constraint? */
 export function isSlotConflictError(err: unknown): boolean {
@@ -417,17 +434,20 @@ export class TrialBookingService {
           appointmentStatus: 'CONFIRMED',
           bookedBy: source,
           adminNotes: input.adminNotes ?? null,
+          // Minted now, but not sent to anyone until a teacher is assigned.
+          guestToken: newGuestToken(),
         },
       })) as ConfirmedLead;
 
       // A parent booking alerts the admin; an admin booking on someone's
-      // behalf does not (they just did it).
+      // behalf does not (they just did it). The class link and the 1-hour
+      // reminder are queued later, when a teacher is assigned.
       await this.whatsapp.enqueue(
         tx,
         lead,
         source === 'PARENT'
-          ? ['PARENT_CONFIRMATION', 'PARENT_REMINDER', 'ADMIN_ALERT']
-          : ['PARENT_CONFIRMATION', 'PARENT_REMINDER'],
+          ? ['PARENT_CONFIRMATION', 'ADMIN_ALERT']
+          : ['PARENT_CONFIRMATION'],
         now,
       );
       return { lead, alreadyBooked: false };
@@ -469,12 +489,14 @@ export class TrialBookingService {
     newStart: Date,
     actor: Actor,
     reason?: string,
+    /** Move to a different teacher at the same time (optional). */
+    opts: { teacherId?: string } = {},
   ): Promise<{
     lead: ConfirmedLead;
     availabilityChanges: AvailabilityChanges;
   }> {
     const now = new Date();
-    let previous!: { startAt: Date; endAt: Date };
+    let previous!: { startAt: Date; endAt: Date; teacherId: string | null };
 
     const { lead, changes } = await this.inTransaction(async (tx) => {
       const current = await tx.trialLead.findUnique({ where: { id } });
@@ -496,10 +518,28 @@ export class TrialBookingService {
           'The new time is the same as the current time.',
         );
       }
-      previous = { startAt: current.startAt, endAt: current.endAt };
+      previous = {
+        startAt: current.startAt,
+        endAt: current.endAt,
+        teacherId: current.teacherId,
+      };
 
       const cfg = await this.loadConfig(tx);
       await this.assertSlotBookable(tx, cfg, newStart, now, id);
+
+      // The teacher who will teach at the NEW time (the assigned one unless the
+      // admin picked another) must be free then — same rule as assignment.
+      if (opts.teacherId && !current.teacherId) {
+        // Staffing is its own step (it is what sends the parent the link).
+        throw new BadRequestException(
+          'Assign a teacher first; a teacher can only be changed while rescheduling an already-staffed trial.',
+        );
+      }
+      const teacherId = opts.teacherId ?? current.teacherId;
+      const newEnd = trialEnd(newStart);
+      if (teacherId) {
+        await this.assertTeacherAssignable(tx, teacherId, newStart, newEnd, id);
+      }
 
       const dates = [
         utcToDhakaParts(current.startAt).dateStr,
@@ -511,17 +551,34 @@ export class TrialBookingService {
         where: { id },
         data: {
           startAt: newStart,
-          endAt: trialEnd(newStart),
+          endAt: newEnd,
           revision: { increment: 1 },
+          ...(teacherId && teacherId !== current.teacherId
+            ? { teacherId, teacherAssignedAt: now }
+            : {}),
+          // The 1-hour reminder is for the old time: re-plan it for the new
+          // one (none if the new start is less than an hour away or there is
+          // no teacher yet). The email reminder sweep picks this up.
+          reminderDueAt: teacherId ? reminderDueAt(newStart, now) : null,
+          reminderEmailSentAt: null,
         },
       })) as ConfirmedLead;
 
-      // The old reminder is for the old time: retire it and queue one for the
-      // new time. (Confirmation / admin alert are never re-sent.)
+      // Unsent WhatsApp messages about the old time are retired; with a teacher
+      // the parent gets the updated details + the same link, and a new
+      // reminder. (Confirmation / admin alert are never re-sent.)
       await this.whatsapp.skipUnsent(tx, id, 'Superseded by a reschedule.', [
         'PARENT_REMINDER',
+        'PARENT_CLASS_DETAILS',
       ]);
-      await this.whatsapp.enqueue(tx, updated, ['PARENT_REMINDER'], now);
+      if (teacherId) {
+        await this.whatsapp.enqueue(
+          tx,
+          updated,
+          ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER'],
+          now,
+        );
+      }
 
       const after = await this.slotSnapshot(tx, cfg, dates, now);
       return { lead: updated, changes: this.diff(before, after) };
@@ -538,10 +595,12 @@ export class TrialBookingService {
         beforeData: {
           startAt: previous.startAt.toISOString(),
           endAt: previous.endAt.toISOString(),
+          teacherId: previous.teacherId,
         },
         afterData: {
           startAt: lead.startAt.toISOString(),
           endAt: lead.endAt.toISOString(),
+          teacherId: lead.teacherId,
         },
       })
       .catch((e) =>
@@ -584,6 +643,11 @@ export class TrialBookingService {
           alreadyCancelled: true,
         };
       }
+      if (current.appointmentStatus !== 'CONFIRMED') {
+        throw new BadRequestException(
+          'This trial has already been marked completed or missed, so it cannot be cancelled.',
+        );
+      }
       if (current.endAt.getTime() <= now.getTime()) {
         throw new BadRequestException('That trial has already taken place.');
       }
@@ -598,6 +662,9 @@ export class TrialBookingService {
           appointmentStatus: 'CANCELLED',
           cancelledAt: now,
           cancelReason: reason,
+          // No reminder for a cancelled class; the guest link stops working
+          // because it only grants entry to a CONFIRMED appointment.
+          reminderDueAt: null,
         },
       })) as ConfirmedLead;
       await this.whatsapp.skipUnsent(tx, id, 'Appointment was cancelled.');
@@ -639,6 +706,219 @@ export class TrialBookingService {
       availabilityChanges: result.changes,
       alreadyCancelled: result.alreadyCancelled,
     };
+  }
+
+  // ─── Teacher assignment ───────────────────────────────────────────────────
+
+  /** The teacher must exist, be an active (not suspended) teacher account and
+   *  be free for the whole session — checked with the same conflict function
+   *  every other class uses (lessons, batch classes, booked shifts, trials). */
+  private async assertTeacherAssignable(
+    tx: Db,
+    teacherId: string,
+    start: Date,
+    end: Date,
+    trialId: string,
+  ): Promise<{ id: string; fullName: string }> {
+    const teacher = await tx.teacherProfile.findUnique({
+      where: { id: teacherId },
+      select: {
+        id: true,
+        isSuspended: true,
+        user: { select: { role: true, accountStatus: true, fullName: true } },
+      },
+    });
+    if (!teacher || teacher.user.role !== 'TEACHER') {
+      throw new NotFoundException('Teacher not found.');
+    }
+    if (teacher.isSuspended || teacher.user.accountStatus !== 'ACTIVE') {
+      throw new BadRequestException(
+        `${teacher.user.fullName} is not an active teacher right now.`,
+      );
+    }
+    const conflict = await findTeacherConflict(tx, teacherId, start, end, {
+      excludeTrialId: trialId,
+    });
+    if (conflict) {
+      throw new ConflictException(
+        `${teacher.user.fullName} is already booked at ${describeDhakaMoment(start)} (Asia/Dhaka). Choose another teacher or time.`,
+      );
+    }
+    return { id: teacher.id, fullName: teacher.user.fullName };
+  }
+
+  /**
+   * Assign (or change) the teacher of a trial.
+   *
+   * The first assignment is what makes the trial real for everyone else: it
+   * lands on the teacher's schedule and upcoming classes (they read the same
+   * row), the parent is sent the details + secure link by email and WhatsApp,
+   * and the 1-hour reminder is planned — unless the class is less than an hour
+   * away, in which case the link goes out immediately and no (outdated)
+   * reminder is scheduled. Changing teacher later moves the class between the
+   * two teachers' calendars; the time and the parent's link do not change, so
+   * the parent is not messaged again.
+   */
+  async assignTeacher(
+    id: string,
+    teacherId: string,
+    actor: Actor,
+  ): Promise<{ lead: ConfirmedLead; firstAssignment: boolean }> {
+    const now = new Date();
+    let previousTeacherId: string | null = null;
+
+    const result = await this.inTransaction(async (tx) => {
+      const current = await tx.trialLead.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Trial appointment not found.');
+      if (
+        current.appointmentStatus !== 'CONFIRMED' ||
+        !current.startAt ||
+        !current.endAt
+      ) {
+        throw new BadRequestException(
+          'A teacher can only be assigned to a confirmed trial.',
+        );
+      }
+      if (
+        now.getTime() >
+        joinWindow(current.startAt, current.endAt).closesAt.getTime()
+      ) {
+        throw new BadRequestException('That trial has already taken place.');
+      }
+      if (current.teacherId === teacherId) {
+        throw new BadRequestException(
+          'That teacher is already assigned to this trial.',
+        );
+      }
+      previousTeacherId = current.teacherId;
+
+      await this.assertTeacherAssignable(
+        tx,
+        teacherId,
+        current.startAt,
+        current.endAt,
+        id,
+      );
+
+      const first = current.teacherId === null;
+      const updated = (await tx.trialLead.update({
+        where: { id },
+        data: {
+          teacherId,
+          teacherAssignedAt: now,
+          // Legacy rows are backfilled by the migration; this is the safety net.
+          ...(current.guestToken ? {} : { guestToken: newGuestToken() }),
+          ...(first
+            ? {
+                reminderDueAt: reminderDueAt(current.startAt, now),
+                reminderEmailSentAt: null,
+              }
+            : {}),
+        },
+      })) as ConfirmedLead;
+
+      if (first) {
+        await this.whatsapp.enqueue(
+          tx,
+          updated,
+          ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER'],
+          now,
+        );
+      }
+      return { lead: updated, firstAssignment: first };
+    });
+
+    this.audit
+      .log({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: result.firstAssignment
+          ? 'TRIAL_TEACHER_ASSIGNED'
+          : 'TRIAL_TEACHER_CHANGED',
+        entityType: 'TRIAL_APPOINTMENT',
+        entityId: id,
+        beforeData: { teacherId: previousTeacherId },
+        afterData: { teacherId },
+      })
+      .catch((e) =>
+        this.logger.error(
+          `Audit write failed: ${String((e as Error)?.message ?? e)}`,
+        ),
+      );
+    if (result.firstAssignment) {
+      this.safely('teacher assignment notification', () =>
+        this.notifier.afterTeacherAssigned(result.lead),
+      );
+    }
+    return result;
+  }
+
+  // ─── Outcome ──────────────────────────────────────────────────────────────
+
+  /**
+   * Record what happened once the start time has passed: Completed or Missed.
+   * Doing so never consumes a lesson, pays anyone or touches curriculum
+   * progress — a trial has none of those. It can be corrected between the two
+   * outcomes, but a cancelled trial stays cancelled.
+   */
+  async markOutcome(
+    id: string,
+    outcome: 'COMPLETED' | 'MISSED',
+    actor: Actor,
+    note?: string,
+  ): Promise<{ lead: ConfirmedLead }> {
+    const now = new Date();
+    let before: string | null = null;
+
+    const lead = await this.inTransaction(async (tx) => {
+      const current = await tx.trialLead.findUnique({ where: { id } });
+      if (!current) throw new NotFoundException('Trial appointment not found.');
+      if (!current.appointmentStatus || !current.startAt || !current.endAt) {
+        throw new BadRequestException('This lead has no booked appointment.');
+      }
+      if (current.appointmentStatus === 'CANCELLED') {
+        throw new BadRequestException(
+          'A cancelled trial cannot be marked completed or missed.',
+        );
+      }
+      if (current.startAt.getTime() > now.getTime()) {
+        throw new BadRequestException(
+          'A trial can only be marked once its start time has passed.',
+        );
+      }
+      before = current.appointmentStatus;
+      const updated = (await tx.trialLead.update({
+        where: { id },
+        data: {
+          appointmentStatus: outcome,
+          reminderDueAt: null,
+        },
+      })) as ConfirmedLead;
+      await this.whatsapp.skipUnsent(
+        tx,
+        id,
+        `Trial was marked ${outcome.toLowerCase()}.`,
+      );
+      return updated;
+    });
+
+    this.audit
+      .log({
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: outcome === 'COMPLETED' ? 'TRIAL_COMPLETED' : 'TRIAL_MISSED',
+        entityType: 'TRIAL_APPOINTMENT',
+        entityId: id,
+        reason: note,
+        beforeData: { appointmentStatus: before },
+        afterData: { appointmentStatus: outcome },
+      })
+      .catch((e) =>
+        this.logger.error(
+          `Audit write failed: ${String((e as Error)?.message ?? e)}`,
+        ),
+      );
+    return { lead };
   }
 }
 

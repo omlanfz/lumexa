@@ -17,6 +17,7 @@ const ENV = [
   'WHATSAPP_ADMIN_RECIPIENT',
   'WHATSAPP_TEMPLATE_PARENT_CONFIRMATION',
   'WHATSAPP_TEMPLATE_PARENT_REMINDER',
+  'WHATSAPP_TEMPLATE_PARENT_CLASS_DETAILS',
   'WHATSAPP_TEMPLATE_ADMIN_ALERT',
   'WHATSAPP_TEMPLATE_LANGUAGE',
 ];
@@ -37,11 +38,17 @@ const lead = {
   startAt: new Date('2026-11-10T10:00:00Z'),
   whatsappConsent: true,
   parentPhone: '+8801712345678',
+  teacherId: 'teacher-1' as string | null,
 };
-const ALL = ['PARENT_CONFIRMATION', 'PARENT_REMINDER', 'ADMIN_ALERT'] as const;
+const ALL = [
+  'PARENT_CONFIRMATION',
+  'PARENT_CLASS_DETAILS',
+  'PARENT_REMINDER',
+  'ADMIN_ALERT',
+] as const;
 
 describe('planTrialWhatsApp (message selection)', () => {
-  it('queues exactly the three trial messages when enabled and consented', () => {
+  it('queues exactly the four trial messages when enabled, consented and staffed', () => {
     const plan = planTrialWhatsApp({
       lead,
       now: NOW,
@@ -52,12 +59,43 @@ describe('planTrialWhatsApp (message selection)', () => {
     expect(plan.every((p) => p.status === 'PENDING')).toBe(true);
     const reminder = plan.find((p) => p.kind === 'PARENT_REMINDER')!;
     expect(reminder.scheduledFor.toISOString()).toBe(
-      '2026-11-09T10:00:00.000Z',
-    ); // 24h before
+      '2026-11-10T09:00:00.000Z',
+    ); // exactly one hour before
     expect(reminder.nextAttemptAt).toEqual(reminder.scheduledFor);
-    expect(
-      plan.find((p) => p.kind === 'PARENT_CONFIRMATION')!.nextAttemptAt,
-    ).toEqual(NOW);
+    for (const kind of ['PARENT_CONFIRMATION', 'PARENT_CLASS_DETAILS']) {
+      expect(plan.find((p) => p.kind === kind)!.nextAttemptAt).toEqual(NOW);
+    }
+  });
+
+  it('before a teacher is assigned the link messages and the reminder are skipped, never queued', () => {
+    const plan = planTrialWhatsApp({
+      lead: { ...lead, teacherId: null },
+      now: NOW,
+      enabled: true,
+      kinds: [...ALL],
+    });
+    const status = Object.fromEntries(plan.map((p) => [p.kind, p.status]));
+    expect(status).toEqual({
+      PARENT_CONFIRMATION: 'PENDING',
+      PARENT_CLASS_DETAILS: 'SKIPPED',
+      PARENT_REMINDER: 'SKIPPED',
+      ADMIN_ALERT: 'PENDING',
+    });
+  });
+
+  it('assigned less than an hour before the start: the link is sent now, no reminder is scheduled', () => {
+    const soon = { ...lead, startAt: new Date(NOW.getTime() + 40 * 60_000) };
+    const plan = planTrialWhatsApp({
+      lead: soon,
+      now: NOW,
+      enabled: true,
+      kinds: ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER'],
+    });
+    const byKind = Object.fromEntries(plan.map((p) => [p.kind, p]));
+    expect(byKind.PARENT_CLASS_DETAILS.status).toBe('PENDING');
+    expect(byKind.PARENT_CLASS_DETAILS.nextAttemptAt).toEqual(NOW);
+    expect(byKind.PARENT_REMINDER.status).toBe('SKIPPED');
+    expect(byKind.PARENT_REMINDER.lastError).toMatch(/less than an hour/i);
   });
 
   it('feature flag off: everything is SKIPPED, nothing pending', () => {
@@ -83,12 +121,13 @@ describe('planTrialWhatsApp (message selection)', () => {
     const status = Object.fromEntries(plan.map((p) => [p.kind, p.status]));
     expect(status).toEqual({
       PARENT_CONFIRMATION: 'SKIPPED',
+      PARENT_CLASS_DETAILS: 'SKIPPED',
       PARENT_REMINDER: 'SKIPPED',
       ADMIN_ALERT: 'PENDING',
     });
   });
 
-  it('short-notice booking: reminder is 1h before; inside the last hour there is none', () => {
+  it('the reminder is always 1h before; inside the last hour there is none', () => {
     const soon = { ...lead, startAt: new Date(NOW.getTime() + 5 * 3600_000) };
     const r1 = planTrialWhatsApp({
       lead: soon,
@@ -111,7 +150,7 @@ describe('planTrialWhatsApp (message selection)', () => {
     expect(r2.status).toBe('SKIPPED');
   });
 
-  it('dedupe keys are stable per message, and per revision for reminders only', () => {
+  it('dedupe keys are stable per message, and per revision for the time-bound messages only', () => {
     expect(whatsappDedupeKey('L', 'PARENT_CONFIRMATION', 3)).toBe(
       'trial:L:PARENT_CONFIRMATION',
     );
@@ -123,6 +162,9 @@ describe('planTrialWhatsApp (message selection)', () => {
     );
     expect(whatsappDedupeKey('L', 'PARENT_REMINDER', 1)).toBe(
       'trial:L:PARENT_REMINDER:r1',
+    );
+    expect(whatsappDedupeKey('L', 'PARENT_CLASS_DETAILS', 2)).toBe(
+      'trial:L:PARENT_CLASS_DETAILS:r2',
     );
   });
 });
@@ -146,6 +188,8 @@ function build(rowOverrides: any = {}, leadOverrides: any = {}) {
       message: null,
       appointmentStatus: 'CONFIRMED',
       whatsappConsent: true,
+      teacherId: 'teacher-1',
+      guestToken: 'tok_'.padEnd(43, 'x'),
       revision: 0,
       startAt: new Date(Date.now() + 3 * 86400_000),
       endAt: new Date(Date.now() + 3 * 86400_000 + 1800_000),
@@ -216,6 +260,45 @@ describe('TrialWhatsAppService.processDue', () => {
       providerMessageId: 'wamid.1',
       lockedAt: null,
     });
+  });
+
+  it('class details and the reminder carry the secure join link as their last variable', async () => {
+    process.env.FRONTEND_URL = 'https://lumexa-one.vercel.app';
+    for (const kind of ['PARENT_CLASS_DETAILS', 'PARENT_REMINDER']) {
+      const { service, cloud } = build({ kind });
+      await service.processDue();
+      const vars = cloud.sendTemplate.mock.calls[0][0].variables;
+      expect(vars.at(-1)).toEqual({
+        name: 'join_link',
+        value: `https://lumexa-one.vercel.app/trial/join/${'tok_'.padEnd(43, 'x')}`,
+      });
+    }
+  });
+
+  it('a link message for a trial without a token fails permanently instead of sending a dead link', async () => {
+    const { service, prisma, cloud } = build(
+      { kind: 'PARENT_CLASS_DETAILS' },
+      { guestToken: null },
+    );
+    await service.processDue();
+    expect(cloud.sendTemplate).not.toHaveBeenCalled();
+    expect(lastUpdate(prisma)).toMatchObject({
+      status: 'FAILED',
+      errorCode: 'BUILD_FAILED',
+      nextAttemptAt: null,
+    });
+  });
+
+  it('the class link is still sent when a teacher is assigned just after the start, while the room is open', async () => {
+    const { service, cloud } = build(
+      { kind: 'PARENT_CLASS_DETAILS' },
+      {
+        startAt: new Date(Date.now() - 5 * 60_000),
+        endAt: new Date(Date.now() + 25 * 60_000),
+      },
+    );
+    await service.processDue();
+    expect(cloud.sendTemplate).toHaveBeenCalledTimes(1);
   });
 
   it('admin alert goes to the configured admin number, not the parent', async () => {
@@ -338,6 +421,24 @@ describe('TrialWhatsAppService.processDue', () => {
       { kind: 'PARENT_REMINDER', revision: 0 },
       { revision: 1 },
     ],
+    [
+      'superseded class details after reschedule',
+      { kind: 'PARENT_CLASS_DETAILS', revision: 0 },
+      { revision: 1 },
+    ],
+    [
+      'reminder when the teacher was removed',
+      { kind: 'PARENT_REMINDER' },
+      { teacherId: null },
+    ],
+    [
+      'class link after the joining window closed',
+      { kind: 'PARENT_CLASS_DETAILS' },
+      {
+        startAt: new Date(Date.now() - 3 * 3600_000),
+        endAt: new Date(Date.now() - 3 * 3600_000 + 1800_000),
+      },
+    ],
     ['parent without consent', {}, { whatsappConsent: false }],
   ])('skips (does not send): %s', async (_label, rowOv, leadOv) => {
     const { service, prisma, cloud } = build(rowOv, leadOv);
@@ -353,7 +454,7 @@ describe('TrialWhatsAppService.processDue', () => {
 describe('TrialWhatsAppService.enqueue / skipUnsent', () => {
   it('persists planned rows with skipDuplicates so re-planning cannot double-queue', async () => {
     process.env.WHATSAPP_ENABLED = 'true';
-    const createMany = jest.fn().mockResolvedValue({ count: 3 });
+    const createMany = jest.fn().mockResolvedValue({ count: 4 });
     const { service } = build();
     await service.enqueue(
       { trialWhatsAppMessage: { createMany } } as any,
@@ -363,7 +464,7 @@ describe('TrialWhatsAppService.enqueue / skipUnsent', () => {
     );
     const arg = createMany.mock.calls[0][0];
     expect(arg.skipDuplicates).toBe(true);
-    expect(arg.data).toHaveLength(3);
+    expect(arg.data).toHaveLength(4);
     expect(arg.data.every((d: any) => d.trialLeadId === 'lead-1')).toBe(true);
   });
 

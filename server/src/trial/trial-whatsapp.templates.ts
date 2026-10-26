@@ -12,7 +12,11 @@
 // server/src/whatsapp/whatsapp.config.ts).
 
 import type { TrialLead, TrialWhatsAppKind } from '@prisma/client';
-import { TRIAL_TIMEZONE_LABEL } from './trial.constants';
+import {
+  TRIAL_TIMEZONE_LABEL,
+  frontendBaseUrl,
+  trialJoinUrl,
+} from './trial.constants';
 import {
   formatTrialDate,
   formatTrialDuration,
@@ -31,11 +35,24 @@ export const PARENT_CONFIRMATION_VARIABLES = [
   'programs_url',
 ] as const;
 
+/** Sent once a teacher is assigned (and again if the time changes): the trial
+ *  details plus the secure classroom link. */
+export const PARENT_CLASS_DETAILS_VARIABLES = [
+  'parent_name',
+  'child_name',
+  'appointment_date',
+  'appointment_time',
+  'duration',
+  'join_link',
+] as const;
+
+/** Sent one hour before the start, with the same link. */
 export const PARENT_REMINDER_VARIABLES = [
   'child_name',
   'appointment_date',
   'appointment_time',
   'duration',
+  'join_link',
 ] as const;
 
 export const ADMIN_ALERT_VARIABLES = [
@@ -61,6 +78,7 @@ export type TrialWhatsAppLead = Pick<
   | 'message'
   | 'startAt'
   | 'endAt'
+  | 'guestToken'
 >;
 
 export function templateKeyFor(kind: TrialWhatsAppKind): TemplateKey {
@@ -69,9 +87,15 @@ export function templateKeyFor(kind: TrialWhatsAppKind): TemplateKey {
 
 /** Public Programs page, built from FRONTEND_URL so it follows the deployed domain. */
 export function programsUrl(): string {
-  const first = (process.env.FRONTEND_URL || '').split(',')[0].trim();
-  const base = (first || 'http://localhost:3000').replace(/\/+$/, '');
-  return `${base}/programs`;
+  return `${frontendBaseUrl()}/programs`;
+}
+
+/** The secure guest link. A message that needs it can never be built without
+ *  one (that would send a parent a dead link), so this throws and the sender
+ *  records a non-retryable BUILD_FAILED instead. */
+function joinLink(lead: Pick<TrialWhatsAppLead, 'guestToken'>): string {
+  if (!lead.guestToken) throw new Error('Trial has no guest join token.');
+  return trialJoinUrl(lead.guestToken);
 }
 
 export function buildTemplateVariables(
@@ -96,43 +120,43 @@ export function buildTemplateVariables(
           program_interest: program,
           programs_url: programsUrl(),
         }
-      : kind === 'PARENT_REMINDER'
+      : kind === 'PARENT_CLASS_DETAILS'
         ? {
+            parent_name: lead.parentName,
             child_name: lead.childName,
             appointment_date: date,
             appointment_time: time,
             duration: formatTrialDuration(),
+            join_link: joinLink(lead),
           }
-        : {
-            parent_name: lead.parentName,
-            parent_email: lead.parentEmail,
-            parent_whatsapp: lead.parentPhone ?? 'Not provided',
-            child_name: lead.childName,
-            child_age: String(lead.childAge),
-            program_interest: program,
-            appointment_date: date,
-            appointment_time: time,
-            parent_message: lead.message?.trim() || 'None provided',
-          };
+        : kind === 'PARENT_REMINDER'
+          ? {
+              child_name: lead.childName,
+              appointment_date: date,
+              appointment_time: time,
+              duration: formatTrialDuration(),
+              join_link: joinLink(lead),
+            }
+          : {
+              parent_name: lead.parentName,
+              parent_email: lead.parentEmail,
+              parent_whatsapp: lead.parentPhone ?? 'Not provided',
+              child_name: lead.childName,
+              child_age: String(lead.childAge),
+              program_interest: program,
+              appointment_date: date,
+              appointment_time: time,
+              parent_message: lead.message?.trim() || 'None provided',
+            };
 
   const order: readonly string[] =
     kind === 'PARENT_CONFIRMATION'
       ? PARENT_CONFIRMATION_VARIABLES
-      : kind === 'PARENT_REMINDER'
-        ? PARENT_REMINDER_VARIABLES
-        : ADMIN_ALERT_VARIABLES;
+      : kind === 'PARENT_CLASS_DETAILS'
+        ? PARENT_CLASS_DETAILS_VARIABLES
+        : kind === 'PARENT_REMINDER'
+          ? PARENT_REMINDER_VARIABLES
+          : ADMIN_ALERT_VARIABLES;
 
   return order.map((name) => ({ name, value: values[name] }));
-}
-
-/** When the parent reminder should go out: 24h before the session, or — when
- *  the booking was made less than 24h ahead — 1h before. Null when even that
- *  is no longer possible (never remind after/at the start). */
-export function computeReminderAt(start: Date, now: Date): Date | null {
-  const HOUR = 60 * 60 * 1000;
-  const dayBefore = new Date(start.getTime() - 24 * HOUR);
-  if (dayBefore.getTime() > now.getTime()) return dayBefore;
-  const hourBefore = new Date(start.getTime() - HOUR);
-  if (hourBefore.getTime() > now.getTime()) return hourBefore;
-  return null;
 }

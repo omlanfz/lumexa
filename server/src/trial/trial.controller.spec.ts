@@ -1,3 +1,4 @@
+import { RequestMethod } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
@@ -22,7 +23,7 @@ describe('trial endpoints — authorization', () => {
     expect(methods(TrialAdminController).length).toBeGreaterThan(10);
   });
 
-  it('the public controller exposes only booking + availability without auth; lead listing and status stay admin-only', () => {
+  it('the public controller exposes only booking, availability and the token-protected guest endpoints without auth; lead listing and status stay admin-only', () => {
     const open = methods(TrialController).filter(
       (m) =>
         !reflector.get<any[]>(
@@ -30,13 +31,38 @@ describe('trial endpoints — authorization', () => {
           (TrialController.prototype as any)[m],
         ),
     );
-    expect(open.sort()).toEqual(['availability', 'create']);
+    expect(open.sort()).toEqual([
+      'availability',
+      'create',
+      'guestJoin',
+      'guestStatus',
+    ]);
     for (const m of ['list', 'updateStatus']) {
       const handler = (TrialController.prototype as any)[m];
       expect(reflector.get<any[]>(GUARDS_METADATA, handler)).toContain(
         RolesGuard,
       );
       expect(reflector.get<Role[]>(ROLES_KEY, handler)).toEqual([Role.ADMIN]);
+    }
+  });
+
+  it('the guest endpoints are POSTs (the secret token never appears in a URL or access log) and are rate limited', () => {
+    for (const m of ['guestJoin', 'guestStatus']) {
+      const handler = (TrialController.prototype as any)[m];
+      expect(reflector.get<number>('path', handler)).toMatch(/^guest\//);
+      expect(reflector.get<number>('method', handler)).toBe(RequestMethod.POST);
+      const keys = Reflect.getMetadataKeys(handler).map(String);
+      expect(keys.some((k) => k.startsWith('THROTTLER:LIMIT'))).toBe(true);
+    }
+  });
+
+  it('team-only trial management (assign, outcome, teachers) lives on the admin controller', () => {
+    const adminMethods = methods(TrialAdminController);
+    for (const m of ['assignTeacher', 'outcome', 'teachers']) {
+      expect(adminMethods).toContain(m);
+    }
+    for (const m of ['assignTeacher', 'outcome', 'teachers']) {
+      expect(methods(TrialController)).not.toContain(m);
     }
   });
 
