@@ -72,6 +72,9 @@ interface ControlBarProps {
   onToggleRecording: () => void;
   /** False in a free trial class, which is never recorded. Defaults to true. */
   recordingAvailable?: boolean;
+  /** Recordings of this class not yet uploaded: shown as a badge on the Record
+   * button when nothing is being recorded, so they are not forgotten. */
+  recordingPending?: number;
 
   backgroundEffect: BackgroundEffect;
   onBackgroundChange: (e: BackgroundEffect) => void;
@@ -130,6 +133,7 @@ export default function ControlBar({
   recordingState,
   onToggleRecording,
   recordingAvailable = true,
+  recordingPending = 0,
   backgroundEffect,
   onBackgroundChange,
   lighting,
@@ -220,13 +224,16 @@ export default function ControlBar({
         recordingState === 'active'
           ? 'Stop recording'
           : recordingState === 'starting'
-            ? 'Starting recording…'
+            ? 'Choose what to share…'
             : recordingState === 'stopping'
-              ? 'Stopping recording…'
-              : 'Record class'
+              ? 'Finishing the recording…'
+              : recordingPending > 0
+                ? `Record class (${recordingPending} not uploaded yet)`
+                : 'Record class'
       }
       onClick={onToggleRecording}
       disabled={recordingState === 'starting' || recordingState === 'stopping'}
+      badge={recordingState === 'inactive' && recordingPending > 0 ? recordingPending : undefined}
       className={
         recordingState === 'active'
           ? 'text-red-500 animate-pulse'

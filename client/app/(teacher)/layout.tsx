@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import TeacherTopNav from '@/components/TeacherTopNav';
+import PendingRecordingsBanner from '@/components/teacher/PendingRecordingsBanner';
 import api from '@/lib/axios';
 import { parseStoredUser, getStoredToken } from '@/lib/storage';
 
@@ -54,6 +55,8 @@ export default function TeacherDashboardLayout({
         teacherName={profile?.user?.fullName ?? 'Teacher'}
         avatarUrl={profile?.user?.avatarUrl ?? null}
       />
+      {/* A class recording that is still on this computer, not yet uploaded */}
+      <PendingRecordingsBanner />
       <main className="max-w-[1600px] mx-auto">
         {/* Keyed by route so each page transitions in smoothly on navigation */}
         <div key={pathname} className="fade-in">

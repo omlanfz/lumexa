@@ -7,6 +7,9 @@ import axios from "axios";
 // ─── LUMI CHATBOT ──────────────────────────────────────────────────────────────
 import LumiChat from "../../../components/LumiChat";
 // ──────────────────────────────────────────────────────────────────────────────
+import RecordingPlayerModal from "@/components/recordings/RecordingPlayerModal";
+import { fetchBookingParts } from "@/lib/classroom/recording/library";
+import type { RecordingPart } from "@/lib/classroom/recording/library";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
@@ -25,6 +28,14 @@ function RecordingsContent() {
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [studentName, setStudentName] = useState("");
+  // The recording being watched. Its parts are looked up when the window opens;
+  // `load` is made once per click so the window does not look them up again on
+  // every render.
+  const [watching, setWatching] = useState<{
+    title: string;
+    subtitle: string;
+    load: () => Promise<RecordingPart[]>;
+  } | null>(null);
 
   useEffect(() => {
     const tok = localStorage.getItem("token");
@@ -142,13 +153,37 @@ function RecordingsContent() {
                   >
                     ▶ Watch
                   </a>
+                ) : r.recordingStatus === "AVAILABLE" ? (
+                  <button
+                    onClick={() =>
+                      setWatching({
+                        title: `Class with ${r.teacherName}`,
+                        subtitle: r.classDate
+                          ? new Date(r.classDate).toLocaleDateString("en-US", {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : "",
+                        load: () => fetchBookingParts(r.bookingId),
+                      })
+                    }
+                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition-colors cursor-pointer flex-shrink-0"
+                  >
+                    ▶ Watch
+                  </button>
                 ) : r.recordingStatus === "PROCESSING" || r.recordingStatus === "RECORDING" ? (
                   <span className="text-xs text-amber-500 flex items-center gap-1.5 flex-shrink-0">
                     <span className="w-3 h-3 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
-                    Processing recording…
+                    {r.recordingStatus === "RECORDING"
+                      ? "Being recorded…"
+                      : "Waiting for the teacher to upload it…"}
                   </span>
                 ) : r.recordingStatus === "FAILED" ? (
                   <span className="text-xs text-red-500 flex-shrink-0">Recording unavailable</span>
+                ) : r.recordingStatus === "EXPIRED" ? (
+                  <span className="text-xs text-[var(--s-text-muted)] flex-shrink-0">No longer available</span>
                 ) : (
                   <span className="text-xs dark:text-blue-500 text-blue-400 flex-shrink-0">
                     No recording
@@ -159,6 +194,15 @@ function RecordingsContent() {
           </div>
         )}
       </div>
+
+      {watching && (
+        <RecordingPlayerModal
+          title={watching.title}
+          subtitle={watching.subtitle}
+          loadParts={watching.load}
+          onClose={() => setWatching(null)}
+        />
+      )}
 
       {/* ─── LUMI CHATBOT ───────────────────────────────────────────────────────
           Fixed bottom-right. variant="student" → blue theme, Cadet persona.

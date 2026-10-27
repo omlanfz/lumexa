@@ -33,6 +33,10 @@
 //     silent, non-publishing observer (see ClassroomService.
 //     adminJoinLiveClass) — skips the pre-join device screen entirely,
 //     since there's nothing to configure.
+//
+// A teacher who leaves a class with a recording that is not uploaded yet is not
+// sent straight to the dashboard: they land on PostClassRecordings, which gets
+// the recording uploaded (it exists only in this browser tab until then).
 
 'use client';
 
@@ -46,8 +50,10 @@ import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
 import PreJoinScreen, { JoinChoices } from './PreJoinScreen';
 import ClassroomRoom from './ClassroomRoom';
+import PostClassRecordings from './PostClassRecordings';
 import { PeopleProvider } from './PeopleContext';
 import { newDeviceId } from '@/lib/classroom/identity';
+import { recordingStore } from '@/lib/classroom/recording/store';
 import { DEFAULT_LIGHTING } from '@/lib/classroom/useVideoEffects';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
@@ -148,6 +154,9 @@ export default function ClassroomExperience({
   const [demoExampleLesson, setDemoExampleLesson] = useState<LessonDetailsResponse | null>(null);
   const [error, setError] = useState('');
   const [choices, setChoices] = useState<JoinChoices | null>(null);
+  // Set when the teacher left with a recording still to upload: the classroom
+  // whose recordings are shown instead of going to the dashboard.
+  const [recordingsHeldFor, setRecordingsHeldFor] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lessonRequested = useRef(false);
 
@@ -306,8 +315,18 @@ export default function ClassroomExperience({
       router.push('/admin/classes');
       return;
     }
+    // Only the teacher who recorded has anything here. Their recording exists in
+    // this tab alone until it is uploaded, so keep them on a page that does that.
+    if (join && recordingStore.unfinishedCount(join.roomName) > 0) {
+      setRecordingsHeldFor(join.roomName);
+      return;
+    }
     router.push(dashboardPathFor(getStoredRole()));
   };
+
+  if (recordingsHeldFor) {
+    return <PostClassRecordings roomName={recordingsHeldFor} backLabel={backLabel} onLeave={leave} />;
+  }
 
   if (denied) {
     return (

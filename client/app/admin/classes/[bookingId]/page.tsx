@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import { Card, StatusBadge, formatBDT, formatDateTime } from "@/components/admin/AdminUI";
+import RecordingPlayerModal from "@/components/recordings/RecordingPlayerModal";
+import { fetchBookingParts } from "@/lib/classroom/recording/library";
 
 export default function BookingDetailPage() {
   const { bookingId } = useParams<{ bookingId: string }>();
   const router = useRouter();
   const [booking, setBooking] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [watching, setWatching] = useState(false);
 
   useEffect(() => {
     api
@@ -17,6 +20,8 @@ export default function BookingDetailPage() {
       .then((res) => setBooking(res.data))
       .finally(() => setLoading(false));
   }, [bookingId]);
+
+  const loadParts = useCallback(() => fetchBookingParts(bookingId), [bookingId]);
 
   if (loading) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
   if (!booking) return <p className="text-sm text-[var(--a-danger)]">Class not found.</p>;
@@ -49,6 +54,14 @@ export default function BookingDetailPage() {
           <a href={booking.recordingUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--a-accent)] hover:underline">
             View recording
           </a>
+        ) : booking.recordingStatus === "AVAILABLE" ? (
+          <button onClick={() => setWatching(true)} className="text-[var(--a-accent)] hover:underline">
+            Watch recording
+          </button>
+        ) : booking.recordingStatus === "PROCESSING" ? (
+          "Waiting for the teacher to upload it"
+        ) : booking.recordingStatus === "RECORDING" ? (
+          "Being recorded now"
         ) : "Not available"} />
         <Field label="Review" value={booking.review ? `${booking.review.rating}★` : "No review yet"} />
       </Card>
@@ -81,6 +94,15 @@ export default function BookingDetailPage() {
           ))}
         </div>
       </div>
+
+      {watching && (
+        <RecordingPlayerModal
+          title="Class recording"
+          subtitle={`${studentName} with ${teacherName}`}
+          loadParts={loadParts}
+          onClose={() => setWatching(false)}
+        />
+      )}
 
       {booking.payoutEntries && booking.payoutEntries.length > 0 && (
         <div>
