@@ -515,8 +515,8 @@ export class ClassFinalizationService {
     };
   }
 
-  /** Stops the recording, hands it to the merge sweep and closes the live room
-   * — once, for the whole class. */
+  /** Closes out the class's recording (a browser still recording now only waits
+   * for its upload) and closes the live room — once, for the whole class. */
   private async wrapUpSessionRoom(sessionId: string) {
     const room = roomForBatchSession(sessionId);
     await this.recording
@@ -700,8 +700,8 @@ export class ClassFinalizationService {
     // batch, so it is wrapped up once the LAST student's lesson has ended —
     // an admin settling one student's lesson must not end the class for the
     // rest. A 1:1 class is its own classroom and is always wrapped up here.
-    // (If the count cannot be read, wrap up: leaving it would leave a
-    // recording that is never merged.)
+    // (If the count cannot be read, wrap up: leaving it would leave the
+    // recording's summary out of date.)
     const classroomStillNeeded =
       lesson.classType === ClassType.BATCH &&
       (await this.prisma.scheduledLesson
@@ -716,9 +716,10 @@ export class ClassFinalizationService {
         .catch(() => 0)) > 0;
 
     if (!classroomStillNeeded) {
-      // Recording: stop whatever is still running (no-op when it was never
-      // started or the teacher already stopped it) and hand the room to the
-      // merge sweep. Both calls are idempotent and swallow Egress errors.
+      // Recording: a browser that is still recording now only waits for its
+      // upload (no-op when it was never started or the teacher already stopped
+      // it), and the class's recording summary is brought up to date. Both
+      // calls are idempotent.
       await this.recording
         .stopActiveSegmentIfAny(room)
         .then(() => this.recording.finalizeAtClassEnd(room))

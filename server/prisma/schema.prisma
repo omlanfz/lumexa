@@ -200,9 +200,12 @@ model Booking {
   egressId             String?
   paymentIntentId      String?
   paymentStatus        PaymentStatus        @default(PENDING)
-  // Final merged recording (see RecordingSegment) — never set directly by
-  // the Egress webhook anymore, only by RecordingMergeService once every
-  // segment has settled and been concatenated.
+  // Recording summary for this class. The recordings themselves are
+  // RecordingSegment rows (one per Record → Stop in the teacher's browser, kept
+  // in a private Cloudflare R2 bucket); recordingStatus is derived from them by
+  // RecordingService. recordingUrl and the merge fields belong to the retired
+  // server-side recorder: they are only read, so a recording made then keeps
+  // working, and are never written for a new one.
   recordingUrl            String?
   recordingStatus         RecordingStatus @default(NONE)
   recordingStartedAt      DateTime?
@@ -533,39 +536,48 @@ enum LessonStatus {
   CANCELLED
 }
 
-// Lifecycle of a class's FINAL recording (the merge of every RecordingSegment
-// started/stopped during the class). AVAILABLE is only reached once
-// RecordingMergeService has actually concatenated and uploaded the merged
-// file — never optimistically set when the teacher clicks Stop or when a
-// single segment's egress completes (see RecordingSegmentStatus for that).
+// A class's recording as a whole, summarised from its RecordingSegments by
+// RecordingService (a student watches the segments themselves, not this):
+//   RECORDING  a segment is being recorded right now
+//   AVAILABLE  at least one segment is uploaded and can be watched
+//   PROCESSING a segment is recorded and waiting to be uploaded by the teacher
+//   FAILED     every segment failed — see RecordingSegment.failureReason
+//   EXPIRED    every segment was removed by the storage retention policy
+// A recording made by the retired server-side recorder keeps the status it had
+// (AVAILABLE, with recordingUrl on the class).
 enum RecordingStatus {
   NONE
-  RECORDING // at least one segment is currently recording
-  PROCESSING // class ended / cap hit; segments settling or merge in progress
+  RECORDING
+  PROCESSING
   AVAILABLE
-  FAILED // merge failed — see recordingMergeError; retryable by admin
-  EXPIRED // deleted by the storage retention policy
+  FAILED
+  EXPIRED
 }
 
-// One row per Record start→stop click. A class's final recording is these,
-// concatenated in start-time order once every segment has settled (see
-// RecordingMergeService). Never deleted on failure — a FAILED segment is
-// simply excluded from the merge and left for admins to see why.
+// One recording segment = one Record → Stop in the teacher's browser. The
+// browser records a WebM file, then uploads it straight to a private
+// Cloudflare R2 bucket with a short-lived URL this server signed. Recording
+// again in the same class makes another segment (a new "part"); segments are
+// never merged or overwritten.
 enum RecordingSegmentStatus {
-  RECORDING // egress actively running
-  UPLOADING // teacher stopped it / cap hit; waiting on the Egress webhook
-  AVAILABLE // Egress webhook confirmed the raw file landed in S3/MinIO
-  FAILED
-  EXPIRED // raw file removed from storage after being folded into the final recording
+  RECORDING // the teacher's browser is recording it
+  UPLOADING // recorded and waiting for the teacher to upload it, or being uploaded
+  AVAILABLE // the file is in R2 (checked by the server) and can be watched
+  FAILED // not uploaded: see failureReason
+  EXPIRED // the file was removed from storage by the retention policy
 }
 
 model RecordingSegment {
+  // Chosen by the teacher's browser (a UUID) when it starts recording, so a
+  // retried request can never create a second segment.
   id                String                 @id @default(uuid())
   room              String
   bookingId         String?
   scheduledLessonId String?
+  // Retired: the LiveKit Egress job of the old server-side recorder.
   egressId          String?
   status            RecordingSegmentStatus @default(RECORDING)
+  // The object key of the file in the R2 bucket (recordings/<room>/<id>.webm).
   storagePath       String?
   fileSizeBytes     Int?
   startedAt         DateTime               @default(now())
@@ -573,6 +585,16 @@ model RecordingSegment {
   failureReason     String?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
+
+  // The teacher whose browser made the recording: the only person who may
+  // finish, upload or discard it. Null for a segment of the old recorder.
+  recordedByUserId  String?
+  // What the browser actually recorded, e.g. video/webm;codecs=vp8,opus.
+  mimeType          String?
+  durationSeconds   Int?
+  uploadedAt        DateTime?
+  // How many upload URLs were issued for it (retries and resumed uploads).
+  uploadAttempts    Int                    @default(0)
 
   booking         Booking?         @relation(fields: [bookingId], references: [id])
   scheduledLesson ScheduledLesson? @relation(fields: [scheduledLessonId], references: [id])
@@ -582,6 +604,7 @@ model RecordingSegment {
   @@index([scheduledLessonId])
   @@index([status])
   @@index([egressId])
+  @@index([recordedByUserId])
 }
 
 // Why a class was ended INCOMPLETE. STUDENT_LEFT_EARLY and TEACHER_DISCONNECTED
@@ -737,11 +760,13 @@ model ScheduledLesson {
   teacherJoinedAt DateTime?
   studentJoinedAt DateTime?
 
-  // ─── Recording (self-hosted LiveKit Egress → MinIO/S3) ──────────────────
-  // Legacy single-egress fields kept for the Booking flow's field parity;
-  // for the curriculum flow these now represent the FINAL merged recording
-  // (see RecordingSegment — one row per Record start/stop, concatenated by
-  // RecordingMergeService once the class ends).
+  // ─── Recording ──────────────────────────────────────────────────────────
+  // recordingStatus summarises this class's RecordingSegment rows (one per
+  // Record → Stop in the teacher's browser, kept in a private Cloudflare R2
+  // bucket) and is maintained by RecordingService. egressId, recordingUrl and
+  // the merge fields belong to the retired server-side recorder (LiveKit
+  // Egress): they are only read, so a recording made then keeps working, and
+  // are never written for a new one.
   egressId               String?
   recordingStatus        RecordingStatus @default(NONE)
   recordingUrl           String?

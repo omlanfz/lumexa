@@ -124,10 +124,6 @@ export class AdminService {
     return this.classroom.adminJoinLiveClass(kind, id);
   }
 
-  async retryRecording(kind: 'BOOKING' | 'LESSON' | 'SESSION', id: string) {
-    return this.classroom.retryRecordingMerge(kind, id);
-  }
-
   // ═══════════════════════════════════════════════════════════════════════
   // Dashboard
   // ═══════════════════════════════════════════════════════════════════════

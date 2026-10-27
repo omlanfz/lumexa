@@ -52,7 +52,8 @@ class out of its room (the lock, which is in the database, still holds).
 
 > **The webhook** (`POST /classroom/webhook/livekit`) must be receiving
 > `participant_joined`. LiveKit sends every event to the configured webhook URL,
-> so nothing more is needed if recording already works there.
+> so nothing more is needed. (It is not used for recording any more: a class is
+> recorded in the teacher's browser, not by LiveKit — see Recording below.)
 
 ## The lock
 
@@ -102,8 +103,8 @@ used:
   Incomplete adds **one** extra class for the whole batch. An admin settling one
   participant's row settles the whole class. The shared room (recording wrap-up,
   closing the live room) is wrapped up once, with the class.
-- **Recording.** One recording per class, mirrored onto every participant row (they
-  all get the same file); merged once; storage is counted per file.
+- **Recording.** One recording per class (a batch's students all watch the same
+  one — see Recording below), summarised on every participant row.
 
 ### Economics
 
@@ -118,6 +119,71 @@ Lateness is judged by the teacher's **first** arrival (the join time kept on the
 class), not by each later token request. A token is also requested when the
 teacher presses Join, opens a second device or refreshes, and none of those may
 fine a teacher who was on time.
+
+## Recording
+
+A class is recorded **in the teacher's browser**, not by LiveKit: a WebM file of
+their browser window plus the class's audio, uploaded by that browser straight to
+a **private Cloudflare R2 bucket** with a short-lived URL this server signs.
+Students watch through signed URLs too. No LiveKit Egress, no FFmpeg, no recording
+credentials in the browser. Setup (bucket, token, CORS) is in
+`docs/CLASS_RECORDING_SETUP.md`; the variables are the `R2_*` ones in
+`server/.env.example`.
+
+**One recording = one segment ("part").** Every Record → Stop is its own
+`RecordingSegment`, kept as its own file — never merged, never overwritten.
+Recording again in the same class adds a part; a student sees the parts in order.
+
+| Status      | Meaning                                                                      |
+| ----------- | ---------------------------------------------------------------------------- |
+| `RECORDING` | the teacher's browser is recording it                                        |
+| `UPLOADING` | recorded; the file is in the teacher's browser, waiting to be/being uploaded |
+| `AVAILABLE` | the file is in R2 **and the server checked it** — it can be watched          |
+| `FAILED`    | given up on: discarded by the teacher, or never uploaded                     |
+| `EXPIRED`   | removed by the storage-retention policy                                      |
+
+| Route (teacher of the room only)         | What                                                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `POST /classroom/:room/recording/start`  | Record pressed. Body `{ segmentId? }` (the browser's UUID — a retry returns the same segment). Works before R2 is set up. |
+| `POST …/recording/:segmentId/stop`       | Stop pressed: `{ durationMs?, mimeType? }`                                                                                |
+| `POST …/recording/:segmentId/upload-url` | `{ sizeBytes }` → a signed `PUT` URL (15 minutes) and the headers to send                                                 |
+| `POST …/recording/:segmentId/complete`   | `{ sizeBytes }` → the server asks R2 (size, type) and only then makes it `AVAILABLE`. Safe to repeat                      |
+| `POST …/recording/:segmentId/discard`    | give it up (not once uploaded)                                                                                            |
+| `GET  …/recording/segments`              | this class's recordings and their state                                                                                   |
+
+| Route (watching)                      | Who                                                                                                                                                                                           |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /recordings/mine`                | a student: their classes' recordings (+ how many are still being uploaded)                                                                                                                    |
+| `GET /recordings/booking/:bookingId`  | a student, a parent of the booked child, the class's teacher, an admin: the watchable parts of one booked class (a parent has no list of their own — the child's page asks booking by booking); anyone outside the class gets an empty list |
+| `GET /recordings/:segmentId/playback` | a student of the class, a parent of the booked child, the class's teacher, an admin → `{ url, expiresAt }`, a signed `GET` URL (2 hours). Anyone else, and anything not `AVAILABLE`, is a 404 |
+| `GET /recordings/classes/:kind/:id`   | an admin: every part of a class, whatever its state                                                                                                                                           |
+
+- **Who owns a segment.** `recordedByUserId` is the teacher whose browser made it;
+  only they can stop, upload or discard it, and only in the room it was made in.
+  The browser chooses the segment's id, so a retried request cannot make a second
+  one; the file's key is `recordings/<room>/<segmentId>.webm`, so a retried upload
+  can only ever replace itself.
+- **Never believed on the browser's word.** `complete` HEADs the object in R2: it
+  must exist, be `video/webm` and have exactly the size the browser sent.
+  Anything else is refused (and a wrong-type file is deleted).
+- **The REC badge.** Start/stop mirror `recording: true|false` into the live room's
+  metadata, so everyone in the class sees REC while a recording runs.
+- **When the class ends** a still-running recording only waits for its upload
+  (`stopActiveSegmentIfAny`) and the class's summary is refreshed
+  (`finalizeAtClassEnd`). Nothing is lost: the browser keeps the file until it is
+  uploaded.
+- **The summary.** `ScheduledLesson/Booking.recordingStatus` is derived from a
+  class's segments (`deriveRecordingStatus`) for the admin screens. `recordingUrl`
+  belongs to the retired server-side recorder: it is read (a recording made then
+  still plays, as a plain link) and never written.
+- **Sweeps** (every 10 minutes): a browser that began recording and vanished has
+  its segment closed as waiting for upload; a segment whose file _is_ in R2 but
+  whose confirmation was lost is confirmed; one nobody touched for 12 hours is
+  given up on (`FAILED`, the teacher is told — and can still upload it if the
+  browser tab is still open). Hourly: the retention policy removes the oldest
+  recordings past `RECORDING_STORAGE_LIMIT_BYTES` and warns admins at 80%.
+- **A free trial is never recorded**; the QA demo room is, and the QA demo student
+  sees those recordings in their Recordings tab.
 
 ## Badges (`badges/`)
 
@@ -159,9 +225,11 @@ the older gems/streak achievements.
 ```bash
 cd server
 npx jest src/classroom src/scheduling          # unit
-# + the real-Postgres specs (rooms, batch end, lock, badges):
+# + the real-Postgres specs (rooms, batch end, lock, badges, recordings — the
+# last one also boots the whole app and calls the recording routes over HTTP):
 ASSESSMENT_INTEGRATION_DATABASE_URL=postgresql://…/lumexa_it npx jest src/classroom
 ```
 
 See `../assessments/testing/integration-db.ts` for the throwaway-database rules.
-LiveKit is replaced by an in-memory fake in those specs.
+LiveKit is replaced by an in-memory fake, and R2 by an in-memory bucket
+(`testing/memory-recording-storage.ts`, which still signs real URLs), in those specs.
