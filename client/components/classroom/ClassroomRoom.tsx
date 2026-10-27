@@ -51,6 +51,7 @@ import Stage from './Stage';
 import FilmStrip from './FilmStrip';
 import ParticipantRail from './ParticipantRail';
 import ControlBar, { PanelKind, RecordingUiState } from './ControlBar';
+import RecordingTray from './RecordingTray';
 import ParticipantsPanel from './ParticipantsPanel';
 import ChatPanel from './ChatPanel';
 import LessonSidePanel from './LessonSidePanel';
@@ -70,12 +71,11 @@ import { useServerEvents } from '@/lib/classroom/useServerEvents';
 import { useClassroomState } from '@/lib/classroom/useClassroomState';
 import { useClassroomControls } from '@/lib/classroom/useClassroomControls';
 import { useVideoEffects } from '@/lib/classroom/useVideoEffects';
+import { useClassRecorder } from '@/lib/classroom/recording/useClassRecorder';
 import { useClassroomTheme } from '@/lib/classroom/useClassroomTheme';
 import {
   muteAllParticipants,
   endClassRequest,
-  startRecording,
-  stopRecording,
   listPendingAdmissions,
   decideAdmission,
   stopParticipantScreenShare,
@@ -182,8 +182,6 @@ export default function ClassroomRoom({
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [lastSeenChatCount, setLastSeenChatCount] = useState(0);
   const [handToasts, setHandToasts] = useState<HandToast[]>([]);
-  const [recordingState, setRecordingState] = useState<RecordingUiState>('inactive');
-  const [recordingError, setRecordingError] = useState<string | null>(null);
   const [showEndClassModal, setShowEndClassModal] = useState(false);
   const [expiredNoticeVisible, setExpiredNoticeVisible] = useState(false);
   const [timerMilestoneVisible, setTimerMilestoneVisible] = useState(false);
@@ -231,7 +229,20 @@ export default function ClassroomRoom({
   // `lessonData` untouched — only the View Lesson panel falls back to the
   // demo example, so demo's main stage keeps showing the camera by default.
   const lessonPanelData = lessonData ?? (demo ? demoExampleLesson ?? null : null);
+  // The REC badge everyone sees comes from the room (the server mirrors "a recording
+  // is running" into its metadata); the teacher's own recorder also counts, so it
+  // shows even before the room has heard.
   const isRecordingLive = !!classroomState.recording;
+  // Only the teacher records, and never a free trial. Everything about recording
+  // — the browser's recorder, the finished files, their uploads — lives in this
+  // hook and the store behind it (lib/classroom/recording).
+  const recorder = useClassRecorder({
+    room,
+    roomName,
+    enabled: isTeacher && !isTrialClass,
+  });
+  const recordingUiState: RecordingUiState =
+    recorder.state === 'recording' ? 'active' : recorder.state === 'idle' ? 'inactive' : recorder.state;
   // A test session: students take the test in their OWN browser tab (they
   // share their whole screen while they do, and a share takes over the stage),
   // so the teacher's view of everyone's progress — and the lock buttons — is a
@@ -288,11 +299,6 @@ export default function ClassroomRoom({
   const finishCelebration = useCallback((awardId: string) => {
     setCelebrations((queue) => queue.filter((c) => c.awardId !== awardId));
   }, []);
-
-  useEffect(() => {
-    if (isRecordingLive) setRecordingState('active');
-    else setRecordingState((prev) => (prev === 'active' ? 'inactive' : prev));
-  }, [isRecordingLive]);
 
   // Teacher polls for "removed participant wants back in" requests.
   useEffect(() => {
@@ -503,30 +509,6 @@ export default function ClassroomRoom({
     void stopParticipantScreenShare(roomName, identity).catch(() => {});
   };
 
-  const handleToggleRecording = async () => {
-    if (recordingState === 'starting' || recordingState === 'stopping') return;
-    const wasActive = recordingState === 'active';
-    setRecordingState(wasActive ? 'stopping' : 'starting');
-    try {
-      setRecordingError(null);
-      // The server itself patches room metadata on start/stop (see
-      // RecordingService.startSegment/stopSegment) — the resulting
-      // RoomMetadataChanged event is what flips classroomState.recording
-      // for every participant, which the effect above turns into 'active'/
-      // 'inactive'. This local state only covers the in-flight moment.
-      if (wasActive) {
-        await stopRecording(roomName);
-      } else {
-        await startRecording(roomName);
-      }
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } };
-      setRecordingError(e.response?.data?.message ?? 'Could not update the recording. Please try again.');
-      setRecordingState(wasActive ? 'active' : 'inactive');
-      setTimeout(() => setRecordingError(null), 8000);
-    }
-  };
-
   const endClassGate = (() => {
     if (!scheduledStart) return null;
     const elapsedMs = Date.now() - new Date(scheduledStart).getTime();
@@ -542,7 +524,7 @@ export default function ClassroomRoom({
       sessionTitle={sessionTitle}
       sessionSubtitle={sessionSubtitle}
       isLive={isLive}
-      recording={isRecordingLive}
+      recording={isRecordingLive || recorder.state === 'recording'}
       scheduledStart={scheduledStart}
       expectedDurationMinutes={expectedDurationMinutes}
       onTimerMilestone={() => {
@@ -648,9 +630,9 @@ export default function ClassroomRoom({
             </div>
           )}
 
-          {(recordingError || controlError) && (
+          {controlError && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 backdrop-blur text-red-400 text-xs font-medium shadow-lg cr-fade-in">
-              {recordingError ?? controlError}
+              {controlError}
             </div>
           )}
 
@@ -721,6 +703,8 @@ export default function ClassroomRoom({
           {isTeacher && awardResult && (
             <AwardToast result={awardResult} roomName={roomName} onDismiss={() => setAwardResult(null)} />
           )}
+
+          {isTeacher && !isTrialClass && <RecordingTray roomName={roomName} controls={recorder} />}
         </div>
 
         <ParticipantRail
@@ -817,9 +801,10 @@ export default function ClassroomRoom({
             classroomState={classroomState}
             onPatchState={patchState}
             onMuteAll={() => void muteAllParticipants(roomName)}
-            recordingState={recordingState}
-            onToggleRecording={() => void handleToggleRecording()}
+            recordingState={recordingUiState}
+            onToggleRecording={() => (recorder.state === 'recording' ? void recorder.stop() : recorder.start())}
             recordingAvailable={!isTrialClass}
+            recordingPending={recorder.pending}
             backgroundEffect={effects.backgroundEffect}
             onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
             lighting={effects.lighting}
@@ -869,7 +854,20 @@ export default function ClassroomRoom({
           isLessonFlow={isLessonFlow}
           partialCompletionAvailable={partialCompletionAvailable}
           onClose={() => setShowEndClassModal(false)}
-          onSubmit={(params: EndClassParams) => endClassRequest(roomName, params)}
+          recordingNotice={
+            recorder.state === 'recording'
+              ? 'Your recording will be stopped and saved first. After the class ends, press Upload Class Recording so students can watch it.'
+              : recorder.pending > 0
+                ? 'You have a class recording that is not uploaded yet. After the class ends, stay on this page and press Upload Class Recording — students cannot watch it until then.'
+                : undefined
+          }
+          onSubmit={async (params: EndClassParams) => {
+            // Finish the file BEFORE the class closes: its length and its stop
+            // are then recorded properly, and nothing is still running in a room
+            // that no longer exists.
+            await recorder.stopIfRecording();
+            await endClassRequest(roomName, params);
+          }}
           onFinished={() => room.disconnect()}
         />
       )}

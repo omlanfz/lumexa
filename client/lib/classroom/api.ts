@@ -29,16 +29,6 @@ export async function stopParticipantScreenShare(room: string, identity: string)
   await api.post(`/classroom/${room}/stop-screen-share`, { identity });
 }
 
-export async function startRecording(room: string): Promise<{ recordingStatus: string }> {
-  const res = await api.post(`/classroom/${room}/recording/start`);
-  return res.data;
-}
-
-export async function stopRecording(room: string): Promise<{ recordingStatus: string }> {
-  const res = await api.post(`/classroom/${room}/recording/stop`);
-  return res.data;
-}
-
 export async function updateClassroomState(
   room: string,
   patch: ClassroomState,

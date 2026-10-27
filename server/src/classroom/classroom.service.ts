@@ -16,12 +16,7 @@ import {
   computeLateMinutes,
 } from '../scheduling/lesson-window.util';
 import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
-import {
-  LessonStatus,
-  RecordingStatus,
-  ClassEndReason,
-  SpaceRank,
-} from '@prisma/client';
+import { LessonStatus, ClassEndReason, SpaceRank } from '@prisma/client';
 import {
   AccessToken,
   RoomServiceClient,
@@ -29,6 +24,7 @@ import {
 } from 'livekit-server-sdk';
 import type { ParticipantInfo } from 'livekit-server-sdk';
 import { RecordingService } from './recording.service';
+import type { SegmentView, StartedSegment } from './recording.service';
 import { AdmissionService } from './admission.service';
 import {
   ClassFinalizationService,
@@ -45,7 +41,6 @@ import {
   MAX_PEOPLE_PER_CLASSROOM,
   buildIdentity,
   getRoomRef,
-  isCurriculumRoom,
   isLessonRoom,
   isTrialRoom,
   lessonIdFromRoom,
@@ -326,27 +321,6 @@ export class ClassroomService {
       url: process.env.LIVEKIT_URL,
       roomName: room,
     };
-  }
-
-  async retryRecordingMerge(
-    kind: 'BOOKING' | 'LESSON' | 'SESSION',
-    id: string,
-  ): Promise<{ ok: true }> {
-    if (kind === 'SESSION') {
-      // The recording belongs to the class's room; any student's row in it
-      // is the way in (every row mirrors the one recording).
-      const anchor = await this.prisma.scheduledLesson.findFirst({
-        where: { batchSessionId: id, status: { not: LessonStatus.CANCELLED } },
-        select: { id: true },
-        orderBy: { id: 'asc' },
-      });
-      if (!anchor) throw new BadRequestException('Class not found.');
-      return this.recordingService.retryMerge('lesson', anchor.id);
-    }
-    return this.recordingService.retryMerge(
-      kind === 'LESSON' ? 'lesson' : 'booking',
-      id,
-    );
   }
 
   /** Dispatches to the marketplace-booking flow or the curriculum
@@ -748,45 +722,91 @@ export class ClassroomService {
     };
   }
 
-  // ─── Recording (teacher-triggered, segment-based) ────────────────────────
+  // ─── Recording (made in the teacher's browser, one segment per Record) ───
   //
-  // The actual egress/S3/FFmpeg pipeline now lives in RecordingService (see
-  // that file's header comment for why it's segment-based and for the root
-  // cause of the historical "Recording is not configured" 400). This class
-  // just enforces "only the teacher of this room may start/stop it" before
-  // delegating.
+  // The recording itself is a WebM file the TEACHER'S BROWSER makes and uploads
+  // straight to R2; RecordingService keeps the books (see that file's header).
+  // This class only enforces "only the teacher of this room" before delegating
+  // — and mirrors "a recording is running" into the room's metadata, so the REC
+  // badge shows for everyone in the class (a browser cannot write room metadata
+  // itself).
 
   /** Teacher clicks Record. Never called automatically — see joinBooking/
-   * joinScheduledLesson, which don't start recording on their own. */
+   * joinScheduledLesson, which don't start recording on their own. `segmentId`
+   * is the id their browser chose for this recording (so a retry is harmless). */
   async startTeacherRecording(
     userId: string,
     room: string,
-  ): Promise<{ ok: true; recordingStatus: RecordingStatus }> {
+    segmentId?: string,
+  ): Promise<{ ok: true } & StartedSegment> {
     await this.assertTeacherOfRoom(userId, room);
     if (isTrialRoom(room)) {
       throw new BadRequestException(
         'Trial classes are not recorded. Recording is available in regular Lumexa classes.',
       );
     }
-    const { recordingStatus } = await this.recordingService.startSegment(room);
-    return { ok: true, recordingStatus };
+    const started = await this.recordingService.startSegment(
+      room,
+      userId,
+      segmentId,
+    );
+    await this.mirrorRecordingFlag(room);
+    return { ok: true, ...started };
   }
 
+  /** The teacher's browser stopped recording (Stop, the length cap, or the
+   * browser's own "Stop sharing"). */
   async stopTeacherRecording(
     userId: string,
     room: string,
-  ): Promise<{ ok: true; recordingStatus: RecordingStatus }> {
+    segmentId: string,
+    info: { durationMs?: number; mimeType?: string } = {},
+  ): Promise<{ ok: true; segment: SegmentView }> {
     await this.assertTeacherOfRoom(userId, room);
-    const { recordingStatus } = await this.recordingService.stopSegment(room);
-    return { ok: true, recordingStatus };
+    const segment = await this.recordingService.stopSegment(
+      room,
+      userId,
+      segmentId,
+      info,
+    );
+    await this.mirrorRecordingFlag(room);
+    return { ok: true, segment };
+  }
+
+  /** The teacher gives a recording up before uploading it. */
+  async discardTeacherRecording(
+    userId: string,
+    room: string,
+    segmentId: string,
+  ): Promise<{ ok: true; segment: SegmentView }> {
+    await this.assertTeacherOfRoom(userId, room);
+    const segment = await this.recordingService.discardSegment(
+      room,
+      userId,
+      segmentId,
+    );
+    await this.mirrorRecordingFlag(room);
+    return { ok: true, segment };
+  }
+
+  /** Puts `recording: true|false` in the live room's metadata, for the REC badge.
+   * Best effort: the room may not exist (the QA demo room between sessions), and
+   * a recording must never fail because a badge could not be updated. */
+  private async mirrorRecordingFlag(room: string): Promise<void> {
+    try {
+      const recording = await this.recordingService.hasActiveSegment(room);
+      await this.patchRoomMetadata(room, { recording });
+    } catch (err) {
+      this.logger.debug(
+        `Room ${room} is not live, recording flag not mirrored: ${err}`,
+      );
+    }
   }
 
   /**
-   * Handle LiveKit webhook events. `egress_ended` updates the matching
-   * RecordingSegment's status (see RecordingService.handleEgressEnded) —
-   * the final, merged recording is only ever marked AVAILABLE once every
-   * segment has settled and RecordingService's merge sweep has actually
-   * concatenated and uploaded them.
+   * Handle LiveKit webhook events. Only `participant_joined` matters: it is the
+   * second line of the room limits (see enforceRoomLimits). Recording needs no
+   * webhook — it is made and uploaded by the teacher's browser.
    */
   async handleLiveKitWebhook(body: any, authHeader: string): Promise<void> {
     try {
@@ -800,18 +820,6 @@ export class ClassroomService {
 
       if (event.event === 'participant_joined') {
         await this.enforceRoomLimits(event);
-        return;
-      }
-
-      if (event.event === 'egress_ended') {
-        const room = event.egressInfo?.roomName;
-        if (!room) return;
-
-        await this.recordingService.handleEgressEnded(event.egressInfo as any);
-
-        // No payment/gem flow for curriculum lessons or free trial classes.
-        if (isCurriculumRoom(room) || isTrialRoom(room)) return;
-        await this.finalizeBookingIfDue(room);
       }
     } catch (err) {
       this.logger.error(`Webhook processing error: ${err}`);
@@ -861,11 +869,9 @@ export class ClassroomService {
    * Capture a marketplace Booking's payment and award session gems/badges,
    * once the class is confirmed complete. Idempotent — safe to call
    * repeatedly for the same booking (checks paymentStatus === 'PENDING'
-   * first). Called from two places since recording is now optional and
-   * teacher-triggered rather than automatic: the Egress webhook (when a
-   * recording did happen) AND the sweep cron below (when it didn't) —
-   * either way, the class having actually ended is what matters, not
-   * whether it was recorded.
+   * first). Called by the sweep cron below once the class's scheduled end has
+   * passed — the class having actually ended is what matters, not whether it
+   * was recorded (recording is optional and the teacher's own action).
    */
   private async finalizeBookingIfDue(bookingId: string): Promise<void> {
     const booking = await this.prisma.booking.findUnique({
@@ -920,11 +926,10 @@ export class ClassroomService {
   }
 
   /**
-   * Safety net for the marketplace flow now that recording is optional and
-   * teacher-triggered: a class whose scheduled end has passed still needs
-   * its payment captured even if nobody ever clicked Record. Bounded
-   * lookback keeps this a cheap scan; finalizeBookingIfDue's own PENDING
-   * check makes re-running it harmless.
+   * Captures the payment of every marketplace class whose scheduled end has
+   * passed, whether or not anybody recorded it. Bounded lookback keeps this a
+   * cheap scan; finalizeBookingIfDue's own PENDING check makes re-running it
+   * harmless.
    */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sweepDueBookingPayments() {

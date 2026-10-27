@@ -201,14 +201,8 @@ export class AdminController {
     return this.adminService.joinLiveClass(kind, id);
   }
 
-  /** Retries a FAILED recording merge — see RecordingService.retryMerge. */
-  @Post('classes/:kind/:id/recording-retry')
-  retryRecording(
-    @Param('kind') kind: 'BOOKING' | 'LESSON' | 'SESSION',
-    @Param('id') id: string,
-  ) {
-    return this.adminService.retryRecording(kind, id);
-  }
+  // A class's recordings (the parts, their state, watching them) are served by
+  // RecordingsController: GET /recordings/classes/:kind/:id.
 
   @Get('bookings/:bookingId/reschedule-history')
   getBookingRescheduleHistory(@Param('bookingId') bookingId: string) {

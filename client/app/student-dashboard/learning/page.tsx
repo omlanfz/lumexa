@@ -9,6 +9,10 @@ import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankProgressBar from '@/components/student/RankProgressBar';
 import StreakCounter from '@/components/student/StreakCounter';
 import BadgeGrid from '@/components/student/BadgeGrid';
+import RecordingPlayerModal from '@/components/recordings/RecordingPlayerModal';
+import { fetchMyRecordings, recordingErrorMessage } from '@/lib/classroom/recording/library';
+import type { MyRecordings, RecordingClass } from '@/lib/classroom/recording/library';
+import { describeDuration, totalSeconds } from '@/lib/classroom/recording/format';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -319,6 +323,30 @@ function LearningHubContent() {
     fetchAll();
   }, [fetchAll]);
 
+  // Recordings have their own load: the signed-URL service being unavailable
+  // must not take the rest of the Learning hub down with it. Fetched each time
+  // the tab is opened, so a recording the teacher has just uploaded shows up.
+  const [myRecordings, setMyRecordings] = useState<MyRecordings | null>(null);
+  const [recordingsLoading, setRecordingsLoading] = useState(false);
+  const [recordingsError, setRecordingsError] = useState('');
+  const [watching, setWatching] = useState<RecordingClass | null>(null);
+
+  const loadRecordings = useCallback(async () => {
+    setRecordingsLoading(true);
+    setRecordingsError('');
+    try {
+      setMyRecordings(await fetchMyRecordings());
+    } catch (err: unknown) {
+      setRecordingsError(recordingErrorMessage(err, 'Could not load your recordings. Please try again.'));
+    } finally {
+      setRecordingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'recordings') void loadRecordings();
+  }, [tab, loadRecordings]);
+
   const switchLessonsFilter = (t: 'upcoming' | 'completed') => {
     setLessonsTabFilter(t);
     setReviewingId(null);
@@ -371,42 +399,6 @@ function LearningHubContent() {
         ? fromBooking
         : fromSchedule
       : (fromBooking ?? fromSchedule);
-  interface RecordingEntry {
-    key: string;
-    teacherName: string;
-    teacherAvatarUrl?: string | null;
-    classStart: string;
-    durationMinutes: number;
-    recordingUrl: string;
-    lessonLabel?: string;
-  }
-  const bookingRecordings: RecordingEntry[] = (completedData?.bookings ?? [])
-    .filter((l) => l.recordingUrl)
-    .map((l) => ({
-      key: l.bookingId,
-      teacherName: l.teacherName,
-      teacherAvatarUrl: l.teacherAvatarUrl,
-      classStart: l.classStart,
-      durationMinutes: l.durationMinutes,
-      recordingUrl: l.recordingUrl!,
-    }));
-  const scheduledRecordings: RecordingEntry[] = scheduledCompleted
-    .filter((l) => l.recordingStatus === 'AVAILABLE' && l.recordingUrl)
-    .map((l) => ({
-      key: l.id,
-      teacherName: l.teacher.user.fullName,
-      teacherAvatarUrl: l.teacher.user.avatarUrl,
-      classStart: l.start,
-      durationMinutes: Math.round((new Date(l.end).getTime() - new Date(l.start).getTime()) / 60000),
-      recordingUrl: l.recordingUrl!,
-      lessonLabel: `${l.course.title}${l.lessonTitle ? ` · Lesson ${l.lessonNumber}: ${l.lessonTitle}` : ''}`,
-    }));
-  const recordingLessons: RecordingEntry[] = [...scheduledRecordings, ...bookingRecordings].sort(
-    (a, b) => new Date(b.classStart).getTime() - new Date(a.classStart).getTime(),
-  );
-  const processingCount = scheduledCompleted.filter(
-    (l) => l.recordingStatus === 'RECORDING' || l.recordingStatus === 'PROCESSING',
-  ).length;
 
   return (
     <div className="space-y-6">
@@ -632,33 +624,58 @@ function LearningHubContent() {
       {/* ─── Recordings ───────────────────────────────────────────────── */}
       {tab === 'recordings' && (
         <div className="fade-in">
-          {processingCount > 0 && (
-            <div className="mb-3 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 text-amber-700 dark:text-amber-300 text-xs">
-              {processingCount} recording{processingCount !== 1 ? 's are' : ' is'} still processing and will appear here once ready.
+          {recordingsError && (
+            <div
+              className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-700 dark:border-red-800/30 dark:bg-red-900/20 dark:text-red-300"
+              role="alert"
+            >
+              <span>{recordingsError}</span>
+              <button onClick={() => void loadRecordings()} className="flex-shrink-0 font-semibold underline">
+                Try again
+              </button>
             </div>
           )}
-          {recordingLessons.length === 0 ? (
+          {myRecordings && myRecordings.processingCount > 0 && (
+            <div className="mb-3 px-4 py-2.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 text-amber-700 dark:text-amber-300 text-xs">
+              {myRecordings.processingCount} more recording{myRecordings.processingCount !== 1 ? 's' : ''} of your
+              classes {myRecordings.processingCount !== 1 ? 'are' : 'is'} still being uploaded by your teacher and will
+              appear here once ready.
+            </div>
+          )}
+          {!myRecordings && recordingsLoading && (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Skeleton className="h-24 w-full rounded-xl" />
+              <Skeleton className="h-24 w-full rounded-xl" />
+            </div>
+          )}
+          {myRecordings && myRecordings.recordings.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center bg-gray-50 dark:bg-gray-800/30 rounded-xl">
               <div className="text-5xl mb-4">🎬</div>
               <h3 className="text-gray-900 dark:text-white font-semibold text-lg mb-2">No recordings yet</h3>
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                Class recordings appear here after your sessions are processed. Switch to the Lessons tab (Completed) to see processing status.
+              <p className="text-gray-500 dark:text-gray-400 text-sm max-w-md">
+                When your teacher records a class and uploads the recording, you can watch it here.
               </p>
             </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 gap-3">
-              {recordingLessons.map((lesson) => {
-                const date = new Date(lesson.classStart);
-                const initial = lesson.teacherName ? lesson.teacherName.charAt(0).toUpperCase() : 'T';
+          )}
+          {myRecordings && myRecordings.recordings.length > 0 && (
+            <div className="grid sm:grid-cols-2 gap-3" data-testid="recordings-list">
+              {myRecordings.recordings.map((rec) => {
+                const date = new Date(rec.classStart);
+                const initial = rec.teacherName ? rec.teacherName.charAt(0).toUpperCase() : 'T';
+                const length = describeDuration(totalSeconds(rec.parts));
+                const legacyOnly = rec.parts.length === 0 && !!rec.legacyUrl;
+                const watchClass =
+                  'flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0';
                 return (
                   <div
-                    key={lesson.key}
+                    key={rec.key}
                     className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl card-hover"
+                    data-testid="recording-card"
                   >
-                    {lesson.teacherAvatarUrl ? (
+                    {rec.teacherAvatarUrl ? (
                       <img
-                        src={lesson.teacherAvatarUrl}
-                        alt={lesson.teacherName}
+                        src={rec.teacherAvatarUrl}
+                        alt={rec.teacherName}
                         className="w-11 h-11 rounded-full object-cover border border-gray-300 dark:border-gray-600 flex-shrink-0"
                       />
                     ) : (
@@ -667,28 +684,51 @@ function LearningHubContent() {
                       </div>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-gray-900 dark:text-white font-medium truncate">{lesson.teacherName}</p>
-                      {lesson.lessonLabel && (
-                        <p className="text-gray-500 dark:text-gray-400 text-xs truncate">{lesson.lessonLabel}</p>
+                      <p className="text-gray-900 dark:text-white font-medium truncate">{rec.title}</p>
+                      {(rec.courseTitle || rec.batchName) && (
+                        <p className="text-gray-500 dark:text-gray-400 text-xs truncate">
+                          {[rec.courseTitle, rec.batchName ? `Batch · ${rec.batchName}` : null]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </p>
                       )}
                       <p className="text-gray-500 dark:text-gray-400 text-xs">
-                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} · {lesson.durationMinutes} min
+                        {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {length ? ` · ${length}` : ''}
+                        {rec.parts.length > 1 ? ` · ${rec.parts.length} parts` : ''}
+                        {' · with '}
+                        {rec.teacherName}
                       </p>
                     </div>
-                    <a
-                      href={lesson.recordingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0"
-                    >
-                      <span>▶</span> Watch
-                    </a>
+                    {legacyOnly ? (
+                      <a href={rec.legacyUrl!} target="_blank" rel="noopener noreferrer" className={watchClass}>
+                        <span>▶</span> Watch
+                      </a>
+                    ) : (
+                      <button onClick={() => setWatching(rec)} className={watchClass} data-testid="recording-watch">
+                        <span>▶</span> Watch
+                      </button>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
         </div>
+      )}
+
+      {watching && (
+        <RecordingPlayerModal
+          title={watching.title}
+          subtitle={`${watching.teacherName} · ${new Date(watching.classStart).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })}`}
+          parts={watching.parts}
+          legacyUrl={watching.legacyUrl}
+          onClose={() => setWatching(null)}
+        />
       )}
     </div>
   );

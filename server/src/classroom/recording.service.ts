@@ -1,185 +1,219 @@
 // FILE PATH: server/src/classroom/recording.service.ts
 //
-// Segment-based classroom recording: LiveKit Egress → S3-compatible storage
-// (self-hosted MinIO in production via S3_ENDPOINT, or plain AWS S3),
-// FFmpeg concatenation into one final recording per class, and storage
-// retention. Split out of ClassroomService because this is the single
-// biggest, most operationally-sensitive slice of the classroom feature.
+// Class recordings. A class is recorded in the TEACHER'S BROWSER (a WebM file of
+// their browser window plus the class's audio) and the browser uploads the
+// finished file straight to a private Cloudflare R2 bucket. This server never
+// sees the video: it keeps the books (one RecordingSegment row per recording),
+// decides who may do what, signs the short-lived upload and playback URLs
+// (RecordingStorageService), and checks that a file really arrived before
+// anyone is told it can be watched.
 //
-// ─── Why "segments" ──────────────────────────────────────────────────────
-// The teacher can start/stop recording as many times as they like during a
-// class (e.g. pause while reviewing sensitive material). Each start→stop is
-// its own RecordingSegment row + its own LiveKit RoomCompositeEgress job —
-// never one continuous egress paused/resumed, since LiveKit Egress has no
-// pause/resume primitive. When the class ends, every segment for that room
-// is concatenated in start-time order into a single final recording, which
-// is what students actually see (see RecordingStatus on Booking/
-// ScheduledLesson — the per-segment lifecycle is RecordingSegmentStatus).
+// ─── One recording = one segment ("part") ────────────────────────────────────
+// Every Record → Stop is its own RecordingSegment, kept as its own file and
+// never merged or overwritten. Recording again in the same class simply adds
+// another part. A student sees the parts of a class in order.
 //
-// ─── Root cause of the "Recording is not configured" 400 ────────────────
-// egressConfigured()/missingEgressEnvVars() below is the actual gate that
-// produced the reported 400 (POST .../recording/start → 400 Bad Request,
-// "Recording is not configured for this environment yet."). It requires
-// LIVEKIT_URL + LIVEKIT_API_KEY + LIVEKIT_API_SECRET (LiveKit connection)
-// AND S3_ACCESS_KEY/AWS_ACCESS_KEY + S3_SECRET_KEY/AWS_SECRET_KEY +
-// S3_BUCKET/AWS_S3_BUCKET (Egress upload target) to ALL be set. The error
-// message now names exactly which of these are missing in the deployed
-// backend, instead of a generic message — see missingEgressEnvVars(). Set
-// the missing variables in the Render backend's environment (see
-// server/.env.example) and redeploy; there is no code path that can start
-// an Egress job without them, by design (recording must never silently
-// no-op).
+//   RECORDING  the teacher's browser is recording it           (POST …/start)
+//   UPLOADING  recorded; waiting to be uploaded, or uploading  (…/stop, …/upload-url)
+//   AVAILABLE  the file is in R2 and was checked: watchable    (…/complete)
+//   FAILED     given up on — discarded, or never uploaded      (…/discard, the sweep)
+//   EXPIRED    removed from storage by the retention policy
+//
+// The browser picks the segment's id (a UUID), so a retried request can never
+// create a second segment; the file's key in R2 is derived from that id, so a
+// retried upload can only ever replace the same file. Only the teacher whose
+// browser made a segment may finish, upload or discard it.
+//
+// ScheduledLesson/Booking.recordingStatus is a summary of a class's segments
+// (see deriveRecordingStatus), kept up to date here so the admin screens that
+// read it keep working. The recordingUrl on those rows belongs to the retired
+// server-side recorder: it is never written, and a class that has one is left
+// exactly as it was.
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { randomUUID } from 'crypto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../prisma.service';
-import { AlertsService } from '../alerts/alerts.service';
 import {
   ClassType,
   LessonStatus,
-  Role,
-  RecordingStatus,
+  Prisma,
   RecordingSegmentStatus,
+  RecordingStatus,
+  Role,
 } from '@prisma/client';
+import type { RecordingSegment } from '@prisma/client';
+import { PrismaService } from '../prisma.service';
+import { AlertsService } from '../alerts/alerts.service';
 import {
-  S3Client,
-  GetObjectCommand,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
-import * as ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
-import { spawn } from 'child_process';
-import { createWriteStream, createReadStream } from 'fs';
-import { mkdtemp, writeFile, rm, stat } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
-import { pipeline } from 'stream/promises';
-import {
-  DEMO_ROOM_NAME,
-  getRoomRef,
-  roomForLesson,
-  roomForLessonRecord,
-} from './room-ref.util';
+  RECORDING_CONTENT_TYPE,
+  RecordingStorageService,
+  describeStorageError,
+} from './recording-storage.service';
+import type { StoredObject } from './recording-storage.service';
+import { getRoomRef } from './room-ref.util';
 
-const RECORDING_MAX_DURATION_MINUTES =
-  Number(process.env.RECORDING_MAX_DURATION_MINUTES) || 70;
-const RECORDING_STORAGE_LIMIT_BYTES =
-  Number(process.env.RECORDING_STORAGE_LIMIT_BYTES) || 50 * 1024 * 1024 * 1024; // 50 GB default
+/** The most one segment may weigh: under what the 32-bit size column and a
+ * single upload to R2 can hold. A browser auto-stops a segment before it gets
+ * anywhere near this (see the recorder's bitrate and duration caps). */
+export const MAX_SEGMENT_BYTES = 2_000_000_000;
+
+/** Parts one class may have — a guard against a runaway loop, not a limit a
+ * teacher should ever meet. */
+export const MAX_SEGMENTS_PER_ROOM = 30;
+
+/** Why a segment was given up on (shown to admins and in the teacher's list). */
+export const FAILURE_DISCARDED =
+  'Discarded by the teacher before it was uploaded.';
+export const FAILURE_NOT_UPLOADED = 'The recording was not uploaded in time.';
+
+/** A browser that started a recording and never reported back is given this
+ * long past the maximum duration before its segment is closed. */
+const RECORDING_GRACE_MINUTES = 10;
+/** A segment waiting for its upload is left alone this long before the sweep
+ * checks storage for it (an upload may well be running). */
+const UPLOAD_SETTLE_MINUTES = 15;
+/** A recording nobody has touched for this long is given up on (the file only
+ * ever lived in a browser tab). The teacher can still upload it if that tab is
+ * still open. */
+const STALE_UPLOAD_HOURS = 12;
 const STORAGE_WARNING_RATIO = 0.8;
 
-type EntityKind = 'booking' | 'lesson';
+/** What the browser needs to know about a segment. */
+export interface SegmentView {
+  id: string;
+  status: RecordingSegmentStatus;
+  startedAt: Date;
+  endedAt: Date | null;
+  durationSeconds: number | null;
+  sizeBytes: number | null;
+  uploadedAt: Date | null;
+  failureReason: string | null;
+}
 
-interface RecordingMirror {
-  recordingStatus: RecordingStatus;
+export interface StartedSegment {
+  segment: SegmentView;
+  /** The browser stops a segment by itself at this length. */
+  maxDurationMinutes: number;
+  maxSegmentBytes: number;
+  /** Whether a finished recording can be uploaded yet. Recording works either
+   * way; an upload does not until R2 is configured. */
+  storage: { configured: boolean; missing: string[] };
+}
+
+export interface UploadTarget {
+  uploadUrl: string;
+  method: 'PUT';
+  /** Sent with the PUT exactly as given. */
+  headers: Record<string, string>;
+  expiresAt: Date;
+  maxSegmentBytes: number;
+}
+
+export function toSegmentView(row: RecordingSegment): SegmentView {
+  return {
+    id: row.id,
+    status: row.status,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+    durationSeconds: row.durationSeconds,
+    sizeBytes: row.fileSizeBytes,
+    uploadedAt: row.uploadedAt,
+    failureReason: row.failureReason,
+  };
+}
+
+/** A class's recording as a whole, from the state of its segments. Something
+ * watchable wins over "still uploading", so a class with one part up and
+ * another on its way already counts as having a recording. */
+export function deriveRecordingStatus(
+  statuses: RecordingSegmentStatus[],
+): RecordingStatus {
+  const has = (s: RecordingSegmentStatus) => statuses.includes(s);
+  if (has(RecordingSegmentStatus.RECORDING)) return RecordingStatus.RECORDING;
+  if (has(RecordingSegmentStatus.AVAILABLE)) return RecordingStatus.AVAILABLE;
+  if (has(RecordingSegmentStatus.UPLOADING)) return RecordingStatus.PROCESSING;
+  if (has(RecordingSegmentStatus.FAILED)) return RecordingStatus.FAILED;
+  if (has(RecordingSegmentStatus.EXPIRED)) return RecordingStatus.EXPIRED;
+  return RecordingStatus.NONE;
+}
+
+function isWebm(contentType: string | null): boolean {
+  return (
+    !!contentType &&
+    contentType.toLowerCase().startsWith(RECORDING_CONTENT_TYPE)
+  );
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002'
+  );
 }
 
 @Injectable()
 export class RecordingService {
   private readonly logger = new Logger(RecordingService.name);
-
-  // Per-room lock held for the duration of a start/stop call so a double
-  // click (or a retried request) can never create two active egress jobs
-  // for the same room — see startSegment/stopActiveSegment.
-  private readonly roomLocks = new Set<string>();
-
-  // Rooms whose recording is being merged right now, so the 30-second sweep can
-  // never start a second merge of the same class while a long one is running.
-  private readonly mergingRooms = new Set<string>();
-
-  // In-memory recording state for the demo classroom only (see
-  // ClassroomService's DEMO_ROOM_NAME block comment) — there is no
-  // Booking/ScheduledLesson row to persist against.
-  private demoMirror: RecordingMirror = {
-    recordingStatus: RecordingStatus.NONE,
-  };
-  private demoSegments: Array<{
-    id: string;
-    egressId: string | null;
-    status: RecordingSegmentStatus;
-    storagePath: string | null;
-    startedAt: Date;
-    endedAt: Date | null;
-  }> = [];
-
   private lastStorageWarningAt = 0;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly alerts: AlertsService,
+    private readonly storage: RecordingStorageService,
   ) {}
 
-  // ─── Configuration diagnostics ───────────────────────────────────────────
+  // ─── Configuration ───────────────────────────────────────────────────────
 
-  missingEgressEnvVars(): string[] {
-    const missing: string[] = [];
-    if (!process.env.LIVEKIT_URL) missing.push('LIVEKIT_URL');
-    if (!process.env.LIVEKIT_API_KEY) missing.push('LIVEKIT_API_KEY');
-    if (!process.env.LIVEKIT_API_SECRET) missing.push('LIVEKIT_API_SECRET');
-    if (!process.env.S3_ACCESS_KEY && !process.env.AWS_ACCESS_KEY)
-      missing.push('S3_ACCESS_KEY');
-    if (!process.env.S3_SECRET_KEY && !process.env.AWS_SECRET_KEY)
-      missing.push('S3_SECRET_KEY');
-    if (!process.env.S3_BUCKET && !process.env.AWS_S3_BUCKET)
-      missing.push('S3_BUCKET');
-    return missing;
+  /** How long one segment may run, in minutes (RECORDING_MAX_DURATION_MINUTES).
+   * The browser enforces it; the sweep closes a segment whose browser vanished. */
+  maxDurationMinutes(): number {
+    return Number(process.env.RECORDING_MAX_DURATION_MINUTES) || 70;
   }
 
-  egressConfigured(): boolean {
-    return this.missingEgressEnvVars().length === 0;
+  /** Total bytes of uploaded recordings kept before the oldest are removed. */
+  storageLimitBytes(): number {
+    return (
+      Number(process.env.RECORDING_STORAGE_LIMIT_BYTES) ||
+      50 * 1024 * 1024 * 1024
+    );
   }
 
-  private buildEgressS3Config() {
-    const endpoint = process.env.S3_ENDPOINT || undefined;
+  storageStatus(): { configured: boolean; missing: string[] } {
+    const missing = this.storage.missingEnvVars();
+    return { configured: missing.length === 0, missing };
+  }
+
+  private limits() {
     return {
-      accessKey: process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY,
-      secret: process.env.S3_SECRET_KEY || process.env.AWS_SECRET_KEY,
-      bucket: process.env.S3_BUCKET || process.env.AWS_S3_BUCKET,
-      region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
-      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+      maxDurationMinutes: this.maxDurationMinutes(),
+      maxSegmentBytes: MAX_SEGMENT_BYTES,
     };
   }
 
-  private s3Client(): S3Client {
-    const endpoint = process.env.S3_ENDPOINT || undefined;
-    return new S3Client({
-      region: process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1',
-      credentials: {
-        accessKeyId: (process.env.S3_ACCESS_KEY || process.env.AWS_ACCESS_KEY)!,
-        secretAccessKey: (process.env.S3_SECRET_KEY ||
-          process.env.AWS_SECRET_KEY)!,
-      },
-      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
-    });
+  /** Uploading and watching need R2. Recording does not. */
+  private requireStorage(): void {
+    const { configured, missing } = this.storageStatus();
+    if (configured) return;
+    this.logger.error(
+      `Recording storage is not configured — missing backend env var(s): ${missing.join(', ')}`,
+    );
+    throw new BadRequestException(
+      `Recording storage is not set up on the server yet: missing ${missing.join(', ')}. ` +
+        'Ask a Lumexa admin to add them to the backend settings (see server/.env.example). ' +
+        'Your recording stays in this browser tab until it can be uploaded.',
+    );
   }
 
-  private bucketName(): string {
-    return (process.env.S3_BUCKET || process.env.AWS_S3_BUCKET)!;
-  }
-
-  private buildObjectUrl(key: string): string {
-    const bucket = this.bucketName();
-    const endpoint = process.env.S3_ENDPOINT;
-    if (endpoint) return `${endpoint.replace(/\/+$/, '')}/${bucket}/${key}`;
-    const region =
-      process.env.S3_REGION || process.env.AWS_REGION || 'us-east-1';
-    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-  }
-
-  // ─── Entity helpers (Booking | ScheduledLesson | demo, keyed by room) ───
-
-  private entityKindForRoom(room: string): EntityKind | null {
-    const ref = getRoomRef(room);
-    if (ref.kind === 'demo') return null;
-    return ref.kind === 'lesson' ||
-      ref.kind === 'batch' ||
-      ref.kind === 'session'
-      ? 'lesson'
-      : 'booking';
-  }
+  // ─── Rooms and the classes behind them ───────────────────────────────────
 
   /** The lessons a room's recording belongs to: the one lesson of a 1:1 class,
-   * or every student's lesson of a batch — they all sat the same class, so
-   * each of them gets the one recording (the file is stored once). */
+   * or every student's lesson of a batch (they all sat the same class). */
   private async lessonIdsForRoom(room: string): Promise<string[]> {
     const ref = getRoomRef(room);
     if (ref.kind === 'lesson') return [ref.scheduledLessonId];
@@ -210,874 +244,616 @@ export class RecordingService {
     return [];
   }
 
-  private async readMirror(room: string): Promise<RecordingMirror | null> {
-    if (room === DEMO_ROOM_NAME) return this.demoMirror;
+  /** Brings the class-level recordingStatus (what the admin screens read) in
+   * line with the class's segments. A class with no segments, and a class that
+   * has a recording from the retired server-side recorder (recordingUrl), is
+   * left exactly as it is. The demo room has no class row to update. */
+  private async syncMirror(room: string): Promise<void> {
     const ref = getRoomRef(room);
-    if (
-      ref.kind === 'lesson' ||
-      ref.kind === 'batch' ||
-      ref.kind === 'session'
-    ) {
-      const [anchor] = await this.lessonIdsForRoom(room);
-      if (!anchor) return null;
-      return this.prisma.scheduledLesson.findUnique({
-        where: { id: anchor },
-        select: { recordingStatus: true },
-      });
-    }
-    if (ref.kind === 'booking') {
-      return this.prisma.booking.findUnique({
-        where: { id: ref.bookingId },
-        select: { recordingStatus: true },
-      });
-    }
-    return null;
-  }
+    if (ref.kind === 'demo' || ref.kind === 'trial') return;
+    const rows = await this.prisma.recordingSegment.findMany({
+      where: { room },
+      select: { status: true },
+    });
+    if (rows.length === 0) return;
+    const recordingStatus = deriveRecordingStatus(rows.map((r) => r.status));
 
-  private async writeMirror(
-    room: string,
-    recordingStatus: RecordingStatus,
-  ): Promise<void> {
-    if (room === DEMO_ROOM_NAME) {
-      this.demoMirror = { recordingStatus };
+    if (ref.kind === 'booking') {
+      await this.prisma.booking.updateMany({
+        where: { id: ref.bookingId, recordingUrl: null },
+        data: { recordingStatus },
+      });
       return;
     }
-    const ref = getRoomRef(room);
-    if (ref.kind === 'lesson') {
-      await this.prisma.scheduledLesson.update({
-        where: { id: ref.scheduledLessonId },
-        data: { recordingStatus },
-      });
-    } else if (ref.kind === 'batch' || ref.kind === 'session') {
-      const ids = await this.lessonIdsForRoom(room);
-      if (ids.length > 0) {
-        await this.prisma.scheduledLesson.updateMany({
-          where: { id: { in: ids } },
-          data: { recordingStatus },
-        });
-      }
-    } else if (ref.kind === 'booking') {
-      await this.prisma.booking.update({
-        where: { id: ref.bookingId },
+    const ids = await this.lessonIdsForRoom(room);
+    if (ids.length > 0) {
+      await this.prisma.scheduledLesson.updateMany({
+        where: { id: { in: ids }, recordingUrl: null },
         data: { recordingStatus },
       });
     }
   }
 
-  // ─── Segment start / stop (teacher clicks Record) ────────────────────────
+  /** True while a teacher's browser is recording in this room (what the REC
+   * badge everyone sees reflects). */
+  async hasActiveSegment(room: string): Promise<boolean> {
+    return (
+      (await this.prisma.recordingSegment.count({
+        where: { room, status: RecordingSegmentStatus.RECORDING },
+      })) > 0
+    );
+  }
 
+  /** A segment of this room made by this teacher, or a "not found" that does
+   * not say whether it exists for somebody else. */
+  private async ownedSegment(
+    room: string,
+    teacherUserId: string,
+    segmentId: string,
+  ): Promise<RecordingSegment> {
+    const seg = await this.prisma.recordingSegment.findUnique({
+      where: { id: segmentId },
+    });
+    if (!seg || seg.room !== room || seg.recordedByUserId !== teacherUserId) {
+      throw new NotFoundException('Recording not found.');
+    }
+    return seg;
+  }
+
+  private async reload(id: string): Promise<RecordingSegment> {
+    return this.prisma.recordingSegment.findUniqueOrThrow({ where: { id } });
+  }
+
+  // ─── The teacher's browser: record, stop, upload ─────────────────────────
+  //
+  // The caller has already checked that `teacherUserId` is this room's teacher
+  // (ClassroomService.assertTeacherOfRoom); these check the segment is theirs.
+
+  /** The teacher pressed Record. Idempotent per `requestedId`: the same id again
+   * (a retried request) returns the segment it already made. Works without R2
+   * being configured — only uploading needs it. */
   async startSegment(
     room: string,
-  ): Promise<{ recordingStatus: RecordingStatus }> {
-    const missing = this.missingEgressEnvVars();
-    if (missing.length > 0) {
-      this.logger.error(
-        `Cannot start recording for room ${room} — missing backend env var(s): ${missing.join(', ')}`,
-      );
-      throw new BadRequestException(
-        `Recording is not configured for this environment: missing ${missing.join(', ')}. ` +
-          `Set these in the backend deployment (see server/.env.example) and redeploy.`,
-      );
+    teacherUserId: string,
+    requestedId?: string,
+  ): Promise<StartedSegment> {
+    const ref = getRoomRef(room);
+    if (ref.kind === 'trial') {
+      throw new BadRequestException('Trial classes are not recorded.');
+    }
+    const id = requestedId ?? randomUUID();
+
+    let row = await this.prisma.recordingSegment.findUnique({ where: { id } });
+    if (row && (row.room !== room || row.recordedByUserId !== teacherUserId)) {
+      throw new ConflictException('That recording id is already in use.');
     }
 
-    if (this.roomLocks.has(room)) {
-      // A start/stop for this room is already in flight — treat a duplicate
-      // click as a no-op rather than racing a second egress job.
-      const mirror = await this.readMirror(room);
-      return {
-        recordingStatus: mirror?.recordingStatus ?? RecordingStatus.RECORDING,
-      };
-    }
-    this.roomLocks.add(room);
-    try {
-      const activeCount =
-        room === DEMO_ROOM_NAME
-          ? this.demoSegments.filter(
-              (s) => s.status === RecordingSegmentStatus.RECORDING,
-            ).length
-          : await this.prisma.recordingSegment.count({
-              where: { room, status: RecordingSegmentStatus.RECORDING },
-            });
-      if (activeCount > 0) {
-        return { recordingStatus: RecordingStatus.RECORDING };
-      }
-
-      const ref = getRoomRef(room);
-      const objectKey = `recordings/${room}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp4`;
-
-      const { EgressClient } = await import('livekit-server-sdk');
-      const egress = new EgressClient(
-        process.env.LIVEKIT_URL!,
-        process.env.LIVEKIT_API_KEY,
-        process.env.LIVEKIT_API_SECRET,
-      );
-
-      let info: { egressId: string };
-      try {
-        info = await egress.startRoomCompositeEgress(room, {
-          file: {
-            fileType: 3,
-            filepath: objectKey,
-            s3: this.buildEgressS3Config(),
-          },
-        } as any);
-      } catch (err) {
-        this.logger.error(`Egress start error for ${room}: ${err}`);
+    if (!row) {
+      const parts = await this.prisma.recordingSegment.count({
+        where: { room },
+      });
+      if (parts >= MAX_SEGMENTS_PER_ROOM) {
         throw new BadRequestException(
-          'Could not start recording. Please try again.',
+          `This class already has ${MAX_SEGMENTS_PER_ROOM} recordings, the most it can have.`,
         );
       }
-
-      const startedAt = new Date();
-      if (room === DEMO_ROOM_NAME) {
-        this.demoSegments.push({
-          id: `demo-${Date.now()}`,
-          egressId: info.egressId,
-          status: RecordingSegmentStatus.RECORDING,
-          storagePath: objectKey,
-          startedAt,
-          endedAt: null,
-        });
-      } else {
-        await this.prisma.recordingSegment.create({
+      try {
+        row = await this.prisma.recordingSegment.create({
           data: {
+            id,
             room,
             bookingId: ref.kind === 'booking' ? ref.bookingId : undefined,
             // A batch's segments hang off its first lesson; the room name is
-            // what ties them all to the whole batch class.
+            // what ties them to the whole class.
             scheduledLessonId:
               ref.kind === 'lesson'
                 ? ref.scheduledLessonId
                 : ref.kind === 'batch' || ref.kind === 'session'
                   ? (await this.lessonIdsForRoom(room))[0]
                   : undefined,
-            egressId: info.egressId,
             status: RecordingSegmentStatus.RECORDING,
-            storagePath: objectKey,
-            startedAt,
+            storagePath: this.storage.objectKeyFor(room, id),
+            recordedByUserId: teacherUserId,
           },
         });
-      }
-
-      await this.writeMirror(room, RecordingStatus.RECORDING);
-      this.logger.log(
-        `Recording segment started for room ${room} (egress ${info.egressId})`,
-      );
-      return { recordingStatus: RecordingStatus.RECORDING };
-    } finally {
-      this.roomLocks.delete(room);
-    }
-  }
-
-  /** Stops whatever segment is currently RECORDING for this room, if any.
-   * Safe to call even when nothing is active (endClass/disconnect-sweep
-   * call this unconditionally). Never marks a segment AVAILABLE here — only
-   * the Egress webhook does that, once the upload is actually confirmed. */
-  async stopActiveSegmentIfAny(room: string): Promise<void> {
-    if (this.roomLocks.has(room)) return; // a start/stop is already in flight
-    this.roomLocks.add(room);
-    try {
-      const active =
-        room === DEMO_ROOM_NAME
-          ? this.demoSegments.find(
-              (s) => s.status === RecordingSegmentStatus.RECORDING,
-            )
-          : await this.prisma.recordingSegment.findFirst({
-              where: { room, status: RecordingSegmentStatus.RECORDING },
-              orderBy: { startedAt: 'desc' },
-            });
-      if (!active) return;
-
-      try {
-        const { EgressClient } = await import('livekit-server-sdk');
-        const egress = new EgressClient(
-          process.env.LIVEKIT_URL!,
-          process.env.LIVEKIT_API_KEY,
-          process.env.LIVEKIT_API_SECRET,
-        );
-        if (active.egressId) await egress.stopEgress(active.egressId);
       } catch (err) {
-        this.logger.error(`Egress stop error for ${room}: ${err}`);
+        // Two identical requests raced: the other one made it.
+        if (!isUniqueViolation(err)) throw err;
+        row = await this.reload(id);
       }
-
-      const endedAt = new Date();
-      if (room === DEMO_ROOM_NAME) {
-        active.status = RecordingSegmentStatus.UPLOADING;
-        active.endedAt = endedAt;
-      } else {
-        await this.prisma.recordingSegment.update({
-          where: { id: (active as { id: string }).id },
-          data: { status: RecordingSegmentStatus.UPLOADING, endedAt },
-        });
-      }
-      await this.writeMirror(room, RecordingStatus.NONE);
-    } finally {
-      this.roomLocks.delete(room);
     }
+
+    await this.syncMirror(room);
+    this.logger.log(`Recording segment ${id} started in ${room}`);
+    return {
+      segment: toSegmentView(row),
+      ...this.limits(),
+      storage: this.storageStatus(),
+    };
   }
 
+  /** The teacher pressed Stop (or the browser stopped it at the length cap): the
+   * file now exists only in their browser until it is uploaded. Safe to repeat. */
   async stopSegment(
     room: string,
-  ): Promise<{ recordingStatus: RecordingStatus }> {
-    const active =
-      room === DEMO_ROOM_NAME
-        ? this.demoSegments.some(
-            (s) => s.status === RecordingSegmentStatus.RECORDING,
-          )
-        : (await this.prisma.recordingSegment.count({
-            where: { room, status: RecordingSegmentStatus.RECORDING },
-          })) > 0;
-    if (!active) {
-      throw new BadRequestException('There is no active recording to stop.');
+    teacherUserId: string,
+    segmentId: string,
+    info: { durationMs?: number; mimeType?: string } = {},
+  ): Promise<SegmentView> {
+    const seg = await this.ownedSegment(room, teacherUserId, segmentId);
+    if (seg.status === RecordingSegmentStatus.AVAILABLE) {
+      return toSegmentView(seg);
     }
-    await this.stopActiveSegmentIfAny(room);
-    return { recordingStatus: RecordingStatus.NONE };
+    if (
+      seg.status === RecordingSegmentStatus.FAILED ||
+      seg.status === RecordingSegmentStatus.EXPIRED
+    ) {
+      throw new ConflictException('This recording can no longer be changed.');
+    }
+    await this.prisma.recordingSegment.updateMany({
+      where: {
+        id: seg.id,
+        status: {
+          in: [
+            RecordingSegmentStatus.RECORDING,
+            RecordingSegmentStatus.UPLOADING,
+          ],
+        },
+      },
+      data: {
+        status: RecordingSegmentStatus.UPLOADING,
+        endedAt: seg.endedAt ?? new Date(),
+        ...(info.durationMs !== undefined
+          ? { durationSeconds: Math.round(info.durationMs / 1000) }
+          : {}),
+        ...(info.mimeType ? { mimeType: info.mimeType } : {}),
+      },
+    });
+    await this.syncMirror(room);
+    return toSegmentView(await this.reload(seg.id));
   }
 
-  // ─── 70-minute hard cap ───────────────────────────────────────────────────
+  /** A signed URL for the browser to PUT the finished file to. Can be asked for
+   * again and again (a retry, an expired URL): the file always goes to the same
+   * key, so the worst a repeat can do is replace itself. */
+  async createUploadUrl(
+    room: string,
+    teacherUserId: string,
+    segmentId: string,
+    sizeBytes: number,
+  ): Promise<UploadTarget> {
+    this.requireStorage();
+    if (!Number.isInteger(sizeBytes) || sizeBytes < 1) {
+      throw new BadRequestException('The recording is empty.');
+    }
+    if (sizeBytes > MAX_SEGMENT_BYTES) {
+      throw new BadRequestException(
+        'This recording is too large to upload. Record shorter parts instead.',
+      );
+    }
+    const seg = await this.ownedSegment(room, teacherUserId, segmentId);
+    this.assertUploadable(seg);
+    if (!seg.storagePath) {
+      throw new ConflictException('This recording has no storage location.');
+    }
 
-  @Cron(CronExpression.EVERY_MINUTE)
-  async enforceMaxSegmentDuration() {
-    const cutoff = new Date(
-      Date.now() - RECORDING_MAX_DURATION_MINUTES * 60_000,
+    const moved = await this.prisma.recordingSegment.updateMany({
+      where: { id: seg.id, status: { not: RecordingSegmentStatus.AVAILABLE } },
+      data: {
+        status: RecordingSegmentStatus.UPLOADING,
+        endedAt: seg.endedAt ?? new Date(),
+        failureReason: null,
+        uploadAttempts: { increment: 1 },
+      },
+    });
+    if (moved.count === 0) {
+      throw new ConflictException('This recording has already been uploaded.');
+    }
+
+    const signed = await this.storage.createUploadUrl(seg.storagePath);
+    await this.syncMirror(room);
+    return {
+      uploadUrl: signed.url,
+      method: 'PUT',
+      headers: signed.headers,
+      expiresAt: signed.expiresAt,
+      maxSegmentBytes: MAX_SEGMENT_BYTES,
+    };
+  }
+
+  /** The browser says the upload finished. Believed only once R2 confirms the
+   * file is there with the size the browser sent and the right type. Safe to
+   * repeat: an already-available segment is simply returned. */
+  async completeUpload(
+    room: string,
+    teacherUserId: string,
+    segmentId: string,
+    sizeBytes: number,
+    durationMs?: number,
+  ): Promise<SegmentView> {
+    this.requireStorage();
+    const seg = await this.ownedSegment(room, teacherUserId, segmentId);
+    if (seg.status === RecordingSegmentStatus.AVAILABLE) {
+      return toSegmentView(seg);
+    }
+    this.assertUploadable(seg);
+    if (!seg.storagePath) {
+      throw new ConflictException('This recording has no storage location.');
+    }
+
+    let stored: StoredObject | null;
+    try {
+      stored = await this.storage.headObject(seg.storagePath);
+    } catch (err) {
+      this.logger.error(
+        `Could not check recording ${seg.id} in storage: ${describeStorageError(err)}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not check the upload with storage. Please try again in a moment.',
+      );
+    }
+    if (!stored) {
+      throw new ConflictException(
+        'The recording has not reached storage yet. Please upload it again.',
+      );
+    }
+    if (!isWebm(stored.contentType) || stored.sizeBytes > MAX_SEGMENT_BYTES) {
+      // Not what we signed for: never offered to anyone, and not kept.
+      await this.storage
+        .deleteObject(seg.storagePath)
+        .catch((e) =>
+          this.logger.warn(
+            `Could not remove a rejected upload: ${describeStorageError(e)}`,
+          ),
+        );
+      throw new ConflictException(
+        'The uploaded file is not a valid recording. Please upload it again.',
+      );
+    }
+    if (stored.sizeBytes !== sizeBytes) {
+      throw new ConflictException(
+        'The uploaded file is not the same size as the recording. Please upload it again.',
+      );
+    }
+
+    await this.prisma.recordingSegment.updateMany({
+      where: { id: seg.id, status: { not: RecordingSegmentStatus.AVAILABLE } },
+      data: {
+        status: RecordingSegmentStatus.AVAILABLE,
+        fileSizeBytes: stored.sizeBytes,
+        uploadedAt: new Date(),
+        endedAt: seg.endedAt ?? new Date(),
+        failureReason: null,
+        ...(seg.durationSeconds === null && durationMs !== undefined
+          ? { durationSeconds: Math.round(durationMs / 1000) }
+          : {}),
+      },
+    });
+    await this.syncMirror(room);
+    this.logger.log(
+      `Recording segment ${seg.id} uploaded for ${room} (${stored.sizeBytes} bytes)`,
     );
-    const overrunning = await this.prisma.recordingSegment.findMany({
+    return toSegmentView(await this.reload(seg.id));
+  }
+
+  /** The teacher gives a recording up (or the browser abandoned it). Not for a
+   * recording that is already uploaded. Safe to repeat. */
+  async discardSegment(
+    room: string,
+    teacherUserId: string,
+    segmentId: string,
+  ): Promise<SegmentView> {
+    const seg = await this.ownedSegment(room, teacherUserId, segmentId);
+    if (seg.status === RecordingSegmentStatus.AVAILABLE) {
+      throw new ConflictException(
+        'A recording that has been uploaded cannot be discarded here.',
+      );
+    }
+    if (
+      seg.status === RecordingSegmentStatus.FAILED ||
+      seg.status === RecordingSegmentStatus.EXPIRED
+    ) {
+      return toSegmentView(seg);
+    }
+    await this.prisma.recordingSegment.updateMany({
+      where: {
+        id: seg.id,
+        status: {
+          in: [
+            RecordingSegmentStatus.RECORDING,
+            RecordingSegmentStatus.UPLOADING,
+          ],
+        },
+      },
+      data: {
+        status: RecordingSegmentStatus.FAILED,
+        failureReason: FAILURE_DISCARDED,
+        endedAt: seg.endedAt ?? new Date(),
+      },
+    });
+    // The file may have reached storage before it was given up on.
+    if (seg.storagePath && this.storage.isConfigured()) {
+      await this.storage
+        .deleteObject(seg.storagePath)
+        .catch((e) =>
+          this.logger.warn(
+            `Could not remove a discarded upload: ${describeStorageError(e)}`,
+          ),
+        );
+    }
+    await this.syncMirror(room);
+    return toSegmentView(await this.reload(seg.id));
+  }
+
+  /** The class's segments, oldest first (the teacher's own list). */
+  async listSegments(room: string): Promise<SegmentView[]> {
+    const rows = await this.prisma.recordingSegment.findMany({
+      where: { room },
+      orderBy: { startedAt: 'asc' },
+    });
+    return rows.map(toSegmentView);
+  }
+
+  /** What may still be uploaded: a segment in flight, or one that was only given
+   * up on because it sat too long (its file may well still be in the tab). */
+  private assertUploadable(seg: RecordingSegment): void {
+    if (seg.status === RecordingSegmentStatus.AVAILABLE) {
+      throw new ConflictException('This recording has already been uploaded.');
+    }
+    if (seg.status === RecordingSegmentStatus.EXPIRED) {
+      throw new ConflictException('This recording has been removed.');
+    }
+    if (
+      seg.status === RecordingSegmentStatus.FAILED &&
+      seg.failureReason !== FAILURE_NOT_UPLOADED
+    ) {
+      throw new ConflictException(
+        'This recording was discarded and can no longer be uploaded.',
+      );
+    }
+  }
+
+  // ─── Class end ───────────────────────────────────────────────────────────
+
+  /** The class is over: a browser still recording in it is being closed with
+   * the room (and stops itself when it notices), so its segment now only waits
+   * for its upload. Never uploads or deletes anything. Safe to repeat. */
+  async stopActiveSegmentIfAny(room: string): Promise<void> {
+    const { count } = await this.prisma.recordingSegment.updateMany({
+      where: { room, status: RecordingSegmentStatus.RECORDING },
+      data: { status: RecordingSegmentStatus.UPLOADING, endedAt: new Date() },
+    });
+    if (count > 0) {
+      this.logger.log(
+        `Class ended in ${room} with ${count} recording(s) still running; they now wait for their upload.`,
+      );
+    }
+  }
+
+  /** The class is over: bring its recording summary up to date. */
+  async finalizeAtClassEnd(room: string): Promise<void> {
+    await this.syncMirror(room);
+  }
+
+  // ─── Sweep: lost browsers, finished-but-unreported uploads, abandoned files ─
+
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async reconcileSegments(): Promise<void> {
+    try {
+      await this.runReconcile();
+    } catch (err) {
+      this.logger.error(`Recording sweep failed: ${err}`);
+    }
+  }
+
+  /** Exposed (with a clock) so it can be exercised directly. */
+  async runReconcile(now: Date = new Date()): Promise<{
+    closed: number;
+    completed: number;
+    abandoned: number;
+  }> {
+    const ago = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
+    const touched = new Set<string>();
+    let closed = 0;
+    let completed = 0;
+    let abandoned = 0;
+    const cap = this.maxDurationMinutes();
+
+    // 1. A browser that began recording and never said it stopped (closed the
+    //    tab, crashed, lost its connection). Its file may still be in the tab,
+    //    so it now waits for an upload like any other.
+    const lost = await this.prisma.recordingSegment.findMany({
       where: {
         status: RecordingSegmentStatus.RECORDING,
-        startedAt: { lt: cutoff },
+        recordedByUserId: { not: null },
+        startedAt: { lt: ago(cap + RECORDING_GRACE_MINUTES) },
       },
-      select: { room: true },
     });
-    const demoOverrunning = this.demoSegments.some(
-      (s) =>
-        s.status === RecordingSegmentStatus.RECORDING && s.startedAt < cutoff,
-    );
-    const rooms = new Set(overrunning.map((s) => s.room));
-    if (demoOverrunning) rooms.add(DEMO_ROOM_NAME);
-    for (const room of rooms) {
-      this.logger.warn(
-        `Recording for room ${room} hit the ${RECORDING_MAX_DURATION_MINUTES}-minute cap — auto-stopping segment`,
-      );
-      await this.stopActiveSegmentIfAny(room).catch((err) =>
-        this.logger.error(
-          `Failed to auto-stop recording for room ${room}: ${err}`,
-        ),
-      );
-    }
-  }
-
-  // ─── Egress webhook: per-segment status update ───────────────────────────
-
-  async handleEgressEnded(egressInfo: {
-    egressId?: string;
-    roomName?: string;
-    status?: number | string;
-    file?: { location?: string; size?: number | string };
-  }): Promise<void> {
-    const egressId = egressInfo.egressId;
-    if (!egressId) return;
-    // EgressStatus.EGRESS_COMPLETE === 3 in livekit-server-sdk's proto enum.
-    const succeeded =
-      egressInfo.status === 3 || egressInfo.status === 'EGRESS_COMPLETE';
-    const fileSizeBytes =
-      egressInfo.file?.size !== undefined
-        ? Number(egressInfo.file.size)
-        : undefined;
-
-    if (egressInfo.roomName === DEMO_ROOM_NAME) {
-      const seg = this.demoSegments.find((s) => s.egressId === egressId);
-      if (seg)
-        seg.status = succeeded
-          ? RecordingSegmentStatus.AVAILABLE
-          : RecordingSegmentStatus.FAILED;
-      return;
-    }
-
-    const segment = await this.prisma.recordingSegment.findFirst({
-      where: { egressId },
-    });
-    if (!segment) {
-      this.logger.warn(
-        `egress_ended for unknown egress ${egressId} (room ${egressInfo.roomName})`,
-      );
-      return;
-    }
-    await this.prisma.recordingSegment.update({
-      where: { id: segment.id },
-      data: succeeded
-        ? {
-            status: RecordingSegmentStatus.AVAILABLE,
-            fileSizeBytes: fileSizeBytes ?? null,
-          }
-        : {
-            status: RecordingSegmentStatus.FAILED,
-            failureReason: `Egress status ${egressInfo.status}`,
-          },
-    });
-    if (!succeeded) {
-      this.logger.warn(
-        `Recording segment failed for room ${segment.room} (egress status ${egressInfo.status})`,
-      );
-    }
-  }
-
-  // ─── Class-end finalization → async merge ────────────────────────────────
-
-  /** Called once, right after the recording (if any) has been stopped, when
-   * a class ends. Hands the room off to the merge sweep rather than merging
-   * inline, so endClass stays fast and a server restart mid-merge can't
-   * lose the job. */
-  async finalizeAtClassEnd(room: string): Promise<void> {
-    if (room === DEMO_ROOM_NAME) return; // QA room has nothing to persist/merge
-    const hasAnySegment =
-      (await this.prisma.recordingSegment.count({ where: { room } })) > 0;
-    if (!hasAnySegment) return;
-    const roomKind = getRoomRef(room).kind;
-    if (roomKind === 'batch' || roomKind === 'session') {
-      // Only move a lesson on that has not already been handed to (or finished
-      // with) the merge.
-      const ids = await this.lessonIdsForRoom(room);
-      await this.prisma.scheduledLesson.updateMany({
-        where: {
-          id: { in: ids },
-          recordingStatus: {
-            in: [RecordingStatus.NONE, RecordingStatus.RECORDING],
-          },
-        },
-        data: { recordingStatus: RecordingStatus.PROCESSING },
-      });
-      return;
-    }
-    await this.writeMirror(room, RecordingStatus.PROCESSING);
-  }
-
-  // ─── Merge sweep ──────────────────────────────────────────────────────────
-
-  @Cron(CronExpression.EVERY_30_SECONDS)
-  async processMergeSweep() {
-    const [bookings, lessons] = await Promise.all([
-      this.prisma.booking.findMany({
-        where: {
-          recordingStatus: RecordingStatus.PROCESSING,
-          recordingMergedAt: null,
-        },
-        select: { id: true },
-        take: 20,
-      }),
-      this.prisma.scheduledLesson.findMany({
-        where: {
-          recordingStatus: RecordingStatus.PROCESSING,
-          recordingMergedAt: null,
-        },
-        select: {
-          id: true,
-          classType: true,
-          teacherId: true,
-          start: true,
-          batchSessionId: true,
-        },
-        take: 20,
-      }),
-    ]);
-    for (const b of bookings)
-      await this.tryMerge('booking', b.id).catch((e) =>
-        this.logger.error(String(e)),
-      );
-    // The students of a batch all show up here (they share one recording);
-    // merge each classroom once.
-    const seenRooms = new Set<string>();
-    for (const l of lessons) {
-      const room = roomForLessonRecord(l);
-      if (seenRooms.has(room)) continue;
-      seenRooms.add(room);
-      await this.tryMerge('lesson', l.id, room).catch((e) =>
-        this.logger.error(String(e)),
-      );
-    }
-  }
-
-  private async tryMerge(
-    kind: EntityKind,
-    id: string,
-    roomOverride?: string,
-  ): Promise<void> {
-    const room = roomOverride ?? (kind === 'lesson' ? roomForLesson(id) : id);
-    if (this.mergingRooms.has(room)) return; // a merge of this class is under way
-    this.mergingRooms.add(room);
-    try {
-      const segments = await this.prisma.recordingSegment.findMany({
-        where: { room },
-      });
-      const stillSettling = segments.some(
-        (s) =>
-          s.status === RecordingSegmentStatus.RECORDING ||
-          s.status === RecordingSegmentStatus.UPLOADING,
-      );
-      if (stillSettling) return; // wait for the Egress webhook (or the next sweep tick)
-      await this.mergeEntity(kind, id, room, segments);
-    } finally {
-      this.mergingRooms.delete(room);
-    }
-  }
-
-  /** Admin-triggered retry for a FAILED merge. */
-  async retryMerge(kind: EntityKind, id: string): Promise<{ ok: true }> {
-    const current =
-      kind === 'lesson'
-        ? await this.prisma.scheduledLesson.findUnique({
-            where: { id },
-            select: { recordingStatus: true },
-          })
-        : await this.prisma.booking.findUnique({
-            where: { id },
-            select: { recordingStatus: true },
-          });
-    if (!current) throw new BadRequestException('Class not found.');
-    if (current.recordingStatus !== RecordingStatus.FAILED) {
-      throw new BadRequestException('Only a failed recording can be retried.');
-    }
-    const data = {
-      recordingStatus: RecordingStatus.PROCESSING,
-      recordingMergedAt: null,
-      recordingMergeError: null,
-    };
-    if (kind === 'lesson') {
-      // A batch's students share one recording, so retry it for all of them.
-      const lesson = await this.prisma.scheduledLesson.findUniqueOrThrow({
-        where: { id },
-        select: {
-          id: true,
-          classType: true,
-          teacherId: true,
-          start: true,
-          batchSessionId: true,
+    for (const seg of lost) {
+      const moved = await this.prisma.recordingSegment.updateMany({
+        where: { id: seg.id, status: RecordingSegmentStatus.RECORDING },
+        data: {
+          status: RecordingSegmentStatus.UPLOADING,
+          endedAt: new Date(seg.startedAt.getTime() + cap * 60_000),
         },
       });
-      const ids = await this.lessonIdsForRoom(roomForLessonRecord(lesson));
-      await this.prisma.scheduledLesson.updateMany({
-        where: { id: { in: ids.length > 0 ? ids : [id] } },
-        data,
-      });
-    } else await this.prisma.booking.update({ where: { id }, data });
-    return { ok: true };
-  }
-
-  private async mergeEntity(
-    kind: EntityKind,
-    id: string,
-    room: string,
-    segments: Array<{
-      id: string;
-      status: RecordingSegmentStatus;
-      storagePath: string | null;
-      startedAt: Date;
-    }>,
-  ): Promise<void> {
-    const available = segments
-      .filter(
-        (s) => s.status === RecordingSegmentStatus.AVAILABLE && s.storagePath,
-      )
-      .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
-
-    // The classes this recording belongs to: one lesson/booking, or every
-    // student's lesson of a batch.
-    const targetIds =
-      kind === 'lesson' ? await this.lessonIdsForRoom(room) : [id];
-    const lessonIds = targetIds.length > 0 ? targetIds : [id];
-
-    const fail = async (message: string) => {
-      const data = {
-        recordingStatus: RecordingStatus.FAILED,
-        recordingMergeError: message,
-        recordingMergeAttempts: { increment: 1 },
-      };
-      if (kind === 'lesson')
-        await this.prisma.scheduledLesson.updateMany({
-          where: { id: { in: lessonIds } },
-          data,
-        });
-      else await this.prisma.booking.update({ where: { id }, data });
-      this.logger.error(`Recording merge failed for ${kind} ${id}: ${message}`);
-      await this.notifyMergeFailure(kind, id, message).catch(() => {});
-    };
-
-    if (available.length === 0) {
-      await fail(
-        'No recording segments were successfully uploaded — nothing to merge.',
-      );
-      return;
-    }
-
-    let workDir: string | null = null;
-    try {
-      const s3 = this.s3Client();
-      const bucket = this.bucketName();
-      workDir = await mkdtemp(join(tmpdir(), 'lumexa-rec-'));
-
-      const localFiles: string[] = [];
-      for (let i = 0; i < available.length; i++) {
-        const key = available[i].storagePath!;
-        const localPath = join(workDir, `seg-${i}.mp4`);
-        const obj = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: key }),
-        );
-        await pipeline(
-          obj.Body as NodeJS.ReadableStream,
-          createWriteStream(localPath),
-        );
-        localFiles.push(localPath);
+      if (moved.count > 0) {
+        closed++;
+        touched.add(seg.room);
       }
+    }
 
-      const outputPath = join(workDir, 'final.mp4');
-      if (localFiles.length === 1) {
-        await rm(outputPath, { force: true });
-        await this.copyFile(localFiles[0], outputPath);
-      } else {
-        const listPath = join(workDir, 'concat.txt');
-        await writeFile(
-          listPath,
-          localFiles
-            .map((f) => `file '${f.replace(/'/g, "'\\''")}'`)
-            .join('\n'),
-        );
+    // 2. Segments waiting for an upload. If the file is in storage the upload
+    //    finished and only its confirmation was lost: confirm it now. If it is
+    //    not, and nobody has touched the segment for a long time, give up.
+    const waiting = await this.prisma.recordingSegment.findMany({
+      where: {
+        status: RecordingSegmentStatus.UPLOADING,
+        recordedByUserId: { not: null },
+        updatedAt: { lt: ago(UPLOAD_SETTLE_MINUTES) },
+      },
+      orderBy: { updatedAt: 'asc' },
+      take: 50,
+    });
+    const staleBefore = ago(STALE_UPLOAD_HOURS * 60);
+    for (const seg of waiting) {
+      let checked = true;
+      if (this.storage.isConfigured() && seg.storagePath) {
         try {
-          await this.runFfmpeg([
-            '-f',
-            'concat',
-            '-safe',
-            '0',
-            '-i',
-            listPath,
-            '-c',
-            'copy',
-            '-y',
-            outputPath,
-          ]);
-        } catch {
-          // Segments came from separately-started RoomCompositeEgress jobs and
-          // should share codec/resolution, but fall back to a re-encode if a
-          // stream copy ever refuses to concatenate them cleanly.
-          await this.runFfmpeg([
-            '-f',
-            'concat',
-            '-safe',
-            '0',
-            '-i',
-            listPath,
-            '-c:v',
-            'libx264',
-            '-preset',
-            'veryfast',
-            '-c:a',
-            'aac',
-            '-y',
-            outputPath,
-          ]);
+          const stored = await this.storage.headObject(seg.storagePath);
+          if (
+            stored &&
+            stored.sizeBytes > 0 &&
+            stored.sizeBytes <= MAX_SEGMENT_BYTES &&
+            isWebm(stored.contentType)
+          ) {
+            const done = await this.prisma.recordingSegment.updateMany({
+              where: { id: seg.id, status: RecordingSegmentStatus.UPLOADING },
+              data: {
+                status: RecordingSegmentStatus.AVAILABLE,
+                fileSizeBytes: stored.sizeBytes,
+                uploadedAt: now,
+                failureReason: null,
+              },
+            });
+            if (done.count > 0) {
+              completed++;
+              touched.add(seg.room);
+            }
+            continue;
+          }
+        } catch (err) {
+          // Could not ask storage: say nothing about this segment this time.
+          checked = false;
+          this.logger.warn(
+            `Sweep could not check recording ${seg.id}: ${describeStorageError(err)}`,
+          );
         }
       }
-
-      const { size } = await stat(outputPath);
-      const finalKey = `recordings/final/${room}/${Date.now()}.mp4`;
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: finalKey,
-          Body: createReadStream(outputPath),
-          ContentType: 'video/mp4',
-          ContentLength: size,
-        }),
-      );
-
-      const finalUrl = this.buildObjectUrl(finalKey);
-      const data = {
-        recordingStatus: RecordingStatus.AVAILABLE,
-        recordingUrl: finalUrl,
-        recordingFileSizeBytes: size,
-        recordingMergedAt: new Date(),
-        recordingMergeError: null,
-      };
-      if (kind === 'lesson')
-        await this.prisma.scheduledLesson.updateMany({
-          where: { id: { in: lessonIds } },
-          data,
+      if (checked && seg.updatedAt < staleBefore) {
+        const failed = await this.prisma.recordingSegment.updateMany({
+          where: { id: seg.id, status: RecordingSegmentStatus.UPLOADING },
+          data: {
+            status: RecordingSegmentStatus.FAILED,
+            failureReason: FAILURE_NOT_UPLOADED,
+          },
         });
-      else await this.prisma.booking.update({ where: { id }, data });
-      this.logger.log(
-        `Recording merged for ${kind} ${id} (${available.length} segment(s), ${size} bytes)`,
-      );
-
-      // Raw per-segment files are no longer needed once folded into the
-      // final recording — best-effort cleanup, never blocks success.
-      for (const seg of available) {
-        await s3
-          .send(
-            new DeleteObjectCommand({ Bucket: bucket, Key: seg.storagePath! }),
-          )
-          .then(() =>
-            this.prisma.recordingSegment.update({
-              where: { id: seg.id },
-              data: { status: RecordingSegmentStatus.EXPIRED },
-            }),
-          )
-          .catch((err) =>
-            this.logger.warn(
-              `Could not clean up raw segment ${seg.id}: ${err}`,
-            ),
-          );
+        if (failed.count > 0) {
+          abandoned++;
+          touched.add(seg.room);
+          await this.notifyNotUploaded(seg).catch(() => undefined);
+        }
       }
+    }
+
+    for (const room of touched) {
+      await this.syncMirror(room).catch((err) =>
+        this.logger.error(`Could not update the summary for ${room}: ${err}`),
+      );
+    }
+    if (closed + completed + abandoned > 0) {
+      this.logger.log(
+        `Recording sweep: closed ${closed}, confirmed ${completed}, gave up on ${abandoned}.`,
+      );
+    }
+    return { closed, completed, abandoned };
+  }
+
+  private async notifyNotUploaded(seg: RecordingSegment): Promise<void> {
+    if (!seg.recordedByUserId) return;
+    await this.alerts.create({
+      userId: seg.recordedByUserId,
+      role: Role.TEACHER,
+      type: 'RECORDING_FAILED',
+      title: 'A class recording was not uploaded',
+      message:
+        'A recording of one of your classes was never uploaded, so students cannot watch it. ' +
+        'Recordings are kept in your browser until you upload them — after a class, press "Upload Class Recording" and keep the tab open until it finishes.',
+      metadata: { segmentId: seg.id, room: seg.room },
+    });
+  }
+
+  // ─── Storage retention ───────────────────────────────────────────────────
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async enforceRetention(): Promise<void> {
+    if (!this.storage.isConfigured()) return;
+    try {
+      await this.runRetention();
     } catch (err) {
-      await fail(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (workDir)
-        await rm(workDir, { recursive: true, force: true }).catch(() => {});
+      this.logger.error(`Recording retention failed: ${err}`);
     }
   }
 
-  private async copyFile(src: string, dest: string): Promise<void> {
-    await pipeline(createReadStream(src), createWriteStream(dest));
-  }
-
-  private runFfmpeg(args: string[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn((ffmpegInstaller as { path: string }).path, args);
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('error', reject);
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else
-          reject(
-            new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-800)}`),
-          );
-      });
-    });
-  }
-
-  private async notifyMergeFailure(
-    kind: EntityKind,
-    id: string,
-    message: string,
-  ): Promise<void> {
-    const teacherUserId =
-      kind === 'lesson'
-        ? (
-            await this.prisma.scheduledLesson.findUnique({
-              where: { id },
-              select: { teacher: { select: { userId: true } } },
-            })
-          )?.teacher.userId
-        : (
-            await this.prisma.booking.findUnique({
-              where: { id },
-              select: {
-                shift: { select: { teacher: { select: { userId: true } } } },
-              },
-            })
-          )?.shift.teacher.userId;
-    if (!teacherUserId) return;
-    await this.alerts.create({
-      userId: teacherUserId,
-      role: Role.TEACHER,
-      type: 'RECORDING_FAILED',
-      title: 'Recording failed',
-      message:
-        "This class's recording could not be finalized. Lumexa Ops has been notified and can retry it.",
-      metadata: { kind, id, error: message },
-    });
-
-    const admins = await this.prisma.user.findMany({
-      where: { role: Role.ADMIN },
-      select: { id: true },
-    });
-    await Promise.all(
-      admins.map((a) =>
-        this.alerts.create({
-          userId: a.id,
-          role: Role.ADMIN,
-          type: 'RECORDING_MERGE_FAILED',
-          title: 'Recording merge failed',
-          message: `A class recording failed to finalize and needs a retry from Admin → Classes.`,
-          metadata: { kind, id, error: message },
-        }),
-      ),
-    ).catch(() => {});
-  }
-
-  // ─── Storage retention ────────────────────────────────────────────────────
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async enforceRetention() {
-    if (!this.egressConfigured()) return;
-
-    const usage = await this.currentStorageUsageBytes();
-    const ratio = usage / RECORDING_STORAGE_LIMIT_BYTES;
+  /** Warns admins as stored recordings near the limit, and past it removes the
+   * oldest ones first (their files, then marks them EXPIRED) until back under. */
+  async runRetention(): Promise<void> {
+    const limit = this.storageLimitBytes();
+    const stored: Prisma.RecordingSegmentWhereInput = {
+      status: RecordingSegmentStatus.AVAILABLE,
+      recordedByUserId: { not: null },
+    };
+    const usage =
+      (
+        await this.prisma.recordingSegment.aggregate({
+          where: stored,
+          _sum: { fileSizeBytes: true },
+        })
+      )._sum.fileSizeBytes ?? 0;
+    const ratio = usage / limit;
 
     if (
       ratio >= STORAGE_WARNING_RATIO &&
       Date.now() - this.lastStorageWarningAt > 6 * 60 * 60 * 1000
     ) {
       this.lastStorageWarningAt = Date.now();
-      await this.warnAdminsOfStorage(usage, ratio).catch((err) =>
+      await this.warnAdminsOfStorage(usage, limit, ratio).catch((err) =>
         this.logger.error(String(err)),
       );
     }
-
     if (ratio < 1) return;
 
-    // Delete the oldest COMPLETED (never active/processing) recordings
-    // first until we're back under the limit.
-    let remaining = usage - RECORDING_STORAGE_LIMIT_BYTES;
-    const candidates = await this.oldestCompletedRecordings(100);
-    const s3 = this.s3Client();
-    const bucket = this.bucketName();
-    for (const rec of candidates) {
+    let remaining = usage - limit;
+    const oldest = await this.prisma.recordingSegment.findMany({
+      where: stored,
+      orderBy: { startedAt: 'asc' },
+      take: 100,
+    });
+    const touched = new Set<string>();
+    for (const seg of oldest) {
       if (remaining <= 0) break;
-      const key = this.keyFromUrl(rec.recordingUrl);
       try {
-        if (key)
-          await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-        const data = {
-          recordingStatus: RecordingStatus.EXPIRED,
-          recordingUrl: null,
-        };
-        if (rec.kind === 'lesson')
-          // Every student of a batch points at the same file.
-          await this.prisma.scheduledLesson.updateMany({
-            where: rec.recordingUrl
-              ? { recordingUrl: rec.recordingUrl }
-              : { id: rec.id },
-            data,
-          });
-        else await this.prisma.booking.update({ where: { id: rec.id }, data });
-        remaining -= rec.size;
+        if (seg.storagePath) await this.storage.deleteObject(seg.storagePath);
+        await this.prisma.recordingSegment.update({
+          where: { id: seg.id },
+          data: { status: RecordingSegmentStatus.EXPIRED },
+        });
+        remaining -= seg.fileSizeBytes ?? 0;
+        touched.add(seg.room);
         this.logger.log(
-          `Retention: expired ${rec.kind} ${rec.id} recording (${rec.size} bytes) to stay under the storage cap`,
+          `Retention: removed recording ${seg.id} (${seg.fileSizeBytes ?? 0} bytes) to stay under the storage limit`,
         );
       } catch (err) {
-        // Retry-safe: leave the row AVAILABLE so the next hourly sweep tries
-        // again rather than losing track of it half-deleted.
+        // Left AVAILABLE, so the next hourly run tries again.
         this.logger.error(
-          `Retention delete failed for ${rec.kind} ${rec.id}: ${err}`,
+          `Retention could not remove recording ${seg.id}: ${describeStorageError(err)}`,
         );
       }
     }
-  }
-
-  private keyFromUrl(url: string | null): string | null {
-    if (!url) return null;
-    const bucket = this.bucketName();
-    const marker = `/${bucket}/`;
-    const idx = url.indexOf(marker);
-    if (idx >= 0) return url.slice(idx + marker.length);
-    // Virtual-hosted AWS S3 URL: https://<bucket>.s3.<region>.amazonaws.com/<key>
-    const afterHost = url.split('.amazonaws.com/')[1];
-    return afterHost ?? null;
-  }
-
-  private async currentStorageUsageBytes(): Promise<number> {
-    const [bookingAgg, lessonFiles, segmentAgg] = await Promise.all([
-      this.prisma.booking.aggregate({
-        where: { recordingStatus: RecordingStatus.AVAILABLE },
-        _sum: { recordingFileSizeBytes: true },
-      }),
-      // One file per URL: the students of a batch share a single recording.
-      this.prisma.scheduledLesson.groupBy({
-        by: ['recordingUrl'],
-        where: { recordingStatus: RecordingStatus.AVAILABLE },
-        _max: { recordingFileSizeBytes: true },
-      }),
-      this.prisma.recordingSegment.aggregate({
-        where: { status: RecordingSegmentStatus.AVAILABLE },
-        _sum: { fileSizeBytes: true },
-      }),
-    ]);
-    return (
-      (bookingAgg._sum.recordingFileSizeBytes ?? 0) +
-      lessonFiles.reduce(
-        (sum, f) => sum + (f._max.recordingFileSizeBytes ?? 0),
-        0,
-      ) +
-      (segmentAgg._sum.fileSizeBytes ?? 0)
-    );
-  }
-
-  private async oldestCompletedRecordings(limit: number): Promise<
-    Array<{
-      kind: EntityKind;
-      id: string;
-      recordingUrl: string | null;
-      size: number;
-    }>
-  > {
-    const [bookings, lessons] = await Promise.all([
-      this.prisma.booking.findMany({
-        where: {
-          recordingStatus: RecordingStatus.AVAILABLE,
-          paymentStatus: 'CAPTURED',
-        },
-        orderBy: { recordingMergedAt: 'asc' },
-        select: {
-          id: true,
-          recordingUrl: true,
-          recordingFileSizeBytes: true,
-          recordingMergedAt: true,
-        },
-        take: limit,
-      }),
-      this.prisma.scheduledLesson.findMany({
-        where: {
-          recordingStatus: RecordingStatus.AVAILABLE,
-          status: { in: ['COMPLETED', 'PARTIALLY_COMPLETED', 'INCOMPLETE'] },
-        },
-        orderBy: { recordingMergedAt: 'asc' },
-        select: {
-          id: true,
-          recordingUrl: true,
-          recordingFileSizeBytes: true,
-          recordingMergedAt: true,
-        },
-        take: limit,
-      }),
-    ]);
-    return [
-      ...bookings.map((b) => ({
-        kind: 'booking' as const,
-        id: b.id,
-        recordingUrl: b.recordingUrl,
-        size: b.recordingFileSizeBytes ?? 0,
-        mergedAt: b.recordingMergedAt ?? new Date(0),
-      })),
-      // A batch's students share one file: offer it once, or its size would
-      // be taken off the total once per student.
-      ...lessons
-        .filter(
-          (l, i) =>
-            !l.recordingUrl ||
-            lessons.findIndex((o) => o.recordingUrl === l.recordingUrl) === i,
-        )
-        .map((l) => ({
-          kind: 'lesson' as const,
-          id: l.id,
-          recordingUrl: l.recordingUrl,
-          size: l.recordingFileSizeBytes ?? 0,
-          mergedAt: l.recordingMergedAt ?? new Date(0),
-        })),
-    ].sort((a, b) => a.mergedAt.getTime() - b.mergedAt.getTime());
+    for (const room of touched)
+      await this.syncMirror(room).catch(() => undefined);
   }
 
   private async warnAdminsOfStorage(
     usage: number,
+    limit: number,
     ratio: number,
   ): Promise<void> {
     const admins = await this.prisma.user.findMany({
       where: { role: Role.ADMIN },
       select: { id: true },
     });
-    const usageGb = (usage / (1024 * 1024 * 1024)).toFixed(1);
-    const limitGb = (
-      RECORDING_STORAGE_LIMIT_BYTES /
-      (1024 * 1024 * 1024)
-    ).toFixed(1);
+    const gb = (bytes: number) => (bytes / (1024 * 1024 * 1024)).toFixed(1);
     await Promise.all(
       admins.map((a) =>
         this.alerts.create({
@@ -1085,11 +861,8 @@ export class RecordingService {
           role: Role.ADMIN,
           type: 'RECORDING_STORAGE_WARNING',
           title: 'Recording storage nearing capacity',
-          message: `Classroom recordings are using ${usageGb} GB of the ${limitGb} GB limit (${Math.round(ratio * 100)}%). The oldest completed recordings will be auto-deleted once the limit is reached.`,
-          metadata: {
-            usageBytes: usage,
-            limitBytes: RECORDING_STORAGE_LIMIT_BYTES,
-          },
+          message: `Classroom recordings are using ${gb(usage)} GB of the ${gb(limit)} GB limit (${Math.round(ratio * 100)}%). The oldest recordings will be removed once the limit is reached.`,
+          metadata: { usageBytes: usage, limitBytes: limit },
         }),
       ),
     );

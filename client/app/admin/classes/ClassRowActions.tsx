@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { DropdownMenu, DropdownItem, Modal, ReasonActionModal, StatusBadge, formatDateTime, CLASS_TYPE_LABELS } from "@/components/admin/AdminUI";
+import RecordingPlayer from "@/components/recordings/RecordingPlayer";
+import { fetchClassRecordings, recordingErrorMessage } from "@/lib/classroom/recording/library";
+import type { ClassRecordings, SegmentStatus } from "@/lib/classroom/recording/library";
+import { describeDuration, formatBytes } from "@/lib/classroom/recording/format";
 
 export interface ClassRow {
   id: string;
@@ -79,17 +83,6 @@ export default function ClassRowActions({
               </DropdownItem>
             )}
             <DropdownItem onClick={() => { setModal("recording"); close(); }}>View recording</DropdownItem>
-            {row.recordingStatus === "FAILED" && (
-              <DropdownItem
-                onClick={async () => {
-                  close();
-                  await api.post(`/admin/classes/${row.kind}/${row.id}/recording-retry`);
-                  onChanged();
-                }}
-              >
-                Retry recording
-              </DropdownItem>
-            )}
             {row.kind === "BOOKING" && (
               <DropdownItem onClick={() => { setModal("history"); close(); }}>Reschedule history</DropdownItem>
             )}
@@ -480,36 +473,128 @@ function RefundModal({
   );
 }
 
+const SEGMENT_LABEL: Record<SegmentStatus, string> = {
+  RECORDING: "Being recorded",
+  UPLOADING: "Waiting for the teacher to upload it",
+  AVAILABLE: "Ready to watch",
+  FAILED: "Not available",
+  EXPIRED: "Removed (storage limit)",
+};
+
 function RecordingModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
+  const [data, setData] = useState<ClassRecordings | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [watching, setWatching] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setData(await fetchClassRecordings(row.kind, row.id));
+    } catch (err: unknown) {
+      setError(recordingErrorMessage(err, "Could not load this class's recordings."));
+    } finally {
+      setLoading(false);
+    }
+  }, [row.kind, row.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const segments = data?.segments ?? [];
+  // What the player can play: the parts that are uploaded and checked.
+  const watchable = segments
+    .filter((s) => s.status === "AVAILABLE")
+    .map((s) => ({
+      id: s.id,
+      part: s.part,
+      durationSeconds: s.durationSeconds,
+      sizeBytes: s.sizeBytes,
+      recordedAt: s.startedAt,
+    }));
+
   return (
-    <Modal title="Class recording" onClose={onClose}>
-      <div className="space-y-2">
+    <Modal title="Class recording" onClose={onClose} wide>
+      <div className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
           Status: {row.recordingStatus}
         </p>
-        {row.recordingStatus === "PROCESSING" && (
-          <p className="text-sm text-[var(--a-text-muted)]">Processing recording… check back shortly.</p>
-        )}
-        {row.recordingStatus === "FAILED" && (
-          <p className="text-sm text-[var(--a-danger)]">
-            {row.recordingMergeError || "Merging this recording failed."} Use &ldquo;Retry recording&rdquo; from the
-            Actions menu.
+
+        {loading && !data && <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>}
+        {error && (
+          <p className="text-sm text-[var(--a-danger)]" role="alert">
+            {error}{" "}
+            <button onClick={() => void load()} className="font-medium underline">
+              Try again
+            </button>
           </p>
         )}
-        {row.recordingUrl ? (
-          <a
-            href={row.recordingUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium text-[var(--a-accent)] hover:underline break-all"
-          >
-            {row.recordingUrl}
-          </a>
-        ) : (
-          row.recordingStatus !== "PROCESSING" &&
-          row.recordingStatus !== "FAILED" && (
-            <p className="text-sm text-[var(--a-text-muted)]">No recording available for this class.</p>
-          )
+
+        {data && !data.storage.configured && (
+          <p className="text-sm text-[var(--a-warning-text)]" role="alert">
+            Recording storage is not set up on the server (missing {data.storage.missing.join(", ")}), so
+            recordings cannot be uploaded or watched until it is. See docs/CLASS_RECORDING_SETUP.md.
+          </p>
+        )}
+
+        {/* above the list, so it is in view as soon as Watch is pressed */}
+        {watching && <RecordingPlayer key={watching} parts={watchable} initialPartId={watching} />}
+
+        {segments.length > 0 && (
+          <ul className="space-y-2" data-testid="admin-recording-parts">
+            {segments.map((s) => (
+              <li
+                key={s.id}
+                className="p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] flex items-center gap-3"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--a-text)]">
+                    Part {s.part} · {SEGMENT_LABEL[s.status]}
+                  </p>
+                  <p className="text-xs text-[var(--a-text-muted)]">
+                    Recorded {formatDateTime(s.startedAt)}
+                    {describeDuration(s.durationSeconds) ? ` · ${describeDuration(s.durationSeconds)}` : ""}
+                    {s.sizeBytes ? ` · ${formatBytes(s.sizeBytes)}` : ""}
+                  </p>
+                  {s.status === "FAILED" && s.failureReason && (
+                    <p className="text-xs text-[var(--a-danger)] mt-0.5">{s.failureReason}</p>
+                  )}
+                </div>
+                {s.status === "AVAILABLE" && (
+                  <button
+                    onClick={() => setWatching(watching === s.id ? null : s.id)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[var(--a-accent)] hover:opacity-90 transition-opacity flex-shrink-0"
+                  >
+                    {watching === s.id ? "Hide" : "Watch"}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {row.recordingUrl && (
+          <p className="text-sm">
+            <span className="text-[var(--a-text-muted)]">Earlier recording (old format): </span>
+            <a
+              href={row.recordingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[var(--a-accent)] hover:underline break-all"
+            >
+              open
+            </a>
+          </p>
+        )}
+
+        {row.recordingStatus === "FAILED" && row.recordingMergeError && segments.length === 0 && (
+          <p className="text-sm text-[var(--a-danger)]">{row.recordingMergeError}</p>
+        )}
+
+        {data && !loading && segments.length === 0 && !row.recordingUrl && (
+          <p className="text-sm text-[var(--a-text-muted)]">No recording was made for this class.</p>
         )}
       </div>
     </Modal>

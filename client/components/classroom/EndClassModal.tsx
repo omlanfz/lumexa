@@ -49,6 +49,8 @@ interface EndClassModalProps {
   /** Called once the flow is fully done (immediately for everything except
    * Completed, which first shows the brief "Class completed!" screen). */
   onFinished: () => void;
+  /** A recording is running or waiting to be uploaded: what happens to it. */
+  recordingNotice?: string;
 }
 
 const secondaryButton =
@@ -60,6 +62,7 @@ export default function EndClassModal({
   onClose,
   onSubmit,
   onFinished,
+  recordingNotice,
 }: EndClassModalProps) {
   const [step, setStep] = useState<Step>('choose');
   const [reason, setReason] = useState<ClassEndReason | null>(null);
@@ -108,6 +111,14 @@ export default function EndClassModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-sm rounded-2xl border border-[var(--cr-border)] bg-[var(--cr-surface)] shadow-2xl overflow-hidden cr-fade-in">
+        {recordingNotice && step !== 'completed-done' && (
+          <p
+            className="border-b border-[var(--cr-border)] bg-amber-500/10 px-5 py-2.5 text-xs text-amber-300"
+            data-testid="end-class-recording-notice"
+          >
+            {recordingNotice}
+          </p>
+        )}
         {!isLessonFlow ? (
           <div className="p-5">
             <p className="text-[var(--cr-text)] font-semibold mb-1">End class for everyone?</p>

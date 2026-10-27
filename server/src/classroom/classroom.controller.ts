@@ -184,17 +184,7 @@ export class ClassroomController {
     return this.classroomService.endClass(req.user.userId, room, body ?? {});
   }
 
-  @Post(':room/recording/start')
-  @UseGuards(AuthGuard('jwt'))
-  startRecording(@Request() req, @Param('room') room: string) {
-    return this.classroomService.startTeacherRecording(req.user.userId, room);
-  }
-
-  @Post(':room/recording/stop')
-  @UseGuards(AuthGuard('jwt'))
-  stopRecording(@Request() req, @Param('room') room: string) {
-    return this.classroomService.stopTeacherRecording(req.user.userId, room);
-  }
+  // Recording has its own controller: see RecordingController.
 
   /** Lock or unlock the classroom. While locked no student can join; people
    * already inside stay. A class starts unlocked. */
@@ -230,7 +220,8 @@ export class ClassroomController {
   }
 
   /**
-   * LiveKit webhook — receives events like egress_ended (recording complete).
+   * LiveKit webhook — receives participant_joined, which is how the room's
+   * limits (the lock, 10 people, 3 devices each) are enforced a second time.
    * This endpoint is NOT authenticated with JWT — it uses LiveKit's own
    * Authorization header signature verification instead.
    *

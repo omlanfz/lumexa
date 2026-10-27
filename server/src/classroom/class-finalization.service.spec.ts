@@ -131,7 +131,7 @@ describe('ClassFinalizationService.finalizeLesson', () => {
       1,
     );
     expect(t.scheduling.insertMakeupOccurrence).not.toHaveBeenCalled();
-    // Recording stopped + handed to the merge sweep.
+    // The class's recording is closed out.
     expect(t.recording.stopActiveSegmentIfAny).toHaveBeenCalledWith(
       `lesson-${LESSON_ID}`,
     );
