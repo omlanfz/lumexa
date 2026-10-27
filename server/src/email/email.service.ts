@@ -25,6 +25,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../prisma.service';
+import { BrevoTransport, type MailTransport } from './brevo-transport';
 
 export interface EmailAttachment {
   filename: string;
@@ -50,6 +51,22 @@ export interface SendEmailParams {
 const MAX_ATTEMPTS = 5;
 const INLINE_RETRY_DELAYS_MS = [1000, 3000]; // two quick in-process retries before falling back to the cron sweep
 
+/** The error stored on the EmailLog row (shown to admins). A timeout or
+ * "network unreachable" to an SMTP port almost always means the host blocks
+ * outbound SMTP, which is worth saying plainly. */
+export function describeSendError(err: unknown): string {
+  const message = String((err as Error)?.message ?? err);
+  const code = (err as { code?: string })?.code ?? '';
+  const blocked =
+    /^(ETIMEDOUT|ENETUNREACH|ECONNECTION|ESOCKET)$/.test(code) ||
+    /connection timeout|ENETUNREACH|ETIMEDOUT/i.test(message);
+  return (
+    blocked
+      ? `${message} — the host may be blocking outbound SMTP (Render's free tier blocks ports 25/465/587). Set EMAIL_PROVIDER=brevo or use a paid instance.`
+      : message
+  ).slice(0, 1000);
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -57,11 +74,26 @@ function sleep(ms: number) {
 @Injectable()
 export class EmailService implements OnModuleInit {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: MailTransport | null = null;
 
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
+    // EMAIL_PROVIDER=brevo sends over HTTPS (for hosts that block SMTP, e.g.
+    // Render's free tier); anything else is Gmail/SMTP as before.
+    if ((process.env.EMAIL_PROVIDER || '').toLowerCase() === 'brevo') {
+      const key = process.env.BREVO_API_KEY;
+      if (!key || !this.senderAddress) {
+        this.logger.warn(
+          'EMAIL_PROVIDER=brevo needs BREVO_API_KEY and EMAIL_FROM_ADDRESS (a sender verified in Brevo) — outbound email is disabled (sends will be journaled as FAILED and logged only).',
+        );
+        return;
+      }
+      this.transporter = new BrevoTransport(key);
+      this.logger.log('Outbound email: Brevo (HTTPS).');
+      return;
+    }
+
     const { SMTP_USER, SMTP_PASS } = process.env;
     if (!SMTP_USER || !SMTP_PASS) {
       this.logger.warn(
@@ -75,11 +107,21 @@ export class EmailService implements OnModuleInit {
       port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 465,
       secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : true,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      // Fail in seconds, not minutes, when the host blocks the port.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 30_000,
     });
   }
 
+  /** The From address: EMAIL_FROM_ADDRESS (Brevo) or the SMTP account (Gmail
+   * only honours a From it owns, so it is always SMTP_USER there). */
+  private get senderAddress(): string | undefined {
+    return process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER || undefined;
+  }
+
   private get fromAddress(): string {
-    const user = process.env.SMTP_USER || `noreply@${process.env.EMAIL_DOMAIN || 'lumexa.app'}`;
+    const user = this.senderAddress || `noreply@${process.env.EMAIL_DOMAIN || 'lumexa.app'}`;
     // Gmail only honours a From address it owns (the authenticated SMTP_USER
     // or a verified "Send mail as" alias), so the address is always SMTP_USER;
     // only the display name is configurable.
@@ -281,7 +323,7 @@ export class EmailService implements OnModuleInit {
           where: { id: logId },
           data: {
             status: 'FAILED',
-            lastError: String((err as Error)?.message ?? err).slice(0, 1000),
+            lastError: describeSendError(err),
             attempts: { increment: 1 },
           },
         })

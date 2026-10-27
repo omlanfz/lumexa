@@ -220,6 +220,28 @@ own copy and a retry can never duplicate one.) No other email events were added.
 (Without `SMTP_USER`/`SMTP_PASS` the app still runs and bookings still work;
 emails are journaled as FAILED and retried once SMTP is configured.)
 
+### If every email shows FAILED with "Connection timeout" or "ENETUNREACH"
+
+That is not a wrong password: **Render's free web services block outbound SMTP
+(ports 25, 465 and 587)**, so Gmail SMTP can never connect from there
+([Render changelog](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)).
+Two fixes:
+
+1. **Upgrade the backend to any paid Render instance** (465/587 then work; keep
+   the Gmail variables above). Port 25 stays blocked, which is fine.
+2. **Send over HTTPS with Brevo** (free, 300 emails/day, no domain needed):
+   1. Create a Brevo account → *SMTP & API → API Keys* → generate a key.
+   2. *Senders, Domains & Dedicated IPs → Senders* → add
+      `lumexa.school@gmail.com` and click the verification link Brevo emails there.
+   3. On Render set `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY=<key>`,
+      `EMAIL_FROM_ADDRESS=lumexa.school@gmail.com`
+      (and keep `EMAIL_FROM_NAME`, `ADMIN_NOTIFICATION_EMAILS`). Redeploy.
+   4. Emails that already failed are retried automatically every 5 minutes
+      (up to 5 attempts); older ones can be re-triggered by re-assigning /
+      re-booking.
+
+Check Render's logs on start-up: `Outbound email: Brevo (HTTPS).` confirms it.
+
 ### Verify delivery
 
 1. Book a trial on `/trial` using an email address you can read.
