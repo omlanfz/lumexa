@@ -5,23 +5,22 @@
 
 'use client';
 
-import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
-import { personKey } from '@/lib/classroom/identity';
+import type { Person } from '@/lib/classroom/people';
 
 interface FilmStripProps {
-  /** One tile per person (see pickPersonTiles). */
-  tracks: TrackReferenceOrPlaceholder[];
+  /** One tile per person (see groupPeople). */
+  people: Person[];
   /** Keyed by person (see lib/classroom/identity.ts). */
   raisedHands: Record<string, boolean>;
-  pinnedIdentity: string | null;
-  onTogglePin: (identity: string) => void;
+  pinnedUserId: string | null;
+  onTogglePin: (userId: string) => void;
   compact?: boolean;
   className?: string;
 }
 
-export default function FilmStrip({ tracks, raisedHands, pinnedIdentity, onTogglePin, compact, className }: FilmStripProps) {
-  if (tracks.length === 0) return null;
+export default function FilmStrip({ people, raisedHands, pinnedUserId, onTogglePin, compact, className }: FilmStripProps) {
+  if (people.length === 0) return null;
 
   return (
     <div
@@ -29,20 +28,17 @@ export default function FilmStrip({ tracks, raisedHands, pinnedIdentity, onToggl
         compact ? 'h-20' : 'h-28 sm:h-32'
       } ${className ?? ''}`}
     >
-      {tracks.map((t) => {
-        const who = personKey(t.participant.identity);
-        return (
-          <div key={who} className={`${compact ? 'w-32' : 'w-40 sm:w-48'} h-full flex-shrink-0`}>
-            <ParticipantTile
-              trackRef={t}
-              size="strip"
-              raised={!!raisedHands[who]}
-              pinned={pinnedIdentity === who}
-              onTogglePin={() => onTogglePin(who)}
-            />
-          </div>
-        );
-      })}
+      {people.map((person) => (
+        <div key={person.userId} className={`${compact ? 'w-32' : 'w-40 sm:w-48'} h-full flex-shrink-0`}>
+          <ParticipantTile
+            person={person}
+            size="strip"
+            raised={!!raisedHands[person.userId]}
+            pinned={pinnedUserId === person.userId}
+            onTogglePin={() => onTogglePin(person.userId)}
+          />
+        </div>
+      ))}
     </div>
   );
 }

@@ -12,8 +12,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { RoomEvent } from 'livekit-client';
-import type { Room } from 'livekit-client';
+import type { DailyCall } from '@daily-co/daily-js';
 import { CaptureCancelled, captureErrorMessage, recordingSupport } from './capture.ts';
 import type { CaptureSurface, RecordingSupport } from './capture.ts';
 import { ClassRecorder } from './ClassRecorder.ts';
@@ -34,17 +33,18 @@ export type RecorderState = 'idle' | 'starting' | 'recording' | 'stopping';
 const DEFAULT_MAX_DURATION_MS = 70 * 60_000;
 const DEFAULT_MAX_BYTES = 1_900_000_000;
 
-/** What changes in a room that changes who the class can hear. */
+/** What changes in a call that changes who the class can hear: someone arriving
+ * or leaving, a microphone or a shared screen's sound starting, stopping or
+ * being replaced by another. */
 const AUDIO_EVENTS = [
-  RoomEvent.TrackSubscribed,
-  RoomEvent.TrackUnsubscribed,
-  RoomEvent.LocalTrackPublished,
-  RoomEvent.LocalTrackUnpublished,
-  RoomEvent.ParticipantConnected,
-  RoomEvent.ParticipantDisconnected,
-];
+  'participant-joined',
+  'participant-updated',
+  'participant-left',
+  'track-started',
+  'track-stopped',
+] as const;
 
-interface EventfulRoom {
+interface EventfulCall {
   on(event: string, callback: () => void): unknown;
   off(event: string, callback: () => void): unknown;
 }
@@ -96,12 +96,12 @@ export interface ClassRecorderControls {
 }
 
 export function useClassRecorder(opts: {
-  room: Room;
+  call: DailyCall;
   roomName: string;
   /** False for students, observers and trial classes: nothing is offered. */
   enabled: boolean;
 }): ClassRecorderControls {
-  const { room, roomName, enabled } = opts;
+  const { call, roomName, enabled } = opts;
   const [state, setStateValue] = useState<RecorderState>('idle');
   const stateRef = useRef<RecorderState>('idle');
   const [recorder, setRecorder] = useState<ClassRecorder | null>(null);
@@ -179,7 +179,7 @@ export function useClassRecorder(opts: {
     // This is the teacher's click: the browser's "choose what to share" box (and
     // the audio engine) may only start from it, so it is called right here.
     const starting = ClassRecorder.start({
-      room,
+      call,
       maxDurationMs: DEFAULT_MAX_DURATION_MS,
       maxBytes: DEFAULT_MAX_BYTES,
       onFinished: (outcome) => handleFinished(id, outcome),
@@ -247,7 +247,7 @@ export function useClassRecorder(opts: {
       setSurface(started.surface);
       setState('recording');
     })();
-  }, [enabled, handleFinished, room, roomName, setState]);
+  }, [enabled, handleFinished, call, roomName, setState]);
 
   const stop = useCallback(async () => {
     const active = activeRef.current;
@@ -261,19 +261,20 @@ export function useClassRecorder(opts: {
     if (active) await active.recorder.stop('user');
   }, []);
 
-  // Whenever the class's audio changes, re-read it into the recording.
+  // Whenever the class's audio changes, re-read it into the recording; and when
+  // the meeting ends — the teacher left, or the class was closed — finish it.
   useEffect(() => {
     if (!enabled) return;
-    const live = room as unknown as EventfulRoom;
+    const live = call as unknown as EventfulCall;
     const resync = () => activeRef.current?.recorder.syncAudio();
     const left = () => void activeRef.current?.recorder.stop('room-ended');
     AUDIO_EVENTS.forEach((event) => live.on(event, resync));
-    live.on(RoomEvent.Disconnected, left);
+    live.on('left-meeting', left);
     return () => {
       AUDIO_EVENTS.forEach((event) => live.off(event, resync));
-      live.off(RoomEvent.Disconnected, left);
+      live.off('left-meeting', left);
     };
-  }, [room, enabled]);
+  }, [call, enabled]);
 
   // Leaving the classroom page while recording ends the recording — its file is
   // kept (in the store) so it can still be uploaded.

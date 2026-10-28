@@ -17,35 +17,34 @@
 'use client';
 
 import { ChevronRight, ChevronLeft } from 'lucide-react';
-import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import ParticipantTile from './ParticipantTile';
-import { personKey } from '@/lib/classroom/identity';
+import type { Person } from '@/lib/classroom/people';
 import { railLayout, railTileWidthCss, railWidthCss } from '@/lib/classroom/railLayout';
 
 interface ParticipantRailProps {
-  /** One tile per person (see pickPersonTiles). */
-  tracks: TrackReferenceOrPlaceholder[];
+  /** One tile per person (see groupPeople). */
+  people: Person[];
   raisedHands: Record<string, boolean>;
-  pinnedIdentity: string | null;
-  onTogglePin: (identity: string) => void;
+  pinnedUserId: string | null;
+  onTogglePin: (userId: string) => void;
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }
 
 export default function ParticipantRail({
-  tracks,
+  people,
   raisedHands,
-  pinnedIdentity,
+  pinnedUserId,
   onTogglePin,
   collapsed,
   onToggleCollapsed,
 }: ParticipantRailProps) {
-  if (tracks.length === 0) return null;
+  if (people.length === 0) return null;
 
-  const { columns } = railLayout(tracks.length);
+  const { columns } = railLayout(people.length);
   const twoColumns = columns === 2;
-  const tileW = railTileWidthCss(tracks.length);
-  const railW = railWidthCss(tracks.length, tileW);
+  const tileW = railTileWidthCss(people.length);
+  const railW = railWidthCss(people.length, tileW);
 
   // The toggle button lives in this OUTER wrapper, which never collapses or
   // clips — only the inner content box does. Previously the button was
@@ -73,20 +72,17 @@ export default function ParticipantRail({
           }`}
           style={{ width: railW }}
         >
-          {tracks.map((t) => {
-            const who = personKey(t.participant.identity);
-            return (
-              <div key={who} className="aspect-video flex-shrink-0 min-h-0">
-                <ParticipantTile
-                  trackRef={t}
-                  size="strip"
-                  raised={!!raisedHands[who]}
-                  pinned={pinnedIdentity === who}
-                  onTogglePin={() => onTogglePin(who)}
-                />
-              </div>
-            );
-          })}
+          {people.map((person) => (
+            <div key={person.userId} className="aspect-video flex-shrink-0 min-h-0">
+              <ParticipantTile
+                person={person}
+                size="strip"
+                raised={!!raisedHands[person.userId]}
+                pinned={pinnedUserId === person.userId}
+                onTogglePin={() => onTogglePin(person.userId)}
+              />
+            </div>
+          ))}
         </div>
       </div>
     </div>

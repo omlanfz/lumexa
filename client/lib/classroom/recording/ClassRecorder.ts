@@ -1,7 +1,7 @@
 // FILE PATH: client/lib/classroom/recording/ClassRecorder.ts
 //
 // Records a class in the teacher's browser: the video of the window they chose
-// to share, plus the class's audio (classAudio.ts) mixed from the same LiveKit
+// to share, plus the class's audio (classAudio.ts) mixed from the same Daily
 // tracks the classroom plays, written as a WebM file that is finished (a length
 // and a jump index, webm.ts) so students can scrub through it.
 //
@@ -54,8 +54,8 @@ export type RecorderOutcome =
   | { ok: false; reason: StopReason; message: string };
 
 export interface ClassRecorderOptions {
-  /** The LiveKit room whose audio is recorded. */
-  room: ClassAudioSource;
+  /** The Daily call whose audio is recorded. */
+  call: ClassAudioSource;
   maxDurationMs: number;
   maxBytes: number;
   /** Called once, when the recording has ended and its file is ready. */
@@ -65,7 +65,7 @@ export interface ClassRecorderOptions {
 /** MediaRecorder hands over what it has this often, so the browser never holds
  * the recording as one giant buffer. */
 const TIMESLICE_MS = 2_000;
-/** The mix is re-read from the room this often (as well as when it changes). */
+/** The mix is re-read from the call this often (as well as when it changes). */
 const TICK_MS = 1_000;
 /** Room left for the finished file's few extra bytes under the size limit. */
 const SIZE_HEADROOM_BYTES = 8 * 1024 * 1024;
@@ -158,7 +158,7 @@ export class ClassRecorder {
     const mixer = new ClassAudioMixer(context);
     try {
       await mixer.resume();
-      mixer.sync(collectClassAudioTracks(options.room));
+      mixer.sync(collectClassAudioTracks(options.call));
       const stream = new MediaStream([capture.track, mixer.track]);
       const recorder = new MediaRecorder(stream, {
         mimeType,
@@ -184,7 +184,12 @@ export class ClassRecorder {
    * joins or leaves, a microphone is switched); it also runs every second. */
   syncAudio(): void {
     if (this.finishing) return;
-    this.mixer.sync(collectClassAudioTracks(this.options.room));
+    try {
+      this.mixer.sync(collectClassAudioTracks(this.options.call));
+    } catch {
+      // The call may be going away: the next read sees the room as it is then —
+      // and the time limit, checked right after this on every tick, still applies.
+    }
   }
 
   /** The limits the server set for this recording (they arrive just after it

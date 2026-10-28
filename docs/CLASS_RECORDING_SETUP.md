@@ -39,8 +39,10 @@ Student: Learning → Recordings → Watch
         ◄── plays the video straight from R2 ──────────────────────────────
 ```
 
-- **Nothing is recorded on the server.** There is no LiveKit Egress and no FFmpeg.
-  The live classroom (LiveKit) is unchanged.
+- **Nothing is recorded on the server.** There is no server-side recorder (no
+  Egress, no FFmpeg) and Daily's own cloud recording is not used. The live classroom
+  runs on Daily ([CLASSROOM_DAILY_SETUP.md](CLASSROOM_DAILY_SETUP.md)); the recording is
+  made in the teacher's browser from what Daily delivers to it.
 - **The R2 keys never leave the server.** The browser only ever receives a URL that
   is good for one file and expires on its own.
 - A class can be recorded **several times** (Record → Stop → Record…). Each is its own
@@ -215,11 +217,13 @@ These are limits of what browsers allow, not choices made in Lumexa.
   also records other applications and notifications, so avoid it.
 - **Window capture has no sound, so the sound is not taken from it.** Browsers either
   give no audio for a window or give whatever the computer plays — never the teacher's
-  microphone. Lumexa therefore mixes the **class audio itself** from the same LiveKit
+  microphone. Lumexa therefore mixes the **class audio itself** from the same Daily
   audio tracks the classroom plays: the teacher's microphone, every student's
   microphone, and the sound of any screen share. Students who join, leave or mute
-  mid-class come and go in the mix. Other programs' sound (music, notifications) is not
-  recorded.
+  mid-class come and go in the mix, and **a microphone that is muted — by the person or
+  by the teacher — is not recorded** (the mix follows what Daily says is being sent, so
+  this holds whatever the browser does underneath). Other programs' sound (music,
+  notifications) is not recorded.
 - **"Stop sharing"** in the browser's own bar ends the recording (it is saved).
 - **The recording lives in the browser tab until it is uploaded** (memory, not disk).
   Closing or reloading the tab loses it, and a very long recording needs a computer
@@ -278,8 +282,10 @@ as many as needed. Admins get an alert at 80 %. Recordings are otherwise kept.
 
 ## 8. What changed from the old recorder
 
-- LiveKit Egress, the webhook that finished it, the FFmpeg merge job
-  (`@ffmpeg-installer/ffmpeg`) and the admin "Retry recording" action are removed.
+- The server-side recorder (LiveKit Egress), the webhook that finished it, the FFmpeg
+  merge job (`@ffmpeg-installer/ffmpeg`) and the admin "Retry recording" action are
+  removed. (The live classroom itself has since moved from LiveKit to Daily; this
+  recording needed no change for that beyond reading the audio from Daily's tracks.)
 - `S3_*` settings are no longer used. One set of `R2_*` settings is used everywhere.
 - Recordings made before this change are unchanged and still play from their old links
   (students' Recordings tab and the admin Classes list show them as before).

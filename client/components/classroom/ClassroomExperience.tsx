@@ -1,16 +1,20 @@
 // FILE PATH: client/components/classroom/ClassroomExperience.tsx
 //
-// Top-level classroom flow: fetch a LiveKit join token, show the pre-join
+// Top-level classroom flow: fetch a Daily join token, show the pre-join
 // screen, then connect and hand off to ClassroomRoom. Also fetches lesson
 // material up front (curriculum flow only) so both the pre-join session
 // info and the in-room LessonPanel have it immediately.
 //
-// This page load is ONE device of the person (a new random device id, sent with
-// every join, becomes part of the LiveKit identity — see lib/classroom/
-// identity.ts), so the same person can also join from a phone or a second tab.
+// This page load is ONE device of the person (Daily gives every connection its
+// own session, all sharing the person's user id — see lib/classroom/identity.ts),
+// so the same person can also join from a phone or a second tab.
 // A fresh token is fetched again when the person presses Join on the pre-join
 // screen, so the teacher's lock and the 10-people limit are checked at the last
 // moment rather than minutes earlier when the page opened.
+//
+// The Daily call object is made once for the page (lib/classroom/daily/loader.ts)
+// and used from the pre-join preview all the way through the class, so the
+// camera, microphone and effects chosen before joining carry straight in.
 //
 // Special join paths besides the normal one:
 //   - waitingForAdmission: the server refused a token because this
@@ -30,9 +34,9 @@
 //     — or any error — they go back to the guest page via `onExit`, never to a
 //     dashboard they do not have.
 //   - adminObserve: an admin joining a live class from /admin/classes as a
-//     silent, non-publishing observer (see ClassroomService.
+//     silent observer that cannot send (see ClassroomService.
 //     adminJoinLiveClass) — skips the pre-join device screen entirely,
-//     since there's nothing to configure.
+//     since there's nothing to configure (and never asks for the camera).
 //
 // A teacher who leaves a class with a recording that is not uploaded yet is not
 // sent straight to the dashboard: they land on PostClassRecordings, which gets
@@ -43,18 +47,17 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock } from 'lucide-react';
-import { LiveKitRoom } from '@livekit/components-react';
-import '@livekit/components-styles';
+import type { DailyCall } from '@daily-co/daily-js';
 import axios from 'axios';
 import api from '@/lib/axios';
 import { getStoredRole, getStoredToken } from '@/lib/storage';
 import PreJoinScreen, { JoinChoices } from './PreJoinScreen';
 import ClassroomRoom from './ClassroomRoom';
 import PostClassRecordings from './PostClassRecordings';
-import { PeopleProvider } from './PeopleContext';
-import { newDeviceId } from '@/lib/classroom/identity';
+import { callManager } from '@/lib/classroom/daily/loader';
+import { CallProvider } from '@/lib/classroom/daily/CallContext';
+import { describeJoinError } from '@/lib/classroom/daily/errors';
 import { recordingStore } from '@/lib/classroom/recording/store';
-import { DEFAULT_LIGHTING } from '@/lib/classroom/useVideoEffects';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
 interface ClassroomExperienceProps {
@@ -86,8 +89,11 @@ interface ClassroomExperienceProps {
 }
 
 interface JoinResponse {
+  /** The person's Daily meeting token, and the address of the room to join. */
   token: string;
   url: string;
+  /** What proves a message came from the server (see lib/classroom/serverEvents.ts). */
+  eventKey?: string;
   roomName: string;
   scheduledStart?: string;
   /** The class row the person came in through (a batch class names one
@@ -146,9 +152,6 @@ export default function ClassroomExperience({
   const [waiting, setWaiting] = useState<WaitingResponse | null>(null);
   const [blocked, setBlocked] = useState<BlockedResponse | null>(null);
   const [retrying, setRetrying] = useState(false);
-  // This page load's device id — never stored, so a refreshed or duplicated tab
-  // can't collide with another connection of the same person.
-  const [deviceId] = useState(newDeviceId);
   const [denied, setDenied] = useState(false);
   const [lessonData, setLessonData] = useState<LessonDetailsResponse | null>(null);
   const [demoExampleLesson, setDemoExampleLesson] = useState<LessonDetailsResponse | null>(null);
@@ -159,6 +162,14 @@ export default function ClassroomExperience({
   const [recordingsHeldFor, setRecordingsHeldFor] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lessonRequested = useRef(false);
+  // The Daily call object, shared for this page (see the file header).
+  const [call, setCall] = useState<DailyCall | null>(null);
+  // Set once the person is in the meeting; and what went wrong if they could not get in.
+  const [joined, setJoined] = useState(false);
+  const [joinFailure, setJoinFailure] = useState('');
+  const joinedRef = useRef(false);
+  /** The token this page has already joined with (a second pass must not join twice). */
+  const joinedWithRef = useRef<string | null>(null);
 
   const fetchLessonDetails = (lessonId: string) => {
     if (lessonRequested.current) return;
@@ -176,7 +187,7 @@ export default function ClassroomExperience({
         // would attach a stored login (or bounce to /login on a 401).
         const res = await axios.post<JoinResponse | BlockedResponse>(
           `${process.env.NEXT_PUBLIC_API_URL}/trial/guest/join`,
-          { token: guestToken, deviceId },
+          { token: guestToken },
         );
         if ('blocked' in res.data) {
           setBlocked(res.data);
@@ -194,14 +205,14 @@ export default function ClassroomExperience({
       const body = adminObserve
         ? {}
         : demo
-          ? { deviceId }
+          ? {}
           : isTrial
-            ? { trialLeadId: id, deviceId }
-          : isBatch
-            ? { batchSessionId: id, deviceId }
-            : isLesson
-              ? { scheduledLessonId: id, deviceId }
-              : { bookingId: id, deviceId };
+            ? { trialLeadId: id }
+            : isBatch
+              ? { batchSessionId: id }
+              : isLesson
+                ? { scheduledLessonId: id }
+                : { bookingId: id };
       const res = await api.post<JoinResponse | WaitingResponse | BlockedResponse>(path, body);
       if ('waitingForAdmission' in res.data) {
         setWaiting(res.data);
@@ -250,6 +261,70 @@ export default function ClassroomExperience({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isLesson, isBatch, isTrial, guestToken, demo, adminObserve, router]);
+
+  // The Daily call object: made once for this page, and given back when it goes.
+  useEffect(() => {
+    let cancelled = false;
+    let held: DailyCall | null = null;
+    callManager
+      .acquire()
+      .then((acquired) => {
+        if (cancelled) {
+          callManager.release(acquired);
+          return;
+        }
+        held = acquired;
+        setCall(acquired);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load the video service. Check your internet connection and try again.');
+      });
+    return () => {
+      cancelled = true;
+      if (held) callManager.release(held);
+      setCall(null);
+    };
+  }, []);
+
+  // Joining the meeting, once there is a token and the person has pressed Join
+  // (an admin observer has nothing to choose, so joins at once — silently, and
+  // without ever opening a camera or microphone).
+  useEffect(() => {
+    if (!call || !join) return;
+    if (!adminObserve && !choices) return;
+    if (joinedWithRef.current === join.token) return;
+    joinedWithRef.current = join.token;
+    setJoinFailure('');
+    call
+      .join({
+        url: join.url,
+        token: join.token,
+        startAudioOff: adminObserve ? true : !choices?.audioEnabled,
+        startVideoOff: adminObserve ? true : !choices?.videoEnabled,
+      })
+      .then(() => {
+        joinedRef.current = true;
+        setJoined(true);
+      })
+      .catch((err: unknown) => {
+        joinedWithRef.current = null;
+        setJoinFailure(describeJoinError(err));
+      });
+  }, [call, join, choices, adminObserve]);
+
+  // The meeting ending — the person left, the teacher removed them, or the class
+  // was ended — is the end of the visit, wherever it came from.
+  const disconnectRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    if (!call) return;
+    const onLeft = () => {
+      if (joinedRef.current) disconnectRef.current();
+    };
+    call.on('left-meeting', onLeft);
+    return () => {
+      call.off('left-meeting', onLeft);
+    };
+  }, [call]);
 
   // While waiting to be re-admitted, poll the teacher's decision every 3s.
   useEffect(() => {
@@ -306,6 +381,12 @@ export default function ClassroomExperience({
   };
   const backLabel = guestToken ? 'Back' : adminObserve ? 'Back to classes' : 'Back to dashboard';
 
+  const retryAfterFailure = () => {
+    setJoinFailure('');
+    setJoin(null);
+    void attemptJoin();
+  };
+
   const handleDisconnect = () => {
     if (guestToken) {
       onExit?.();
@@ -323,6 +404,7 @@ export default function ClassroomExperience({
     }
     router.push(dashboardPathFor(getStoredRole()));
   };
+  disconnectRef.current = handleDisconnect;
 
   if (recordingsHeldFor) {
     return <PostClassRecordings roomName={recordingsHeldFor} backLabel={backLabel} onLeave={leave} />;
@@ -391,6 +473,31 @@ export default function ClassroomExperience({
     );
   }
 
+  if (joinFailure) {
+    return (
+      <div className="cr-root min-h-screen flex items-center justify-center p-6">
+        <div className="max-w-sm text-center" data-testid="join-failed">
+          <p className="text-red-400 font-medium mb-2">Couldn&apos;t join class</p>
+          <p className="text-[var(--cr-text-muted)] text-sm">{joinFailure}</p>
+          <div className="mt-5 flex items-center justify-center gap-2">
+            <button
+              onClick={retryAfterFailure}
+              className="px-4 py-2 rounded-lg bg-[var(--cr-accent)] text-black text-sm font-semibold hover:opacity-90 transition-opacity"
+            >
+              Try again
+            </button>
+            <button
+              onClick={leave}
+              className="px-4 py-2 rounded-lg bg-[var(--cr-surface-2)] text-[var(--cr-text)] text-sm hover:bg-[var(--cr-surface-3)] transition-colors"
+            >
+              {backLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="cr-root min-h-screen flex items-center justify-center p-6">
@@ -408,7 +515,7 @@ export default function ClassroomExperience({
     );
   }
 
-  if (!join) {
+  if (!join || !call) {
     return (
       <div className="cr-root min-h-screen flex flex-col items-center justify-center gap-3">
         <div className="w-9 h-9 border-2 border-[var(--cr-accent)] border-t-transparent rounded-full animate-spin" />
@@ -443,6 +550,7 @@ export default function ClassroomExperience({
   if (!adminObserve && !choices) {
     return (
       <PreJoinScreen
+        call={call}
         sessionTitle={sessionTitle}
         sessionSubtitle={sessionSubtitle}
         isLive
@@ -452,39 +560,31 @@ export default function ClassroomExperience({
     );
   }
 
+  if (!joined) {
+    return (
+      <div className="cr-root min-h-screen flex flex-col items-center justify-center gap-3">
+        <div className="w-9 h-9 border-2 border-[var(--cr-accent)] border-t-transparent rounded-full animate-spin" />
+        <p className="text-[var(--cr-text-muted)] text-sm">Joining the classroom…</p>
+      </div>
+    );
+  }
+
   return (
-    <LiveKitRoom
-      token={join.token}
-      serverUrl={join.url}
-      connect
-      video={adminObserve ? false : choices!.videoEnabled}
-      audio={adminObserve ? false : choices!.audioEnabled}
-      options={{
-        videoCaptureDefaults: !adminObserve && choices!.videoDeviceId ? { deviceId: choices!.videoDeviceId } : undefined,
-        audioCaptureDefaults: !adminObserve && choices!.audioDeviceId ? { deviceId: choices!.audioDeviceId } : undefined,
-      }}
-      data-lk-theme="default"
-      style={{ height: '100vh' }}
-      onDisconnected={handleDisconnect}
-    >
-      <PeopleProvider>
-        <ClassroomRoom
-          roomName={join.roomName}
-          sessionTitle={adminObserve ? `${sessionTitle} (Observing)` : sessionTitle}
-          sessionSubtitle={sessionSubtitle}
-          isLive
-          lessonData={lessonData}
-          demoExampleLesson={demoExampleLesson}
-          initialBackgroundEffect={choices?.backgroundEffect ?? { mode: 'none' }}
-          initialLighting={choices?.lighting ?? DEFAULT_LIGHTING}
-          scheduledStart={join.scheduledStart}
-          classType={join.classType}
-          initialRoomLocked={join.roomLocked}
-          partialCompletionAvailable={join.partialCompletionAvailable}
-          observerMode={adminObserve}
-          demo={demo}
-        />
-      </PeopleProvider>
-    </LiveKitRoom>
+    <CallProvider call={call} eventKey={join.eventKey ?? ''}>
+      <ClassroomRoom
+        roomName={join.roomName}
+        sessionTitle={adminObserve ? `${sessionTitle} (Observing)` : sessionTitle}
+        sessionSubtitle={sessionSubtitle}
+        isLive
+        lessonData={lessonData}
+        demoExampleLesson={demoExampleLesson}
+        scheduledStart={join.scheduledStart}
+        classType={join.classType}
+        initialRoomLocked={join.roomLocked}
+        partialCompletionAvailable={join.partialCompletionAvailable}
+        observerMode={adminObserve}
+        demo={demo}
+      />
+    </CallProvider>
   );
 }
