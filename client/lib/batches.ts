@@ -71,6 +71,9 @@ export interface BatchSessionRow {
 
 export interface BatchDetail {
   batch: BatchSummary;
+  /** Where the batch starts in its curriculum, and why that can no longer be
+   * changed (null while it can). */
+  startLesson: { number: number; lockedReason: string | null };
   members: BatchMemberRow[];
   formerMembers: { studentUserId: string; fullName: string; joinedAt: string; leftAt: string }[];
   upcomingSessions: BatchSessionRow[];
@@ -180,6 +183,8 @@ export interface ParsedApiError {
   issues: EnrollmentIssue[];
   unmet: EnrollmentIssue[];
   batch?: { id: string; name: string };
+  /** For START_LESSON_*: the students the change concerns. */
+  students: { studentUserId: string; fullName: string; nextLesson: number }[];
 }
 
 export function parseApiError(err: unknown, fallback = "Something went wrong."): ParsedApiError {
@@ -191,6 +196,7 @@ export function parseApiError(err: unknown, fallback = "Something went wrong."):
     issues?: EnrollmentIssue[];
     unmet?: EnrollmentIssue[];
     batch?: { id: string; name: string };
+    students?: ParsedApiError["students"];
   };
   return {
     message,
@@ -198,6 +204,7 @@ export function parseApiError(err: unknown, fallback = "Something went wrong."):
     issues: details.issues ?? [],
     unmet: details.unmet ?? [],
     batch: details.batch,
+    students: details.students ?? [],
   };
 }
 

@@ -16,6 +16,7 @@ import {
 import { BatchStatusBadge, Notice, SeatsChip } from "@/components/admin/batches/BatchUI";
 import {
   ChangeScheduleModal,
+  ChangeStartLessonModal,
   ChangeTeacherModal,
   EditBatchModal,
 } from "@/components/admin/batches/BatchFormModals";
@@ -32,7 +33,7 @@ import {
   type BatchSummary,
 } from "@/lib/batches";
 
-type ModalName = null | "edit" | "teacher" | "schedule" | "add" | "archive" | "reopen";
+type ModalName = null | "edit" | "teacher" | "schedule" | "startLesson" | "add" | "archive" | "reopen";
 
 const SYNC_STYLES: Record<BatchMemberRow["sync"], string> = {
   ALIGNED: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
@@ -145,7 +146,7 @@ export default function BatchDetailPage() {
   if (loading) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
   if (!detail) return <p className="text-sm text-[var(--a-danger)]">{error ?? "Batch not found."}</p>;
 
-  const { batch, members, formerMembers, upcomingSessions, recentSessions, warnings } = detail;
+  const { batch, startLesson, members, formerMembers, upcomingSessions, recentSessions, warnings } = detail;
   const open = batch.status === "ACTIVE";
 
   return (
@@ -224,7 +225,21 @@ export default function BatchDetailPage() {
             {batch.teacher.name}
           </span>
         </Stat>
-        <Stat label="Curriculum">
+        <Stat
+          label="Curriculum"
+          action={
+            open && (
+              <button
+                onClick={() => setModal("startLesson")}
+                disabled={startLesson.lockedReason !== null}
+                title={startLesson.lockedReason ?? "Change the lesson this batch starts at"}
+                className={`${SMALL_BTN} disabled:opacity-40 disabled:cursor-not-allowed`}
+              >
+                Change
+              </button>
+            )
+          }
+        >
           {batch.course.title}
           <span className="block text-xs text-[var(--a-text-faint)] mt-0.5">
             {formatProgress(batch.progress)}
@@ -446,6 +461,9 @@ export default function BatchDetailPage() {
       {modal === "edit" && <EditBatchModal batch={batch} onClose={() => setModal(null)} onSaved={load} />}
       {modal === "teacher" && <ChangeTeacherModal batch={batch} onClose={() => setModal(null)} onSaved={load} />}
       {modal === "schedule" && <ChangeScheduleModal batch={batch} onClose={() => setModal(null)} onSaved={load} />}
+      {modal === "startLesson" && (
+        <ChangeStartLessonModal batch={batch} startLesson={startLesson.number} onClose={() => setModal(null)} onSaved={load} />
+      )}
       {modal === "add" && <AddStudentModal batch={batch} onClose={() => setModal(null)} onChanged={load} />}
 
       {(modal === "archive" || modal === "reopen") && (

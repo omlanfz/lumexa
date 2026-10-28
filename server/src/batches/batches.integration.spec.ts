@@ -1309,6 +1309,222 @@ describeDb('Batches (real Postgres)', () => {
 
   // ═══ The classes of a batch ════════════════════════════════════════════════
 
+  describe('changing where a batch starts in its curriculum', () => {
+    const changeStart = (
+      batchId: string,
+      startLessonNumber: number,
+      acceptSkippedLessons?: boolean,
+    ) =>
+      w.batches.changeStartLesson(
+        batchId,
+        { startLessonNumber, acceptSkippedLessons },
+        admin.id,
+      );
+
+    it('an empty batch simply starts somewhere else, and the first student to join gets classes from there', async () => {
+      const { batch } = await create('Custom Start');
+      const detail = await changeStart(batch.id, 4);
+      expect(detail.startLesson).toEqual({ number: 4, lockedReason: null });
+      expect(detail.batch.progress.nextLesson).toBe(4);
+      expect(await sessionsOf(batch.id)).toHaveLength(0);
+
+      // A student who is on lesson 4 is aligned with it: nothing to decide.
+      const s = await student('newcomer', { completed: 3 });
+      await expect(enroll(s, batch.id)).resolves.toMatchObject({
+        alignment: 'ALIGNED',
+        startsAtLesson: 4,
+      });
+      expect((await sessionsOf(batch.id)).map((x) => x.lessonNumber)).toEqual([
+        4, 5, 6,
+      ]);
+    });
+
+    it('a batch with students is rebuilt from the new lesson on the same dates — after the admin accepts that its students skip lessons', async () => {
+      const { batch } = await create('Lesson One Batch');
+      const a = await student('ada');
+      const b = await student('ben');
+      await enroll(a, batch.id);
+      await enroll(b, batch.id);
+      const datesBefore = (await sessionsOf(batch.id)).map((x) =>
+        x.start.toISOString(),
+      );
+      expect(datesBefore).toHaveLength(6);
+
+      const asked = await refused(changeStart(batch.id, 4));
+      expect(asked.status).toBe(409);
+      expect(asked.code).toBe('START_LESSON_CONFIRM_REQUIRED');
+      expect(asked.message).toMatch(/ada.*lesson 1/i);
+      // Nothing changed.
+      expect(
+        (await prisma.batch.findUniqueOrThrow({ where: { id: batch.id } }))
+          .startLessonNumber,
+      ).toBe(1);
+      expect(await sessionsOf(batch.id)).toHaveLength(6);
+
+      await changeStart(batch.id, 4, true);
+      const sessions = await sessionsOf(batch.id);
+      expect(sessions.map((x) => x.lessonNumber)).toEqual([4, 5, 6]);
+      expect(sessions.map((x) => x.start.toISOString())).toEqual(
+        datesBefore.slice(0, 3),
+      );
+      for (const x of sessions) {
+        expect(x.participants.map((p) => p.studentUserId).sort()).toEqual(
+          [a.id, b.id].sort(),
+        );
+        expect(
+          x.participants.every((p) => p.lessonNumber === x.lessonNumber),
+        ).toBe(true);
+        expect(x.lessonId).not.toBeNull();
+      }
+      expect((await rowsOf(a)).map((r) => r.lessonNumber)).toEqual([4, 5, 6]);
+      const [m] = await activeMemberships(a);
+      expect(m).toMatchObject({
+        alignment: 'SKIPPED_TO_BATCH',
+        joinedAtLesson: 4,
+      });
+      const detail = await w.batches.getBatchDetail(batch.id);
+      expect(detail.batch.progress.nextLesson).toBe(4);
+      expect(detail.startLesson.number).toBe(4);
+      const audit = await prisma.auditLog.findFirstOrThrow({
+        where: { action: 'BATCH_START_LESSON_CHANGED', entityId: batch.id },
+      });
+      expect(audit.beforeData).toMatchObject({ startLessonNumber: 1 });
+      expect(audit.afterData).toMatchObject({
+        startLessonNumber: 4,
+        sessionsCreated: 3,
+      });
+
+      // And back again: students are aligned with lesson 1 once more.
+      await changeStart(batch.id, 1);
+      expect((await sessionsOf(batch.id)).map((x) => x.lessonNumber)).toEqual([
+        1, 2, 3, 4, 5, 6,
+      ]);
+      expect(await activeMemberships(a)).toEqual([
+        expect.objectContaining({ alignment: 'ALIGNED', joinedAtLesson: 1 }),
+      ]);
+    });
+
+    it('saving the lesson the batch already starts at changes nothing', async () => {
+      const { batch } = await create('Same Start');
+      await enroll(await student('ada'), batch.id);
+      const before = (await sessionsOf(batch.id)).map((x) => x.id);
+      await changeStart(batch.id, 1);
+      expect((await sessionsOf(batch.id)).map((x) => x.id)).toEqual(before);
+      expect(
+        await prisma.auditLog.count({
+          where: { action: 'BATCH_START_LESSON_CHANGED' },
+        }),
+      ).toBe(0);
+    });
+
+    it('refuses a start that would make a student repeat lessons they have completed — and changes nothing', async () => {
+      const { batch } = await create('Rebased Batch');
+      const far = await student('on-lesson-five', { completed: 4 });
+      await enroll(far, batch.id, { progress: 'REBASE_BATCH' });
+      expect((await sessionsOf(batch.id)).map((x) => x.lessonNumber)).toEqual([
+        5, 6,
+      ]);
+
+      const r = await refused(changeStart(batch.id, 3, true));
+      expect(r.status).toBe(409);
+      expect(r.code).toBe('START_LESSON_BLOCKED');
+      expect(r.message).toMatch(/on lesson five/);
+      expect(r.message).toMatch(/lesson 5 or later/);
+      expect((await sessionsOf(batch.id)).map((x) => x.lessonNumber)).toEqual([
+        5, 6,
+      ]);
+      expect(await rowsOf(far, { status: 'COMPLETED' })).toHaveLength(4);
+
+      // Lesson 5 is where they are: nothing to decide. Lesson 6 skips one.
+      await expect(changeStart(batch.id, 5)).resolves.toBeDefined();
+      expect((await refused(changeStart(batch.id, 6))).code).toBe(
+        'START_LESSON_CONFIRM_REQUIRED',
+      );
+    });
+
+    it('is locked once the batch has taught a class, with the reason in the batch detail', async () => {
+      const { batch } = await create('Under Way');
+      const a = await student('ada');
+      await enroll(a, batch.id);
+      expect(
+        (await w.batches.getBatchDetail(batch.id)).startLesson.lockedReason,
+      ).toBeNull();
+
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, [a]);
+      // A class under way already locks it …
+      const underWay = await refused(changeStart(batch.id, 3, true));
+      expect(underWay.status).toBe(400);
+      expect(underWay.message).toMatch(/under way/i);
+
+      // … and so does one that has been taught.
+      await finish(first.id);
+      const taught = await refused(changeStart(batch.id, 3, true));
+      expect(taught.status).toBe(400);
+      expect(taught.message).toMatch(/already taught/i);
+      expect(
+        (await w.batches.getBatchDetail(batch.id)).startLesson.lockedReason,
+      ).toMatch(/already taught/i);
+      const fresh = await prisma.batch.findUniqueOrThrow({
+        where: { id: batch.id },
+      });
+      expect(fresh.startLessonNumber).toBe(1);
+      expect((await sessionsOf(batch.id)).map((x) => x.lessonNumber)).toEqual([
+        1, 2, 3, 4, 5, 6,
+      ]);
+    });
+
+    it('refuses a lesson the curriculum does not have, an archived batch and a batch that does not exist', async () => {
+      const { batch } = await create('Edges');
+      const tooFar = await refused(changeStart(batch.id, 7));
+      expect(tooFar.status).toBe(400);
+      expect(tooFar.message).toMatch(/6 lessons/);
+
+      await w.batches.updateBatch(batch.id, { status: 'ARCHIVED' }, admin.id);
+      expect((await refused(changeStart(batch.id, 2))).status).toBe(400);
+      expect((await refused(changeStart('missing-batch', 2))).status).toBe(404);
+    });
+
+    it('lowering the start is refused when the teacher is busy for the extra classes, and leaves the batch as it was', async () => {
+      const { batch } = await create('Busy Teacher');
+      const a = await student('ada');
+      await enroll(a, batch.id);
+      await changeStart(batch.id, 4, true);
+      const held = await sessionsOf(batch.id);
+      expect(held).toHaveLength(3);
+
+      // The teacher takes a class on the weekday of what would be lesson 3.
+      const busyStart = new Date(held[2].start.getTime() - 7 * 86_400_000);
+      expect(busyStart.getTime()).toBe(
+        held[0].start.getTime() + 7 * 86_400_000,
+      );
+      const other = await student('other-student');
+      await prisma.scheduledLesson.create({
+        data: {
+          studentUserId: other.id,
+          teacherId: teacherA.profileId!,
+          courseId: course.id,
+          lessonNumber: 1,
+          start: busyStart,
+          end: new Date(busyStart.getTime() + 45 * 60_000),
+          classType: ClassType.ONE_TO_ONE,
+          status: LessonStatus.UPCOMING,
+        },
+      });
+
+      const r = await refused(changeStart(batch.id, 1));
+      expect(r.status).toBe(400);
+      expect(r.message).toMatch(/already booked/i);
+      expect(
+        (await prisma.batch.findUniqueOrThrow({ where: { id: batch.id } }))
+          .startLessonNumber,
+      ).toBe(4);
+      expect((await sessionsOf(batch.id)).map((x) => x.lessonNumber)).toEqual([
+        4, 5, 6,
+      ]);
+    });
+  });
+
   describe('the classes of a batch', () => {
     it('a class that ends Incomplete adds ONE extra class for the whole batch and moves the lessons behind it down by one — dates never move', async () => {
       const { batch } = await create('Evening Odyssey');

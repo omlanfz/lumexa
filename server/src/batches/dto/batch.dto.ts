@@ -102,6 +102,19 @@ export class UpdateBatchDto {
   status?: 'ACTIVE' | 'ARCHIVED';
 }
 
+/** Moves where an untaught batch starts in its curriculum. */
+export class ChangeBatchStartLessonDto {
+  @IsInt()
+  @Min(1)
+  startLessonNumber: number;
+
+  /** Accept that students already on an earlier lesson will not be taught the
+   * lessons between theirs and the new start (their records are untouched). */
+  @IsOptional()
+  @IsBoolean()
+  acceptSkippedLessons?: boolean;
+}
+
 export class ChangeBatchTeacherDto {
   @IsString()
   @IsNotEmpty()
