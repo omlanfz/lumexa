@@ -105,6 +105,41 @@ export async function loadBatchProgress(
   };
 }
 
+/**
+ * Why a batch's starting lesson can no longer be changed, or null when it can.
+ * The starting lesson only decides where an UNTAUGHT batch begins; once the
+ * batch has taught (or is teaching) a class its position comes from those
+ * classes, and rewriting the start would renumber lessons that already happened.
+ */
+export async function startLessonLockReason(
+  db: Db,
+  batch: { id: string; startLessonNumber: number },
+  now = new Date(),
+): Promise<string | null> {
+  const [taught, progress] = await Promise.all([
+    db.batchSession.count({
+      where: {
+        batchId: batch.id,
+        status: {
+          in: [
+            LessonStatus.COMPLETED,
+            LessonStatus.PARTIALLY_COMPLETED,
+            LessonStatus.INCOMPLETE,
+          ],
+        },
+      },
+    }),
+    loadBatchProgress(db, batch, now),
+  ]);
+  if (taught > 0) {
+    return 'This batch has already taught a class, so its starting lesson can no longer be changed.';
+  }
+  if (progress.frozenMax !== null) {
+    return 'A class of this batch is under way or about to open, so its starting lesson cannot be changed right now.';
+  }
+  return null;
+}
+
 /** The lesson a student is on in a curriculum: one past their highest
  * COMPLETED lesson (same rule SchedulingService uses to number a schedule). */
 export async function studentNextLesson(

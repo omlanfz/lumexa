@@ -27,6 +27,7 @@ import { BatchSessionsService } from './batch-sessions.service';
 import {
   AddBatchStudentDto,
   BatchScheduleDto,
+  ChangeBatchStartLessonDto,
   ChangeBatchTeacherDto,
   CreateBatchDto,
   EnrollStudentInBatchDto,
@@ -101,6 +102,16 @@ export class BatchesController {
     @Request() req: AuthedRequest,
   ) {
     return this.batches.changeSchedule(batchId, dto, req.user.userId);
+  }
+
+  /** Moves where a batch that has taught nothing starts in its curriculum. */
+  @Put('batches/:batchId/start-lesson')
+  changeStartLesson(
+    @Param('batchId') batchId: string,
+    @Body() dto: ChangeBatchStartLessonDto,
+    @Request() req: AuthedRequest,
+  ) {
+    return this.batches.changeStartLesson(batchId, dto, req.user.userId);
   }
 
   @Put('batches/:batchId/teacher')

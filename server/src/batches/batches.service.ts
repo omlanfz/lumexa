@@ -61,12 +61,14 @@ import {
   lockBatch,
   lockBatches,
   lockStudentPlacement,
+  startLessonLockReason,
   studentNextLesson,
   type Db,
 } from './batch-progress.util';
 import { DEFAULT_BATCH_STUDENTS } from './batch.constants';
 import type {
   BatchScheduleDto,
+  ChangeBatchStartLessonDto,
   CreateBatchDto,
   NewBatchForStudentDto,
   UpdateBatchDto,
@@ -269,6 +271,10 @@ export class BatchesService {
 
     const now = new Date();
     const progress = await loadBatchProgress(this.prisma, batch, now);
+    const startLessonLockedReason =
+      batch.status === BatchStatus.ACTIVE
+        ? await startLessonLockReason(this.prisma, batch, now)
+        : 'Only an active batch can change its starting lesson.';
 
     const members = await this.prisma.batchMember.findMany({
       where: { batchId },
@@ -403,6 +409,10 @@ export class BatchesService {
 
     return {
       batch: summary,
+      startLesson: {
+        number: batch.startLessonNumber,
+        lockedReason: startLessonLockedReason,
+      },
       members: active,
       formerMembers: members
         .filter((m) => m.leftAt !== null)
@@ -1009,6 +1019,169 @@ export class BatchesService {
       },
     });
     await this.notifyFirstClass(batchId);
+    return this.getBatchDetail(batchId);
+  }
+
+  /**
+   * Moves where a batch that has not taught anything yet starts in its
+   * curriculum (a custom course, a parent's request, an admin's decision).
+   * Every class that has not opened yet is rebuilt from the new lesson; the
+   * dates and slots stay as they are.
+   *
+   * Students keep their own progress. A student who has already completed
+   * lessons the batch would now teach again is a blocker (the same rule as
+   * joining a batch); a student on an earlier lesson would skip the lessons in
+   * between, which the admin must accept explicitly. One transaction: any
+   * refusal, including a teacher clash for the rebuilt classes, changes nothing.
+   */
+  async changeStartLesson(
+    batchId: string,
+    dto: ChangeBatchStartLessonDto,
+    adminUserId: string,
+  ) {
+    const exists = await this.prisma.batch.findUnique({
+      where: { id: batchId },
+      select: { id: true },
+    });
+    if (!exists) throw new NotFoundException('Batch not found.');
+
+    const now = new Date();
+    const outcome = await this.prisma.$transaction(
+      async (tx) => {
+        await lockBatch(tx, batchId);
+        const before = await tx.batch.findUniqueOrThrow({
+          where: { id: batchId },
+          include: { course: { select: { title: true, sessions: true } } },
+        });
+        if (before.status !== BatchStatus.ACTIVE) {
+          throw new BadRequestException(
+            'Only an active batch can change its starting lesson.',
+          );
+        }
+        const lesson = dto.startLessonNumber;
+        if (lesson > before.course.sessions) {
+          throw new BadRequestException(
+            `${before.course.title} has ${before.course.sessions} lessons, so a batch cannot start at lesson ${lesson}.`,
+          );
+        }
+        if (lesson === before.startLessonNumber) return null;
+        const locked = await startLessonLockReason(tx, before, now);
+        if (locked) throw new BadRequestException(locked);
+
+        const members = await tx.batchMember.findMany({
+          where: { batchId, leftAt: null },
+          select: {
+            id: true,
+            studentUserId: true,
+            student: { select: { fullName: true } },
+          },
+        });
+        const placed: {
+          id: string;
+          studentUserId: string;
+          fullName: string;
+          nextLesson: number;
+        }[] = [];
+        for (const m of members) {
+          placed.push({
+            id: m.id,
+            studentUserId: m.studentUserId,
+            fullName: m.student.fullName,
+            nextLesson: await studentNextLesson(
+              tx,
+              m.studentUserId,
+              before.courseId,
+            ),
+          });
+        }
+        const ahead = placed.filter((m) => m.nextLesson > lesson);
+        if (ahead.length > 0) {
+          throw new ConflictException({
+            message: `${ahead
+              .map(
+                (m) =>
+                  `${m.fullName} (has completed through lesson ${m.nextLesson - 1})`,
+              )
+              .join(
+                ', ',
+              )} would repeat lessons they have already taken if ${before.name} started at lesson ${lesson}. Choose lesson ${Math.max(...ahead.map((m) => m.nextLesson))} or later, or move them to another batch first.`,
+            details: {
+              code: 'START_LESSON_BLOCKED',
+              students: ahead.map((m) => ({
+                studentUserId: m.studentUserId,
+                fullName: m.fullName,
+                nextLesson: m.nextLesson,
+              })),
+            },
+          });
+        }
+        const skipping = placed.filter((m) => m.nextLesson < lesson);
+        if (skipping.length > 0 && dto.acceptSkippedLessons !== true) {
+          throw new ConflictException({
+            message: `Confirm before continuing: ${skipping
+              .map((m) => `${m.fullName} is on lesson ${m.nextLesson}`)
+              .join(
+                ', ',
+              )}. Starting ${before.name} at lesson ${lesson} means the lessons in between will not be taught to them by the batch. Their completed classes are kept exactly as they are.`,
+            details: {
+              code: 'START_LESSON_CONFIRM_REQUIRED',
+              students: skipping.map((m) => ({
+                studentUserId: m.studentUserId,
+                fullName: m.fullName,
+                nextLesson: m.nextLesson,
+              })),
+            },
+          });
+        }
+
+        await tx.batch.update({
+          where: { id: batchId },
+          data: { startLessonNumber: lesson },
+        });
+        // The batch has taught nothing, so every current student starts at the
+        // new lesson: the record of where they joined follows it.
+        for (const m of placed) {
+          await tx.batchMember.update({
+            where: { id: m.id },
+            data: {
+              joinedAtLesson: lesson,
+              alignment:
+                m.nextLesson === lesson ? 'ALIGNED' : 'SKIPPED_TO_BATCH',
+            },
+          });
+        }
+        const regenerated = await this.sessions.regenerateFutureSessions(
+          tx,
+          batchId,
+          { now },
+        );
+        return {
+          from: before.startLessonNumber,
+          sessionsCreated: regenerated.sessionsCreated,
+          skipping,
+        };
+      },
+      { timeout: 30_000, maxWait: 10_000 },
+    );
+
+    if (outcome) {
+      await this.audit.log({
+        actorId: adminUserId,
+        actorRole: 'ADMIN',
+        action: 'BATCH_START_LESSON_CHANGED',
+        entityType: 'Batch',
+        entityId: batchId,
+        beforeData: { startLessonNumber: outcome.from },
+        afterData: {
+          startLessonNumber: dto.startLessonNumber,
+          sessionsCreated: outcome.sessionsCreated,
+          studentsSkippingLessons: outcome.skipping.map((m) => ({
+            student: m.fullName,
+            nextLesson: m.nextLesson,
+          })),
+        },
+      });
+    }
     return this.getBatchDetail(batchId);
   }
 

@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { Modal } from "@/components/admin/AdminUI";
-import { parseApiError, type BatchSummary } from "@/lib/batches";
+import { parseApiError, type BatchSummary, type ParsedApiError } from "@/lib/batches";
 import ScheduleFields, { EMPTY_SCHEDULE, scheduleProblem, type ScheduleDraft } from "./ScheduleFields";
 
 const FIELD =
@@ -373,6 +373,87 @@ export function ChangeScheduleModal({
         </p>
         <ScheduleFields value={schedule} onChange={setSchedule} />
         <Footer busy={busy} label="Rebuild schedule" busyLabel="Rebuilding…" onCancel={onClose} onSubmit={submit} error={error} />
+      </div>
+    </Modal>
+  );
+}
+
+export function ChangeStartLessonModal({
+  batch,
+  startLesson,
+  onClose,
+  onSaved,
+}: {
+  batch: BatchSummary;
+  startLesson: number;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [lesson, setLesson] = useState(String(startLesson));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Set when the server says some students would skip lessons: the admin must
+  // accept it by pressing the button again.
+  const [skipping, setSkipping] = useState<ParsedApiError["students"] | null>(null);
+  const total = batch.course.totalLessons;
+  const value = Number(lesson);
+  const valid = Number.isInteger(value) && value >= 1 && value <= total;
+
+  const submit = async () => {
+    if (!valid) return setError(`Enter a lesson number from 1 to ${total}.`);
+    if (value === startLesson) return onClose();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.put(`/admin/batches/${batch.id}/start-lesson`, {
+        startLessonNumber: value,
+        ...(skipping ? { acceptSkippedLessons: true } : {}),
+      });
+      onSaved();
+      onClose();
+    } catch (err) {
+      const parsed = parseApiError(err, "Could not change the starting lesson.");
+      setSkipping(parsed.code === "START_LESSON_CONFIRM_REQUIRED" ? parsed.students : null);
+      setError(parsed.message);
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal title="Change starting lesson" onClose={busy ? () => {} : onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-[var(--a-text-muted)]">
+          <strong className="text-[var(--a-text)]">{batch.name}</strong> has not taught a class yet, so it can begin at any
+          lesson of {batch.course.title}. The classes that have not opened yet are rebuilt from that lesson on the same
+          weekly times. Students keep their own progress and records.
+        </p>
+        <div>
+          <label className={LABEL}>Start at lesson (1–{total})</label>
+          <input
+            type="number"
+            min={1}
+            max={total}
+            value={lesson}
+            onChange={(e) => {
+              setLesson(e.target.value);
+              setSkipping(null);
+              setError(null);
+            }}
+            className={FIELD}
+          />
+        </div>
+        {skipping ? (
+          <Footer
+            busy={busy}
+            label="Start here anyway"
+            busyLabel="Rebuilding…"
+            onCancel={onClose}
+            onSubmit={submit}
+            error={error}
+          />
+        ) : (
+          <Footer busy={busy} label="Change lesson" busyLabel="Rebuilding…" onCancel={onClose} onSubmit={submit} error={error} />
+        )}
       </div>
     </Modal>
   );
