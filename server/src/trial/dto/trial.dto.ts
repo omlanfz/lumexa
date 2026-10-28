@@ -189,11 +189,6 @@ export class GuestJoinDto {
   @MinLength(32)
   @MaxLength(128)
   token: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  deviceId?: string;
 }
 
 export class CancelTrialDto {

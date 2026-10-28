@@ -85,11 +85,11 @@ the existing scheduling code assumes a fixed +6 offset.
   every request: the trial is `CONFIRMED`; a teacher is assigned; now is between
   **10 minutes before the start and 30 minutes after the end**. Cancelled,
   completed, missed, unstaffed, too-early and too-late links are refused.
-- A valid link is exchanged for a **short-lived LiveKit token bound to that one
-  room** (`trial-<id>`) and one guest identity, with ordinary participant rights
-  (publish audio/video, subscribe, chat). The LiveKit API key/secret and any
-  reusable credential never reach the browser. The teacher's lock, the 10-person
-  limit and the per-person device limit apply to the guest like any student.
+- A valid link is exchanged for a **short-lived Daily meeting token bound to that
+  one room** (`trial-<id>`) and one guest identity, with ordinary participant rights
+  (publish audio/video, subscribe, chat) and never the room-owner flag. The Daily API
+  key and any reusable credential never reach the browser. The teacher's lock, the
+  10-person limit and the per-person device limit apply to the guest like any student.
 - The guest page (`/trial/join/<token>`) needs no login, shows a countdown until
   the classroom opens (against the server's clock), and is `noindex` /
   `no-referrer`. Endpoints are rate limited per IP.
@@ -474,7 +474,7 @@ Added or changed (see `server/.env.example`; placeholders only):
 | `EMAIL_FROM_NAME` | `Lumexa AI School` | email display name (address is `SMTP_USER`) |
 | `ADMIN_NOTIFICATION_EMAILS` | *(existing)* | now also receives "new trial booked"; set to the admin's private email on Render |
 | `FRONTEND_URL` | *(existing)* | **must be the public https site address**: the parent's link is `FRONTEND_URL/trial/join/<token>` |
-| `LIVEKIT_URL` / `LIVEKIT_API_KEY` / `LIVEKIT_API_SECRET` | *(existing)* | the same LiveKit project every class uses; trial classes need nothing extra |
+| `DAILY_API_KEY` | *(existing)* | the same Daily account every class uses; trial classes need nothing extra (see `docs/CLASSROOM_DAILY_SETUP.md`) |
 | `TRIAL_MIN_NOTICE_MINUTES` | `120` | earliest bookable start from now |
 | `TRIAL_BOOKING_HORIZON_DAYS` | `60` | how far ahead parents can book |
 | `WHATSAPP_ENABLED` | `false` | master switch |

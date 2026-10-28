@@ -8,7 +8,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Check, Mic } from 'lucide-react';
-import { useMediaDeviceSelect, useRoomContext } from '@livekit/components-react';
+import { useCall } from '@/lib/classroom/daily/CallContext';
+import { deviceLabel } from '@/lib/classroom/daily/devices';
+import { useDevices } from '@/lib/classroom/useDevices';
+import { canChooseSpeaker } from '@/lib/classroom/audioOutput';
 
 interface DeviceMenuProps {
   kind: 'audioinput' | 'videoinput';
@@ -77,11 +80,13 @@ function MicTestMeter() {
 /** Speaker (audiooutput) selection — nested inside the microphone popover
  * rather than its own bottom-bar button, matching how most conferencing
  * apps group "audio" settings together. Silently renders nothing if the
- * browser doesn't support output-device selection (Safari/Firefox). */
+ * browser doesn't support output-device selection (Safari/Firefox). The class
+ * is played by the classroom itself (see ClassAudioRenderer), which is what
+ * the choice is applied to. */
 function SpeakerSection() {
-  const room = useRoomContext();
-  const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({ kind: 'audiooutput', room });
-  if (devices.length === 0) return null;
+  const call = useCall();
+  const { devices, activeDeviceId, select } = useDevices(call, 'audiooutput');
+  if (devices.length === 0 || !canChooseSpeaker()) return null;
 
   return (
     <div className="border-t border-[var(--cr-border)]">
@@ -90,11 +95,13 @@ function SpeakerSection() {
         {devices.map((d) => (
           <button
             key={d.deviceId}
-            onClick={() => void setActiveMediaDevice(d.deviceId)}
+            onClick={() => void select(d.deviceId)}
             className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-sm text-[var(--cr-text)] hover:bg-[var(--cr-surface-2)] transition-colors text-left"
           >
-            <span className="truncate">{d.label || 'Speaker'}</span>
-            {d.deviceId === activeDeviceId && <Check size={14} className="text-[var(--cr-accent)] flex-shrink-0" />}
+            <span className="truncate">{deviceLabel(d, 'audiooutput')}</span>
+            {(d.deviceId === activeDeviceId || (!activeDeviceId && d.deviceId === 'default')) && (
+              <Check size={14} className="text-[var(--cr-accent)] flex-shrink-0" />
+            )}
           </button>
         ))}
       </div>
@@ -103,8 +110,8 @@ function SpeakerSection() {
 }
 
 export default function DeviceMenu({ kind, onClose }: DeviceMenuProps) {
-  const room = useRoomContext();
-  const { devices, activeDeviceId, setActiveMediaDevice } = useMediaDeviceSelect({ kind, room });
+  const call = useCall();
+  const { devices, activeDeviceId, select } = useDevices(call, kind);
 
   return (
     <div className="w-64 rounded-xl border border-[var(--cr-border)] bg-[var(--cr-surface)] shadow-2xl overflow-hidden cr-fade-in">
@@ -121,12 +128,12 @@ export default function DeviceMenu({ kind, onClose }: DeviceMenuProps) {
             <button
               key={d.deviceId}
               onClick={() => {
-                void setActiveMediaDevice(d.deviceId);
+                void select(d.deviceId);
                 onClose();
               }}
               className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-[var(--cr-text)] hover:bg-[var(--cr-surface-2)] transition-colors text-left"
             >
-              <span className="truncate">{d.label || `${kind === 'audioinput' ? 'Microphone' : 'Camera'}`}</span>
+              <span className="truncate">{deviceLabel(d, kind)}</span>
               {d.deviceId === activeDeviceId && <Check size={14} className="text-[var(--cr-accent)] flex-shrink-0" />}
             </button>
           ))

@@ -1,22 +1,22 @@
 import {
+  ADMIN_OBSERVER_PREFIX,
+  MAX_DAILY_USER_ID_LENGTH,
   MAX_PEOPLE_PER_CLASSROOM,
   MAX_STUDENTS_PER_CLASSROOM,
-  buildIdentity,
   getRoomRef,
+  isAdminObserver,
   isBatchRoom,
   isCurriculumRoom,
   isLessonRoom,
-  isPersonIdentity,
+  isPersonUserId,
   isTrialRoom,
   parseBatchRoom,
   parseBatchSessionRoom,
   parseTrialRoom,
-  personKey,
   roomForBatch,
   roomForBatchSession,
   roomForLessonRecord,
   roomForTrial,
-  sanitizeDeviceId,
   trialGuestKey,
 } from './room-ref.util';
 
@@ -179,46 +179,28 @@ describe('room names', () => {
   });
 });
 
-describe('participant identities', () => {
-  it('builds <userId>~<deviceId> and recovers the person from it', () => {
-    const identity = buildIdentity('user-1', 'abcd1234');
-    expect(identity).toBe('user-1~abcd1234');
-    expect(personKey(identity)).toBe('user-1');
+describe('who is a person in a room', () => {
+  const USER_ID = '0f8fad5b-d9cb-469f-a165-70867728950e';
+
+  it('counts people only: a user id is a person, the admin observer is not', () => {
+    expect(isPersonUserId(USER_ID)).toBe(true);
+    expect(
+      isPersonUserId(trialGuestKey('5d1c7e92-4a3b-4f60-9e1d-2b8c6a0f3d71')),
+    ).toBe(true);
+    expect(isPersonUserId(`${ADMIN_OBSERVER_PREFIX}1700000000000`)).toBe(false);
+    expect(isAdminObserver(`${ADMIN_OBSERVER_PREFIX}1700000000000`)).toBe(true);
+    expect(isAdminObserver(USER_ID)).toBe(false);
   });
 
-  it('two devices of one person are one person; a bare userId still works', () => {
-    expect(personKey(buildIdentity('u', 'aaaa'))).toBe(
-      personKey(buildIdentity('u', 'bbbb')),
+  it('every kind of person id fits what Daily allows in a meeting token (36 characters)', () => {
+    expect(MAX_DAILY_USER_ID_LENGTH).toBe(36);
+    expect(USER_ID).toHaveLength(36); // a uuid is exactly the limit
+    expect(
+      trialGuestKey('5d1c7e92-4a3b-4f60-9e1d-2b8c6a0f3d71').length,
+    ).toBeLessThanOrEqual(MAX_DAILY_USER_ID_LENGTH);
+    expect(`${ADMIN_OBSERVER_PREFIX}${Date.now()}`.length).toBeLessThanOrEqual(
+      MAX_DAILY_USER_ID_LENGTH,
     );
-    expect(personKey('u')).toBe('u');
-  });
-
-  it('accepts a plain alphanumeric device id and falls back for anything else', () => {
-    expect(sanitizeDeviceId('Ab12Cd34')).toBe('Ab12Cd34');
-    for (const bad of [
-      undefined,
-      null,
-      42,
-      '',
-      'abc',
-      'has space1',
-      'semi;colon',
-      'tilde~tilde',
-      'x'.repeat(25),
-    ]) {
-      expect(sanitizeDeviceId(bad)).toBe('main');
-    }
-  });
-
-  it('counts people only: not the admin observer, not LiveKit egress/ingress/agents', () => {
-    expect(isPersonIdentity(buildIdentity('user-1', 'abcd1234'))).toBe(true);
-    expect(isPersonIdentity('user-1')).toBe(true);
-    expect(isPersonIdentity('admin-observer-1700000000')).toBe(false);
-    expect(isPersonIdentity('EG_AbCdEf123456')).toBe(false);
-    expect(isPersonIdentity('IN_x')).toBe(false);
-    expect(isPersonIdentity('agent-1')).toBe(false);
-    expect(isPersonIdentity('user-1~abcd1234', 2)).toBe(false); // non-standard kind
-    expect(isPersonIdentity('user-1~abcd1234', 0)).toBe(true);
   });
 });
 
@@ -255,13 +237,13 @@ describe('a free trial class’s room', () => {
     }
   });
 
-  it('a guest has a LiveKit identity of their own, one person across devices, never a real user id', () => {
+  it('a guest has a person id of their own, one person across devices, never a real user id', () => {
     const key = trialGuestKey(LEAD_ID);
-    expect(key).toBe(`trial-guest-${LEAD_ID}`);
-    const phone = buildIdentity(key, 'aaaa1111');
-    const laptop = buildIdentity(key, 'bbbb2222');
-    expect(personKey(phone)).toBe(key);
-    expect(personKey(phone)).toBe(personKey(laptop));
-    expect(isPersonIdentity(phone)).toBe(true);
+    expect(key).toBe(`tg-${LEAD_ID.replace(/-/g, '')}`);
+    expect(key).toHaveLength(35);
+    expect(key).not.toBe(LEAD_ID);
+    expect(isPersonUserId(key)).toBe(true);
+    // different trials are different guests
+    expect(trialGuestKey('00000000-0000-4000-8000-000000000000')).not.toBe(key);
   });
 });

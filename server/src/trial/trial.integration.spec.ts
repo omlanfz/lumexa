@@ -42,9 +42,13 @@ import {
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { findTeacherConflict } from '../scheduling/teacher-conflict.util';
 import { TeachersService } from '../teachers/teachers.service';
+import {
+  DailyRoomsService,
+  type MeetingTokenParams,
+} from '../classroom/daily-rooms.service';
+import { RoomAccessService } from '../classroom/room-access.service';
 import { TrialClassroomService } from '../classroom/trial-classroom.service';
 import { TrialReminderService } from './trial-reminder.service';
-import { TokenVerifier } from 'livekit-server-sdk';
 import { TrialModule } from './trial.module';
 import { TrialWhatsAppService } from './trial-whatsapp.service';
 import { isSlotConflictError } from './trial-booking.service';
@@ -803,10 +807,25 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
   const MIN = 60_000;
   /** The most recent half-hour mark (<= now): a trial that started 0–30 min ago. */
   const mark = () => Math.floor(Date.now() / HALF) * HALF;
-  const KEY = 'devkey';
-  const SECRET = 'devsecret-devsecret-devsecret-devsecret';
-  const verify = (jwt: string) =>
-    new TokenVerifier(KEY, SECRET).verify(jwt) as Promise<any>;
+  // Daily itself is faked (there is no Daily account in the test environment):
+  // it hands out a way into the room per join and remembers what it was for.
+  const dailyEntries: MeetingTokenParams[] = [];
+  const fakeDaily = {
+    assertConfigured: () => undefined,
+    isConfigured: () => true,
+    entryFor: (params: MeetingTokenParams) => {
+      dailyEntries.push(params);
+      return Promise.resolve({
+        token: `daily-token-${dailyEntries.length}`,
+        url: `https://lumexa.daily.co/${params.room}`,
+        eventKey: 'event-key',
+      });
+    },
+    listPeople: () => Promise.resolve([]),
+  };
+  /** What the way in a join response carries was made for. */
+  const wayIn = (token: string): MeetingTokenParams =>
+    dailyEntries[Number(token.replace('daily-token-', '')) - 1];
 
   const admin = () => ({ Authorization: `Bearer ${adminToken}` });
   const http = () => app.getHttpServer();
@@ -904,11 +923,13 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
   }
 
   beforeAll(async () => {
-    process.env.LIVEKIT_API_KEY = KEY;
-    process.env.LIVEKIT_API_SECRET = SECRET;
-    process.env.LIVEKIT_URL = 'wss://example.livekit.cloud';
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    // The check that runs a few seconds after a join is covered in
+    // room-access.service.spec; it must not fire in the middle of a later test.
+    jest
+      .spyOn(RoomAccessService.prototype, 'scheduleEnforcement')
+      .mockImplementation(() => undefined);
     const moduleRef = await Test.createTestingModule({
       imports: [
         PrismaModule,
@@ -919,7 +940,10 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
         TrialModule,
       ],
       providers: [JwtStrategy],
-    }).compile();
+    })
+      .overrideProvider(DailyRoomsService)
+      .useValue(fakeDaily)
+      .compile();
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
       new ValidationPipe({
@@ -1345,10 +1369,16 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
 
     const join = await guestJoin(tokenOf(lead)).expect(200);
     expect(join.body.roomName).toBe(`trial-${lead.id}`);
-    const claims = await verify(join.body.token);
-    expect(claims.video.room).toBe(`trial-${lead.id}`);
-    expect(claims.sub).toBe(`trial-guest-${lead.id}~main`);
-    expect(JSON.stringify(join.body)).not.toContain(SECRET);
+    // the way in is for this one room and this one guest, who is never the
+    // room's owner (no moderating)
+    expect(wayIn(join.body.token)).toMatchObject({
+      room: `trial-${lead.id}`,
+      userId: `tg-${lead.id.replace(/-/g, '')}`,
+      userName: `${lead.childName} (Student)`,
+      isOwner: false,
+    });
+    expect(join.body.url).toBe(`https://lumexa.daily.co/trial-${lead.id}`);
+    expect(JSON.stringify(join.body)).not.toContain(lead.guestToken!);
     expect(
       (await prisma.trialLead.findUniqueOrThrow({ where: { id: lead.id } }))
         .guestJoinedAt,
@@ -1362,15 +1392,11 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
     });
     const ja = await guestJoin(tokenOf(a)).expect(200);
     // b's window is not open now: with b's clock set to its own start it is
-    const jb: any = await classroom.joinAsGuest(
-      tokenOf(b),
-      'abcd1234',
-      b.startAt!,
-    );
+    const jb: any = await classroom.joinAsGuest(tokenOf(b), b.startAt!);
     expect(ja.body.roomName).toBe(`trial-${a.id}`);
     expect(jb.roomName).toBe(`trial-${b.id}`);
-    expect((await verify(ja.body.token)).video.room).toBe(`trial-${a.id}`);
-    expect((await verify(jb.token)).video.room).toBe(`trial-${b.id}`);
+    expect(wayIn(ja.body.token).room).toBe(`trial-${a.id}`);
+    expect(wayIn(jb.token).room).toBe(`trial-${b.id}`);
     // a's link does not work for b's time, and vice versa
     await guestJoin(tokenOf(b)).expect(400);
   });
@@ -1436,7 +1462,7 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
       data: { startAt: new Date(mark()), endAt: new Date(mark() + HALF) },
     });
     await guestJoin(tokenOf(lead)).expect(200); // works before the cancellation
-    await classroom.joinAsTeacher(teacher.userId, lead.id, 'abcd1234');
+    await classroom.joinAsTeacher(teacher.userId, lead.id);
 
     await request(http())
       .post(`/admin/trial/appointments/${lead.id}/cancel`)
@@ -1447,7 +1473,7 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
     await guestJoin(tokenOf(lead)).expect(400);
     expect((await guestStatus(tokenOf(lead))).body.state).toBe('CANCELLED');
     await expect(
-      classroom.joinAsTeacher(teacher.userId, lead.id, 'abcd1234'),
+      classroom.joinAsTeacher(teacher.userId, lead.id),
     ).rejects.toThrow(/cancelled/i);
     const row = await prisma.trialLead.findUniqueOrThrow({
       where: { id: lead.id },
@@ -1481,14 +1507,15 @@ describeDb('Trial teacher assignment & guest classroom (real Postgres)', () => {
   it('only the assigned teacher can join; a guest + teacher session ends as Completed without touching lessons or pay', async () => {
     const lead = await makeTrial(mark(), { teacherId: teacher.profileId });
     await expect(
-      classroom.joinAsTeacher(other.userId, lead.id, 'abcd1234'),
+      classroom.joinAsTeacher(other.userId, lead.id),
     ).rejects.toThrow(/not assigned/);
-    const joined: any = await classroom.joinAsTeacher(
-      teacher.userId,
-      lead.id,
-      'abcd1234',
-    );
-    expect((await verify(joined.token)).name).toBe('Ms Karim (Teacher)');
+    const joined: any = await classroom.joinAsTeacher(teacher.userId, lead.id);
+    // the teacher is the room's OWNER — what lets their browser moderate it
+    expect(wayIn(joined.token)).toMatchObject({
+      userId: teacher.userId,
+      userName: 'Ms Karim (Teacher)',
+      isOwner: true,
+    });
     await guestJoin(tokenOf(lead)).expect(200);
 
     await classroom.markEnded(lead.id, teacher.userId);

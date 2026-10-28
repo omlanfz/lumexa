@@ -6,47 +6,75 @@
 // audio with a window or screen at all, it is whatever the computer is playing
 // (other tabs, notifications, music), only if the teacher ticks a box, and never
 // the teacher's own microphone. So the class's audio is not taken from the
-// capture. It is mixed here, from the same LiveKit audio tracks the classroom
+// capture. It is mixed here, from the same Daily audio tracks the classroom
 // itself plays (see ClassAudioRenderer):
 //
 //   - the teacher's own microphone (and the audio of a screen they share),
 //   - every student's microphone (and the audio of a screen they share),
 //
-// each track once. A student who joins, leaves, mutes or switches microphone
-// mid-class simply appears in or drops out of the mix: the tracks are re-read
-// whenever the room changes (and every couple of seconds as a safety net). The
-// mix is never played through the speakers (no echo, no doubled sound) — it only
-// feeds the recorder.
+// each track once. A shared screen's sound is there only where the browser lets
+// it be shared at all (Chrome and Edge, for a tab or the whole screen, when the
+// sharer ticks "share audio"). A student who joins, leaves, mutes or switches
+// microphone mid-class simply appears in or drops out of the mix: the tracks are
+// re-read whenever the call changes (and every second as a safety net). The mix is
+// never played through the speakers (no echo, no doubled sound) — it only feeds
+// the recorder.
+//
+// What is in the mix is decided by what DAILY says each track is doing, not by
+// what the underlying media track happens to carry: a microphone Daily reports as
+// off (the person muted it, the teacher muted it or took away the right to use it)
+// is not recorded, however Daily implements muting underneath — "muted" must mean
+// "not in the recording" for the teacher's own microphone above all.
 
-/** The part of a LiveKit participant the recording reads. */
-export interface ParticipantAudio {
-  audioTrackPublications: Map<
-    string,
-    { track?: { mediaStreamTrack: MediaStreamTrack } | undefined }
-  >;
+/** A Daily track, as far as the recording reads it. Daily's `persistentTrack` is
+ * the same MediaStreamTrack for as long as the track lives, whether or not it is
+ * flowing at this instant; `track` exists only while it is playable. */
+export interface AudioTrackState {
+  /** Daily's state for the track: 'off' (muted, or not allowed to send) and
+   * 'blocked' (no device, or no permission) mean it is not being sent. */
+  state?: string;
+  persistentTrack?: MediaStreamTrack;
+  track?: MediaStreamTrack;
 }
 
-/** The part of a LiveKit Room the recording reads. */
+/** Whether Daily says this track is not being sent. */
+function isSilenced(state: AudioTrackState | undefined): boolean {
+  return state?.state === 'off' || state?.state === 'blocked';
+}
+
+/** The part of a Daily participant the recording reads. */
+export interface ParticipantAudio {
+  tracks: {
+    /** The microphone. */
+    audio?: AudioTrackState;
+    /** The sound of a shared screen or tab. */
+    screenAudio?: AudioTrackState;
+  };
+}
+
+/** The part of a Daily call the recording reads: `participants()` holds this
+ * browser's own connection (`local`) and everyone else's. */
 export interface ClassAudioSource {
-  localParticipant: ParticipantAudio;
-  remoteParticipants: Map<string, ParticipantAudio>;
+  participants(): Record<string, ParticipantAudio>;
 }
 
 /** Every live audio track in the class — local and remote, microphones and
  * screen-share audio — once each (by track id). A remote track appears once it is
- * subscribed; one that has ended is left out. */
-export function collectClassAudioTracks(room: ClassAudioSource): MediaStreamTrack[] {
+ * subscribed; one that has ended is left out, and so is one Daily says is off (a
+ * muted microphone, the audio of a share that has stopped). */
+export function collectClassAudioTracks(call: ClassAudioSource): MediaStreamTrack[] {
   const found = new Map<string, MediaStreamTrack>();
-  const take = (p: ParticipantAudio) => {
-    for (const publication of p.audioTrackPublications.values()) {
-      const track = publication.track?.mediaStreamTrack;
-      if (track && track.kind === 'audio' && track.readyState === 'live') {
-        found.set(track.id, track);
-      }
+  const take = (state: AudioTrackState | undefined) => {
+    if (isSilenced(state)) return;
+    const track = state?.persistentTrack ?? state?.track;
+    if (track && track.kind === 'audio' && track.readyState === 'live') {
+      found.set(track.id, track);
     }
   };
-  take(room.localParticipant);
-  room.remoteParticipants.forEach(take);
+  for (const participant of Object.values(call.participants())) {
+    take(participant.tracks.audio);
+    take(participant.tracks.screenAudio);
+  }
   return [...found.values()];
 }
 

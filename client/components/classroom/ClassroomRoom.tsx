@@ -1,8 +1,9 @@
 // FILE PATH: client/components/classroom/ClassroomRoom.tsx
 //
-// The in-call classroom experience — mounted inside <LiveKitRoom>. Owns all
-// the room-level UI state (panels, pin/spotlight, video effects) and wires
-// LiveKit hooks into the presentational components.
+// The in-call classroom experience — mounted inside <CallProvider>, once the
+// person is in the Daily meeting. Owns all the room-level UI state (panels,
+// pin/spotlight, video effects) and wires the Daily hooks (lib/classroom/daily)
+// into the presentational components.
 //
 // Layout hierarchy: main Stage (teaching content) + a persistent
 // collapsible right-side ParticipantRail on desktop, always — not just
@@ -23,7 +24,7 @@
 // never auto-enters fullscreen. Shared screens sit in Stage's own equal-
 // priority grid instead.
 //
-// Fullscreen (the ⛶ button on a shared-screen tile) is `fullscreenIdentity`
+// Fullscreen (the ⛶ button on a shared-screen tile) is `fullscreenSessionId`
 // state owned here, NOT the browser's per-element Fullscreen API — that
 // API would hide the header/control bar along with everything else, and
 // this classroom wants them to keep working (as an auto-hiding glass
@@ -34,17 +35,6 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Track } from 'livekit-client';
-import type { LocalVideoTrack } from 'livekit-client';
-import {
-  useChat,
-  useLocalParticipant,
-  useParticipants,
-  useRoomContext,
-  useTracks,
-  isTrackReference,
-  VideoTrack,
-} from '@livekit/components-react';
 import { AlertTriangle, Hand, Lock, PhoneOff, Minimize2, Monitor } from 'lucide-react';
 import Header from './Header';
 import Stage from './Stage';
@@ -62,30 +52,29 @@ import EndClassModal from './EndClassModal';
 import ClassAudioRenderer from './ClassAudioRenderer';
 import AwardToast from './AwardToast';
 import BadgeCelebration from './BadgeCelebration';
-import { parseParticipantMeta } from '@/lib/classroom/types';
-import { personKey } from '@/lib/classroom/identity';
-import { countPeople, listStudents, pickPersonTiles } from '@/lib/classroom/people';
+import { VideoView } from './MediaViews';
+import { activeScreenShares, listStudents } from '@/lib/classroom/people';
+import { useCall, useCallSnapshot, useLocalPeer, usePeople } from '@/lib/classroom/daily/CallContext';
+import { muteAllStudents, stopPersonScreenShare } from '@/lib/classroom/daily/moderation';
 import type { AwardResponse } from '@/lib/classroom/badgeAward';
 import type { BadgeAwardedEvent } from '@/lib/classroom/serverEvents';
 import { useServerEvents } from '@/lib/classroom/useServerEvents';
 import { useClassroomState } from '@/lib/classroom/useClassroomState';
 import { useClassroomControls } from '@/lib/classroom/useClassroomControls';
+import { useChat } from '@/lib/classroom/useChat';
+import { useLocalMedia } from '@/lib/classroom/useLocalMedia';
 import { useVideoEffects } from '@/lib/classroom/useVideoEffects';
 import { useClassRecorder } from '@/lib/classroom/recording/useClassRecorder';
 import { useClassroomTheme } from '@/lib/classroom/useClassroomTheme';
 import {
-  muteAllParticipants,
   endClassRequest,
   listPendingAdmissions,
   decideAdmission,
-  stopParticipantScreenShare,
   setRoomLocked as setRoomLockedRequest,
   type PendingAdmission,
   type EndClassParams,
 } from '@/lib/classroom/api';
 import { playClassroomTone } from '@/lib/classroom/sounds';
-import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
-import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
 interface ClassroomRoomProps {
@@ -99,12 +88,10 @@ interface ClassroomRoomProps {
    * getDemoExampleLessonDetails. Deliberately separate from `lessonData`
    * above so it only affects that panel, not Stage's default content. */
   demoExampleLesson?: LessonDetailsResponse | null;
-  initialBackgroundEffect: BackgroundEffect;
-  initialLighting: AppearanceOptions;
   scheduledStart?: string;
   classType?: 'ONE_TO_ONE' | 'BATCH';
   /** Whether the teacher had the classroom locked when this person joined (from
-   * the join response; live changes arrive through the room's metadata). */
+   * the join response; live changes arrive through the room's shared state). */
   initialRoomLocked?: boolean;
   /** False on the extra class of a lesson that already used its one Partially
    * Completed — the teacher's End Class flow then disables that option. */
@@ -132,8 +119,6 @@ export default function ClassroomRoom({
   isLive,
   lessonData,
   demoExampleLesson,
-  initialBackgroundEffect,
-  initialLighting,
   scheduledStart,
   classType,
   initialRoomLocked,
@@ -141,44 +126,31 @@ export default function ClassroomRoom({
   observerMode,
   demo,
 }: ClassroomRoomProps) {
-  const room = useRoomContext();
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled, cameraTrack } =
-    useLocalParticipant();
-  const participants = useParticipants();
-  const localKey = personKey(localParticipant.identity);
-  // LiveKit hands out one camera tile per CONNECTION; on screen it is one per
-  // PERSON (the device with the camera on wins).
-  const cameraTracks = pickPersonTiles(useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]));
-  const peopleCount = countPeople(participants);
-  const screenTracks = useTracks([Track.Source.ScreenShare], { onlySubscribed: false });
-  const screenShareRefs = screenTracks.filter(isTrackReference);
-  const screenShare = screenShareRefs[0];
-  const { chatMessages, send: sendChat } = useChat();
+  const call = useCall();
+  const { peers, localUserId } = useCallSnapshot();
+  const local = useLocalPeer();
+  const localKey = localUserId ?? '';
+  // Daily hands out one connection per DEVICE; on screen it is one per PERSON
+  // (the device with the camera on supplies the video).
+  const people = usePeople();
+  const peopleCount = people.length;
+  const screenShares = activeScreenShares(peers);
+  const screenShare = screenShares[0];
   const { theme, toggle: toggleTheme } = useClassroomTheme();
 
-  const meta = parseParticipantMeta(localParticipant.identity, localParticipant.name || '');
-  const isTeacher = !observerMode && meta.role === 'TEACHER';
+  // The teacher is the room's owner: only the server's meeting token can make
+  // anyone that (a student can rename themselves, but not that).
+  const isTeacher = !observerMode && !!local?.isOwner;
+  const media = useLocalMedia();
+  const { messages: chatMessages, send: sendChat } = useChat({ isTeacher });
 
   const { state: classroomState, patch: patchState } = useClassroomState(roomName, isTeacher);
-  const {
-    raisedHands,
-    reactions,
-    spotlightIdentity,
-    setOwnHandRaised,
-    lowerHand,
-    sendReaction,
-    setSpotlight,
-    notifyStopScreenShare,
-  } = useClassroomControls(() => {
-    // The teacher forcibly stopped OUR screen share — stop the capture and
-    // flip our own UI back off. The server already muted the track for
-    // everyone else; this is what makes it look right locally too.
-    void localParticipant.setScreenShareEnabled(false);
-  });
-  const effects = useVideoEffects();
+  const { raisedHands, reactions, spotlightUserId, setOwnHandRaised, lowerHand, sendReaction, setSpotlight } =
+    useClassroomControls();
+  const effects = useVideoEffects(call);
 
   const [activePanel, setActivePanel] = useState<PanelKind>(null);
-  const [pinnedIdentity, setPinnedIdentity] = useState<string | null>(null);
+  const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const [lastSeenChatCount, setLastSeenChatCount] = useState(0);
   const [handToasts, setHandToasts] = useState<HandToast[]>([]);
@@ -193,16 +165,13 @@ export default function ClassroomRoom({
   const [awardResult, setAwardResult] = useState<AwardResponse | null>(null);
   const [celebrations, setCelebrations] = useState<BadgeAwardedEvent[]>([]);
   const [denied, setDenied] = useState<string | null>(null);
-  const [fullscreenIdentity, setFullscreenIdentity] = useState<string | null>(null);
-  const fullscreenTrack = fullscreenIdentity
-    ? screenShareRefs.find((t) => t.participant.identity === fullscreenIdentity)
-    : undefined;
+  const [fullscreenSessionId, setFullscreenSessionId] = useState<string | null>(null);
+  const fullscreenShare = fullscreenSessionId ? screenShares.find((p) => p.sessionId === fullscreenSessionId) : undefined;
   const [chromeVisible, setChromeVisible] = useState(true);
   const chromeHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const expiredFiredRef = useRef(false);
-  const seededEffectsRef = useRef(false);
   const prevRaisedRef = useRef<Record<string, boolean>>({});
-  const prevParticipantIdentitiesRef = useRef<Set<string> | null>(null);
+  const prevPeopleRef = useRef<Set<string> | null>(null);
   const participantRolesRef = useRef<Record<string, 'TEACHER' | 'STUDENT'>>({});
   const prevAdmissionIdsRef = useRef<Set<string> | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -230,14 +199,14 @@ export default function ClassroomRoom({
   // demo example, so demo's main stage keeps showing the camera by default.
   const lessonPanelData = lessonData ?? (demo ? demoExampleLesson ?? null : null);
   // The REC badge everyone sees comes from the room (the server mirrors "a recording
-  // is running" into its metadata); the teacher's own recorder also counts, so it
+  // is running" into its shared state); the teacher's own recorder also counts, so it
   // shows even before the room has heard.
   const isRecordingLive = !!classroomState.recording;
   // Only the teacher records, and never a free trial. Everything about recording
   // — the browser's recorder, the finished files, their uploads — lives in this
   // hook and the store behind it (lib/classroom/recording).
   const recorder = useClassRecorder({
-    room,
+    call,
     roomName,
     enabled: isTeacher && !isTrialClass,
   });
@@ -255,16 +224,16 @@ export default function ClassroomRoom({
   const presentationMode = !!screenShare;
   const expectedDurationMinutes = isTrialClass ? 30 : classType === 'BATCH' ? 60 : 45;
 
-  // The database decides whether the room is locked; the live room's metadata
+  // The database decides whether the room is locked; the live room's shared state
   // mirrors it so every screen updates at once. What we show is whichever
-  // changed last: the join response, a change announced in the metadata, or the
-  // teacher's own toggle (the server's answer, so a metadata update that never
+  // changed last: the join response, a change announced in the room's state, or the
+  // teacher's own toggle (the server's answer, so a state update that never
   // arrived cannot leave the teacher looking at the wrong state).
-  const metaLocked = classroomState.roomLocked;
-  const [seenMetaLocked, setSeenMetaLocked] = useState(metaLocked);
-  if (metaLocked !== seenMetaLocked) {
-    setSeenMetaLocked(metaLocked);
-    if (metaLocked !== undefined) setLockedLocal(metaLocked);
+  const stateLocked = classroomState.roomLocked;
+  const [seenStateLocked, setSeenStateLocked] = useState(stateLocked);
+  if (stateLocked !== seenStateLocked) {
+    setSeenStateLocked(stateLocked);
+    if (stateLocked !== undefined) setLockedLocal(stateLocked);
   }
   const roomLocked = lockedLocal;
 
@@ -334,12 +303,10 @@ export default function ClassroomRoom({
   // about people, not connections: someone opening a second device is not a
   // new arrival.
   useEffect(() => {
-    const currentKeys = new Set(participants.map((p) => personKey(p.identity)));
-    const prev = prevParticipantIdentitiesRef.current;
+    const currentKeys = new Set(people.map((p) => p.userId));
+    const prev = prevPeopleRef.current;
 
-    for (const p of participants) {
-      participantRolesRef.current[personKey(p.identity)] = parseParticipantMeta(p.identity, p.name || '').role;
-    }
+    for (const p of people) participantRolesRef.current[p.userId] = p.role;
 
     if (prev) {
       for (const key of currentKeys) {
@@ -358,9 +325,9 @@ export default function ClassroomRoom({
         }
       }
     }
-    prevParticipantIdentitiesRef.current = currentKeys;
+    prevPeopleRef.current = currentKeys;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [participants]);
+  }, [people]);
 
   // Scheduled class time expiring — teacher-only friendly notice + subtle
   // sound. The classroom never closes on its own; this is purely advisory.
@@ -381,35 +348,12 @@ export default function ClassroomRoom({
     return () => clearTimeout(timer);
   }, [isTeacher, scheduledEnd]);
 
-  // Seed the effect choice made on the pre-join screen once, then keep
-  // re-applying whatever's currently selected whenever the camera track is
-  // (re)published — e.g. after toggling the camera off and back on.
-  useEffect(() => {
-    if (seededEffectsRef.current || observerMode) return;
-    seededEffectsRef.current = true;
-    if (initialBackgroundEffect.mode !== 'none') void effects.setBackground(undefined, initialBackgroundEffect);
-    else if (
-      initialLighting.brightness !== 1 ||
-      initialLighting.contrast !== 1 ||
-      initialLighting.touchUp ||
-      initialLighting.autoFraming
-    ) {
-      void effects.setLighting(undefined, initialLighting);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const localVideoTrack = cameraTrack?.track as LocalVideoTrack | undefined;
-  useEffect(() => {
-    if (localVideoTrack) effects.reapply(localVideoTrack);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [localVideoTrack]);
+  // (The effect chosen on the pre-join screen needs no seeding here: the camera,
+  // the microphone and the effects live on the call, which is the same call.)
 
   // Enforce the teacher's "students muted" policy client-side.
   useEffect(() => {
-    if (!isTeacher && classroomState.studentsMuted && isMicrophoneEnabled) {
-      void localParticipant.setMicrophoneEnabled(false);
-    }
+    if (!isTeacher && !observerMode && classroomState.studentsMuted && media.micOn) media.setMic(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomState.studentsMuted]);
 
@@ -419,8 +363,8 @@ export default function ClassroomRoom({
     Object.entries(raisedHands).forEach(([who, raised]) => {
       const wasRaised = prevRaisedRef.current[who];
       if (raised && !wasRaised && who !== localKey) {
-        const p = participants.find((pp) => personKey(pp.identity) === who);
-        const name = p ? parseParticipantMeta(p.identity, p.name || p.identity).displayName : 'A student';
+        const person = people.find((pp) => pp.userId === who);
+        const name = person ? person.displayName : 'A student';
         const id = `${who}-${Date.now()}`;
         setHandToasts((prev) => [...prev, { id, name }]);
         playClassroomTone('hand-raised');
@@ -428,7 +372,7 @@ export default function ClassroomRoom({
       }
     });
     prevRaisedRef.current = raisedHands;
-  }, [raisedHands, isTeacher, participants, localKey]);
+  }, [raisedHands, isTeacher, people, localKey]);
 
   const unreadChat = activePanel === 'chat' ? 0 : Math.max(0, chatMessages.length - lastSeenChatCount);
   useEffect(() => {
@@ -441,7 +385,7 @@ export default function ClassroomRoom({
   useEffect(() => {
     if (chatMessages.length > prevChatCountRef.current) {
       const latest = chatMessages[chatMessages.length - 1];
-      if (latest?.from && personKey(latest.from.identity) !== localKey) {
+      if (latest && latest.fromUserId !== localKey) {
         playClassroomTone('chat-message');
       }
     }
@@ -462,7 +406,7 @@ export default function ClassroomRoom({
   };
 
   useEffect(() => {
-    if (!fullscreenIdentity) {
+    if (!fullscreenSessionId) {
       if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
       setChromeVisible(true);
       return;
@@ -471,43 +415,47 @@ export default function ClassroomRoom({
     return () => {
       if (chromeHideTimerRef.current) clearTimeout(chromeHideTimerRef.current);
     };
-  }, [fullscreenIdentity]);
+  }, [fullscreenSessionId]);
 
   // Drop out of fullscreen automatically the moment its share ends.
   useEffect(() => {
-    if (fullscreenIdentity && !screenShareRefs.some((t) => t.participant.identity === fullscreenIdentity)) {
-      setFullscreenIdentity(null);
+    if (fullscreenSessionId && !screenShares.some((p) => p.sessionId === fullscreenSessionId)) {
+      setFullscreenSessionId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fullscreenIdentity, screenShareRefs.map((t) => t.participant.identity).join(',')]);
+  }, [fullscreenSessionId, screenShares.map((p) => p.sessionId).join(',')]);
 
   useEffect(() => {
-    if (!fullscreenIdentity) return;
+    if (!fullscreenSessionId) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFullscreenIdentity(null);
+      if (e.key === 'Escape') setFullscreenSessionId(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [fullscreenIdentity]);
+  }, [fullscreenSessionId]);
 
-  const handleTogglePin = (identity: string) => {
-    setPinnedIdentity((prev) => (prev === identity ? null : identity));
+  const handleTogglePin = (userId: string) => {
+    setPinnedUserId((prev) => (prev === userId ? null : userId));
   };
 
-  const handleToggleFullscreen = (identity: string) => {
-    setFullscreenIdentity((prev) => (prev === identity ? null : identity));
+  const handleToggleFullscreen = (sessionId: string) => {
+    setFullscreenSessionId((prev) => (prev === sessionId ? null : sessionId));
   };
 
   // Everyone is in the strip — including you while you share your screen, so
   // you can always see yourself. (Only the fullscreen share layer hides tiles.)
-  const filmstripTracks = cameraTracks;
 
-  const micDisabledByTeacher = !isTeacher && !!classroomState.studentsMuted;
+  // A student is muted by the teacher's "students can't unmute" setting, or by the
+  // teacher taking away their right to use a microphone (see daily/moderation.ts).
+  const micDisabledByTeacher = !isTeacher && (!!classroomState.studentsMuted || media.micLocked);
 
-  const handleForceStopShare = (identity: string) => {
-    notifyStopScreenShare(identity);
-    void stopParticipantScreenShare(roomName, identity).catch(() => {});
+  // The teacher's own browser stops a share through Daily (the room's owner may);
+  // the sharer's browser then stops its capture by itself.
+  const handleForceStopShare = (userId: string) => {
+    stopPersonScreenShare(call, peers, userId);
   };
+
+  const leaveClass = () => void call.leave();
 
   const endClassGate = (() => {
     if (!scheduledStart) return null;
@@ -533,7 +481,7 @@ export default function ClassroomRoom({
       }}
       theme={theme}
       onToggleTheme={toggleTheme}
-      floating={!!fullscreenTrack}
+      floating={!!fullscreenShare}
       roomLocked={roomLocked}
       onToggleLock={isTeacher ? () => void handleToggleLock() : undefined}
       lockBusy={lockBusy}
@@ -545,15 +493,15 @@ export default function ClassroomRoom({
       ref={rootRef}
       className="cr-root h-screen w-full flex flex-col overflow-hidden relative"
       data-theme={theme}
-      onMouseMove={fullscreenTrack ? bumpChrome : undefined}
-      onPointerDown={fullscreenTrack ? bumpChrome : undefined}
-      onTouchStart={fullscreenTrack ? bumpChrome : undefined}
+      onMouseMove={fullscreenShare ? bumpChrome : undefined}
+      onPointerDown={fullscreenShare ? bumpChrome : undefined}
+      onTouchStart={fullscreenShare ? bumpChrome : undefined}
     >
-      <ClassAudioRenderer selfIdentity={localParticipant.identity} />
+      <ClassAudioRenderer />
 
-      {fullscreenTrack && (
-        <div className="fixed inset-0 z-30 bg-black" onDoubleClick={() => setFullscreenIdentity(null)}>
-          <VideoTrack trackRef={fullscreenTrack} className="w-full h-full object-contain bg-black" />
+      {fullscreenShare && (
+        <div className="fixed inset-0 z-30 bg-black" onDoubleClick={() => setFullscreenSessionId(null)}>
+          <VideoView track={fullscreenShare.screenVideo.track} className="w-full h-full object-contain bg-black" />
           <div
             className={`absolute top-[72px] right-4 flex items-center gap-2 transition-opacity duration-300 ${
               chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -561,12 +509,12 @@ export default function ClassroomRoom({
           >
             <div className="px-3 py-1.5 rounded-full bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
               <Monitor size={12} />
-              {fullscreenTrack.participant.isLocal
+              {fullscreenShare.isLocal || fullscreenShare.userId === localUserId
                 ? 'You are presenting'
-                : `${parseParticipantMeta(fullscreenTrack.participant.identity, fullscreenTrack.participant.name || '').displayName} is presenting`}
+                : `${fullscreenShare.displayName} is presenting`}
             </div>
             <button
-              onClick={() => setFullscreenIdentity(null)}
+              onClick={() => setFullscreenSessionId(null)}
               data-tooltip="Exit fullscreen"
               data-tooltip-align="end"
               className="w-8 h-8 rounded-lg bg-black/60 hover:bg-black/80 border border-white/15 backdrop-blur flex items-center justify-center text-white transition-colors"
@@ -577,7 +525,7 @@ export default function ClassroomRoom({
         </div>
       )}
 
-      {fullscreenTrack ? (
+      {fullscreenShare ? (
         <div
           className={`cr-root fixed top-0 inset-x-0 z-40 transition-opacity duration-300 ${
             chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -655,16 +603,16 @@ export default function ClassroomRoom({
           {testSessionId && (
             <div
               className={
-                fullscreenTrack
+                fullscreenShare
                   ? 'pointer-events-none fixed inset-x-3 top-[60px] z-40 sm:right-[17rem]'
                   : 'relative z-10 flex-shrink-0'
               }
             >
-              <div className={fullscreenTrack ? 'pointer-events-auto max-w-5xl' : ''}>
+              <div className={fullscreenShare ? 'pointer-events-auto max-w-5xl' : ''}>
                 <ClassTestMonitor
                   scheduledLessonId={testSessionId}
                   variant="classroom"
-                  layout={fullscreenTrack ? 'overlay' : 'dock'}
+                  layout={fullscreenShare ? 'overlay' : 'dock'}
                 />
               </div>
             </div>
@@ -672,16 +620,18 @@ export default function ClassroomRoom({
 
           <div className="flex-1 min-h-0 relative">
             <Stage
-              cameraTracks={cameraTracks}
-              pinnedIdentity={pinnedIdentity}
-              spotlightIdentity={spotlightIdentity}
+              people={people}
+              screenShares={screenShares}
+              localUserId={localUserId}
+              pinnedUserId={pinnedUserId}
+              spotlightUserId={spotlightUserId}
               raisedHands={raisedHands}
               onTogglePin={handleTogglePin}
               lessonData={lessonData}
-              onStopShare={() => void localParticipant.setScreenShareEnabled(false)}
+              onStopShare={media.stopScreenShare}
               isTeacher={isTeacher}
               onForceStopShare={isTeacher ? handleForceStopShare : undefined}
-              fullscreenIdentity={fullscreenIdentity}
+              fullscreenSessionId={fullscreenSessionId}
               onToggleFullscreen={handleToggleFullscreen}
             />
             <ReactionsOverlay reactions={reactions} />
@@ -692,9 +642,9 @@ export default function ClassroomRoom({
               instead (see below) — never both at once, that duplication
               was the classroom's old layout-hierarchy problem. */}
           <FilmStrip
-            tracks={filmstripTracks}
+            people={people}
             raisedHands={raisedHands}
-            pinnedIdentity={pinnedIdentity}
+            pinnedUserId={pinnedUserId}
             onTogglePin={handleTogglePin}
             compact={presentationMode}
             className="lg:hidden"
@@ -708,9 +658,9 @@ export default function ClassroomRoom({
         </div>
 
         <ParticipantRail
-          tracks={filmstripTracks}
+          people={people}
           raisedHands={raisedHands}
-          pinnedIdentity={pinnedIdentity}
+          pinnedUserId={pinnedUserId}
           onTogglePin={handleTogglePin}
           collapsed={panelCollapsed}
           onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
@@ -722,14 +672,14 @@ export default function ClassroomRoom({
             onClose={() => setActivePanel(null)}
             focused={lessonFocused}
             onToggleFocused={() => setLessonFocused((v) => !v)}
-            overlay={!!fullscreenTrack}
+            overlay={!!fullscreenShare}
           />
         )}
 
         {activePanel && activePanel !== 'lesson' && !observerMode && (
           <div
             className={
-              fullscreenTrack
+              fullscreenShare
                 ? 'fixed top-14 bottom-0 right-0 z-40 w-[320px] border-l border-[var(--cr-border)] bg-[var(--cr-surface)] shadow-2xl cr-fade-in'
                 : 'w-[320px] flex-shrink-0 border-l border-[var(--cr-border)] cr-fade-in'
             }
@@ -737,28 +687,28 @@ export default function ClassroomRoom({
             {activePanel === 'chat' ? (
               <ChatPanel
                 messages={chatMessages}
-                onSend={(text) => void sendChat(text)}
+                onSend={sendChat}
                 onClose={() => setActivePanel(null)}
                 locked={!!classroomState.chatLocked}
                 isTeacher={isTeacher}
                 onToggleLock={() => patchState({ chatLocked: !classroomState.chatLocked })}
                 onReact={sendReaction}
-                localIdentity={localParticipant.identity}
+                localUserId={localKey}
               />
             ) : (
               <ParticipantsPanel
-                participants={participants}
+                people={people}
                 isTeacher={isTeacher}
                 roomName={roomName}
                 raisedHands={raisedHands}
                 onLowerHand={lowerHand}
                 onClose={() => setActivePanel(null)}
-                localIdentity={localParticipant.identity}
-                spotlightIdentity={spotlightIdentity}
+                localUserId={localKey}
+                spotlightUserId={spotlightUserId}
                 onSetSpotlight={setSpotlight}
                 pendingAdmissions={pendingAdmissions}
                 onDecideAdmission={handleDecideAdmission}
-                onNotifyStopScreenShare={isTeacher ? handleForceStopShare : undefined}
+                onStopScreenShare={isTeacher ? handleForceStopShare : undefined}
               />
             )}
           </div>
@@ -769,13 +719,13 @@ export default function ClassroomRoom({
         const bottomBarEl = observerMode ? (
           <div
             className={`flex items-center justify-center h-[60px] flex-shrink-0 ${
-              fullscreenTrack
+              fullscreenShare
                 ? 'bg-black/40 backdrop-blur-xl border-t border-white/10'
                 : 'border-t border-[var(--cr-border)] bg-[var(--cr-bg)]'
             }`}
           >
             <button
-              onClick={() => room.disconnect()}
+              onClick={leaveClass}
               className="flex items-center gap-1.5 px-4 h-9 rounded-full bg-[var(--cr-danger)] hover:bg-[var(--cr-danger-hover)] text-white text-sm font-semibold transition-colors"
             >
               <PhoneOff size={15} />
@@ -785,12 +735,12 @@ export default function ClassroomRoom({
         ) : (
           <ControlBar
             isTeacher={isTeacher}
-            micEnabled={isMicrophoneEnabled}
-            camEnabled={isCameraEnabled}
-            screenShareEnabled={isScreenShareEnabled}
-            onToggleMic={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-            onToggleCam={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}
-            onToggleScreenShare={() => void localParticipant.setScreenShareEnabled(!isScreenShareEnabled)}
+            micEnabled={media.micOn}
+            camEnabled={media.cameraOn}
+            screenShareEnabled={media.screenSharing}
+            onToggleMic={media.toggleMic}
+            onToggleCam={media.toggleCamera}
+            onToggleScreenShare={media.toggleScreenShare}
             micDisabledByTeacher={micDisabledByTeacher}
             handRaised={!!raisedHands[localKey]}
             onToggleHand={() => setOwnHandRaised(!raisedHands[localKey])}
@@ -800,26 +750,26 @@ export default function ClassroomRoom({
             participantCount={peopleCount}
             classroomState={classroomState}
             onPatchState={patchState}
-            onMuteAll={() => void muteAllParticipants(roomName)}
+            onMuteAll={() => muteAllStudents(call, peers)}
             recordingState={recordingUiState}
             onToggleRecording={() => (recorder.state === 'recording' ? void recorder.stop() : recorder.start())}
             recordingAvailable={!isTrialClass}
             recordingPending={recorder.pending}
             backgroundEffect={effects.backgroundEffect}
-            onBackgroundChange={(e) => void effects.setBackground(localVideoTrack, e)}
+            onBackgroundChange={(e) => void effects.setBackground(e)}
             lighting={effects.lighting}
-            onLightingChange={(l) => void effects.setLighting(localVideoTrack, l)}
+            onLightingChange={(l) => void effects.setLighting(l)}
             effectsSupported={effects.supported}
             effectsPending={effects.pending}
             onUploadImage={(file) => {
               const url = URL.createObjectURL(file);
-              void effects.setBackground(localVideoTrack, { mode: 'image', imagePath: url, label: 'Custom' });
+              void effects.setBackground({ mode: 'image', imagePath: url, label: 'Custom' });
             }}
-            onLeave={() => room.disconnect()}
+            onLeave={leaveClass}
             onOpenEndClass={() => setShowEndClassModal(true)}
             endClassDisabledReason={endClassGate}
             onViewLesson={isLessonFlow ? () => setActivePanel('lesson') : undefined}
-            floating={!!fullscreenTrack}
+            floating={!!fullscreenShare}
             roomLocked={roomLocked}
             onToggleRoomLock={isTeacher ? () => void handleToggleLock() : undefined}
             awardBadge={
@@ -827,7 +777,7 @@ export default function ClassroomRoom({
                 ? {
                     roomName,
                     isBatch: classType === 'BATCH',
-                    students: listStudents(participants),
+                    students: listStudents(peers),
                     onAwarded: setAwardResult,
                   }
                 : undefined
@@ -835,7 +785,7 @@ export default function ClassroomRoom({
           />
         );
 
-        return fullscreenTrack ? (
+        return fullscreenShare ? (
           <div
             className={`cr-root fixed bottom-0 inset-x-0 z-40 transition-opacity duration-300 ${
               chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -868,7 +818,7 @@ export default function ClassroomRoom({
             await recorder.stopIfRecording();
             await endClassRequest(roomName, params);
           }}
-          onFinished={() => room.disconnect()}
+          onFinished={leaveClass}
         />
       )}
 
@@ -893,7 +843,7 @@ export default function ClassroomRoom({
             <p className="text-sm text-[var(--cr-text-muted)]">{denied}</p>
             <button
               type="button"
-              onClick={() => room.disconnect()}
+              onClick={leaveClass}
               className="mt-5 rounded-lg bg-[var(--cr-surface-2)] px-4 py-2 text-sm text-[var(--cr-text)] transition-colors hover:bg-[var(--cr-surface-3)]"
             >
               Back to dashboard

@@ -14,26 +14,20 @@
 //
 // Two layers, because a join token is issued before the person actually
 // connects: `checkEntry` runs when the token is issued (a friendly refusal
-// before the browser even tries to connect); `enforceAfterJoin` runs from
-// LiveKit's participant_joined webhook and removes anyone who got past it —
-// a token issued just before the teacher locked, two people racing for the
-// last seat. Neither the lock nor a full class ever keeps the teacher out, the
-// teacher is never removed after joining, and hidden admin observers are never
-// refused (they do not go through here).
+// before the browser even tries to connect); `enforceRoom` looks at who is
+// really in the room a few seconds after a token was issued (scheduleEnforcement)
+// and removes anyone who got past it — a token issued just before the teacher
+// locked, two people racing for the last seat. Neither the lock nor a full class
+// ever keeps the teacher out, the teacher is never removed after joining, and
+// admin observers are never counted or refused (they do not go through here).
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import {
-  LiveKitRoomsService,
-  type RoomConnection,
-} from './livekit-rooms.service';
+import { DailyRoomsService, type RoomConnection } from './daily-rooms.service';
 import {
   MAX_DEVICES_PER_PERSON,
   MAX_PEOPLE_PER_CLASSROOM,
   MAX_STUDENTS_PER_CLASSROOM,
-  buildIdentity,
-  isPersonIdentity,
-  personKey,
 } from './room-ref.util';
 
 export type EntryBlockReason = 'ROOM_LOCKED' | 'ROOM_FULL' | 'TOO_MANY_DEVICES';
@@ -52,20 +46,31 @@ export const ENTRY_BLOCK_MESSAGE: Record<EntryBlockReason, string> = {
 /** How long a refused connection gets to read why before it is removed. */
 const DENY_REMOVE_DELAY_MS = 1200;
 
+/** How long after a token is issued the room is checked for people who should
+ * not be in it: once the browser has had time to connect, and once more for a
+ * slow connection. */
+const ENFORCE_AFTER_MS = [4_000, 15_000];
+
+/** The lock rule's snapshot of the room's lock. */
+type LockState = { locked: boolean; lockedAt: Date | null };
+
 @Injectable()
 export class RoomAccessService {
   private readonly logger = new Logger(RoomAccessService.name);
 
+  /** Rooms with a check already queued (further joins are covered by it). */
+  private readonly queued = new Map<string, NodeJS.Timeout[]>();
+  /** Connections being told why they are going (not told twice). */
+  private readonly denying = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
-    private readonly rooms: LiveKitRoomsService,
+    private readonly rooms: DailyRoomsService,
   ) {}
 
   // ─── The lock ──────────────────────────────────────────────────────────────
 
-  async getLockState(
-    room: string,
-  ): Promise<{ locked: boolean; lockedAt: Date | null }> {
+  async getLockState(room: string): Promise<LockState> {
     const row = await this.prisma.classroomRoomState.findUnique({
       where: { room },
     });
@@ -77,7 +82,7 @@ export class RoomAccessService {
   }
 
   /** Lock or unlock. Idempotent: locking a locked room keeps its original
-   * lockedAt (the webhook compares join times against it). */
+   * lockedAt (the after-join check compares join times against it). */
   async setLocked(
     room: string,
     locked: boolean,
@@ -108,10 +113,9 @@ export class RoomAccessService {
     room: string;
     userId: string;
     role: 'TEACHER' | 'STUDENT';
-    deviceId: string;
     teacherUserId: string;
   }): Promise<EntryDecision> {
-    const { room, userId, role, deviceId, teacherUserId } = params;
+    const { room, userId, role, teacherUserId } = params;
 
     if (role === 'STUDENT' && (await this.isLocked(room))) {
       return blocked('ROOM_LOCKED');
@@ -121,17 +125,15 @@ export class RoomAccessService {
     try {
       people = await this.rooms.listPeople(room);
     } catch (err) {
-      // LiveKit not answering must not shut a real class out of its room; the
-      // participant_joined check below still enforces the limits afterwards.
+      // Daily not answering must not shut a real class out of its room; the
+      // check after joining still enforces the limits.
       this.logger.warn(`Could not count people in ${room}: ${err}`);
       return { ok: true };
     }
 
-    const identity = buildIdentity(userId, deviceId);
-    const mine = people.filter(
-      (c) => c.userId === userId && c.identity !== identity,
-    );
-    if (mine.length >= MAX_DEVICES_PER_PERSON) {
+    if (
+      people.filter((c) => c.userId === userId).length >= MAX_DEVICES_PER_PERSON
+    ) {
       return blocked('TOO_MANY_DEVICES');
     }
 
@@ -149,116 +151,147 @@ export class RoomAccessService {
     return { ok: true };
   }
 
-  // ─── After someone connects (LiveKit participant_joined webhook) ───────────
+  // ─── After people connect ──────────────────────────────────────────────────
 
-  /** Removes a connection that should not be in the room. Returns why, or
-   * null if it may stay. Never touches the teacher or an admin observer. */
-  async enforceAfterJoin(params: {
-    room: string;
-    identity: string;
-    joinedAtMs: number;
-    kind?: number;
-    teacherUserId: string;
-  }): Promise<EntryBlockReason | null> {
-    const { room, identity, joinedAtMs, kind, teacherUserId } = params;
-    if (!isPersonIdentity(identity, kind)) return null;
-    const userId = personKey(identity);
-    if (userId === teacherUserId) return null;
-
-    const reason = await this.refusalFor(
-      room,
-      identity,
-      userId,
-      joinedAtMs,
-      teacherUserId,
-    );
-    if (!reason) return null;
-
-    this.logger.warn(
-      `Removing ${identity} from ${room} right after joining: ${reason}`,
-    );
-    await this.deny(room, identity, reason);
-    return reason;
+  /** Checks the room a few seconds after a token was issued (and again a little
+   * later), without making the join wait. One check is queued per room at a
+   * time: joins that arrive while it is pending are covered by it. */
+  scheduleEnforcement(room: string, teacherUserId: string): void {
+    if (this.queued.has(room)) return;
+    const timers = ENFORCE_AFTER_MS.map((ms, i) => {
+      const timer = setTimeout(() => {
+        if (i === ENFORCE_AFTER_MS.length - 1) this.queued.delete(room);
+        this.enforceRoom({ room, teacherUserId }).catch((err) =>
+          this.logger.warn(`Room check for ${room} failed: ${err}`),
+        );
+      }, ms);
+      // A queued check must never keep the server from shutting down.
+      timer.unref();
+      return timer;
+    });
+    this.queued.set(room, timers);
   }
 
-  private async refusalFor(
-    room: string,
-    identity: string,
-    userId: string,
-    joinedAtMs: number,
-    teacherUserId: string,
-  ): Promise<EntryBlockReason | null> {
-    // Locked before this connection arrived. A connection that was already in
-    // by the time the teacher locked (its webhook just arrived late) stays.
-    const lock = await this.getLockState(room);
-    if (lock.locked && lock.lockedAt && joinedAtMs >= lock.lockedAt.getTime()) {
-      return 'ROOM_LOCKED';
-    }
+  /** Removes every connection that should not be in the room, telling each why
+   * first. Returns who was refused, and why. Never touches the teacher or an
+   * admin observer. */
+  async enforceRoom(params: {
+    room: string;
+    teacherUserId: string;
+  }): Promise<{ sessionId: string; reason: EntryBlockReason }[]> {
+    const { room, teacherUserId } = params;
 
     let people: RoomConnection[];
     try {
       people = await this.rooms.listPeople(room);
     } catch (err) {
       this.logger.warn(`Could not count people in ${room}: ${err}`);
-      return null;
+      return [];
     }
+    const lock = await this.getLockState(room);
 
-    // Seats go to students in the order they arrived; whoever is beyond the
-    // ninth is out. A person's seat is their first connection's.
-    const firstSeen = new Map<string, number>();
-    for (const c of people) {
-      if (c.userId === teacherUserId) continue;
-      const seen = firstSeen.get(c.userId);
-      if (seen === undefined || c.joinedAtMs < seen) {
-        firstSeen.set(c.userId, c.joinedAtMs);
-      }
-    }
-    const seatOrder = [...firstSeen.entries()]
-      .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
-      .map(([id]) => id);
-    if (seatOrder.indexOf(userId) >= MAX_STUDENTS_PER_CLASSROOM) {
-      return 'ROOM_FULL';
-    }
-
-    const devices = people
-      .filter((c) => c.userId === userId)
-      .sort(
-        (a, b) =>
-          a.joinedAtMs - b.joinedAtMs || a.identity.localeCompare(b.identity),
+    const refused = refusals(people, lock, teacherUserId).filter(
+      ({ connection }) => !this.denying.has(connection.sessionId),
+    );
+    for (const { connection, reason } of refused) {
+      this.logger.warn(
+        `Removing ${connection.userId} (${connection.sessionId}) from ${room}: ${reason}`,
       );
-    if (
-      devices.findIndex((c) => c.identity === identity) >=
-      MAX_DEVICES_PER_PERSON
-    ) {
-      return 'TOO_MANY_DEVICES';
+      this.denying.add(connection.sessionId);
     }
-    return null;
+    await Promise.all(
+      refused.map(({ connection, reason }) =>
+        this.deny(room, connection, reason).finally(() =>
+          this.denying.delete(connection.sessionId),
+        ),
+      ),
+    );
+    return refused.map(({ connection, reason }) => ({
+      sessionId: connection.sessionId,
+      reason,
+    }));
   }
 
   /** Tell the connection why, give it a moment to show that, then remove it. */
   private async deny(
     room: string,
-    identity: string,
+    connection: RoomConnection,
     reason: EntryBlockReason,
   ): Promise<void> {
     await this.rooms
-      .sendServerEvent(room, [identity], {
+      .sendServerEvent(room, [connection], {
         type: 'room-denied',
         reason,
         message: ENTRY_BLOCK_MESSAGE[reason],
       })
       .catch((err) =>
         this.logger.warn(
-          `Could not tell ${identity} why they were removed: ${err}`,
+          `Could not tell ${connection.sessionId} why they were removed: ${err}`,
         ),
       );
     await this.delay(DENY_REMOVE_DELAY_MS);
-    await this.rooms.removeConnection(room, identity);
+    await this.rooms.removeConnections(room, [connection.sessionId]);
   }
 
   protected delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
+}
+
+/**
+ * Who in this room has no business being there. Seats go to students in the
+ * order they arrived — whoever is beyond the ninth is out; a person's seat is
+ * their first connection's. A connection that was already in by the time the
+ * teacher locked stays; one that arrived after is out. Extra devices beyond the
+ * third go, newest first. The teacher is never refused.
+ */
+export function refusals(
+  people: RoomConnection[],
+  lock: LockState,
+  teacherUserId: string,
+): { connection: RoomConnection; reason: EntryBlockReason }[] {
+  const firstSeen = new Map<string, number>();
+  for (const c of people) {
+    if (c.userId === teacherUserId) continue;
+    const seen = firstSeen.get(c.userId);
+    if (seen === undefined || c.joinedAtMs < seen) {
+      firstSeen.set(c.userId, c.joinedAtMs);
+    }
+  }
+  const seatOrder = [...firstSeen.entries()]
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
+    .map(([id]) => id);
+
+  const out: { connection: RoomConnection; reason: EntryBlockReason }[] = [];
+  for (const c of people) {
+    if (c.userId === teacherUserId) continue;
+
+    if (
+      lock.locked &&
+      lock.lockedAt &&
+      c.joinedAtMs >= lock.lockedAt.getTime()
+    ) {
+      out.push({ connection: c, reason: 'ROOM_LOCKED' });
+      continue;
+    }
+    if (seatOrder.indexOf(c.userId) >= MAX_STUDENTS_PER_CLASSROOM) {
+      out.push({ connection: c, reason: 'ROOM_FULL' });
+      continue;
+    }
+    const devices = people
+      .filter((d) => d.userId === c.userId)
+      .sort(
+        (a, b) =>
+          a.joinedAtMs - b.joinedAtMs || a.sessionId.localeCompare(b.sessionId),
+      );
+    if (
+      devices.findIndex((d) => d.sessionId === c.sessionId) >=
+      MAX_DEVICES_PER_PERSON
+    ) {
+      out.push({ connection: c, reason: 'TOO_MANY_DEVICES' });
+    }
+  }
+  return out;
 }
 
 function blocked(reason: EntryBlockReason): EntryDecision {

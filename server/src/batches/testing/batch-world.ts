@@ -99,6 +99,8 @@ export function buildBatchWorld(prisma: PrismaService): BatchWorld {
     scheduling,
     recording as never,
     sessions,
+    // No video provider in these tests: closing a room is a no-op.
+    { deleteRoom: () => Promise.resolve() } as never,
   );
   return {
     prisma,

@@ -1,83 +1,76 @@
 // FILE PATH: client/lib/classroom/useClassroomControls.ts
 //
-// Ephemeral, best-effort classroom signals — raised hands, quick reactions,
-// and teacher spotlight — broadcast over LiveKit's data channel. None of
-// this is persisted server-side; it's UI courtesy state, not an access
-// control mechanism (moderation actions like mute/remove go through the
-// authenticated REST endpoints in ./api.ts instead).
+// Ephemeral, best-effort classroom signals — raised hands, quick reactions, and
+// the teacher's spotlight — sent as Daily app messages. None of this is persisted
+// server-side; it's UI courtesy state, not an access control mechanism
+// (moderation — muting, removing — goes through Daily's owner controls and the
+// authenticated REST endpoints instead: see ./daily/moderation.ts and ./api.ts).
 //
-// Everything here is keyed by PERSON (see ./identity.ts), not by connection: a
-// student on two devices has one raised hand, and lowering it on either device
-// lowers it on both. The `identity` in each message is a person key; a full
-// `<userId>~<deviceId>` identity from an older client is reduced to one.
+// Everything here is keyed by PERSON (their user id), not by connection: a student
+// on two devices has one raised hand, and lowering it on either device lowers it
+// on both. And a message never decides who it is about: a raised hand or a
+// reaction is the sender's, and only the teacher can lower a hand or spotlight
+// someone (see ./daily/protocol.ts).
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useDataChannel, useLocalParticipant } from '@livekit/components-react';
-import { CLASSROOM_CONTROL_TOPIC, ControlMessage } from './types';
-import { personKey } from './identity';
+import { useCall, useCallStore, useLocalPeer } from './daily/CallContext';
+import { authorizeControl, controlPayload, parseAppPayload, senderOf } from './daily/protocol';
+import type { ControlWire } from './daily/protocol';
+import { claimsToBeServer } from './serverEvents';
+import type { ControlMessage } from './types';
 
 export interface Reaction {
   id: string;
   emoji: string;
-  identity: string;
+  /** The person who sent it (their user id). */
+  userId: string;
   at: number;
 }
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 const REACTION_TTL_MS = 4000;
 
-/** Optional callback fired when THIS participant is told (over the data
- * channel) that the teacher has forcibly stopped their screen share — see
- * ClassroomService.stopParticipantScreenShare. Server-side mute already
- * cuts the stream to everyone else; this is what lets the presenter's own
- * client stop the capture and flip their local UI back off cleanly. */
-export function useClassroomControls(onForceStopScreenShare?: () => void) {
-  const { localParticipant } = useLocalParticipant();
+export function useClassroomControls() {
+  const call = useCall();
+  const store = useCallStore();
+  const local = useLocalPeer();
+  const localKey = local?.userId ?? '';
   const [raisedHands, setRaisedHands] = useState<Record<string, boolean>>({});
   const [reactions, setReactions] = useState<Reaction[]>([]);
-  const [spotlightIdentity, setSpotlightIdentityState] = useState<string | null>(null);
+  const [spotlightUserId, setSpotlightState] = useState<string | null>(null);
   const reactionCounter = useRef(0);
-  const localKey = personKey(localParticipant.identity);
-  const localKeyRef = useRef(localKey);
-  const onForceStopScreenShareRef = useRef(onForceStopScreenShare);
-  useEffect(() => {
-    localKeyRef.current = localKey;
-    onForceStopScreenShareRef.current = onForceStopScreenShare;
-  });
 
-  const handleIncoming = useCallback((raw: Uint8Array) => {
-    let msg: ControlMessage;
-    try {
-      msg = JSON.parse(decoder.decode(raw));
-    } catch {
-      return;
-    }
+  const apply = useCallback((msg: ControlMessage) => {
     switch (msg.type) {
       case 'raise-hand':
-        setRaisedHands((prev) => ({ ...prev, [personKey(msg.identity)]: msg.raised }));
+        setRaisedHands((prev) => ({ ...prev, [msg.userId]: msg.raised }));
         break;
       case 'lower-hand':
-        setRaisedHands((prev) => ({ ...prev, [personKey(msg.identity)]: false }));
+        setRaisedHands((prev) => ({ ...prev, [msg.userId]: false }));
         break;
       case 'reaction': {
         reactionCounter.current += 1;
-        const who = personKey(msg.identity);
-        const id = `${who}-${reactionCounter.current}`;
-        setReactions((prev) => [...prev, { id, emoji: msg.emoji, identity: who, at: Date.now() }]);
+        const id = `${msg.userId}-${reactionCounter.current}`;
+        setReactions((prev) => [...prev, { id, emoji: msg.emoji, userId: msg.userId, at: Date.now() }]);
         break;
       }
       case 'spotlight':
-        setSpotlightIdentityState(msg.identity === null ? null : personKey(msg.identity));
-        break;
-      case 'stop-screen-share':
-        // The teacher stopped this PERSON's sharing: every device of theirs stops.
-        if (personKey(msg.identity) === localKeyRef.current) onForceStopScreenShareRef.current?.();
+        setSpotlightState(msg.userId);
         break;
     }
   }, []);
 
-  const { send } = useDataChannel(CLASSROOM_CONTROL_TOPIC, (m) => handleIncoming(m.payload));
+  // What everyone else sends — never taken at its word (see ./daily/protocol.ts).
+  useEffect(
+    () =>
+      store.onMessage(({ data, from }) => {
+        if (!from || claimsToBeServer(data)) return;
+        const payload = parseAppPayload(data);
+        if (!payload || payload.kind !== 'control') return;
+        const msg = authorizeControl(payload.control, senderOf(from));
+        if (msg) apply(msg);
+      }),
+    [store, apply],
+  );
 
   // Reactions expire on their own so the floating-emoji layer stays small.
   useEffect(() => {
@@ -90,25 +83,28 @@ export function useClassroomControls(onForceStopScreenShare?: () => void) {
   }, [reactions]);
 
   const broadcast = useCallback(
-    (msg: ControlMessage) => {
-      send(encoder.encode(JSON.stringify(msg)), { reliable: true });
+    (control: ControlWire) => {
+      try {
+        call.sendAppMessage(controlPayload(control), '*');
+      } catch {
+        // best-effort: a signal that does not go out is just not shown to others
+      }
     },
-    [send],
+    [call],
   );
 
   const setOwnHandRaised = useCallback(
     (raised: boolean) => {
       setRaisedHands((prev) => ({ ...prev, [localKey]: raised }));
-      broadcast({ type: 'raise-hand', raised, identity: localKey });
+      broadcast({ type: 'raise-hand', raised });
     },
     [broadcast, localKey],
   );
 
   const lowerHand = useCallback(
-    (identity: string) => {
-      const who = personKey(identity);
-      setRaisedHands((prev) => ({ ...prev, [who]: false }));
-      broadcast({ type: 'lower-hand', identity: who });
+    (userId: string) => {
+      setRaisedHands((prev) => ({ ...prev, [userId]: false }));
+      broadcast({ type: 'lower-hand', userId });
     },
     [broadcast],
   );
@@ -117,24 +113,16 @@ export function useClassroomControls(onForceStopScreenShare?: () => void) {
     (emoji: string) => {
       reactionCounter.current += 1;
       const id = `${localKey}-${reactionCounter.current}`;
-      setReactions((prev) => [...prev, { id, emoji, identity: localKey, at: Date.now() }]);
-      broadcast({ type: 'reaction', emoji, identity: localKey });
+      setReactions((prev) => [...prev, { id, emoji, userId: localKey, at: Date.now() }]);
+      broadcast({ type: 'reaction', emoji });
     },
     [broadcast, localKey],
   );
 
   const setSpotlight = useCallback(
-    (identity: string | null) => {
-      const who = identity === null ? null : personKey(identity);
-      setSpotlightIdentityState(who);
-      broadcast({ type: 'spotlight', identity: who });
-    },
-    [broadcast],
-  );
-
-  const notifyStopScreenShare = useCallback(
-    (identity: string) => {
-      broadcast({ type: 'stop-screen-share', identity: personKey(identity) });
+    (userId: string | null) => {
+      setSpotlightState(userId);
+      broadcast({ type: 'spotlight', userId });
     },
     [broadcast],
   );
@@ -142,11 +130,10 @@ export function useClassroomControls(onForceStopScreenShare?: () => void) {
   return {
     raisedHands,
     reactions,
-    spotlightIdentity,
+    spotlightUserId,
     setOwnHandRaised,
     lowerHand,
     sendReaction,
     setSpotlight,
-    notifyStopScreenShare,
   };
 }

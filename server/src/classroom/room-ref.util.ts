@@ -1,6 +1,6 @@
 // FILE PATH: server/src/classroom/room-ref.util.ts
 //
-// LiveKit room-name parsing shared by ClassroomService and the recording /
+// Room-name parsing shared by ClassroomService and the recording /
 // presence / admission services alongside it. Room names are one of:
 //   "lesson-<scheduledLessonId>"        a 1:1 curriculum class
 //   "batch-session-<batchSessionId>"    a BATCH class: the one classroom of a
@@ -14,13 +14,15 @@
 //                                       who joins by a secure link, no account)
 //   a raw bookingId                     marketplace flow
 //   the fixed QA demo room name
+// A room name is also the name of the Daily room (letters, digits, "-", "_").
 //
-// This file also owns the LiveKit *identity* format. One person may join the
-// same classroom from several devices or tabs (say one for the camera and one
-// for the microphone), and LiveKit gives each connection its own identity —
-// `<userId>~<deviceId>`. Everything that thinks in terms of people (the cap on
-// how many may be in the room, moderation, hands up, tiles) uses
-// `personKey(identity)`, the userId part, so two devices are one person.
+// This file also owns the "person" identity. One person may join the same
+// classroom from several devices or tabs (say one for the camera and one for
+// the microphone). Daily gives every connection its own session id, and the
+// meeting token carries the person's `user_id` — at most 36 characters, which a
+// user's uuid exactly fits. Everything that thinks in terms of people (the cap
+// on how many may be in the room, moderation, hands up, tiles) uses that
+// user id, so two devices are one person.
 
 export const DEMO_ROOM_NAME = 'lumexa-demo-classroom';
 
@@ -40,8 +42,12 @@ export const BATCH_SESSION_ROOM_PREFIX = 'batch-session-';
 export const TRIAL_ROOM_PREFIX = 'trial-';
 
 /** A trial guest (the parent/child following a secure link) has no account, so
- * their LiveKit identity is built from the trial instead of a userId. */
-export const TRIAL_GUEST_PREFIX = 'trial-guest-';
+ * their person id is built from the trial instead of a userId. (Short: Daily
+ * limits a user id to 36 characters, and "trial-guest-" + a uuid is 48.) */
+export const TRIAL_GUEST_PREFIX = 'tg-';
+
+/** The most characters Daily accepts in a meeting token's `user_id`. */
+export const MAX_DAILY_USER_ID_LENGTH = 36;
 
 /** Most people (teacher included) who may be in one classroom at a time. The
  * same for a 1:1 class and a batch; four students is the ideal batch, not a
@@ -154,9 +160,10 @@ export function isTrialRoom(room: string): boolean {
   return parseTrialRoom(room) !== null;
 }
 
-/** The "user id" of a trial's guest in LiveKit identities and room checks. */
+/** The person id of a trial's guest in meeting tokens and room checks: "tg-"
+ * and the trial's uuid without its hyphens (35 characters). */
 export function trialGuestKey(trialLeadId: string): string {
-  return `${TRIAL_GUEST_PREFIX}${trialLeadId}`;
+  return `${TRIAL_GUEST_PREFIX}${trialLeadId.replace(/-/g, '')}`;
 }
 
 export function getRoomRef(room: string): RoomRef {
@@ -175,45 +182,16 @@ export function getRoomRef(room: string): RoomRef {
 
 // ─── Participant identity ───────────────────────────────────────────────────
 
-export const IDENTITY_SEPARATOR = '~';
-
-/** Identity of a hidden admin observer (see ClassroomService.adminJoinLiveClass). */
+/** The person id of a silent admin observer (see ClassroomService.
+ * adminJoinLiveClass): "admin-observer-" and a timestamp. */
 export const ADMIN_OBSERVER_PREFIX = 'admin-observer-';
 
-const DEVICE_ID_PATTERN = /^[A-Za-z0-9]{4,24}$/;
-
-/** A device id comes from the browser, so it is checked before it goes into a
- * LiveKit identity. An absent or malformed one falls back to a fixed id —
- * which is simply "one device" (a second join replaces the first, as before
- * multi-device existed). */
-export function sanitizeDeviceId(raw: unknown): string {
-  return typeof raw === 'string' && DEVICE_ID_PATTERN.test(raw) ? raw : 'main';
+export function isAdminObserver(userId: string): boolean {
+  return userId.startsWith(ADMIN_OBSERVER_PREFIX);
 }
 
-export function buildIdentity(userId: string, deviceId: string): string {
-  return `${userId}${IDENTITY_SEPARATOR}${deviceId}`;
-}
-
-/** The person behind a LiveKit identity (their userId). */
-export function personKey(identity: string): string {
-  const cut = identity.indexOf(IDENTITY_SEPARATOR);
-  return cut === -1 ? identity : identity.slice(0, cut);
-}
-
-export function isAdminObserver(identity: string): boolean {
-  return identity.startsWith(ADMIN_OBSERVER_PREFIX);
-}
-
-// LiveKit's own service participants: the recording egress ("EG_…"), ingress,
-// agents and SIP callers. They are in the room but are not people.
-const SERVICE_IDENTITY_PREFIX = /^(EG_|IN_|AJ_|agent-|sip_)/;
-
-/** True for a connection that is a person in the class: not an admin observer
- * and not one of LiveKit's own service participants (the recording egress
- * above all). Only people count towards the room's limits. `kind` is the
- * participant's LiveKit kind when the caller has it (0 = a normal participant). */
-export function isPersonIdentity(identity: string, kind?: number): boolean {
-  if (kind !== undefined && kind !== 0) return false;
-  if (isAdminObserver(identity)) return false;
-  return !SERVICE_IDENTITY_PREFIX.test(identity);
+/** True for a connection that is a person in the class — not an admin
+ * observer. Only people count towards the room's limits. */
+export function isPersonUserId(userId: string): boolean {
+  return !isAdminObserver(userId);
 }

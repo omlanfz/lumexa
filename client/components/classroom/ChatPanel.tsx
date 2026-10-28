@@ -9,19 +9,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Send, Lock, Unlock, X, ThumbsUp, PartyPopper, Heart, Smile } from 'lucide-react';
-import type { ReceivedChatMessage } from '@livekit/components-core';
-import { parseParticipantMeta } from '@/lib/classroom/types';
-import { samePerson } from '@/lib/classroom/identity';
+import { displayNameOf } from '@/lib/classroom/types';
+import { MAX_CHAT_CHARS } from '@/lib/classroom/daily/protocol';
+import type { ChatEntry } from '@/lib/classroom/daily/protocol';
 
 interface ChatPanelProps {
-  messages: ReceivedChatMessage[];
+  messages: ChatEntry[];
   onSend: (text: string) => void;
   onClose: () => void;
   locked: boolean;
   isTeacher: boolean;
   onToggleLock: () => void;
   onReact: (emoji: string) => void;
-  localIdentity: string;
+  /** This person's user id, so their messages (from any of their devices) are "You". */
+  localUserId: string;
 }
 
 const REACTIONS = ['👍', '🎉', '❤️', '🙂'];
@@ -44,7 +45,7 @@ export default function ChatPanel({
   isTeacher,
   onToggleLock,
   onReact,
-  localIdentity,
+  localUserId,
 }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -101,27 +102,24 @@ export default function ChatPanel({
         ) : (
           messages.map((m) => {
             // "You" includes your other devices.
-            const isSelf = !!m.from && samePerson(m.from.identity, localIdentity);
-            const meta = m.from
-              ? parseParticipantMeta(m.from.identity, m.from.name || m.from.identity)
-              : { displayName: 'Unknown', role: 'STUDENT' as const };
-            const isTeacherMsg = meta.role === 'TEACHER';
+            const isSelf = m.fromUserId === localUserId;
+            const isTeacherMsg = m.fromRole === 'TEACHER';
             return (
-              <div key={m.id} className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
+              <div key={m.key} className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}>
                 <div className="flex items-center gap-1.5 mb-1 px-0.5">
                   <span
                     className={`text-xs font-semibold ${
                       isTeacherMsg ? 'text-violet-300' : 'text-[var(--cr-text-muted)]'
                     }`}
                   >
-                    {isSelf ? 'You' : meta.displayName}
+                    {isSelf ? 'You' : displayNameOf(m.fromName)}
                   </span>
                   {isTeacherMsg && (
                     <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300">
                       Teacher
                     </span>
                   )}
-                  <span className="text-[10px] text-[var(--cr-text-faint)]">{formatTime(m.timestamp)}</span>
+                  <span className="text-[10px] text-[var(--cr-text-faint)]">{formatTime(m.sentAt)}</span>
                 </div>
                 <div
                   className={`max-w-[85%] px-3 py-2 rounded-xl text-sm break-words ${
@@ -132,7 +130,7 @@ export default function ChatPanel({
                         : 'bg-[var(--cr-surface-2)] text-[var(--cr-text)] rounded-tl-sm'
                   }`}
                 >
-                  {m.message}
+                  {m.text}
                 </div>
               </div>
             );
@@ -185,6 +183,7 @@ export default function ChatPanel({
                 }
               }}
               placeholder="Message the class…"
+              maxLength={MAX_CHAT_CHARS}
               className="flex-1 px-3 py-2 rounded-xl bg-[var(--cr-surface-2)] border border-[var(--cr-border)] text-sm text-[var(--cr-text)] placeholder:text-[var(--cr-text-faint)] focus:outline-none focus:border-[var(--cr-accent)]/50"
             />
             <button

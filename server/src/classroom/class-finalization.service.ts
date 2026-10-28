@@ -45,7 +45,6 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ClassEndReason, ClassType, LessonStatus, Role } from '@prisma/client';
-import { RoomServiceClient } from 'livekit-server-sdk';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { AlertsService } from '../alerts/alerts.service';
@@ -54,6 +53,7 @@ import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CLASS_COMPLETED_AMOUNT_CENTS } from '../payouts/payout.constants';
+import { DailyRoomsService } from './daily-rooms.service';
 import { RecordingService } from './recording.service';
 import { roomForBatchSession, roomForLessonRecord } from './room-ref.util';
 import { BatchSessionsService } from '../batches/batch-sessions.service';
@@ -128,6 +128,7 @@ export class ClassFinalizationService {
     private readonly scheduling: SchedulingService,
     private readonly recording: RecordingService,
     private readonly batches: BatchSessionsService,
+    private readonly rooms: DailyRoomsService,
   ) {}
 
   // ─── Public: finalize one class ───────────────────────────────────────────
@@ -821,12 +822,8 @@ export class ClassFinalizationService {
   }
 
   private async closeRoom(room: string) {
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    const url = process.env.LIVEKIT_URL;
-    if (!apiKey || !apiSecret || !url) return;
     try {
-      await new RoomServiceClient(url, apiKey, apiSecret).deleteRoom(room);
+      await this.rooms.deleteRoom(room);
     } catch {
       // Room may already be empty/gone — the class record is what matters.
     }

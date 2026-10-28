@@ -1,7 +1,7 @@
 // FILE PATH: server/src/classroom/admission.service.ts
 //
 // Google Meet-style "knock to rejoin" after a teacher removes a
-// participant. Removing someone disconnects them from the LiveKit room
+// participant. Removing someone disconnects them from the Daily room
 // (see ClassroomService.removeParticipant) but must never permanently
 // block them — this service is what lets them ask to come back in, and
 // lets the teacher Admit/Deny that request.

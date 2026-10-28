@@ -1,10 +1,10 @@
 // FILE PATH: client/lib/classroom/appearanceProcessor.ts
 //
-// A custom LiveKit track processor (built on the same @livekit/track-
-// processors primitives as the background blur/virtual-bg processor) that
-// bundles everything in the "Appearance" section of the Video Effects
-// panel into one pass, since they all occupy the track's single processor
-// slot alongside background blur/replace:
+// The "Appearance" section of the Video Effects panel, as a video pipeline: a
+// camera track goes in, a processed track comes out, and that is what Daily sends
+// (see videoEffects.ts, which hands it over as the call's custom video track).
+// Background blur and virtual backgrounds are Daily's own processors; these are
+// ours:
 //
 //   - Lighting adjustment: brightness/contrast via Canvas2D's `filter`.
 //   - Touch-up: a soft, low-opacity blur blended back over the frame — a
@@ -15,16 +15,32 @@
 //     lightweight BlazeFace short-range model (lazy-loaded only once
 //     turned on) and smoothly pans/zooms the canvas draw region to keep
 //     them centered and reasonably framed, cropping back to the original
-//     frame size so publish resolution never changes.
+//     frame size so publish resolution never changes (the arithmetic is in
+//     appearanceMath.ts).
 //
 // Order per frame: auto-framing crop → lighting filter (applied on the
 // same draw call) → touch-up blend. Runs entirely in-browser; the face
 // detector is the only piece that needs a network fetch (WASM + model,
 // same CDN pattern the background processor already uses), and only once
 // auto-framing is actually turned on.
+//
+// Two ways to drive it, whichever the browser has:
+//   - insertable streams (MediaStreamTrackProcessor / MediaStreamTrackGenerator,
+//     Chromium): frames flow through a TransformStream, so it keeps running when
+//     the tab is in the background (a teacher sharing another window);
+//   - a hidden <video> drawn onto a <canvas> whose stream is captured, ticked by
+//     a worker timer (a page timer is throttled to once a second in the
+//     background, which would freeze the picture the class sees).
 
-import { ProcessorWrapper, VideoTransformer } from '@livekit/track-processors';
-import { FaceDetector, FilesetResolver } from '@mediapipe/tasks-vision';
+import type { FaceDetector } from '@mediapipe/tasks-vision';
+import {
+  DETECT_INTERVAL_MS,
+  FACE_LOST_RESET_MS,
+  cropForFace,
+  easeCrop,
+  lightingFilter,
+} from './appearanceMath';
+import type { CropRect } from './appearanceMath';
 
 export interface AppearanceOptions extends Record<string, unknown> {
   /** 1 = unchanged, >1 = brighter */
@@ -37,25 +53,25 @@ export interface AppearanceOptions extends Record<string, unknown> {
   autoFraming: boolean;
 }
 
+/** A running pipeline: take `output` as the camera track, stop it when done. */
+export interface AppearancePipeline {
+  readonly output: MediaStreamTrack;
+  update(options: AppearanceOptions): void;
+  /** Stops the pipeline and the input track it was given. Safe to repeat. */
+  stop(): void;
+}
+
 const TASKS_VISION_VERSION = '0.10.14';
 const FACE_DETECTOR_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite';
+const FALLBACK_FPS = 30;
 
-interface CropRect {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
+type Context2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+type CanvasLike = HTMLCanvasElement | OffscreenCanvas;
 
-const DETECT_INTERVAL_MS = 200;
-const FACE_LOST_RESET_MS = 2500;
-const CROP_LERP = 0.12;
-const MIN_CROP_WIDTH_RATIO = 0.38;
-const FACE_PADDING = 2.6;
-
-class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
-  private ctx?: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
+/** Draws frames with the effects applied. Knows nothing about where frames come
+ * from. */
+class AppearanceRenderer {
   private brightness = 1;
   private contrast = 1;
   private touchUp = false;
@@ -63,51 +79,11 @@ class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
 
   private faceDetector?: FaceDetector;
   private faceDetectorLoading = false;
+  private destroyed = false;
   private lastDetectAt = 0;
   private lastFaceSeenAt = 0;
   private currentCrop: CropRect | null = null;
   private targetCrop: CropRect | null = null;
-
-  // Deliberately NOT calling super.init()/super.restart(): the base
-  // VideoTransformer always calls setupWebGL(canvas), which binds a WebGL2
-  // context to the output canvas. A <canvas>/OffscreenCanvas can only ever
-  // be bound to one context type — once WebGL2 claims it, the getContext
-  // ('2d') call below permanently returns null, so `this.ctx` stayed
-  // undefined and transform() below hit its `!this.ctx` guard and dropped
-  // every frame without ever enqueuing one, which is what made the local
-  // video go solid black the moment any Appearance option (lighting,
-  // touch-up, auto-framing) was turned on. This transformer only ever
-  // draws with Canvas2D, so it sets up its own minimal init/restart
-  // instead of reusing the WebGL-oriented base implementation.
-  async init({ outputCanvas, inputElement: inputVideo }: Parameters<VideoTransformer<AppearanceOptions>['init']>[0]) {
-    if (!(inputVideo instanceof HTMLVideoElement)) {
-      throw TypeError('Video transformer needs a HTMLVideoElement as input');
-    }
-    this.transformer = new TransformStream({
-      transform: (frame, controller) => this.transform(frame, controller),
-    });
-    this.canvas = outputCanvas;
-    this.inputVideo = inputVideo;
-    this.ctx = this.canvas?.getContext('2d') as
-      | OffscreenCanvasRenderingContext2D
-      | CanvasRenderingContext2D
-      | null;
-  }
-
-  async restart({ outputCanvas, inputElement: inputVideo }: Parameters<VideoTransformer<AppearanceOptions>['restart']>[0]) {
-    this.canvas = outputCanvas;
-    this.inputVideo = inputVideo;
-    this.ctx = this.canvas?.getContext('2d') as
-      | OffscreenCanvasRenderingContext2D
-      | CanvasRenderingContext2D
-      | null;
-  }
-
-  async destroy() {
-    this.faceDetector?.close();
-    this.faceDetector = undefined;
-    this.canvas = undefined;
-  }
 
   update(options: AppearanceOptions) {
     if (typeof options.brightness === 'number') this.brightness = options.brightness;
@@ -128,14 +104,17 @@ class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
     if (this.faceDetector || this.faceDetectorLoading) return;
     this.faceDetectorLoading = true;
     try {
+      const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision');
       const fileset = await FilesetResolver.forVisionTasks(
         `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${TASKS_VISION_VERSION}/wasm`,
       );
-      this.faceDetector = await FaceDetector.createFromOptions(fileset, {
+      const detector = await FaceDetector.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: FACE_DETECTOR_MODEL_URL, delegate: 'GPU' },
         runningMode: 'VIDEO',
         minDetectionConfidence: 0.5,
       });
+      if (this.destroyed) detector.close();
+      else this.faceDetector = detector;
     } catch (err) {
       // Auto-framing just stays off (full frame) — never breaks the rest
       // of the pipeline over a model-load failure (offline, blocked CDN…).
@@ -145,49 +124,32 @@ class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
     }
   }
 
-  private detectFace(w: number, h: number) {
-    if (!this.faceDetector || !this.inputVideo) return;
+  private detectFace(source: TexImageSource, w: number, h: number) {
+    if (!this.faceDetector) return;
     const now = performance.now();
     if (now - this.lastDetectAt < DETECT_INTERVAL_MS) return;
     this.lastDetectAt = now;
 
-    let result: ReturnType<FaceDetector['detectForVideo']> | undefined;
+    let box;
     try {
-      result = this.faceDetector.detectForVideo(this.inputVideo, now);
+      box = this.faceDetector.detectForVideo(source, now).detections[0]?.boundingBox;
     } catch {
       return;
     }
-    const box = result?.detections[0]?.boundingBox;
     if (!box) return;
 
     this.lastFaceSeenAt = now;
-    const cx = box.originX + box.width / 2;
-    const cy = box.originY + box.height / 2;
-    const frameAspect = w / h;
-
-    let cropW = Math.min(w, Math.max(box.width * FACE_PADDING, w * MIN_CROP_WIDTH_RATIO));
-    let cropH = cropW / frameAspect;
-    if (cropH > h) {
-      cropH = h;
-      cropW = cropH * frameAspect;
-    }
-    // Bias the crop up slightly so there's headroom above the face rather
-    // than centering it dead in the middle of the frame.
-    let x = cx - cropW / 2;
-    let y = cy - cropH / 2 - box.height * 0.15;
-    x = Math.min(Math.max(0, x), Math.max(0, w - cropW));
-    y = Math.min(Math.max(0, y), Math.max(0, h - cropH));
-    this.targetCrop = { x, y, w: cropW, h: cropH };
+    this.targetCrop = cropForFace(box, w, h);
   }
 
-  private smoothedCrop(w: number, h: number): CropRect {
+  private smoothedCrop(source: TexImageSource, w: number, h: number): CropRect {
     const full: CropRect = { x: 0, y: 0, w, h };
     if (!this.autoFraming) {
       this.currentCrop = null;
       return full;
     }
 
-    this.detectFace(w, h);
+    this.detectFace(source, w, h);
 
     // No face for a while — ease back out to the full frame instead of
     // staying stuck zoomed in on wherever it was last seen.
@@ -195,50 +157,160 @@ class AppearanceTransformer extends VideoTransformer<AppearanceOptions> {
       this.targetCrop = full;
     }
 
-    const target = this.targetCrop ?? full;
-    if (!this.currentCrop) this.currentCrop = target;
-    this.currentCrop = {
-      x: this.currentCrop.x + (target.x - this.currentCrop.x) * CROP_LERP,
-      y: this.currentCrop.y + (target.y - this.currentCrop.y) * CROP_LERP,
-      w: this.currentCrop.w + (target.w - this.currentCrop.w) * CROP_LERP,
-      h: this.currentCrop.h + (target.h - this.currentCrop.h) * CROP_LERP,
-    };
+    this.currentCrop = easeCrop(this.currentCrop, this.targetCrop ?? full);
     return this.currentCrop;
   }
 
-  transform(frame: VideoFrame, controller: TransformStreamDefaultController<VideoFrame>) {
-    if (!this.ctx || !this.canvas) {
-      frame.close();
-      return;
-    }
-    const w = frame.displayWidth;
-    const h = frame.displayHeight;
-    if (this.canvas.width !== w) this.canvas.width = w;
-    if (this.canvas.height !== h) this.canvas.height = h;
+  /** Draws `frame` (`w`×`h`) onto `ctx`/`canvas` with the effects applied.
+   * `detectSource` is what the face detector looks at. */
+  draw(ctx: Context2D, canvas: CanvasLike, frame: CanvasImageSource, detectSource: TexImageSource, w: number, h: number) {
+    if (canvas.width !== w) canvas.width = w;
+    if (canvas.height !== h) canvas.height = h;
 
-    const crop = this.smoothedCrop(w, h);
+    const crop = this.smoothedCrop(detectSource, w, h);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- CanvasRenderingContext2D#filter isn't on the OffscreenCanvas 2D context lib.dom typings yet
-    (this.ctx as any).filter = `brightness(${this.brightness}) contrast(${this.contrast})`;
-    this.ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, 0, 0, w, h);
+    // CanvasRenderingContext2D#filter isn't on the OffscreenCanvas 2D context lib.dom typings yet.
+    const filtered = ctx as unknown as { filter: string };
+    filtered.filter = lightingFilter(this.brightness, this.contrast);
+    ctx.drawImage(frame, crop.x, crop.y, crop.w, crop.h, 0, 0, w, h);
 
     if (this.touchUp) {
-      this.ctx.save();
-      this.ctx.globalAlpha = 0.35;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (this.ctx as any).filter = 'blur(3px) brightness(1.04)';
-      this.ctx.drawImage(this.canvas as CanvasImageSource, 0, 0);
-      this.ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = 0.35;
+      filtered.filter = 'blur(3px) brightness(1.04)';
+      ctx.drawImage(canvas as CanvasImageSource, 0, 0);
+      ctx.restore();
     }
+  }
 
-    const out = new VideoFrame(this.canvas as CanvasImageSource as HTMLCanvasElement, {
-      timestamp: frame.timestamp,
-    });
-    frame.close();
-    controller.enqueue(out);
+  destroy() {
+    this.destroyed = true;
+    this.faceDetector?.close();
+    this.faceDetector = undefined;
   }
 }
 
-export function createAppearanceProcessor(): ProcessorWrapper<AppearanceOptions> {
-  return new ProcessorWrapper(new AppearanceTransformer(), 'lumexa-appearance');
+// ─── Driver 1: insertable streams ───────────────────────────────────────────
+
+interface TrackProcessorCtor {
+  new (init: { track: MediaStreamTrack }): { readable: ReadableStream<VideoFrame> };
+}
+interface TrackGeneratorCtor {
+  new (init: { kind: 'video' }): MediaStreamTrack & { writable: WritableStream<VideoFrame> };
+}
+
+function startWithInsertableStreams(input: MediaStreamTrack, renderer: AppearanceRenderer): AppearancePipeline | null {
+  const g = globalThis as unknown as {
+    MediaStreamTrackProcessor?: TrackProcessorCtor;
+    MediaStreamTrackGenerator?: TrackGeneratorCtor;
+  };
+  if (!g.MediaStreamTrackProcessor || !g.MediaStreamTrackGenerator) return null;
+  if (typeof VideoFrame === 'undefined' || typeof OffscreenCanvas === 'undefined') return null;
+
+  const canvas = new OffscreenCanvas(2, 2);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const processor = new g.MediaStreamTrackProcessor({ track: input });
+  const generator = new g.MediaStreamTrackGenerator({ kind: 'video' });
+  const transform = new TransformStream<VideoFrame, VideoFrame>({
+    transform: (frame, controller) => {
+      try {
+        const w = frame.displayWidth;
+        const h = frame.displayHeight;
+        renderer.draw(ctx, canvas, frame, frame, w, h);
+        controller.enqueue(new VideoFrame(canvas, { timestamp: frame.timestamp }));
+      } finally {
+        frame.close();
+      }
+    },
+  });
+  processor.readable
+    .pipeThrough(transform)
+    .pipeTo(generator.writable)
+    .catch(() => undefined); // the camera went away, or we stopped
+
+  let stopped = false;
+  return {
+    output: generator,
+    update: (options) => renderer.update(options),
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
+      generator.stop();
+      input.stop();
+      renderer.destroy();
+    },
+  };
+}
+
+// ─── Driver 2: a hidden <video> drawn onto a <canvas> ───────────────────────
+
+/** Calls `tick` about `fps` times a second, from a worker where possible so a
+ * hidden tab does not slow it to once a second. */
+function startTicker(fps: number, tick: () => void): () => void {
+  const interval = Math.round(1000 / fps);
+  try {
+    const url = URL.createObjectURL(
+      new Blob(['let id;onmessage=(e)=>{if(e.data==="stop"){clearInterval(id);}else{id=setInterval(()=>postMessage(0),e.data);}}'], {
+        type: 'text/javascript',
+      }),
+    );
+    const worker = new Worker(url);
+    worker.onmessage = tick;
+    worker.postMessage(interval);
+    return () => {
+      worker.postMessage('stop');
+      worker.terminate();
+      URL.revokeObjectURL(url);
+    };
+  } catch {
+    const id = setInterval(tick, interval);
+    return () => clearInterval(id);
+  }
+}
+
+function startWithCanvas(input: MediaStreamTrack, renderer: AppearanceRenderer): AppearancePipeline {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = new MediaStream([input]);
+  void video.play().catch(() => undefined);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 2;
+  canvas.height = 2;
+  const ctx = canvas.getContext('2d');
+  const output = canvas.captureStream(FALLBACK_FPS).getVideoTracks()[0];
+
+  const stopTicker = startTicker(FALLBACK_FPS, () => {
+    if (!ctx || video.readyState < 2 || !video.videoWidth) return;
+    renderer.draw(ctx, canvas, video, video, video.videoWidth, video.videoHeight);
+  });
+
+  let stopped = false;
+  return {
+    output,
+    update: (options) => renderer.update(options),
+    stop: () => {
+      if (stopped) return;
+      stopped = true;
+      stopTicker();
+      video.srcObject = null;
+      output.stop();
+      input.stop();
+      renderer.destroy();
+    },
+  };
+}
+
+/**
+ * Starts applying `options` to the camera track `input`. The pipeline owns
+ * `input` from here (give it a clone of the call's own camera track): stopping the
+ * pipeline stops it.
+ */
+export function createAppearancePipeline(input: MediaStreamTrack, options: AppearanceOptions): AppearancePipeline {
+  const renderer = new AppearanceRenderer();
+  renderer.update(options);
+  return startWithInsertableStreams(input, renderer) ?? startWithCanvas(input, renderer);
 }

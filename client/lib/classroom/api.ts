@@ -2,33 +2,21 @@
 //
 // Thin wrappers over the teacher-only classroom management endpoints
 // (see server/src/classroom/classroom.controller.ts). All calls are scoped
-// to a LiveKit room name and are rejected server-side unless the caller is
-// that room's teacher.
+// to a classroom's room name and are rejected server-side unless the caller is
+// that room's teacher. Muting people, stopping a share and locking a microphone
+// are not here: the teacher's browser does those directly through Daily (see
+// ./daily/moderation.ts).
 
 import api from '@/lib/axios';
 import { ClassroomState } from './types';
 
-export async function muteParticipant(
-  room: string,
-  identity: string,
-  kind: 'audio' | 'video',
-): Promise<void> {
-  await api.post(`/classroom/${room}/mute-participant`, { identity, kind });
+/** Removes a person (by user id) from every device they are in from; they must
+ * knock to come back in (see AdmissionService on the server). */
+export async function removeParticipant(room: string, userId: string): Promise<void> {
+  await api.post(`/classroom/${room}/remove-participant`, { userId });
 }
 
-export async function muteAllParticipants(room: string): Promise<{ mutedCount: number }> {
-  const res = await api.post(`/classroom/${room}/mute-all`);
-  return res.data;
-}
-
-export async function removeParticipant(room: string, identity: string): Promise<void> {
-  await api.post(`/classroom/${room}/remove-participant`, { identity });
-}
-
-export async function stopParticipantScreenShare(room: string, identity: string): Promise<void> {
-  await api.post(`/classroom/${room}/stop-screen-share`, { identity });
-}
-
+/** Sets the room's shared chat lock / "students muted" state for everyone. */
 export async function updateClassroomState(
   room: string,
   patch: ClassroomState,
@@ -50,10 +38,6 @@ export interface EndClassParams {
 
 export async function endClassRequest(room: string, params: EndClassParams): Promise<void> {
   await api.post(`/classroom/${room}/end`, params);
-}
-
-export async function setParticipantMicLocked(room: string, identity: string, locked: boolean): Promise<void> {
-  await api.post(`/classroom/${room}/participant-mic-lock`, { identity, locked });
 }
 
 export interface PendingAdmission {

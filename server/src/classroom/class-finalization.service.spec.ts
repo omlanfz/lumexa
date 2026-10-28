@@ -78,6 +78,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     hasPartialCompletion: jest.fn().mockResolvedValue(false),
     insertMakeupSession: jest.fn().mockResolvedValue({ shiftedCount: 2 }),
   };
+  const rooms = { deleteRoom: jest.fn().mockResolvedValue(undefined) };
 
   const service = new ClassFinalizationService(
     prisma as any,
@@ -89,6 +90,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     scheduling as any,
     recording as any,
     batches as any,
+    rooms as any,
   );
   return {
     service,
@@ -102,6 +104,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     scheduling,
     recording,
     batches,
+    rooms,
   };
 }
 

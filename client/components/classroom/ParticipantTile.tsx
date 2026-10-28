@@ -6,23 +6,19 @@
 //
 // A person may be connected from several devices (see lib/classroom/
 // identity.ts). The tile shows the video of whichever device has the camera on
-// (the caller picks it, see pickPersonTiles) while the microphone, speaking and
-// screen-share indicators reflect ALL of that person's devices.
+// (Person.shown) while the microphone, speaking and screen-share indicators
+// reflect ALL of that person's devices.
 
 'use client';
 
 import { Mic, MicOff, Hand, Pin, PinOff, Wifi, WifiOff, GraduationCap, MonitorUp } from 'lucide-react';
-import type { Participant } from 'livekit-client';
-import { ConnectionQuality } from 'livekit-client';
-import { isTrackReference, VideoTrack, useConnectionQualityIndicator, useRoomContext } from '@livekit/components-react';
-import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
-import { parseParticipantMeta } from '@/lib/classroom/types';
-import { samePerson } from '@/lib/classroom/identity';
-import { usePersonStatus } from '@/lib/classroom/usePersonStatus';
-import { usePeersOf } from './PeopleContext';
+import { useCallSnapshot, useIsSpeaking } from '@/lib/classroom/daily/CallContext';
+import { connectionQuality } from '@/lib/classroom/people';
+import type { Person } from '@/lib/classroom/people';
+import { VideoView } from './MediaViews';
 
 interface ParticipantTileProps {
-  trackRef: TrackReferenceOrPlaceholder;
+  person: Person;
   size?: 'main' | 'strip' | 'grid';
   raised?: boolean;
   pinned?: boolean;
@@ -34,10 +30,11 @@ function initialsOf(name: string) {
   return name.trim().charAt(0).toUpperCase() || '?';
 }
 
-function QualityIcon({ participant }: { participant: Participant }) {
-  const { quality } = useConnectionQualityIndicator({ participant });
-  if (quality === ConnectionQuality.Excellent || quality === ConnectionQuality.Unknown) return null;
-  const poor = quality === ConnectionQuality.Poor;
+function QualityIcon({ person }: { person: Person }) {
+  const { network } = useCallSnapshot();
+  const quality = connectionQuality(person, network);
+  if (quality === 'good' || quality === 'unknown') return null;
+  const poor = quality === 'poor';
   return (
     <span
       data-tooltip={poor ? 'Poor connection' : 'Unstable connection'}
@@ -51,29 +48,28 @@ function QualityIcon({ participant }: { participant: Participant }) {
 }
 
 export default function ParticipantTile({
-  trackRef,
+  person,
   size = 'grid',
   raised,
   pinned,
   onTogglePin,
   spotlighted,
 }: ParticipantTileProps) {
-  const participant = trackRef.participant;
-  const room = useRoomContext();
-  const meta = parseParticipantMeta(participant.identity, participant.name || participant.identity);
-  const hasVideo = isTrackReference(trackRef) && !trackRef.publication.isMuted;
-  const status = usePersonStatus(usePeersOf(participant));
-  const micEnabled = status.micEnabled;
-  const isTeacher = meta.role === 'TEACHER';
-  const isSpeaking = status.speaking;
+  const video = person.shown.video;
+  const hasVideo = video.on && !!video.track;
+  const micEnabled = person.micOn;
+  const isTeacher = person.role === 'TEACHER';
+  const isSpeaking = useIsSpeaking(person.peers.map((p) => p.sessionId));
   // "You" — on this device or on another device of yours.
-  const isSelf = participant.isLocal || samePerson(participant.identity, room.localParticipant.identity);
+  const isSelf = person.isSelf;
 
   const nameTextSize = size === 'main' ? 'text-sm' : 'text-xs';
   const avatarTextSize = size === 'main' ? 'text-3xl' : size === 'strip' ? 'text-lg' : 'text-xl';
 
   return (
     <div
+      data-testid="participant-tile"
+      data-user-id={person.userId}
       className={`relative w-full h-full rounded-xl overflow-hidden bg-[var(--cr-surface)] border-2 transition-colors ${
         isSpeaking && micEnabled
           ? 'border-[var(--cr-accent)]'
@@ -83,9 +79,9 @@ export default function ParticipantTile({
       } ${raised ? 'cr-hand-pulse' : ''}`}
     >
       {hasVideo ? (
-        <VideoTrack
-          trackRef={trackRef}
-          className={`w-full h-full object-cover ${isSelf ? '-scale-x-100' : ''}`}
+        <VideoView
+          track={video.track}
+          className={`w-full h-full object-cover ${isSelf && person.shown.isLocal ? '-scale-x-100' : ''}`}
         />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[var(--cr-surface-2)] to-[var(--cr-surface-3)]">
@@ -98,7 +94,7 @@ export default function ParticipantTile({
               aspectRatio: '1',
             }}
           >
-            {initialsOf(meta.displayName)}
+            {initialsOf(person.displayName)}
           </div>
         </div>
       )}
@@ -113,7 +109,7 @@ export default function ParticipantTile({
           )}
         </div>
         <div className="flex items-center gap-1">
-          <QualityIcon participant={participant} />
+          <QualityIcon person={person} />
           {onTogglePin && size !== 'strip' && (
             <button
               onClick={onTogglePin}
@@ -135,12 +131,12 @@ export default function ParticipantTile({
       {/* Bottom row: name + mic state */}
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 flex items-center justify-between gap-1.5 bg-gradient-to-t from-black/70 to-transparent">
         <span className={`${nameTextSize} font-medium text-white truncate drop-shadow flex items-center gap-1.5 min-w-0`}>
-          {status.sharingScreen && (
+          {person.sharingScreen && (
             <span data-tooltip="Sharing screen" className="flex-shrink-0 text-[var(--cr-accent)]">
               <MonitorUp size={12} />
             </span>
           )}
-          <span className="truncate">{isSelf ? 'You' : meta.displayName}</span>
+          <span className="truncate">{isSelf ? 'You' : person.displayName}</span>
         </span>
         <span className={`flex-shrink-0 ${micEnabled ? 'text-white/80' : 'text-red-400'}`}>
           {micEnabled ? <Mic size={13} /> : <MicOff size={13} />}

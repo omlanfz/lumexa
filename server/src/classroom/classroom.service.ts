@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
@@ -17,12 +18,7 @@ import {
 } from '../scheduling/lesson-window.util';
 import { LATE_JOIN_GRACE_MINUTES } from '../payouts/payout.constants';
 import { LessonStatus, ClassEndReason, SpaceRank } from '@prisma/client';
-import {
-  AccessToken,
-  RoomServiceClient,
-  TrackSource,
-} from 'livekit-server-sdk';
-import type { ParticipantInfo } from 'livekit-server-sdk';
+import { DailyRoomsService } from './daily-rooms.service';
 import { RecordingService } from './recording.service';
 import type { SegmentView, StartedSegment } from './recording.service';
 import { AdmissionService } from './admission.service';
@@ -35,21 +31,24 @@ import { RoomDirectoryService } from './room-directory.service';
 import { TrialClassroomService } from './trial-classroom.service';
 import { BatchSessionsService } from '../batches/batch-sessions.service';
 import {
+  ADMIN_OBSERVER_PREFIX,
   DEMO_ROOM_NAME,
   DEMO_STUDENT_EMAIL,
   DEMO_TEACHER_EMAIL,
   MAX_PEOPLE_PER_CLASSROOM,
-  buildIdentity,
   getRoomRef,
   isLessonRoom,
   isTrialRoom,
   lessonIdFromRoom,
   parseTrialRoom,
-  personKey,
   roomForBatchSession,
   roomForLessonRecord,
-  sanitizeDeviceId,
 } from './room-ref.util';
+
+/** How long a person's way into the room stays usable (a class can run long). */
+const JOIN_TOKEN_TTL_SECONDS = 3 * 60 * 60;
+/** The admin observer's way in. */
+const OBSERVER_TOKEN_TTL_SECONDS = 2 * 60 * 60;
 
 export interface EndClassParams {
   outcome?: ClassOutcome;
@@ -94,6 +93,7 @@ export class ClassroomService {
     private roomDirectory: RoomDirectoryService,
     private batchSessions: BatchSessionsService,
     private trialClassroom: TrialClassroomService,
+    private rooms: DailyRoomsService,
   ) {}
 
   private computeSpaceRank(sessions: number): SpaceRank {
@@ -107,11 +107,7 @@ export class ClassroomService {
    * Restricted to the two seeded demo accounts — see the block comment
    * above DEMO_ROOM_NAME for why this is kept separate from the real
    * booking/lesson flows. */
-  async joinDemoClassroom(
-    userId: string,
-    email: string | undefined,
-    deviceId?: unknown,
-  ) {
+  async joinDemoClassroom(userId: string, email: string | undefined) {
     const normalizedEmail = email?.toLowerCase();
     const isTeacher = normalizedEmail === DEMO_TEACHER_EMAIL;
     const isStudent = normalizedEmail === DEMO_STUDENT_EMAIL;
@@ -121,11 +117,7 @@ export class ClassroomService {
       );
     }
 
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    if (!apiKey || !apiSecret) {
-      throw new BadRequestException('Video service is not configured.');
-    }
+    this.rooms.assertConfigured();
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -134,27 +126,24 @@ export class ClassroomService {
     const displayName =
       user?.fullName ?? (isTeacher ? 'Teacher Demo' : 'Demo Student');
     const participantName = `${displayName} (${isTeacher ? 'Teacher' : 'Student'})`;
-    const device = sanitizeDeviceId(deviceId);
+
+    // (If the demo teacher's account is missing there is nobody to reserve a
+    // seat for; the limits still apply.)
+    const teacherUserId = await this.roomDirectory
+      .teacherUserIdOf(DEMO_ROOM_NAME)
+      .catch(() => '');
 
     // Locked / full / too many devices — same rules as a real class.
-    const entry = await this.checkRoomEntry({
+    const blocked = await this.checkRoomEntry({
       room: DEMO_ROOM_NAME,
       userId,
       role: isTeacher ? 'TEACHER' : 'STUDENT',
-      deviceId: device,
-      // (If the demo teacher's account is missing there is nobody to reserve
-      // a seat for; the limits still apply.)
-      teacherUserId: await this.roomDirectory
-        .teacherUserIdOf(DEMO_ROOM_NAME)
-        .catch(() => ''),
+      teacherUserId,
     });
-    if (entry) return entry;
+    if (blocked) return blocked;
 
     // A student the teacher removed must knock and be re-admitted rather
-    // than silently rejoining — see AdmissionService. Without this, LiveKit
-    // itself rejects the reconnect ("invalid token: revoked") because the
-    // identity is still banned from the room after removeParticipant, even
-    // though this is a brand-new JWT.
+    // than silently rejoining — see AdmissionService.
     if (isStudent) {
       const admission = await this.admissionService.checkJoin(
         DEMO_ROOM_NAME,
@@ -171,22 +160,17 @@ export class ClassroomService {
       }
     }
 
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: buildIdentity(userId, device),
-      name: participantName,
-      ttl: '3h',
-    });
-    at.addGrant({
-      roomJoin: true,
+    const entry = await this.rooms.entryFor({
       room: DEMO_ROOM_NAME,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
+      userId,
+      userName: participantName,
+      isOwner: isTeacher,
+      ttlSeconds: JOIN_TOKEN_TTL_SECONDS,
     });
+    this.roomAccess.scheduleEnforcement(DEMO_ROOM_NAME, teacherUserId);
 
     return {
-      token: await at.toJwt(),
-      url: process.env.LIVEKIT_URL,
+      ...entry,
       roomName: DEMO_ROOM_NAME,
       scheduledStart: await this.getDemoRoomStart(),
       classType: 'ONE_TO_ONE' as const,
@@ -203,7 +187,6 @@ export class ClassroomService {
     room: string;
     userId: string;
     role: 'TEACHER' | 'STUDENT';
-    deviceId: string;
     teacherUserId: string;
   }) {
     const entry = await this.roomAccess.checkEntry(params);
@@ -221,19 +204,15 @@ export class ClassroomService {
    * started at" moment regardless of when each of them personally called
    * this join endpoint — otherwise the teacher and student each see a
    * timer counting from their own join time instead of one shared clock.
-   * LiveKit already tracks that moment for free: `creationTimeMs` is set
-   * once, the instant the room's first participant actually connects, and
-   * every later join sees that same value back. Only the very first
-   * joiner (who is about to create the room) has no existing room to read
-   * yet — for them "now" effectively IS that anchor, since LiveKit creates
-   * the room within moments of this same connection. */
+   * Daily already tracks that moment for free: the earliest join time among
+   * the people in the room is when the meeting began, and every later join
+   * sees that same value back. Only the very first joiner (who is about to
+   * start the meeting) has nobody to read yet — for them "now" effectively IS
+   * that anchor, since they connect within moments of this same call. */
   private async getDemoRoomStart(): Promise<string> {
     try {
-      const client = this.getRoomServiceClient();
-      const [room] = await client.listRooms([DEMO_ROOM_NAME]);
-      if (room?.creationTimeMs) {
-        return new Date(Number(room.creationTimeMs)).toISOString();
-      }
+      const startedAt = await this.rooms.meetingStartedAt(DEMO_ROOM_NAME);
+      if (startedAt) return startedAt.toISOString();
     } catch (err) {
       this.logger.warn(
         `Could not look up the demo room's creation time, falling back to now: ${err}`,
@@ -242,22 +221,18 @@ export class ClassroomService {
     return new Date().toISOString();
   }
 
-  /** Admin-only: join an already-live class as a silent observer. `hidden:
-   * true` keeps this participant out of the teacher/student's own
-   * `useParticipants()` list and `canPublish: false` means there is no
-   * audio/video/screen-share to ever leak into the class — the admin can
-   * only watch (and, via data channel, use chat) — so joining truly can't
-   * disrupt the session in progress. Rejects if the class isn't actually
-   * live right now, mirroring the same "LIVE" definition AdminService uses
-   * to show the badge in the first place. */
+  /** Admin-only: join an already-live class as a silent observer. The token
+   * lets the observer receive but never send (no audio, video or screen
+   * share to leak into the class — the admin can only watch), and the
+   * classroom leaves observers out of its people lists and room limits, so
+   * joining truly can't disrupt the session in progress. Rejects if the class
+   * isn't actually live right now, mirroring the same "LIVE" definition
+   * AdminService uses to show the badge in the first place. */
   async adminJoinLiveClass(
     kind: 'BOOKING' | 'LESSON' | 'SESSION',
     id: string,
-  ): Promise<{ token: string; url: string | undefined; roomName: string }> {
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    if (!apiKey || !apiSecret)
-      throw new BadRequestException('Video service is not configured.');
+  ): Promise<{ token: string; url: string; roomName: string }> {
+    this.rooms.assertConfigured();
 
     let room: string;
     if (kind === 'SESSION') {
@@ -302,25 +277,16 @@ export class ClassroomService {
       room = id;
     }
 
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: `admin-observer-${Date.now()}`,
-      name: 'Lumexa Ops (Observer)',
-      ttl: '2h',
-    });
-    at.addGrant({
-      roomJoin: true,
+    const entry = await this.rooms.entryFor({
       room,
-      canPublish: false,
-      canSubscribe: true,
-      canPublishData: true,
-      hidden: true,
+      userId: `${ADMIN_OBSERVER_PREFIX}${Date.now()}`,
+      userName: 'Lumexa Ops (Observer)',
+      isOwner: false,
+      ttlSeconds: OBSERVER_TOKEN_TTL_SECONDS,
+      observer: true,
     });
 
-    return {
-      token: await at.toJwt(),
-      url: process.env.LIVEKIT_URL,
-      roomName: room,
-    };
+    return { token: entry.token, url: entry.url, roomName: room };
   }
 
   /** Dispatches to the marketplace-booking flow or the curriculum
@@ -332,30 +298,21 @@ export class ClassroomService {
       scheduledLessonId?: string;
       batchSessionId?: string;
       trialLeadId?: string;
-      deviceId?: string;
     },
   ) {
     if (dto.trialLeadId) {
       // A free trial class (the assigned teacher's way in). The guest uses the
       // public, token-based route instead — see TrialController.
-      return this.trialClassroom.joinAsTeacher(
-        userId,
-        dto.trialLeadId,
-        dto.deviceId,
-      );
+      return this.trialClassroom.joinAsTeacher(userId, dto.trialLeadId);
     }
     if (dto.batchSessionId) {
-      return this.joinBatchSession(userId, dto.batchSessionId, dto.deviceId);
+      return this.joinBatchSession(userId, dto.batchSessionId);
     }
     if (dto.scheduledLessonId) {
-      return this.joinScheduledLesson(
-        userId,
-        dto.scheduledLessonId,
-        dto.deviceId,
-      );
+      return this.joinScheduledLesson(userId, dto.scheduledLessonId);
     }
     if (dto.bookingId) {
-      return this.joinBooking(userId, dto.bookingId, dto.deviceId);
+      return this.joinBooking(userId, dto.bookingId);
     }
     throw new BadRequestException(
       'Either bookingId, scheduledLessonId, batchSessionId or trialLeadId is required.',
@@ -366,11 +323,7 @@ export class ClassroomService {
    * and calendar know it by). Each person still joins through their own row
    * in it: the teacher through any student's, a student through their own — so
    * one set of rules (who may be here, the lock, the limits) applies to all. */
-  async joinBatchSession(
-    userId: string,
-    sessionId: string,
-    deviceId?: unknown,
-  ) {
+  async joinBatchSession(userId: string, sessionId: string) {
     const session =
       await this.schedulingService.getSessionForClassroom(sessionId);
     const open = session.participants.filter(
@@ -385,16 +338,12 @@ export class ClassroomService {
           : 'Access denied: you are not assigned to this classroom.',
       );
     }
-    return this.joinScheduledLesson(userId, anchor.id, deviceId);
+    return this.joinScheduledLesson(userId, anchor.id);
   }
 
   // ─── Curriculum flow: Operations-scheduled recurring lessons ─────────────
 
-  async joinScheduledLesson(
-    userId: string,
-    lessonId: string,
-    deviceId?: unknown,
-  ) {
+  async joinScheduledLesson(userId: string, lessonId: string) {
     const lesson = await this.schedulingService.getLessonForClassroom(lessonId);
 
     // A batch student's row is their place in a class the whole batch shares.
@@ -447,23 +396,17 @@ export class ClassroomService {
       );
     }
 
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    if (!apiKey || !apiSecret) {
-      throw new BadRequestException('Video service is not configured.');
-    }
+    this.rooms.assertConfigured();
 
     // A 1:1 class has a room of its own; every student of a BATCH class takes
     // the class's one room (see roomForLessonRecord).
     const roomName = roomForLessonRecord(lesson);
-    const device = sanitizeDeviceId(deviceId);
 
     // The teacher's lock, the 10-people limit and the per-person device limit.
     const blocked = await this.checkRoomEntry({
       room: roomName,
       userId,
       role,
-      deviceId: device,
       teacherUserId,
     });
     if (blocked) return blocked;
@@ -486,20 +429,18 @@ export class ClassroomService {
       }
     }
 
-    const at = new AccessToken(apiKey, apiSecret, {
-      // One identity per device/tab: the same person can be in the room from
-      // several at once (see room-ref.util.ts).
-      identity: buildIdentity(userId, device),
-      name: participantName,
-      ttl: '3h',
-    });
-    at.addGrant({
-      roomJoin: true,
+    // The way in is made before anything is recorded: if the video service is
+    // down nobody got in, so no join is logged and no teacher is fined for it.
+    // (A person on several devices is one `userId` with a session each — see
+    // room-ref.util.ts.)
+    const entry = await this.rooms.entryFor({
       room: roomName,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
+      userId,
+      userName: participantName,
+      isOwner: role === 'TEACHER',
+      ttlSeconds: JOIN_TOKEN_TTL_SECONDS,
     });
+    this.roomAccess.scheduleEnforcement(roomName, teacherUserId);
 
     // When the teacher FIRST came in, read before this join is recorded: a
     // token is also requested when the teacher presses Join, opens a second
@@ -548,8 +489,7 @@ export class ClassroomService {
     }
 
     return {
-      token: await at.toJwt(),
-      url: process.env.LIVEKIT_URL,
+      ...entry,
       roomName,
       scheduledStart: classStart.toISOString(),
       // The row the person came in through — a teacher entering a batch class by
@@ -595,7 +535,7 @@ export class ClassroomService {
 
   // ─── Marketplace flow: booked shift ───────────────────────────────────────
 
-  async joinBooking(userId: string, bookingId: string, deviceId?: unknown) {
+  async joinBooking(userId: string, bookingId: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
@@ -657,12 +597,11 @@ export class ClassroomService {
     }
 
     // The teacher's lock, the 10-people limit and the per-person device limit.
-    const device = sanitizeDeviceId(deviceId);
+    this.rooms.assertConfigured();
     const blocked = await this.checkRoomEntry({
       room: bookingId,
       userId,
       role: isStudent ? 'STUDENT' : 'TEACHER',
-      deviceId: device,
       teacherUserId: booking.shift.teacher.userId,
     });
     if (blocked) return blocked;
@@ -685,34 +624,26 @@ export class ClassroomService {
       }
     }
 
-    // ─── GENERATE LIVEKIT TOKEN ──────────────────────────────────────────────
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-
-    if (!apiKey || !apiSecret) {
-      throw new BadRequestException('Video service is not configured.');
-    }
-
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: buildIdentity(userId, device),
-      name: participantName,
-      ttl: '3h', // Token valid for 3 hours max
+    // ─── GET INTO THE DAILY ROOM ─────────────────────────────────────────────
+    // The booking id is the room name — unique per session. The token is valid
+    // for 3 hours at most.
+    const entry = await this.rooms.entryFor({
+      room: bookingId,
+      userId,
+      userName: participantName,
+      isOwner: !isStudent,
+      ttlSeconds: JOIN_TOKEN_TTL_SECONDS,
     });
-
-    at.addGrant({
-      roomJoin: true,
-      room: bookingId, // Use bookingId as the room name — unique per session
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
-    });
+    this.roomAccess.scheduleEnforcement(
+      bookingId,
+      booking.shift.teacher.userId,
+    );
 
     // Recording is never automatic — it only starts when the teacher clicks
     // Record in the classroom UI (see startTeacherRecording below).
 
     return {
-      token: await at.toJwt(),
-      url: process.env.LIVEKIT_URL,
+      ...entry,
       roomName: bookingId,
       scheduledStart: booking.shift.start.toISOString(),
       // Marketplace bookings are always 1:1 sessions.
@@ -727,9 +658,9 @@ export class ClassroomService {
   // The recording itself is a WebM file the TEACHER'S BROWSER makes and uploads
   // straight to R2; RecordingService keeps the books (see that file's header).
   // This class only enforces "only the teacher of this room" before delegating
-  // — and mirrors "a recording is running" into the room's metadata, so the REC
-  // badge shows for everyone in the class (a browser cannot write room metadata
-  // itself).
+  // — and mirrors "a recording is running" into the room's shared state (Daily's
+  // meeting session data), so the REC badge shows for everyone in the class (a
+  // student's browser must not be able to write it, so only the server does).
 
   /** Teacher clicks Record. Never called automatically — see joinBooking/
    * joinScheduledLesson, which don't start recording on their own. `segmentId`
@@ -789,80 +720,19 @@ export class ClassroomService {
     return { ok: true, segment };
   }
 
-  /** Puts `recording: true|false` in the live room's metadata, for the REC badge.
-   * Best effort: the room may not exist (the QA demo room between sessions), and
-   * a recording must never fail because a badge could not be updated. */
+  /** Puts `recording: true|false` in the live room's shared state, for the REC
+   * badge. Best effort: nobody may be in the room (the QA demo room between
+   * sessions), and a recording must never fail because a badge could not be
+   * updated. */
   private async mirrorRecordingFlag(room: string): Promise<void> {
     try {
       const recording = await this.recordingService.hasActiveSegment(room);
-      await this.patchRoomMetadata(room, { recording });
+      await this.rooms.setClassState(room, { recording });
     } catch (err) {
       this.logger.debug(
         `Room ${room} is not live, recording flag not mirrored: ${err}`,
       );
     }
-  }
-
-  /**
-   * Handle LiveKit webhook events. Only `participant_joined` matters: it is the
-   * second line of the room limits (see enforceRoomLimits). Recording needs no
-   * webhook — it is made and uploaded by the teacher's browser.
-   */
-  async handleLiveKitWebhook(body: any, authHeader: string): Promise<void> {
-    try {
-      const { WebhookReceiver } = await import('livekit-server-sdk');
-      const receiver = new WebhookReceiver(
-        process.env.LIVEKIT_API_KEY!,
-        process.env.LIVEKIT_API_SECRET!,
-      );
-
-      const event = await receiver.receive(JSON.stringify(body), authHeader);
-
-      if (event.event === 'participant_joined') {
-        await this.enforceRoomLimits(event);
-      }
-    } catch (err) {
-      this.logger.error(`Webhook processing error: ${err}`);
-      // Don't throw — webhook endpoints should always return 200
-    }
-  }
-
-  /** A join token is issued before the person actually connects, so the
-   * limits checked then (the teacher's lock, 10 people, 3 devices each) can be
-   * outrun: a token issued a moment before the teacher locked, or two
-   * students racing for the last seat. This is the second line — as soon as
-   * LiveKit reports someone connected, anyone who should not be there is told
-   * why and removed. Rooms that are not Lumexa classrooms are ignored. */
-  private async enforceRoomLimits(event: {
-    room?: { name?: string };
-    participant?: {
-      identity?: string;
-      kind?: number;
-      joinedAt?: bigint;
-      joinedAtMs?: bigint;
-    };
-  }): Promise<void> {
-    const room = event.room?.name;
-    const participant = event.participant;
-    if (!room || !participant?.identity) return;
-
-    let teacherUserId: string;
-    try {
-      teacherUserId = await this.roomDirectory.teacherUserIdOf(room);
-    } catch {
-      return; // not one of our classrooms
-    }
-
-    const joinedAtMs =
-      Number(participant.joinedAtMs ?? 0n) ||
-      Number(participant.joinedAt ?? 0n) * 1000;
-    await this.roomAccess.enforceAfterJoin({
-      room,
-      identity: participant.identity,
-      joinedAtMs: joinedAtMs || Date.now(),
-      kind: Number(participant.kind ?? 0),
-      teacherUserId,
-    });
   }
 
   /**
@@ -954,19 +824,14 @@ export class ClassroomService {
   // ─── Teacher-only in-room controls ─────────────────────────────────────────
   //
   // Everything below is invoked from the classroom's Participants panel /
-  // Class Controls menu. All of it requires the caller to be the teacher
-  // that owns this room (see assertTeacherOfRoom) and talks to the LiveKit
-  // server API directly — the client never gets these credentials.
-
-  private getRoomServiceClient(): RoomServiceClient {
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    const url = process.env.LIVEKIT_URL;
-    if (!apiKey || !apiSecret || !url) {
-      throw new BadRequestException('Video service is not configured.');
-    }
-    return new RoomServiceClient(url, apiKey, apiSecret);
-  }
+  // Class Controls menu and requires the caller to be the teacher that owns
+  // this room (see assertTeacherOfRoom). Muting people, stopping a screen share
+  // and locking a microphone are not here: the teacher's own browser does those
+  // directly through Daily — the teacher's meeting token is the room's owner
+  // token, which is what lets Daily accept them (and refuse them from anyone
+  // else). What stays on the server is what must not be left to a browser:
+  // removing someone (with the knock-to-rejoin bookkeeping), the room lock and
+  // the shared class state.
 
   /** Room names are `lesson-<scheduledLessonId>` (a 1:1 class),
    * `batch-session-<sessionId>` (a batch class; the old
@@ -998,157 +863,24 @@ export class ClassroomService {
     await this.assertTeacherOfRoom(userId, roomName);
   }
 
-  /** Every connection of one person currently in the room. A person may be in
-   * from several devices at once (see room-ref.util.ts), and a teacher's
-   * action on them — mute, stop sharing, remove — applies to all of them, so
-   * `identity` may be their userId or any one of their identities. */
-  private async connectionsOf(
-    client: RoomServiceClient,
-    room: string,
-    identity: string,
-  ): Promise<ParticipantInfo[]> {
-    const key = personKey(identity);
-    const all = await client.listParticipants(room);
-    return all.filter((p) => personKey(p.identity) === key);
-  }
-
-  async muteParticipant(
-    userId: string,
-    room: string,
-    identity: string,
-    kind: 'audio' | 'video',
-  ): Promise<{ ok: true }> {
-    await this.assertTeacherOfRoom(userId, room);
-    const client = this.getRoomServiceClient();
-    const source =
-      kind === 'audio' ? TrackSource.MICROPHONE : TrackSource.CAMERA;
-    for (const c of await this.connectionsOf(client, room, identity)) {
-      const track = c.tracks.find((t) => t.source === source);
-      if (track && !track.muted) {
-        await client.mutePublishedTrack(room, c.identity, track.sid, true);
-      }
-    }
-    return { ok: true };
-  }
-
-  async muteAllParticipants(
-    userId: string,
-    room: string,
-  ): Promise<{ ok: true; mutedCount: number }> {
-    await this.assertTeacherOfRoom(userId, room);
-    const client = this.getRoomServiceClient();
-    const participants = await client.listParticipants(room);
-    let mutedCount = 0;
-    for (const p of participants) {
-      if (personKey(p.identity) === userId) continue; // never mute the teacher (on any device)
-      const micTrack = p.tracks.find(
-        (t) => t.source === TrackSource.MICROPHONE,
-      );
-      if (micTrack && !micTrack.muted) {
-        await client.mutePublishedTrack(room, p.identity, micTrack.sid, true);
-        mutedCount++;
-      }
-    }
-    return { ok: true, mutedCount };
-  }
-
-  /** Teacher-only: forcibly stop a participant's screen share. Lumexa lets
-   * every participant share their screen freely, with no permission gate —
-   * this is the one-way brake on that: mute whatever SCREEN_SHARE(+AUDIO)
-   * track they currently have published. The client also gets a data-
-   * channel notice (see ClassroomController → useClassroomControls) so the
-   * presenter's own UI/capture stream stops cleanly instead of just going
-   * dark for everyone else. */
-  async stopParticipantScreenShare(
-    userId: string,
-    room: string,
-    identity: string,
-  ): Promise<{ ok: true }> {
-    await this.assertTeacherOfRoom(userId, room);
-    const client = this.getRoomServiceClient();
-    for (const c of await this.connectionsOf(client, room, identity)) {
-      const shareTracks = c.tracks.filter(
-        (t) =>
-          t.source === TrackSource.SCREEN_SHARE ||
-          t.source === TrackSource.SCREEN_SHARE_AUDIO,
-      );
-      for (const track of shareTracks) {
-        await client.mutePublishedTrack(room, c.identity, track.sid, true);
-      }
-    }
-    return { ok: true };
-  }
-
-  /** Teacher-only: revoke or restore a participant's ability to publish a
-   * microphone track (LiveKit enforces this server-side via the
-   * participant's own permission grant — the client SDK can't work around
-   * it just by calling setMicrophoneEnabled). Locking also immediately
-   * mutes whatever mic track is currently live. */
-  async setParticipantMicLocked(
-    userId: string,
-    room: string,
-    identity: string,
-    locked: boolean,
-  ): Promise<{ ok: true }> {
-    await this.assertTeacherOfRoom(userId, room);
-    const client = this.getRoomServiceClient();
-    for (const participant of await this.connectionsOf(
-      client,
-      room,
-      identity,
-    )) {
-      const current = participant.permission;
-      const currentSources = current?.canPublishSources?.length
-        ? current.canPublishSources
-        : [
-            TrackSource.CAMERA,
-            TrackSource.MICROPHONE,
-            TrackSource.SCREEN_SHARE,
-            TrackSource.SCREEN_SHARE_AUDIO,
-          ];
-      const nextSources = locked
-        ? currentSources.filter((s) => s !== TrackSource.MICROPHONE)
-        : Array.from(new Set([...currentSources, TrackSource.MICROPHONE]));
-
-      await client.updateParticipant(room, participant.identity, undefined, {
-        canPublish: current?.canPublish ?? true,
-        canSubscribe: current?.canSubscribe ?? true,
-        canPublishData: current?.canPublishData ?? true,
-        canPublishSources: nextSources,
-      });
-
-      if (locked) {
-        const micTrack = participant.tracks.find(
-          (t) => t.source === TrackSource.MICROPHONE,
-        );
-        if (micTrack && !micTrack.muted) {
-          await client.mutePublishedTrack(
-            room,
-            participant.identity,
-            micTrack.sid,
-            true,
-          );
-        }
-      }
-    }
-    return { ok: true };
-  }
-
+  /** Removes a person from the room — from every device they are in from — and
+   * makes them knock to come back (see AdmissionService). `targetUserId` is the
+   * person's user id (what Daily calls their `user_id`). */
   async removeParticipant(
     userId: string,
     room: string,
-    identity: string,
+    targetUserId: string,
   ): Promise<{ ok: true }> {
     await this.assertTeacherOfRoom(userId, room);
-    if (personKey(identity) === userId) {
+    if (targetUserId === userId) {
       throw new BadRequestException(
         'You cannot remove yourself from your own class.',
       );
     }
-    const client = this.getRoomServiceClient();
 
-    // Removing a person removes them from every device they are in from.
-    const connections = await this.connectionsOf(client, room, identity);
+    const connections = (await this.rooms.listPeople(room)).filter(
+      (c) => c.userId === targetUserId,
+    );
     if (connections.length === 0) return { ok: true }; // already gone
 
     const displayName =
@@ -1157,37 +889,16 @@ export class ClassroomService {
       'Student';
     await this.admissionService.markRemoved(
       room,
-      personKey(identity),
+      targetUserId,
       displayName,
       'STUDENT',
     );
 
-    for (const c of connections) {
-      await client.removeParticipant(room, c.identity);
-    }
+    await this.rooms.removeConnections(
+      room,
+      connections.map((c) => c.sessionId),
+    );
     return { ok: true };
-  }
-
-  /** Merges into the room's JSON metadata — the shared source of truth for
-   * classroom-wide state (chat lock, "students can unmute", recording) that
-   * every participant's client picks up via LiveKit's RoomMetadataChanged
-   * event. */
-  private async patchRoomMetadata(
-    room: string,
-    patch: Record<string, unknown>,
-  ): Promise<Record<string, unknown>> {
-    const client = this.getRoomServiceClient();
-    let current: Record<string, unknown> = {};
-    try {
-      const info = await client.listRooms([room]);
-      const meta = info[0]?.metadata;
-      if (meta) current = JSON.parse(meta) as Record<string, unknown>;
-    } catch {
-      current = {};
-    }
-    const next = { ...current, ...patch };
-    await client.updateRoomMetadata(room, JSON.stringify(next));
-    return next;
   }
 
   /** How long after the scheduled start a teacher must wait before End
@@ -1302,7 +1013,7 @@ export class ClassroomService {
       // consumption — if both sides took part the trial is recorded Completed,
       // otherwise the admin marks it Completed or Missed.
       await this.trialClassroom.markEnded(parseTrialRoom(room)!, userId);
-      await this.deleteLiveKitRoom(room);
+      await this.closeRoom(room);
       await this.roomAccess.setLocked(room, false, userId).catch(() => {});
     } else if (room !== DEMO_ROOM_NAME) {
       const booking = await this.prisma.booking.findUnique({
@@ -1318,10 +1029,10 @@ export class ClassroomService {
           data: { endReason: reason, endNote: note?.trim() || null },
         });
       }
-      await this.deleteLiveKitRoom(room);
+      await this.closeRoom(room);
     } else {
       await this.recordingService.stopActiveSegmentIfAny(room);
-      await this.deleteLiveKitRoom(room);
+      await this.closeRoom(room);
       // The demo room has a fixed name, so unlike a real class it would stay
       // locked for the next QA session.
       await this.roomAccess.setLocked(room, false, userId).catch(() => {});
@@ -1330,25 +1041,25 @@ export class ClassroomService {
     return { ok: true, status, ...(lessons ? { lessons } : {}) };
   }
 
-  private async deleteLiveKitRoom(room: string): Promise<void> {
-    await this.getRoomServiceClient()
-      .deleteRoom(room)
-      .catch(() => {
-        // Room may already be empty/gone — ending the class record still
-        // succeeded above, which is what matters.
-      });
+  /** Closes the Daily room, which disconnects everyone still in it. */
+  private async closeRoom(room: string): Promise<void> {
+    await this.rooms.deleteRoom(room).catch((err) => {
+      // Room may already be empty/gone — ending the class record still
+      // succeeded above, which is what matters.
+      this.logger.debug(`Could not close the video room ${room}: ${err}`);
+    });
   }
 
-  /** Merges into the room's JSON metadata — the shared source of truth for
-   * classroom-wide state (chat lock, "students can unmute") that every
-   * participant's client picks up via LiveKit's RoomMetadataChanged event.
-   * Only these two settings can be changed this way: the recording flag and the
-   * room lock have their own endpoints and are owned by the server. */
+  /** Merges into the room's shared state (Daily's meeting session data) — the
+   * source of truth for classroom-wide settings (chat lock, "students muted")
+   * that every participant's browser follows. Only these two settings can be
+   * changed this way: the recording flag and the room lock have their own
+   * endpoints and are owned by the server. */
   async updateClassroomState(
     userId: string,
     room: string,
     patch: { chatLocked?: boolean; studentsMuted?: boolean },
-  ): Promise<{ ok: true; state: Record<string, unknown> }> {
+  ): Promise<{ ok: true; state: Record<string, boolean> }> {
     await this.assertTeacherOfRoom(userId, room);
     const allowed: Record<string, boolean> = {};
     if (typeof patch?.chatLocked === 'boolean') {
@@ -1357,14 +1068,24 @@ export class ClassroomService {
     if (typeof patch?.studentsMuted === 'boolean') {
       allowed.studentsMuted = patch.studentsMuted;
     }
-    const next = await this.patchRoomMetadata(room, allowed);
-    return { ok: true, state: next };
+    if (Object.keys(allowed).length === 0) return { ok: true, state: allowed };
+    try {
+      await this.rooms.setClassState(room, allowed);
+    } catch (err) {
+      // The teacher's screen has already changed; tell it the change did not
+      // reach the class so it can show that and let them try again.
+      this.logger.warn(`Could not update the class state of ${room}: ${err}`);
+      throw new ServiceUnavailableException(
+        'Could not update the class settings right now. Please try again.',
+      );
+    }
+    return { ok: true, state: allowed };
   }
 
   /** Teacher-only: lock or unlock the classroom. While it is locked no student
    * can join (see RoomAccessService); people already inside stay. The database
-   * decides; the room's metadata only mirrors it so every screen updates at
-   * once (the LiveKit room may not exist yet, which is fine). */
+   * decides; the room's shared state only mirrors it so every screen updates at
+   * once (nobody may be in the room yet, which is fine). */
   async setRoomLocked(
     userId: string,
     room: string,
@@ -1372,12 +1093,13 @@ export class ClassroomService {
   ): Promise<{ ok: true; locked: boolean }> {
     await this.assertTeacherOfRoom(userId, room);
     const result = await this.roomAccess.setLocked(room, locked, userId);
-    await this.patchRoomMetadata(room, { roomLocked: result.locked }).catch(
-      (err) =>
+    await this.rooms
+      .setClassState(room, { roomLocked: result.locked })
+      .catch((err) =>
         this.logger.debug(
           `Room ${room} is not live yet, lock state not mirrored: ${err}`,
         ),
-    );
+      );
     return { ok: true, locked: result.locked };
   }
 }

@@ -12,9 +12,6 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import type { Participant } from 'livekit-client';
-import { ConnectionQuality } from 'livekit-client';
-import { useConnectionQualityIndicator } from '@livekit/components-react';
 import {
   X,
   Mic,
@@ -34,42 +31,44 @@ import {
   MonitorUp,
   MonitorOff,
 } from 'lucide-react';
-import { parseParticipantMeta } from '@/lib/classroom/types';
-import { MAX_PEOPLE_PER_CLASSROOM, personKey } from '@/lib/classroom/identity';
-import { groupByPerson } from '@/lib/classroom/people';
-import { usePersonStatus } from '@/lib/classroom/usePersonStatus';
-import { muteParticipant, removeParticipant, setParticipantMicLocked } from '@/lib/classroom/api';
+import { MAX_PEOPLE_PER_CLASSROOM } from '@/lib/classroom/identity';
+import { connectionQuality } from '@/lib/classroom/people';
+import type { Person } from '@/lib/classroom/people';
+import { useCall, useCallSnapshot, useIsSpeaking } from '@/lib/classroom/daily/CallContext';
+import { mutePerson, setPersonMicLocked } from '@/lib/classroom/daily/moderation';
+import { removeParticipant } from '@/lib/classroom/api';
 import { useClickOutside } from '@/lib/classroom/useClickOutside';
 import type { PendingAdmission } from '@/lib/classroom/api';
 
 interface ParticipantsPanelProps {
-  participants: Participant[];
+  /** One entry per person in the class (see groupPeople). */
+  people: Person[];
   isTeacher: boolean;
   roomName: string;
   raisedHands: Record<string, boolean>;
-  onLowerHand: (identity: string) => void;
+  onLowerHand: (userId: string) => void;
   onClose: () => void;
-  localIdentity: string;
-  spotlightIdentity: string | null;
-  onSetSpotlight: (identity: string | null) => void;
+  localUserId: string;
+  spotlightUserId: string | null;
+  onSetSpotlight: (userId: string | null) => void;
   pendingAdmissions?: PendingAdmission[];
   onDecideAdmission?: (admissionId: string, decision: 'APPROVE' | 'DENY') => void;
-  /** Teacher-only: notifies the target's own client over the data channel
-   * so their capture stream stops cleanly (see useClassroomControls). The
-   * server-side mute (stopParticipantScreenShare) is fired alongside it. */
-  onNotifyStopScreenShare?: (identity: string) => void;
+  /** Teacher-only: stops this person's screen share, on every device they share
+   * from (Daily lets the room's owner do that — see daily/moderation.ts). */
+  onStopScreenShare?: (userId: string) => void;
 }
 
-function QualityBadge({ participant }: { participant: Participant }) {
-  const { quality } = useConnectionQualityIndicator({ participant });
-  if (quality === ConnectionQuality.Poor) {
+function QualityBadge({ person }: { person: Person }) {
+  const { network } = useCallSnapshot();
+  const quality = connectionQuality(person, network);
+  if (quality === 'poor') {
     return (
       <span data-tooltip="Poor connection" className="text-red-400">
         <WifiOff size={13} />
       </span>
     );
   }
-  if (quality === ConnectionQuality.Good || quality === ConnectionQuality.Excellent) {
+  if (quality === 'good') {
     return (
       <span data-tooltip="Good connection" className="text-emerald-400">
         <Wifi size={13} />
@@ -80,8 +79,7 @@ function QualityBadge({ participant }: { participant: Participant }) {
 }
 
 function ParticipantRow({
-  participant,
-  peers,
+  person,
   isTeacher,
   roomName,
   raised,
@@ -92,12 +90,9 @@ function ParticipantRow({
   menuOpen,
   onOpenMenu,
   onCloseMenu,
-  onNotifyStopScreenShare,
+  onStopScreenShare,
 }: {
-  /** The connection to show (the one with the camera on, if any). */
-  participant: Participant;
-  /** All of this person's connections, this one included. */
-  peers: Participant[];
+  person: Person;
   isTeacher: boolean;
   roomName: string;
   raised: boolean;
@@ -108,51 +103,40 @@ function ParticipantRow({
   menuOpen: boolean;
   onOpenMenu: () => void;
   onCloseMenu: () => void;
-  onNotifyStopScreenShare?: (identity: string) => void;
+  onStopScreenShare?: (userId: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useClickOutside(menuRef, menuOpen, onCloseMenu);
+  const call = useCall();
+  const { peers } = useCallSnapshot();
 
-  const meta = parseParticipantMeta(participant.identity, participant.name || participant.identity);
-  const status = usePersonStatus(peers);
-  const micOn = status.micEnabled;
-  const camOn = status.cameraEnabled;
-  const isSpeaking = status.speaking;
+  const peerCount = person.peers.length;
+  const micOn = person.micOn;
+  const camOn = person.cameraOn;
+  const isSpeaking = useIsSpeaking(person.peers.map((p) => p.sessionId));
   const canManage = isTeacher && !isSelf;
 
-  const handleMute = async (kind: 'audio' | 'video') => {
-    setBusy(true);
-    try {
-      await muteParticipant(roomName, participant.identity, kind);
-    } catch {
-      // best-effort — panel state will simply reflect what LiveKit reports
-    } finally {
-      setBusy(false);
-      onCloseMenu();
-    }
+  // Muting, turning a camera off and taking away the right to unmute are done by
+  // this (the teacher's) browser, straight through Daily: the room's owner may,
+  // and Daily refuses anyone else. They act on every device of the person.
+  const handleMute = (kind: 'audio' | 'video') => {
+    mutePerson(call, peers, person.userId, kind);
+    onCloseMenu();
   };
 
-  const handleToggleMicLock = async () => {
-    setBusy(true);
-    try {
-      // A muted mic implies "not currently allowed to unmute" from the
-      // panel's point of view — locking always mutes; unlocking just
-      // restores the ability to unmute, it doesn't force them back on.
-      await setParticipantMicLocked(roomName, participant.identity, micOn);
-    } catch {
-      // best-effort
-    } finally {
-      setBusy(false);
-      onCloseMenu();
-    }
+  const handleToggleMicLock = () => {
+    // Locking mutes the microphone and takes away the right to unmute; unlocking
+    // gives the right back without switching anything on.
+    setPersonMicLocked(call, peers, person.userId, !person.micLocked);
+    onCloseMenu();
   };
 
   const handleRemove = async () => {
-    if (!window.confirm(`Remove ${meta.displayName} from class?`)) return;
+    if (!window.confirm(`Remove ${person.displayName} from class?`)) return;
     setBusy(true);
     try {
-      await removeParticipant(roomName, participant.identity);
+      await removeParticipant(roomName, person.userId);
     } catch {
       setBusy(false);
     }
@@ -160,10 +144,7 @@ function ParticipantRow({
   };
 
   const handleStopScreenShare = () => {
-    // The caller (ClassroomRoom.handleForceStopShare) does both the data-
-    // channel notice and the server-side mute — kept as one call here so
-    // there's a single source of truth instead of two independent ones.
-    onNotifyStopScreenShare?.(participant.identity);
+    onStopScreenShare?.(person.userId);
     onCloseMenu();
   };
 
@@ -171,22 +152,22 @@ function ParticipantRow({
     <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[var(--cr-surface-2)] transition-colors group">
       <div
         className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 bg-gradient-to-br transition-shadow ${
-          meta.role === 'TEACHER' ? 'from-[#7B61FF] to-[#5B3FCF]' : 'from-[#2DD4BF] to-[#0F9C8D]'
+          person.role === 'TEACHER' ? 'from-[#7B61FF] to-[#5B3FCF]' : 'from-[#2DD4BF] to-[#0F9C8D]'
         } ${isSpeaking && micOn ? 'ring-2 ring-[var(--cr-accent)] ring-offset-2 ring-offset-[var(--cr-surface)]' : ''}`}
       >
-        {meta.displayName.charAt(0).toUpperCase()}
+        {person.displayName.charAt(0).toUpperCase()}
       </div>
 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-medium text-[var(--cr-text)] truncate">
-            {isSelf ? `${meta.displayName} (You)` : meta.displayName}
+            {isSelf ? `${person.displayName} (You)` : person.displayName}
           </span>
-          {meta.role === 'TEACHER' && <GraduationCap size={12} className="text-violet-300 flex-shrink-0" />}
+          {person.role === 'TEACHER' && <GraduationCap size={12} className="text-violet-300 flex-shrink-0" />}
         </div>
         <span className="text-[11px] text-[var(--cr-text-faint)]">
-          {meta.role === 'TEACHER' ? 'Teacher' : 'Student'}
-          {peers.length > 1 && ` · ${peers.length} devices`}
+          {person.role === 'TEACHER' ? 'Teacher' : 'Student'}
+          {peerCount > 1 && ` · ${peerCount} devices`}
         </span>
       </div>
 
@@ -200,12 +181,12 @@ function ParticipantRow({
             <Hand size={12} />
           </button>
         )}
-        {status.sharingScreen && (
+        {person.sharingScreen && (
           <span data-tooltip="Sharing screen" className="text-[var(--cr-accent)]">
             <MonitorUp size={14} />
           </span>
         )}
-        <QualityBadge participant={participant} />
+        <QualityBadge person={person} />
         <span className={micOn ? 'text-[var(--cr-text-muted)]' : 'text-red-400'}>
           {micOn ? <Mic size={14} /> : <MicOff size={14} />}
         </span>
@@ -246,8 +227,8 @@ function ParticipantRow({
                   onClick={handleToggleMicLock}
                   className="w-full text-left px-3 py-2 text-xs text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] flex items-center gap-2"
                 >
-                  {micOn ? <MicOff size={13} /> : <Mic size={13} />}
-                  {micOn ? 'Disallow unmute' : 'Allow unmute'}
+                  {person.micLocked ? <Mic size={13} /> : <MicOff size={13} />}
+                  {person.micLocked ? 'Allow unmute' : 'Disallow unmute'}
                 </button>
                 <button
                   onClick={() => handleMute('video')}
@@ -255,7 +236,7 @@ function ParticipantRow({
                 >
                   <VideoOff size={13} /> Turn off camera
                 </button>
-                {status.sharingScreen && (
+                {person.sharingScreen && (
                   <button
                     onClick={handleStopScreenShare}
                     className="w-full text-left px-3 py-2 text-xs text-[var(--cr-text)] hover:bg-[var(--cr-surface-3)] flex items-center gap-2"
@@ -280,33 +261,28 @@ function ParticipantRow({
 }
 
 export default function ParticipantsPanel({
-  participants,
+  people,
   isTeacher,
   roomName,
   raisedHands,
   onLowerHand,
   onClose,
-  localIdentity,
-  spotlightIdentity,
+  localUserId,
+  spotlightUserId,
   onSetSpotlight,
   pendingAdmissions = [],
   onDecideAdmission,
-  onNotifyStopScreenShare,
+  onStopScreenShare,
 }: ParticipantsPanelProps) {
   const [openMenuKey, setOpenMenuKey] = useState<string | null>(null);
 
-  const localKey = personKey(localIdentity);
-  const people = [...groupByPerson(participants)].map(([key, peers]) => {
-    // Show the connection that has the camera on, else the first one.
-    const shown = peers.find((p) => p.isCameraEnabled) ?? peers[0];
-    return { key, peers, shown };
-  });
-  const sorted = people.sort((a, b) => {
-    const aTeacher = parseParticipantMeta(a.shown.identity, a.shown.name || '').role === 'TEACHER';
-    const bTeacher = parseParticipantMeta(b.shown.identity, b.shown.name || '').role === 'TEACHER';
+  // The teacher first, then you, then everyone else as they arrived.
+  const sorted = [...people].sort((a, b) => {
+    const aTeacher = a.role === 'TEACHER';
+    const bTeacher = b.role === 'TEACHER';
     if (aTeacher !== bTeacher) return aTeacher ? -1 : 1;
-    const aSelf = a.key === localKey;
-    const bSelf = b.key === localKey;
+    const aSelf = a.userId === localUserId;
+    const bSelf = b.userId === localUserId;
     if (aSelf !== bSelf) return aSelf ? -1 : 1;
     return 0;
   });
@@ -364,22 +340,21 @@ export default function ParticipantsPanel({
       )}
 
       <div className="flex-1 overflow-y-auto cr-scroll px-2 py-2">
-        {sorted.map(({ key, peers, shown }) => (
+        {sorted.map((person) => (
           <ParticipantRow
-            key={key}
-            participant={shown}
-            peers={peers}
+            key={person.userId}
+            person={person}
             isTeacher={isTeacher}
             roomName={roomName}
-            raised={!!raisedHands[key]}
-            onLowerHand={() => onLowerHand(key)}
-            isSelf={key === localKey}
-            spotlighted={spotlightIdentity === key}
-            onSetSpotlight={() => onSetSpotlight(spotlightIdentity === key ? null : key)}
-            menuOpen={openMenuKey === key}
-            onOpenMenu={() => setOpenMenuKey(key)}
+            raised={!!raisedHands[person.userId]}
+            onLowerHand={() => onLowerHand(person.userId)}
+            isSelf={person.userId === localUserId}
+            spotlighted={spotlightUserId === person.userId}
+            onSetSpotlight={() => onSetSpotlight(spotlightUserId === person.userId ? null : person.userId)}
+            menuOpen={openMenuKey === person.userId}
+            onOpenMenu={() => setOpenMenuKey(person.userId)}
             onCloseMenu={() => setOpenMenuKey(null)}
-            onNotifyStopScreenShare={onNotifyStopScreenShare}
+            onStopScreenShare={onStopScreenShare}
           />
         ))}
       </div>
