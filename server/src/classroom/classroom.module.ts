@@ -25,7 +25,7 @@ import { BatchesModule } from '../batches/batches.module';
     PayoutsModule,
     AlertsModule,
     BatchesModule,
-    // LiveKitRoomsService, RoomAccessService and TrialClassroomService
+    // DailyRoomsService, RoomAccessService and TrialClassroomService
     TrialClassroomModule,
   ],
   controllers: [

@@ -1,5 +1,5 @@
 // The Classroom Badge System against a REAL Postgres — a 1:1 class and a batch
-// of four, with LiveKit replaced by an in-memory fake that records exactly who
+// of four, with Daily replaced by an in-memory fake that records exactly who
 // each celebration was addressed to. The unique constraint that makes an award
 // safe against a double click, and "saved before it is announced", cannot be
 // proven with a mock.
@@ -22,13 +22,12 @@ import { Test } from '@nestjs/testing';
 import { ClassType, LessonStatus, Role } from '@prisma/client';
 import { PrismaModule } from '../../prisma.module';
 import { PrismaService } from '../../prisma.service';
-import type { RoomConnection, ServerEvent } from '../livekit-rooms.service';
+import type { RoomConnection, ServerEvent } from '../daily-rooms.service';
 import { RoomDirectoryService } from '../room-directory.service';
 import {
   DEMO_ROOM_NAME,
   DEMO_STUDENT_EMAIL,
   DEMO_TEACHER_EMAIL,
-  buildIdentity,
   roomForBatchSession,
 } from '../room-ref.util';
 import { createBatchWithSession } from '../../batches/testing/batch-fixtures';
@@ -48,9 +47,14 @@ interface Person {
 
 interface Sent {
   room: string;
-  identities: string[];
+  /** The Daily sessions (connections) the message was addressed to. */
+  sessionIds: string[];
   event: ServerEvent;
 }
+
+/** A student's connection from one device, as Daily would name it. */
+const sessionOf = (who: { id: string }, device = 'aaaa1111') =>
+  `${who.id}-${device}`;
 
 class FakeRooms {
   people: RoomConnection[] = [];
@@ -61,22 +65,30 @@ class FakeRooms {
   onSend: (s: Sent) => Promise<void> = () => Promise.resolve();
 
   listPeople = jest.fn(() => {
-    if (this.failList) return Promise.reject(new Error('livekit down'));
+    if (this.failList) return Promise.reject(new Error('daily down'));
     return Promise.resolve(this.people);
   });
   sendServerEvent = jest.fn(
-    async (room: string, identities: string[], event: ServerEvent) => {
-      if (this.failSend) throw new Error('data channel unavailable');
-      if (identities.length === 0) return 0;
-      const sent = { room, identities, event };
+    async (
+      room: string,
+      connections: Pick<RoomConnection, 'sessionId' | 'userId'>[],
+      event: ServerEvent,
+    ) => {
+      if (this.failSend) throw new Error('app message unavailable');
+      if (connections.length === 0) return 0;
+      const sent = {
+        room,
+        sessionIds: connections.map((c) => c.sessionId),
+        event,
+      };
       await this.onSend(sent);
       this.sent.push(sent);
-      return identities.length;
+      return connections.length;
     },
   );
 }
 
-describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
+describeDb('Classroom badges (real Postgres, Daily faked)', () => {
   // The specs take turns with the one database (see acquireDatabaseLock).
   jest.setTimeout(120_000);
 
@@ -136,11 +148,11 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
     });
   }
 
-  /** Puts a student in the (fake) LiveKit room, on the given devices. */
+  /** Puts a student in the (fake) Daily room, on the given devices. */
   const present = (who: Person, ...devices: string[]) => {
     for (const d of devices.length ? devices : ['aaaa1111']) {
       rooms.people.push({
-        identity: buildIdentity(who.id, d),
+        sessionId: sessionOf(who, d),
         userId: who.id,
         name: who.name,
         joinedAtMs: Date.now(),
@@ -299,8 +311,8 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
       });
       expect(row.scheduledLessonId).toBe(lesson.id);
       expect(row.room).toBe(oneToOneRoom);
-      expect(rooms.sent[0].identities).toEqual([
-        buildIdentity(oneToOneStudent.id, 'laptop01'),
+      expect(rooms.sent[0].sessionIds).toEqual([
+        sessionOf(oneToOneStudent, 'laptop01'),
       ]);
     });
   });
@@ -323,15 +335,12 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
       for (const other of [ben, dev]) {
         expect(await rows({ studentUserId: other.id })).toHaveLength(0);
       }
-      const addressed = rooms.sent.flatMap((s) => s.identities).sort();
+      const addressed = rooms.sent.flatMap((s) => s.sessionIds).sort();
       expect(addressed).toEqual(
-        [
-          buildIdentity(ada.id, 'aaaa1111'),
-          buildIdentity(cleo.id, 'aaaa1111'),
-        ].sort(),
+        [sessionOf(ada, 'aaaa1111'), sessionOf(cleo, 'aaaa1111')].sort(),
       );
       // each celebration went to its own student only
-      for (const s of rooms.sent) expect(s.identities).toHaveLength(1);
+      for (const s of rooms.sent) expect(s.sessionIds).toHaveLength(1);
     });
 
     it('can give one badge to everyone in the class', async () => {
@@ -367,9 +376,9 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
       present(ben);
       await award('curious-mind', [ada.id]);
       expect(rooms.sent).toHaveLength(1);
-      expect(rooms.sent[0].identities.sort()).toEqual([
-        buildIdentity(ada.id, 'laptop01'),
-        buildIdentity(ada.id, 'phone002'),
+      expect(rooms.sent[0].sessionIds.sort()).toEqual([
+        sessionOf(ada, 'laptop01'),
+        sessionOf(ada, 'phone002'),
       ]);
     });
   });
@@ -600,7 +609,7 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
       expect(await rows()).toHaveLength(1);
     });
 
-    it('if LiveKit cannot even say who is there, the award still stands', async () => {
+    it('if Daily cannot even say who is there, the award still stands', async () => {
       rooms.failList = true;
       const res = await award('bright-spark', [batchStudents[0].id]);
       expect(res.awards[0]).toMatchObject({ created: true, notified: false });
@@ -609,7 +618,7 @@ describeDb('Classroom badges (real Postgres, LiveKit faked)', () => {
 
     it('a student who is not in the room is not notified, and still sees the badge in My Badges', async () => {
       const ada = batchStudents[0];
-      const res = await award('bright-spark', [ada.id]); // Ada is nowhere in LiveKit
+      const res = await award('bright-spark', [ada.id]); // Ada is nowhere in Daily
       expect(res.awards[0]).toMatchObject({ created: true, notified: false });
       expect(rooms.sent).toHaveLength(0);
 

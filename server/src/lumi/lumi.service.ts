@@ -678,7 +678,7 @@ ${roleCtx[variant] ?? roleCtx.student}
 Lumexa platform summary:
 - Parents book one-on-one live classes for their children (ages 4-18)
 - Teachers create time slots, conduct live video classes, and earn from the class fee
-- Students attend classes in the "Star Lab" (LiveKit video room)
+- Students attend classes in the "Star Lab" (Daily video room)
 - The platform has a Marketplace to browse and book teachers
 - There is a leaderboard system with rank tiers
 

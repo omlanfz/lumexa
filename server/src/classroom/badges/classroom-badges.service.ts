@@ -8,9 +8,10 @@
 //     class itself, not against anything the browser says), only to students
 //     of that class, and never to themselves.
 //   - The award is saved FIRST; the celebration is a notification sent after,
-//     to exactly the recipients' own connections (LiveKit data message with
-//     destination identities — never a broadcast the browser filters). If it
-//     cannot be delivered the award still stands and the teacher is told.
+//     to exactly the recipients' own connections (a Daily app message
+//     addressed to each of their sessions — never a broadcast the browser
+//     filters). If it cannot be delivered the award still stands and the
+//     teacher is told.
 //   - Idempotent: the browser names each award action with a requestId, and
 //     (requestId, student) can only be stored once, so a double click or a
 //     retry cannot double-award. A later, separate award is a new action.
@@ -29,10 +30,7 @@ import {
 } from '@nestjs/common';
 import { LessonStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma.service';
-import {
-  LiveKitRoomsService,
-  type RoomConnection,
-} from '../livekit-rooms.service';
+import { DailyRoomsService, type RoomConnection } from '../daily-rooms.service';
 import { RoomDirectoryService } from '../room-directory.service';
 import { DEMO_STUDENT_EMAIL } from '../room-ref.util';
 import { BADGE_CATALOG, describeBadge, findBadge } from './badge-catalog';
@@ -59,7 +57,7 @@ export class ClassroomBadgesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly directory: RoomDirectoryService,
-    private readonly rooms: LiveKitRoomsService,
+    private readonly rooms: DailyRoomsService,
   ) {}
 
   catalog() {
@@ -189,11 +187,11 @@ export class ClassroomBadgesService {
     }
 
     for (const award of awards) {
-      const identities = people
-        .filter((c) => c.userId === award.studentUserId)
-        .map((c) => c.identity);
+      const connections = people.filter(
+        (c) => c.userId === award.studentUserId,
+      );
       try {
-        const sent = await this.rooms.sendServerEvent(room, identities, {
+        const sent = await this.rooms.sendServerEvent(room, connections, {
           type: 'badge-awarded',
           awardId: award.id,
           badgeId: badge.id,

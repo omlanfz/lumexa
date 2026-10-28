@@ -5,11 +5,8 @@ import {
   Patch,
   Body,
   Param,
-  Headers,
   UseGuards,
   Request,
-  HttpCode,
-  HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -40,7 +37,6 @@ export class ClassroomController {
       bookingId?: string;
       scheduledLessonId?: string;
       batchSessionId?: string;
-      deviceId?: string;
     },
   ) {
     return this.classroomService.joinLab(req.user.userId, body);
@@ -51,11 +47,10 @@ export class ClassroomController {
    * accounts regardless of what the client sends. */
   @Post('join-demo')
   @UseGuards(AuthGuard('jwt'))
-  joinDemo(@Request() req, @Body() body: { deviceId?: string }) {
+  joinDemo(@Request() req) {
     return this.classroomService.joinDemoClassroom(
       req.user.userId,
       req.user.email,
-      body?.deviceId,
     );
   }
 
@@ -100,72 +95,26 @@ export class ClassroomController {
 
   // ─── Teacher-only in-room management ───────────────────────────────────────
 
-  @Post(':room/mute-participant')
-  @UseGuards(AuthGuard('jwt'))
-  muteParticipant(
-    @Request() req,
-    @Param('room') room: string,
-    @Body() body: { identity: string; kind: 'audio' | 'video' },
-  ) {
-    return this.classroomService.muteParticipant(
-      req.user.userId,
-      room,
-      body.identity,
-      body.kind,
-    );
-  }
+  // Muting people, stopping a screen share and locking a microphone have no
+  // routes: the teacher's browser does those through Daily directly (see the
+  // "Teacher-only in-room controls" note in classroom.service.ts).
 
-  @Post(':room/mute-all')
-  @UseGuards(AuthGuard('jwt'))
-  muteAll(@Request() req, @Param('room') room: string) {
-    return this.classroomService.muteAllParticipants(req.user.userId, room);
-  }
-
-  /** Teacher-only: forcibly stop a participant's screen share. Everyone can
-   * start sharing without permission — this is the teacher's brake on it. */
-  @Post(':room/stop-screen-share')
-  @UseGuards(AuthGuard('jwt'))
-  stopParticipantScreenShare(
-    @Request() req,
-    @Param('room') room: string,
-    @Body() body: { identity: string },
-  ) {
-    return this.classroomService.stopParticipantScreenShare(
-      req.user.userId,
-      room,
-      body.identity,
-    );
-  }
-
-  /** Allow/unallow a participant to unmute — revokes their LiveKit
-   * publish permission for the microphone source server-side, not just a
-   * client-side toggle. */
-  @Post(':room/participant-mic-lock')
-  @UseGuards(AuthGuard('jwt'))
-  setParticipantMicLocked(
-    @Request() req,
-    @Param('room') room: string,
-    @Body() body: { identity: string; locked: boolean },
-  ) {
-    return this.classroomService.setParticipantMicLocked(
-      req.user.userId,
-      room,
-      body.identity,
-      body.locked,
-    );
-  }
-
+  /** Removes a person (by user id) from every device they are in from; they
+   * must knock to come back in. */
   @Post(':room/remove-participant')
   @UseGuards(AuthGuard('jwt'))
   removeParticipant(
     @Request() req,
     @Param('room') room: string,
-    @Body() body: { identity: string },
+    @Body() body: { userId: string },
   ) {
+    if (typeof body?.userId !== 'string' || !body.userId) {
+      throw new BadRequestException('"userId" is required.');
+    }
     return this.classroomService.removeParticipant(
       req.user.userId,
       room,
-      body.identity,
+      body.userId,
     );
   }
 
@@ -217,22 +166,5 @@ export class ClassroomController {
       room,
       body,
     );
-  }
-
-  /**
-   * LiveKit webhook — receives participant_joined, which is how the room's
-   * limits (the lock, 10 people, 3 devices each) are enforced a second time.
-   * This endpoint is NOT authenticated with JWT — it uses LiveKit's own
-   * Authorization header signature verification instead.
-   *
-   * Must be added to your LiveKit webhook configuration in the LiveKit console.
-   */
-  @Post('webhook/livekit')
-  @HttpCode(HttpStatus.OK) // Always return 200 to LiveKit even on soft errors
-  handleLiveKitWebhook(
-    @Body() body: any,
-    @Headers('Authorization') authHeader: string,
-  ) {
-    return this.classroomService.handleLiveKitWebhook(body, authHeader);
   }
 }

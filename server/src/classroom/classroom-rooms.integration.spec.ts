@@ -4,7 +4,7 @@
 // class), and ending a batch class (finalized once, the teacher paid once, one
 // lesson per student on their own record).
 //
-// LiveKit is replaced by an in-memory fake (there is no LiveKit server in the
+// Daily is replaced by an in-memory fake (there is no Daily account in the
 // test environment); everything else — Prisma, the scheduling rules, the
 // finalization transaction, the payout ledger — is the real thing.
 //
@@ -20,9 +20,6 @@ import {
 } from '../assessments/testing/integration-db';
 
 useIntegrationDatabase();
-process.env.LIVEKIT_API_KEY = 'test-key';
-process.env.LIVEKIT_API_SECRET = 'test-secret-that-is-long-enough-for-hs256';
-process.env.LIVEKIT_URL = 'wss://livekit.test';
 delete process.env.SMTP_USER;
 delete process.env.SMTP_PASS;
 
@@ -42,12 +39,11 @@ import { SchedulingService } from '../scheduling/scheduling.service';
 import { AdmissionService } from './admission.service';
 import { ClassFinalizationService } from './class-finalization.service';
 import { ClassroomService } from './classroom.service';
-import type { RoomConnection } from './livekit-rooms.service';
+import type { MeetingTokenParams, RoomConnection } from './daily-rooms.service';
 import { RoomAccessService } from './room-access.service';
 import { RoomDirectoryService } from './room-directory.service';
 import { TrialClassroomService } from './trial-classroom.service';
 import {
-  buildIdentity,
   roomForBatch,
   roomForBatchSession,
   roomForLessonRecord,
@@ -61,30 +57,29 @@ interface Person {
   name: string;
 }
 
+/** Daily, in memory: it hands out ways into a room and remembers who got one. */
 class FakeRooms {
   people: RoomConnection[] = [];
+  /** What each way in that was handed out was made for, in order. */
+  entries: MeetingTokenParams[] = [];
+  assertConfigured = jest.fn();
+  entryFor = jest.fn((params: MeetingTokenParams) => {
+    this.entries.push(params);
+    return Promise.resolve({
+      token: `token-${this.entries.length}`,
+      url: `https://lumexa.daily.co/${params.room}`,
+      eventKey: `key-${params.userId}`,
+    });
+  });
   listPeople = jest.fn(() => Promise.resolve(this.people));
+  meetingStartedAt = jest.fn(() => Promise.resolve(null));
   sendServerEvent = jest.fn(() => Promise.resolve(1));
-  removeConnection = jest.fn(() => Promise.resolve());
+  removeConnections = jest.fn(() => Promise.resolve());
+  setClassState = jest.fn(() => Promise.resolve());
+  deleteRoom = jest.fn(() => Promise.resolve());
 }
 
-/** The access token of a join that was allowed (a refusal has none). */
-function tokenOf(join: object): string {
-  if (!('token' in join) || typeof join.token !== 'string') {
-    throw new Error(`Expected a join token, got ${JSON.stringify(join)}`);
-  }
-  return join.token;
-}
-
-/** The pieces of a LiveKit access token the tests care about. */
-function claims(token: string): { sub: string; name: string; room: string } {
-  const body = JSON.parse(
-    Buffer.from(token.split('.')[1], 'base64url').toString('utf8'),
-  ) as { sub: string; name: string; video: { room: string } };
-  return { sub: body.sub, name: body.name, room: body.video.room };
-}
-
-describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
+describeDb('Classrooms (real Postgres, Daily faked)', () => {
   // The specs take turns with the one database (see acquireDatabaseLock).
   jest.setTimeout(120_000);
 
@@ -92,12 +87,21 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
   let rooms: FakeRooms;
   let scheduling: SchedulingService;
   let access: RoomAccessService;
+  let scheduleEnforcement: jest.SpyInstance;
   let directory: RoomDirectoryService;
   let finalization: ClassFinalizationService;
   let classroom: ClassroomService;
   let payouts: PayoutsService;
   let batchSessions: BatchSessionsService;
   let releaseLock: () => void;
+
+  /** What a join's way in (the token its response carries) was made for. */
+  const wayIn = (join: object): MeetingTokenParams => {
+    if (!('token' in join) || typeof join.token !== 'string') {
+      throw new Error(`Expected a join token, got ${JSON.stringify(join)}`);
+    }
+    return rooms.entries[Number(join.token.replace('token-', '')) - 1];
+  };
 
   const ledger = {
     consumeLessonForScheduledLessonInTx: jest.fn(() => Promise.resolve(true)),
@@ -206,6 +210,11 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     );
     directory = new RoomDirectoryService(prisma);
     access = new RoomAccessService(prisma, rooms as never);
+    // The check that runs a few seconds after a join is covered in
+    // room-access.service.spec; here it must not fire in the middle of a later test.
+    scheduleEnforcement = jest
+      .spyOn(access, 'scheduleEnforcement')
+      .mockImplementation(() => undefined);
     finalization = new ClassFinalizationService(
       prisma,
       audit as never,
@@ -216,6 +225,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       scheduling,
       recording as never,
       batchSessions,
+      rooms as never,
     );
     classroom = new ClassroomService(
       prisma,
@@ -230,7 +240,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       access,
       directory,
       batchSessions,
-      new TrialClassroomService(prisma, access, audit as never),
+      new TrialClassroomService(prisma, access, audit as never, rooms as never),
+      rooms as never,
     );
   });
 
@@ -243,6 +254,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     rooms.people = [];
+    rooms.entries = [];
     await truncateAssessmentData(prisma);
     await prisma.classroomRoomState.deleteMany();
 
@@ -274,22 +286,17 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const joins: object[] = [];
       for (const s of students) {
         joins.push(
-          await classroom.joinScheduledLesson(
-            s.id,
-            batch.lessonIds[s.id],
-            'aaaa1111',
-          ),
+          await classroom.joinScheduledLesson(s.id, batch.lessonIds[s.id]),
         );
       }
       const teacherJoin = await classroom.joinScheduledLesson(
         teacher.id,
         batch.lessonIds[students[0].id],
-        'tdev0001',
       );
 
       const expectedRoom = roomForBatchSession(batch.sessionId);
       for (const j of [...joins, teacherJoin]) {
-        expect(claims(tokenOf(j)).room).toBe(expectedRoom);
+        expect(wayIn(j).room).toBe(expectedRoom);
         expect(j).toMatchObject({
           roomName: expectedRoom,
           classType: 'BATCH',
@@ -300,12 +307,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
 
     it('keeps a 1:1 class in a room of its own', async () => {
       const lesson = await makeLesson(students[0], teacher);
-      const j = await classroom.joinScheduledLesson(
-        students[0].id,
-        lesson.id,
-        'aaaa1111',
-      );
-      expect(claims(tokenOf(j)).room).toBe(`lesson-${lesson.id}`);
+      const j = await classroom.joinScheduledLesson(students[0].id, lesson.id);
+      expect(wayIn(j).room).toBe(`lesson-${lesson.id}`);
       expect(j).toMatchObject({ classType: 'ONE_TO_ONE', batchName: null });
     });
 
@@ -325,12 +328,10 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const joinedA = await classroom.joinScheduledLesson(
         students[0].id,
         a.lessonIds[students[0].id],
-        'aaaa1111',
       );
       const joinedC = await classroom.joinScheduledLesson(
         students[2].id,
         c.lessonIds[students[2].id],
-        'aaaa1111',
       );
       const roomOf = (j: object) => ('roomName' in j ? j.roomName : '');
       expect(
@@ -353,7 +354,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         classroom.joinScheduledLesson(
           students[0].id,
           outsiderClass.lessonIds[students[1].id],
-          'aaaa1111',
         ),
       ).rejects.toThrow(/not assigned/);
     });
@@ -364,63 +364,96 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         classroom.joinScheduledLesson(
           students[0].id,
           batch.lessonIds[students[1].id],
-          'aaaa1111',
         ),
       ).rejects.toThrow(/not assigned/);
       await expect(
         classroom.joinScheduledLesson(
           otherTeacher.id,
           batch.lessonIds[students[0].id],
-          'tdev0001',
         ),
       ).rejects.toThrow(/not assigned/);
     });
 
-    it('gives each device its own identity but one person: <userId>~<device>', async () => {
+    it('gives every device of a person the same person id — devices are connections of one person, not people', async () => {
       const lesson = await makeLesson(students[0], teacher);
       const laptop = await classroom.joinScheduledLesson(
         students[0].id,
         lesson.id,
-        'laptop01',
       );
       const phone = await classroom.joinScheduledLesson(
         students[0].id,
         lesson.id,
-        'phone002',
       );
-      const ids = [laptop, phone].map((j) => claims(tokenOf(j)).sub);
-      expect(ids).toEqual([
-        buildIdentity(students[0].id, 'laptop01'),
-        buildIdentity(students[0].id, 'phone002'),
+      expect([laptop, phone].map((j) => wayIn(j).userId)).toEqual([
+        students[0].id,
+        students[0].id,
       ]);
-      expect(new Set(ids.map((i) => i.split('~')[0]))).toEqual(
-        new Set([students[0].id]),
+    });
+
+    it('answers a join with what the browser needs for Daily: the room’s address, a token, and the key for the server’s messages', async () => {
+      const lesson = await makeLesson(students[0], teacher);
+      const j = await classroom.joinScheduledLesson(students[0].id, lesson.id);
+      expect(j).toMatchObject({
+        token: 'token-1',
+        url: `https://lumexa.daily.co/lesson-${lesson.id}`,
+        eventKey: `key-${students[0].id}`,
+        roomName: `lesson-${lesson.id}`,
+      });
+    });
+
+    it('makes the class’s teacher — and only the teacher — the room’s owner, which is what lets their browser moderate', async () => {
+      const lesson = await makeLesson(students[0], teacher);
+      const asStudent = await classroom.joinScheduledLesson(
+        students[0].id,
+        lesson.id,
+      );
+      const asTeacher = await classroom.joinScheduledLesson(
+        teacher.id,
+        lesson.id,
+      );
+      expect(wayIn(asStudent)).toMatchObject({
+        userId: students[0].id,
+        isOwner: false,
+      });
+      expect(wayIn(asStudent).userName).toMatch(/\(Student\)$/);
+      expect(wayIn(asTeacher)).toMatchObject({
+        userId: teacher.id,
+        isOwner: true,
+      });
+      expect(wayIn(asTeacher).userName).toMatch(/\(Teacher\)$/);
+    });
+
+    it('asks for the room to be checked a few seconds after someone is let in, with the class’s teacher named', async () => {
+      const lesson = await makeLesson(students[0], teacher);
+      await classroom.joinScheduledLesson(students[0].id, lesson.id);
+      expect(scheduleEnforcement).toHaveBeenCalledWith(
+        `lesson-${lesson.id}`,
+        teacher.id,
       );
     });
 
-    it('survives a missing or hostile device id by using a plain one', async () => {
-      const lesson = await makeLesson(students[0], teacher);
-      for (const bad of [undefined, '', 'a b', '../../x', { x: 1 }]) {
-        const j = await classroom.joinScheduledLesson(
-          students[0].id,
-          lesson.id,
-          bad,
-        );
-        expect(claims(tokenOf(j)).sub).toBe(`${students[0].id}~main`);
-      }
+    it('does not record a join (or fine a teacher) when the video service could not let them in', async () => {
+      const lesson = await makeLesson(students[0], teacher, {
+        start: new Date(Date.now() - 10 * 60_000),
+      });
+      rooms.entryFor.mockRejectedValueOnce(new Error('Daily is down'));
+      await expect(
+        classroom.joinScheduledLesson(teacher.id, lesson.id),
+      ).rejects.toThrow('Daily is down');
+      const row = await prisma.scheduledLesson.findUniqueOrThrow({
+        where: { id: lesson.id },
+      });
+      expect(row.teacherJoinedAt).toBeNull();
+      expect(
+        await prisma.payoutEntry.count({ where: { type: 'PENALTY' } }),
+      ).toBe(0);
     });
 
     describe('by the batch class itself', () => {
       it('the teacher enters a batch class by its own id and lands in its room', async () => {
         const batch = await makeBatchClass(students);
-        const j = await classroom.joinBatchSession(
-          teacher.id,
-          batch.sessionId,
-          'tdev0001',
-        );
-        expect(claims(tokenOf(j)).room).toBe(
-          roomForBatchSession(batch.sessionId),
-        );
+        const j = await classroom.joinBatchSession(teacher.id, batch.sessionId);
+        expect(wayIn(j).room).toBe(roomForBatchSession(batch.sessionId));
         // …through one of the students' rows, which the response names.
         expect(Object.values(batch.lessonIds)).toContain(
           (j as { scheduledLessonId: string }).scheduledLessonId,
@@ -432,7 +465,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         const j = await classroom.joinBatchSession(
           students[2].id,
           batch.sessionId,
-          'aaaa1111',
         );
         expect(j).toMatchObject({
           roomName: roomForBatchSession(batch.sessionId),
@@ -443,17 +475,17 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       it('someone who is not in the class, or another teacher, is refused', async () => {
         const batch = await makeBatchClass([students[0], students[1]]);
         await expect(
-          classroom.joinBatchSession(students[3].id, batch.sessionId, 'x1'),
+          classroom.joinBatchSession(students[3].id, batch.sessionId),
         ).rejects.toThrow(/not assigned/);
         await expect(
-          classroom.joinBatchSession(otherTeacher.id, batch.sessionId, 'x1'),
+          classroom.joinBatchSession(otherTeacher.id, batch.sessionId),
         ).rejects.toThrow(/not assigned/);
       });
 
       it('a class with no student in it cannot be entered', async () => {
         const batch = await makeBatchClass([]);
         await expect(
-          classroom.joinBatchSession(teacher.id, batch.sessionId, 'tdev0001'),
+          classroom.joinBatchSession(teacher.id, batch.sessionId),
         ).rejects.toThrow(/no students/);
       });
     });
@@ -464,7 +496,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.joinScheduledLesson(
         students[1].id,
         batch.lessonIds[students[1].id],
-        'aaaa1111',
       );
       let all = await prisma.scheduledLesson.findMany({
         orderBy: { id: 'asc' },
@@ -475,7 +506,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.joinScheduledLesson(
         teacher.id,
         batch.lessonIds[students[0].id],
-        'tdev0001',
       );
       all = await prisma.scheduledLesson.findMany();
       expect(all.every((l) => l.teacherJoinedAt)).toBe(true);
@@ -492,7 +522,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.joinScheduledLesson(
         teacher.id,
         batch.lessonIds[students[0].id],
-        'tdev0001',
       );
       const original = await prisma.batchSession.findUniqueOrThrow({
         where: { id: batch.sessionId },
@@ -520,7 +549,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.joinScheduledLesson(
         teacher.id,
         batch.lessonIds[students[0].id],
-        'tdev0002',
       );
       const after = await prisma.scheduledLesson.findMany();
       expect(after.every((l) => l.teacherJoinedAt)).toBe(true);
@@ -545,13 +573,11 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         await classroom.joinScheduledLesson(
           teacher.id,
           batch.lessonIds[students[0].id],
-          'tdev0001',
         );
         // Back in through another student's row and another device.
         await classroom.joinScheduledLesson(
           teacher.id,
           batch.lessonIds[students[3].id],
-          'tdev0002',
         );
 
         const rows = await penalties();
@@ -572,8 +598,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         const lesson = await makeLesson(students[0], teacher, {
           start: late(),
         });
-        await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0001');
-        await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0002');
+        await classroom.joinScheduledLesson(teacher.id, lesson.id);
+        await classroom.joinScheduledLesson(teacher.id, lesson.id);
         const rows = await penalties();
         expect(rows).toHaveLength(1);
         expect(rows[0].referenceType).toBe('SCHEDULED_LESSON_LATE_JOIN');
@@ -583,7 +609,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     it('a teacher who was on time is not fined by a later token request — pressing Join, a second device, a refresh', async () => {
       const lesson = await makeLesson(students[0], teacher); // starts in 5 minutes
       const spy = jest.spyOn(payouts, 'triggerLateJoinPenalty');
-      await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0001');
+      await classroom.joinScheduledLesson(teacher.id, lesson.id);
       expect(spy).not.toHaveBeenCalled();
 
       // Twenty minutes into the class. (Time cannot be moved on, so the class is
@@ -598,8 +624,8 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
           teacherJoinedAt: new Date(started.getTime() - 2 * 60_000),
         },
       });
-      await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0001'); // Join pressed
-      await classroom.joinScheduledLesson(teacher.id, lesson.id, 'tdev0002'); // a second device
+      await classroom.joinScheduledLesson(teacher.id, lesson.id); // Join pressed
+      await classroom.joinScheduledLesson(teacher.id, lesson.id); // a second device
       expect(spy).not.toHaveBeenCalled();
       expect(
         await prisma.payoutEntry.count({ where: { type: 'PENALTY' } }),
@@ -611,7 +637,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.joinScheduledLesson(
         teacher.id,
         batch.lessonIds[students[0].id],
-        'tdev0001',
       );
 
       const addedLater = await addParticipant(prisma, {
@@ -643,7 +668,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       await classroom.joinScheduledLesson(
         teacher.id,
         batch.lessonIds[students[0].id],
-        'tdev0002',
       );
       expect(
         await prisma.payoutEntry.count({ where: { type: 'PENALTY' } }),
@@ -685,7 +709,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const open = await classroom.joinScheduledLesson(
         students[0].id,
         lessonId,
-        'aaaa1111',
       );
       expect(open).toMatchObject({ roomLocked: false });
 
@@ -693,7 +716,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const blocked = await classroom.joinScheduledLesson(
         students[0].id,
         lessonId,
-        'aaaa1111',
       );
       expect(blocked).toMatchObject({
         blocked: true,
@@ -705,7 +727,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const teacherIn = await classroom.joinScheduledLesson(
         teacher.id,
         lessonId,
-        'tdev0001',
       );
       expect(teacherIn).toMatchObject({ roomLocked: true });
       expect('token' in teacherIn).toBe(true);
@@ -716,22 +737,14 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const lessonId = batch.lessonIds[students[0].id];
       const room = roomForBatchSession(batch.sessionId);
       await classroom.setRoomLocked(teacher.id, room, true);
-      rooms.people = []; // the LiveKit room emptied and is gone
+      rooms.people = []; // the Daily room emptied and is gone
       expect(
-        await classroom.joinScheduledLesson(
-          students[0].id,
-          lessonId,
-          'aaaa1111',
-        ),
+        await classroom.joinScheduledLesson(students[0].id, lessonId),
       ).toMatchObject({ blocked: true });
 
       await classroom.setRoomLocked(teacher.id, room, false);
       expect(
-        await classroom.joinScheduledLesson(
-          students[0].id,
-          lessonId,
-          'aaaa1111',
-        ),
+        await classroom.joinScheduledLesson(students[0].id, lessonId),
       ).toHaveProperty('token');
     });
 
@@ -750,7 +763,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         await classroom.joinScheduledLesson(
           students[0].id,
           a.lessonIds[students[0].id],
-          'aaaa1111',
         ),
       ).toMatchObject({ blocked: true });
       // b is an hour later: not open yet, but certainly not "locked"
@@ -758,7 +770,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         classroom.joinScheduledLesson(
           students[1].id,
           b.lessonIds[students[1].id],
-          'aaaa1111',
         ),
       ).rejects.toThrow(/opens 10 minutes before/);
     });
@@ -769,10 +780,10 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
   describe('the 10-people limit', () => {
     const inRoom = (
       userId: string,
-      device = 'aaaa1111',
+      session = 'aaaa1111',
       at = 0,
     ): RoomConnection => ({
-      identity: buildIdentity(userId, device),
+      sessionId: `${userId}-${session}`,
       userId,
       name: userId,
       joinedAtMs: 1_000_000 + at,
@@ -790,11 +801,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         ...many.slice(0, 8).map((s, i) => inRoom(s.id, 'aaaa1111', i)),
       ];
       expect(
-        await classroom.joinScheduledLesson(
-          many[8].id,
-          rowOf(many[8]),
-          'aaaa1111',
-        ),
+        await classroom.joinScheduledLesson(many[8].id, rowOf(many[8])),
       ).toHaveProperty('token');
 
       rooms.people = [
@@ -804,7 +811,6 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const tenth = await classroom.joinScheduledLesson(
         many[9].id,
         rowOf(many[9]),
-        'aaaa1111',
       );
       expect(tenth).toMatchObject({ blocked: true, reason: 'ROOM_FULL' });
 
@@ -812,11 +818,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         .slice(0, 9)
         .map((s, i) => inRoom(s.id, 'aaaa1111', i));
       expect(
-        await classroom.joinScheduledLesson(
-          teacher.id,
-          rowOf(many[0]),
-          'tdev0001',
-        ),
+        await classroom.joinScheduledLesson(teacher.id, rowOf(many[0])),
       ).toHaveProperty('token');
     });
 
@@ -827,34 +829,26 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         crowd.push(inRoom(`someone-else-${i}`, 'aaaa1111', i));
       rooms.people = [inRoom(teacher.id, 'tdev0001'), ...crowd];
       expect(
-        await classroom.joinScheduledLesson(
-          students[0].id,
-          lesson.id,
-          'aaaa1111',
-        ),
+        await classroom.joinScheduledLesson(students[0].id, lesson.id),
       ).toMatchObject({ blocked: true, reason: 'ROOM_FULL' });
     });
 
-    it('refuses a fourth device, not a refresh of an existing one', async () => {
+    it('refuses a fourth device, but not a second or a third', async () => {
       const batch = await makeBatchClass([students[0]]);
       const lessonId = batch.lessonIds[students[0].id];
+      rooms.people = ['aaaa1111', 'bbbb2222'].map((d, i) =>
+        inRoom(students[0].id, d, i),
+      );
+      expect(
+        await classroom.joinScheduledLesson(students[0].id, lessonId),
+      ).toHaveProperty('token');
+
       rooms.people = ['aaaa1111', 'bbbb2222', 'cccc3333'].map((d, i) =>
         inRoom(students[0].id, d, i),
       );
       expect(
-        await classroom.joinScheduledLesson(
-          students[0].id,
-          lessonId,
-          'dddd4444',
-        ),
+        await classroom.joinScheduledLesson(students[0].id, lessonId),
       ).toMatchObject({ blocked: true, reason: 'TOO_MANY_DEVICES' });
-      expect(
-        await classroom.joinScheduledLesson(
-          students[0].id,
-          lessonId,
-          'bbbb2222',
-        ),
-      ).toHaveProperty('token');
     });
   });
 
@@ -1073,6 +1067,9 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledTimes(1);
       expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledWith(room);
       expect(recording.finalizeAtClassEnd).toHaveBeenCalledTimes(1);
+      // …and the Daily room is closed, once, so nobody is left in it.
+      expect(rooms.deleteRoom).toHaveBeenCalledTimes(1);
+      expect(rooms.deleteRoom).toHaveBeenCalledWith(room);
     });
 
     it('an admin settling one student’s row settles the whole class — once, crediting everyone', async () => {
@@ -1238,56 +1235,73 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
   // ─── Moderation reaches every device ───────────────────────────────────────
 
   describe('removing a person', () => {
+    const inRoom = (
+      userId: string,
+      session: string,
+      name: string,
+    ): RoomConnection => ({
+      sessionId: `${userId}-${session}`,
+      userId,
+      name,
+      joinedAtMs: 1_000_000,
+    });
+
     it('removes them from every device they are on, and makes them knock to come back', async () => {
       const batch = await makeBatchClass(students.slice(0, 2));
       const room = roomForBatchSession(batch.sessionId);
-      const removed: string[] = [];
-      const client = {
-        listParticipants: jest.fn(() =>
-          Promise.resolve([
-            {
-              identity: buildIdentity(students[0].id, 'laptop01'),
-              name: 'Ada (Student)',
-              tracks: [],
-            },
-            {
-              identity: buildIdentity(students[0].id, 'phone002'),
-              name: 'Ada (Student)',
-              tracks: [],
-            },
-            {
-              identity: buildIdentity(students[1].id, 'laptop01'),
-              name: 'Ben (Student)',
-              tracks: [],
-            },
-          ]),
-        ),
-        removeParticipant: jest.fn((_r: string, identity: string) => {
-          removed.push(identity);
-          return Promise.resolve();
-        }),
-      };
-      jest
-        .spyOn(classroom as never, 'getRoomServiceClient')
-        .mockReturnValue(client as never);
+      rooms.people = [
+        inRoom(students[0].id, 'laptop01', 'Ada (Student)'),
+        inRoom(students[0].id, 'phone002', 'Ada (Student)'),
+        inRoom(students[1].id, 'laptop01', 'Ben (Student)'),
+      ];
 
-      await classroom.removeParticipant(
-        teacher.id,
-        room,
-        buildIdentity(students[0].id, 'laptop01'),
-      );
+      await classroom.removeParticipant(teacher.id, room, students[0].id);
 
-      expect(removed.sort()).toEqual([
-        buildIdentity(students[0].id, 'laptop01'),
-        buildIdentity(students[0].id, 'phone002'),
+      expect(rooms.removeConnections).toHaveBeenCalledTimes(1);
+      const [roomName, sessionIds] = rooms.removeConnections.mock
+        .calls[0] as unknown as [string, string[]];
+      expect(roomName).toBe(room);
+      expect([...sessionIds].sort()).toEqual([
+        `${students[0].id}-laptop01`,
+        `${students[0].id}-phone002`,
       ]);
       // keyed by the person, so any device is turned into a knock
       const again = await classroom.joinScheduledLesson(
         students[0].id,
         batch.lessonIds[students[0].id],
-        'newdev01',
       );
       expect(again).toMatchObject({ waitingForAdmission: true });
+      expect(
+        await prisma.classroomAdmission.findFirstOrThrow({
+          where: { room, userId: students[0].id, status: 'REMOVED' },
+        }),
+      ).toMatchObject({ displayName: 'Ada' });
+    });
+
+    it('someone who has already gone is not an error, and nothing is recorded', async () => {
+      const batch = await makeBatchClass([students[0]]);
+      const room = roomForBatchSession(batch.sessionId);
+      rooms.people = [];
+      await expect(
+        classroom.removeParticipant(teacher.id, room, students[0].id),
+      ).resolves.toEqual({ ok: true });
+      expect(rooms.removeConnections).not.toHaveBeenCalled();
+      expect(await prisma.classroomAdmission.count({ where: { room } })).toBe(
+        0,
+      );
+    });
+
+    it('only the class’s teacher can remove someone', async () => {
+      const batch = await makeBatchClass(students.slice(0, 2));
+      const room = roomForBatchSession(batch.sessionId);
+      rooms.people = [inRoom(students[1].id, 'laptop01', 'Ben (Student)')];
+      await expect(
+        classroom.removeParticipant(students[0].id, room, students[1].id),
+      ).rejects.toThrow(/Only the teacher/);
+      await expect(
+        classroom.removeParticipant(otherTeacher.id, room, students[1].id),
+      ).rejects.toThrow(/Only the teacher/);
+      expect(rooms.removeConnections).not.toHaveBeenCalled();
     });
 
     it('the teacher cannot remove themselves', async () => {
@@ -1296,7 +1310,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         classroom.removeParticipant(
           teacher.id,
           roomForBatchSession(batch.sessionId),
-          buildIdentity(teacher.id, 'tdev0001'),
+          teacher.id,
         ),
       ).rejects.toThrow(/cannot remove yourself/);
     });
@@ -1336,6 +1350,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         prisma,
         access,
         audit as never,
+        rooms as never,
       );
     });
     beforeEach(async () => {
@@ -1363,9 +1378,9 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       const trial = await makeTrial();
       const join = await classroom.joinLab(teacher.id, {
         trialLeadId: trial.id,
-        deviceId: 'tdev0001',
       });
-      expect(claims(tokenOf(join)).room).toBe(`trial-${trial.id}`);
+      expect(wayIn(join).room).toBe(`trial-${trial.id}`);
+      expect(wayIn(join)).toMatchObject({ userId: teacher.id, isOwner: true });
       expect(join).toMatchObject({ isTrial: true, classType: 'ONE_TO_ONE' });
       await expect(
         classroom.joinLab(otherTeacher.id, { trialLeadId: trial.id }),
@@ -1384,27 +1399,27 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
       });
       expect(await access.isLocked(room)).toBe(true);
       expect(
-        await trialTrialClassroom.joinAsGuest('g'.repeat(43), 'abcd1234'),
+        await trialTrialClassroom.joinAsGuest('g'.repeat(43)),
       ).toMatchObject({ blocked: true, reason: 'ROOM_LOCKED' });
       await classroom
         .setRoomLocked(teacher.id, room, false)
         .catch(() => undefined);
       expect(
-        await trialTrialClassroom.joinAsGuest('g'.repeat(43), 'abcd1234'),
+        await trialTrialClassroom.joinAsGuest('g'.repeat(43)),
       ).toHaveProperty('token');
     });
 
     it('a full trial room (10 people) refuses a further guest like any classroom', async () => {
       const trial = await makeTrial();
       const crowd = Array.from({ length: 9 }, (_, i) => ({
-        identity: buildIdentity(`someone-${i}`, 'aaaa1111'),
+        sessionId: `someone-${i}-aaaa1111`,
         userId: `someone-${i}`,
         name: `S${i}`,
         joinedAtMs: Date.now(),
       }));
       rooms.people = [
         {
-          identity: buildIdentity(teacher.id, 'tdev0001'),
+          sessionId: `${teacher.id}-tdev0001`,
           userId: teacher.id,
           name: 'T',
           joinedAtMs: Date.now(),
@@ -1412,7 +1427,7 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
         ...crowd,
       ];
       expect(
-        await trialTrialClassroom.joinAsGuest(trial.guestToken!, 'abcd1234'),
+        await trialTrialClassroom.joinAsGuest(trial.guestToken!),
       ).toMatchObject({ blocked: true, reason: 'ROOM_FULL' });
     });
 
@@ -1424,18 +1439,13 @@ describeDb('Classrooms (real Postgres, LiveKit faked)', () => {
     });
 
     it('ending a trial closes the room: Completed when both sides took part, otherwise left for the admin — never a lesson, payout or ledger entry', async () => {
-      const client = { deleteRoom: jest.fn(() => Promise.resolve()) };
-      jest
-        .spyOn(classroom as never, 'getRoomServiceClient')
-        .mockReturnValue(client as never);
-
       const absent = await makeTrial();
       await classroom.endClass(teacher.id, `trial-${absent.id}`, {});
       expect(
         (await prisma.trialLead.findUniqueOrThrow({ where: { id: absent.id } }))
           .appointmentStatus,
       ).toBe('CONFIRMED');
-      expect(client.deleteRoom).toHaveBeenCalledWith(`trial-${absent.id}`);
+      expect(rooms.deleteRoom).toHaveBeenCalledWith(`trial-${absent.id}`);
 
       await prisma.trialLead.update({
         where: { id: absent.id },

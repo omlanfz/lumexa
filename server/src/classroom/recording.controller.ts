@@ -1,7 +1,7 @@
 // FILE PATH: server/src/classroom/recording.controller.ts
 //
 // The teacher's side of recording a class — see RecordingService for how it
-// works. Everything here is scoped to a classroom (LiveKit room name) and is
+// works. Everything here is scoped to a classroom (its room name) and is
 // refused unless the caller is that room's teacher; the segment must also be
 // one that same teacher's browser made.
 //

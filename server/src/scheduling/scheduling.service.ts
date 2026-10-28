@@ -1178,7 +1178,7 @@ export class SchedulingService {
     return session;
   }
 
-  /** Records the first time each side's LiveKit token was issued for this
+  /** Records the first time each side's classroom join token was issued for this
    * lesson — teacherJoinedAt is the sole source for lateness (see
    * lesson-window.util computeLateMinutes), never a manually entered value.
    * A batch class has ONE teacher attendance: it belongs to the class (the

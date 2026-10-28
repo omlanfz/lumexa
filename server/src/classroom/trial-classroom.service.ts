@@ -1,7 +1,7 @@
 // FILE PATH: server/src/classroom/trial-classroom.service.ts
 //
 // Joining a free trial class. A trial reuses the classroom infrastructure
-// (LiveKit room, room lock / 10-people limit via RoomAccessService, the same
+// (Daily room, room lock / 10-people limit via RoomAccessService, the same
 // classroom UI) but has no ScheduledLesson: no student account, no lesson
 // balance, no curriculum progress, no payout.
 //
@@ -12,9 +12,9 @@
 //
 // Both are validated here, on the server, against the stored appointment
 // (trial-access.util.ts): CONFIRMED, teacher assigned, inside the joining
-// window. The LiveKit token that comes back is bound to this one room and one
-// identity; the LiveKit API key/secret and the room name are never sent to the
-// guest beyond what LiveKit needs to connect.
+// window. The Daily meeting token that comes back is bound to this one room and
+// one person; the Daily API key and the room name are never sent to the guest
+// beyond what Daily needs to connect.
 
 import {
   BadRequestException,
@@ -23,15 +23,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AccessToken } from 'livekit-server-sdk';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { DailyRoomsService, type RoomEntry } from './daily-rooms.service';
 import { RoomAccessService } from './room-access.service';
 import {
   MAX_PEOPLE_PER_CLASSROOM,
-  buildIdentity,
   roomForTrial,
-  sanitizeDeviceId,
   trialGuestKey,
 } from './room-ref.util';
 import {
@@ -46,8 +44,6 @@ const MINUTE_MS = 60_000;
 /** Longest a join token stays valid (the same 3 hours a regular class gets). */
 const MAX_TOKEN_TTL_SECONDS = 3 * 60 * 60;
 
-type LiveKitCredentials = { apiKey: string; apiSecret: string };
-
 @Injectable()
 export class TrialClassroomService {
   private readonly logger = new Logger(TrialClassroomService.name);
@@ -56,16 +52,8 @@ export class TrialClassroomService {
     private readonly prisma: PrismaService,
     private readonly roomAccess: RoomAccessService,
     private readonly audit: AuditService,
+    private readonly rooms: DailyRoomsService,
   ) {}
-
-  private credentials(): LiveKitCredentials {
-    const apiKey = process.env.LIVEKIT_API_KEY;
-    const apiSecret = process.env.LIVEKIT_API_SECRET;
-    if (!apiKey || !apiSecret) {
-      throw new BadRequestException('Video service is not configured.');
-    }
-    return { apiKey, apiSecret };
-  }
 
   // ─── What the guest page shows ────────────────────────────────────────────
 
@@ -96,16 +84,15 @@ export class TrialClassroomService {
 
   // ─── Joining ──────────────────────────────────────────────────────────────
 
-  async joinAsGuest(token: string, deviceId?: unknown, now = new Date()) {
+  async joinAsGuest(token: string, now = new Date()) {
     const lead = await this.leadByToken(token);
     const state = trialAccessState(lead, now);
     if (state !== 'OPEN') {
       this.refuse(state);
     }
     const teacherUserId = lead.teacher!.userId;
-    const { apiKey, apiSecret } = this.credentials();
+    this.rooms.assertConfigured();
     const room = roomForTrial(lead.id);
-    const device = sanitizeDeviceId(deviceId);
     const guestKey = trialGuestKey(lead.id);
 
     // The teacher's lock, the 10-people limit and the per-person device limit.
@@ -113,7 +100,6 @@ export class TrialClassroomService {
       room,
       userId: guestKey,
       role: 'STUDENT',
-      deviceId: device,
       teacherUserId,
     });
     if (!entry.ok) {
@@ -126,13 +112,15 @@ export class TrialClassroomService {
     }
 
     const closesAt = joinWindow(lead.startAt!, lead.endAt!).closesAt;
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: buildIdentity(guestKey, device),
+    const way = await this.rooms.entryFor({
+      room,
+      userId: guestKey,
       // "(Student)" is how the classroom UI tells a student from the teacher.
-      name: `${lead.childName} (Student)`,
+      userName: `${lead.childName} (Student)`,
+      isOwner: false,
       // Valid until a little after the joining window closes — a short-lived,
       // room-bound token, never a reusable credential.
-      ttl: Math.min(
+      ttlSeconds: Math.min(
         MAX_TOKEN_TTL_SECONDS,
         Math.max(
           5 * 60,
@@ -140,13 +128,7 @@ export class TrialClassroomService {
         ),
       ),
     });
-    at.addGrant({
-      roomJoin: true,
-      room,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
-    });
+    this.roomAccess.scheduleEnforcement(room, teacherUserId);
 
     await this.prisma.trialLead
       .updateMany({
@@ -157,20 +139,10 @@ export class TrialClassroomService {
         this.logger.error(`Could not record guest join for ${lead.id}: ${err}`),
       );
 
-    return this.joinResponse(
-      await at.toJwt(),
-      room,
-      lead.startAt!,
-      lead.childName,
-    );
+    return this.joinResponse(way, room, lead.startAt!, lead.childName);
   }
 
-  async joinAsTeacher(
-    userId: string,
-    trialLeadId: string,
-    deviceId?: unknown,
-    now = new Date(),
-  ) {
+  async joinAsTeacher(userId: string, trialLeadId: string, now = new Date()) {
     const lead = await this.prisma.trialLead.findUnique({
       where: { id: trialLeadId },
       include: { teacher: { select: { userId: true, user: true } } },
@@ -196,15 +168,13 @@ export class TrialClassroomService {
       this.refuse(state);
     }
 
-    const { apiKey, apiSecret } = this.credentials();
+    this.rooms.assertConfigured();
     const room = roomForTrial(lead.id);
-    const device = sanitizeDeviceId(deviceId);
 
     const entry = await this.roomAccess.checkEntry({
       room,
       userId,
       role: 'TEACHER',
-      deviceId: device,
       teacherUserId: userId,
     });
     if (!entry.ok) {
@@ -216,18 +186,14 @@ export class TrialClassroomService {
       };
     }
 
-    const at = new AccessToken(apiKey, apiSecret, {
-      identity: buildIdentity(userId, device),
-      name: `${lead.teacher.user.fullName} (Teacher)`,
-      ttl: MAX_TOKEN_TTL_SECONDS,
-    });
-    at.addGrant({
-      roomJoin: true,
+    const way = await this.rooms.entryFor({
       room,
-      canPublish: true,
-      canSubscribe: true,
-      canPublishData: true,
+      userId,
+      userName: `${lead.teacher.user.fullName} (Teacher)`,
+      isOwner: true,
+      ttlSeconds: MAX_TOKEN_TTL_SECONDS,
     });
+    this.roomAccess.scheduleEnforcement(room, userId);
 
     await this.prisma.trialLead
       .updateMany({
@@ -240,12 +206,7 @@ export class TrialClassroomService {
         ),
       );
 
-    return this.joinResponse(
-      await at.toJwt(),
-      room,
-      lead.startAt!,
-      lead.childName,
-    );
+    return this.joinResponse(way, room, lead.startAt!, lead.childName);
   }
 
   // ─── Ending ───────────────────────────────────────────────────────────────
@@ -306,14 +267,13 @@ export class TrialClassroomService {
   }
 
   private async joinResponse(
-    token: string,
+    way: RoomEntry,
     room: string,
     start: Date,
     childName: string,
   ) {
     return {
-      token,
-      url: process.env.LIVEKIT_URL,
+      ...way,
       roomName: room,
       scheduledStart: start.toISOString(),
       classType: 'ONE_TO_ONE' as const,

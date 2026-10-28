@@ -1,6 +1,6 @@
 // FILE PATH: server/src/classroom/room-directory.service.ts
 //
-// "Who belongs to this classroom?" — the one place a LiveKit room name is
+// "Who belongs to this classroom?" — the one place a classroom's room name is
 // turned back into the people and lessons behind it. A leaf service (Prisma
 // only) so the join flow, the teacher-only controls, the room limits, the
 // recording service and the badge system can all ask the same question

@@ -89,7 +89,7 @@ export class TrialController {
   @Header('Cache-Control', 'no-store, max-age=0')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   guestJoin(@Body() dto: GuestJoinDto) {
-    return this.classroom.joinAsGuest(dto.token, dto.deviceId);
+    return this.classroom.joinAsGuest(dto.token);
   }
 
   /** Admin only — list all trial leads */

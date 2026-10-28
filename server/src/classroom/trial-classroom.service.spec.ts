@@ -2,12 +2,10 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { TokenVerifier } from 'livekit-server-sdk';
 import { TrialClassroomService } from './trial-classroom.service';
 
-const KEY = 'devkey';
-const SECRET = 'devsecret-devsecret-devsecret-devsecret';
 const TOKEN = 'k3Jx9QmLw0pZ7vNc2RtYb5HdFgAe8UiOsXn1MqWjC4E';
 const NOW = new Date('2026-11-10T09:55:00Z'); // 5 min before the start
 const start = new Date('2026-11-10T10:00:00Z');
@@ -35,24 +33,26 @@ function build(row: any = lead(), entry: any = { ok: true }) {
   const roomAccess: any = {
     checkEntry: jest.fn().mockResolvedValue(entry),
     isLocked: jest.fn().mockResolvedValue(false),
+    scheduleEnforcement: jest.fn(),
   };
   const audit: any = { log: jest.fn().mockResolvedValue({}) };
+  // Daily itself is faked: what matters here is what the trial asks it for.
+  const rooms: any = {
+    assertConfigured: jest.fn(),
+    entryFor: jest.fn().mockResolvedValue({
+      token: 'daily-meeting-token',
+      url: 'https://lumexa.daily.co/trial-lead-1',
+      eventKey: 'event-key',
+    }),
+  };
   return {
     prisma,
     roomAccess,
     audit,
-    service: new TrialClassroomService(prisma, roomAccess, audit),
+    rooms,
+    service: new TrialClassroomService(prisma, roomAccess, audit, rooms),
   };
 }
-
-const verify = (jwt: string) =>
-  new TokenVerifier(KEY, SECRET).verify(jwt) as Promise<any>;
-
-beforeEach(() => {
-  process.env.LIVEKIT_API_KEY = KEY;
-  process.env.LIVEKIT_API_SECRET = SECRET;
-  process.env.LIVEKIT_URL = 'wss://example.livekit.cloud';
-});
 
 describe('TrialClassroomService.guestStatus', () => {
   it('tells the link holder what to show, using the server clock', async () => {
@@ -119,77 +119,81 @@ describe('TrialClassroomService.guestStatus', () => {
 });
 
 describe('TrialClassroomService.joinAsGuest — secure guest access', () => {
-  it('issues a short-lived LiveKit token bound to this trial room only, with no admin rights', async () => {
-    const { service, prisma } = build();
-    const res: any = await service.joinAsGuest(TOKEN, 'abcd1234abcd1234', NOW);
+  it('issues a short-lived Daily token bound to this trial room only, as an ordinary participant', async () => {
+    const { service, prisma, rooms } = build();
+    const res: any = await service.joinAsGuest(TOKEN, NOW);
     expect(res).toMatchObject({
+      token: 'daily-meeting-token',
+      url: 'https://lumexa.daily.co/trial-lead-1',
+      eventKey: 'event-key',
       roomName: 'trial-lead-1',
-      url: 'wss://example.livekit.cloud',
       scheduledStart: start.toISOString(),
       classType: 'ONE_TO_ONE',
       isTrial: true,
+      trialChildName: 'Alex',
       roomLocked: false,
     });
-    const claims = await verify(res.token);
-    expect(claims.sub).toBe('trial-guest-lead-1~abcd1234abcd1234');
-    expect(claims.name).toBe('Alex (Student)');
-    expect(claims.video).toMatchObject({
+    expect(rooms.entryFor).toHaveBeenCalledTimes(1);
+    expect(rooms.entryFor).toHaveBeenCalledWith({
       room: 'trial-lead-1',
-      roomJoin: true,
-      canPublish: true,
-      canSubscribe: true,
+      // "tg-" and the trial's id, never a real user id
+      userId: 'tg-lead1',
+      userName: 'Alex (Student)',
+      // never the room's owner: no moderating, no stopping the teacher's share
+      isOwner: false,
+      // expires soon after the joining window — never a long-lived credential
+      // (the join was at 09:55 and the window closes at 11:00, so: 65 minutes
+      // plus a 15-minute margin)
+      ttlSeconds: 80 * 60,
     });
-    // only joining that one room: never room admin / create / list / record
-    for (const forbidden of [
-      'roomAdmin',
-      'roomCreate',
-      'roomList',
-      'roomRecord',
-      'canUpdateOwnMetadata',
-      'hidden',
-      'recorder',
-    ]) {
-      expect(claims.video[forbidden]).toBeFalsy();
-    }
-    // expires soon after the joining window — never a long-lived credential
-    // (livekit stamps `exp` from the real clock; the join was at 09:55 and the
-    // window closes at 11:00, so: 65 minutes + a 15-minute margin)
-    const ttlMin = (claims.exp - Date.now() / 1000) / 60;
-    expect(ttlMin).toBeGreaterThan(78);
-    expect(ttlMin).toBeLessThan(82);
-    // the secrets never leave the server
-    const json = JSON.stringify(res);
-    expect(json).not.toContain(SECRET);
-    expect(json).not.toContain(TOKEN);
+    // the guest link's secret never comes back to the guest
+    expect(JSON.stringify(res)).not.toContain(TOKEN);
     expect(prisma.trialLead.updateMany.mock.calls[0][0]).toMatchObject({
       where: { id: 'lead-1', guestJoinedAt: null },
     });
   });
 
+  it('has the room checked a few seconds after the guest is let in, naming the trial’s teacher', async () => {
+    const { service, roomAccess } = build();
+    await service.joinAsGuest(TOKEN, NOW);
+    expect(roomAccess.scheduleEnforcement).toHaveBeenCalledWith(
+      'trial-lead-1',
+      'teacher-user-1',
+    );
+  });
+
+  it('caps the token at three hours however late in the window the guest comes', async () => {
+    const { service, rooms } = build(
+      lead({ endAt: new Date(end.getTime() + 6 * 3600_000) }),
+    );
+    await service.joinAsGuest(TOKEN, NOW);
+    expect(rooms.entryFor.mock.calls[0][0].ttlSeconds).toBe(3 * 3600);
+  });
+
   it('the guest is treated as a student for the lock / 10-people / device limits', async () => {
     const { service, roomAccess } = build();
-    await service.joinAsGuest(TOKEN, 'abcd1234', NOW);
+    await service.joinAsGuest(TOKEN, NOW);
     expect(roomAccess.checkEntry).toHaveBeenCalledWith({
       room: 'trial-lead-1',
-      userId: 'trial-guest-lead-1',
+      userId: 'tg-lead1',
       role: 'STUDENT',
-      deviceId: 'abcd1234',
       teacherUserId: 'teacher-user-1',
     });
   });
 
   it('answers a locked / full room like every other class (a normal, retryable refusal)', async () => {
-    const { service } = build(lead(), {
+    const { service, rooms, prisma } = build(lead(), {
       ok: false,
       reason: 'ROOM_LOCKED',
       message: 'locked',
     });
-    await expect(
-      service.joinAsGuest(TOKEN, 'abcd1234', NOW),
-    ).resolves.toMatchObject({
+    await expect(service.joinAsGuest(TOKEN, NOW)).resolves.toMatchObject({
       blocked: true,
       reason: 'ROOM_LOCKED',
     });
+    // …with no way in made, and no join recorded
+    expect(rooms.entryFor).not.toHaveBeenCalled();
+    expect(prisma.trialLead.updateMany).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -202,11 +206,12 @@ describe('TrialClassroomService.joinAsGuest — secure guest access', () => {
   ])(
     'refuses a valid link when the trial is %s — and issues no token',
     async (_l, over, now) => {
-      const { service, prisma, roomAccess } = build(lead(over));
-      await expect(
-        service.joinAsGuest(TOKEN, 'abcd1234', now),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      const { service, prisma, roomAccess, rooms } = build(lead(over));
+      await expect(service.joinAsGuest(TOKEN, now)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expect(roomAccess.checkEntry).not.toHaveBeenCalled();
+      expect(rooms.entryFor).not.toHaveBeenCalled();
       expect(prisma.trialLead.updateMany).not.toHaveBeenCalled();
     },
   );
@@ -217,7 +222,6 @@ describe('TrialClassroomService.joinAsGuest — secure guest access', () => {
       await expect(
         service.joinAsGuest(
           TOKEN,
-          'abcd1234',
           new Date(start.getTime() + offsetMin * 60_000),
         ),
       ).resolves.toHaveProperty('token');
@@ -226,40 +230,58 @@ describe('TrialClassroomService.joinAsGuest — secure guest access', () => {
 
   it('a token for another trial or an unknown token cannot enter', async () => {
     const { service } = build(null);
-    await expect(
-      service.joinAsGuest(TOKEN, 'abcd1234', NOW),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.joinAsGuest(TOKEN, NOW)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('refuses when video is not configured', async () => {
-    delete process.env.LIVEKIT_API_SECRET;
-    const { service } = build();
-    await expect(service.joinAsGuest(TOKEN, 'abcd1234', NOW)).rejects.toThrow(
+    const { service, rooms } = build();
+    rooms.assertConfigured.mockImplementation(() => {
+      throw new BadRequestException('Video service is not configured.');
+    });
+    await expect(service.joinAsGuest(TOKEN, NOW)).rejects.toThrow(
       /not configured/,
     );
   });
 
-  it('a malformed device id falls back to a fixed one rather than reaching the identity', async () => {
-    const { service } = build();
-    const res: any = await service.joinAsGuest(TOKEN, '../../evil id', NOW);
-    expect((await verify(res.token)).sub).toBe('trial-guest-lead-1~main');
+  it('when the video service is down the guest is told to try again, and the join is not recorded', async () => {
+    const { service, rooms, prisma, roomAccess } = build();
+    rooms.entryFor.mockRejectedValue(new ServiceUnavailableException());
+    await expect(service.joinAsGuest(TOKEN, NOW)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    expect(prisma.trialLead.updateMany).not.toHaveBeenCalled();
+    expect(roomAccess.scheduleEnforcement).not.toHaveBeenCalled();
   });
 });
 
 describe('TrialClassroomService.joinAsTeacher', () => {
   it('lets only the assigned teacher in, as the room teacher', async () => {
-    const { service, prisma } = build();
+    const { service, prisma, rooms, roomAccess } = build();
     const res: any = await service.joinAsTeacher(
       'teacher-user-1',
       'lead-1',
-      'abcd1234',
       NOW,
     );
-    const claims = await verify(res.token);
-    expect(claims.sub).toBe('teacher-user-1~abcd1234');
-    expect(claims.name).toBe('Ms Karim (Teacher)');
-    expect(claims.video.room).toBe('trial-lead-1');
-    expect(res.isTrial).toBe(true);
+    // the room's OWNER — what lets the teacher's browser moderate the class
+    expect(rooms.entryFor).toHaveBeenCalledWith({
+      room: 'trial-lead-1',
+      userId: 'teacher-user-1',
+      userName: 'Ms Karim (Teacher)',
+      isOwner: true,
+      ttlSeconds: 3 * 3600,
+    });
+    expect(roomAccess.scheduleEnforcement).toHaveBeenCalledWith(
+      'trial-lead-1',
+      'teacher-user-1',
+    );
+    expect(res).toMatchObject({
+      token: 'daily-meeting-token',
+      url: 'https://lumexa.daily.co/trial-lead-1',
+      roomName: 'trial-lead-1',
+      isTrial: true,
+    });
     expect(prisma.trialLead.updateMany.mock.calls[0][0]).toMatchObject({
       where: { id: 'lead-1', teacherJoinedAt: null },
     });
@@ -276,7 +298,7 @@ describe('TrialClassroomService.joinAsTeacher', () => {
   ])('refuses %s with the same 403', async (_l, userId, row) => {
     const { service, roomAccess } = build(row);
     await expect(
-      service.joinAsTeacher(userId, 'lead-1', 'abcd1234', NOW),
+      service.joinAsTeacher(userId, 'lead-1', NOW),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(roomAccess.checkEntry).not.toHaveBeenCalled();
   });
@@ -287,7 +309,6 @@ describe('TrialClassroomService.joinAsTeacher', () => {
       service.joinAsTeacher(
         'teacher-user-1',
         'lead-1',
-        'abcd1234',
         new Date(start.getTime() - 30 * 60_000),
       ),
     ).rejects.toThrow(/opens 10 minutes before class.*20 minute/);
@@ -298,7 +319,7 @@ describe('TrialClassroomService.joinAsTeacher', () => {
     async (status) => {
       const { service } = build(lead({ appointmentStatus: status }));
       await expect(
-        service.joinAsTeacher('teacher-user-1', 'lead-1', 'abcd1234', NOW),
+        service.joinAsTeacher('teacher-user-1', 'lead-1', NOW),
       ).rejects.toBeInstanceOf(BadRequestException);
     },
   );

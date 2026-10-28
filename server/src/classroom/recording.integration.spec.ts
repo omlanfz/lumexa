@@ -19,9 +19,6 @@ import {
 } from '../assessments/testing/integration-db';
 
 useIntegrationDatabase();
-process.env.LIVEKIT_API_KEY = 'test-key';
-process.env.LIVEKIT_API_SECRET = 'test-secret-that-is-long-enough-for-hs256';
-process.env.LIVEKIT_URL = 'wss://livekit.test';
 
 import { randomUUID } from 'crypto';
 import {
@@ -1327,14 +1324,17 @@ describeDb('Class recordings (real Postgres, R2 faked)', () => {
 
   describe('through the classroom', () => {
     let classroom: ClassroomService;
-    const client = {
-      listRooms: jest.fn(() => Promise.resolve([] as { metadata?: string }[])),
-      updateRoomMetadata: jest.fn(() => Promise.resolve()),
+    // Daily is faked: the REC badge is the room's shared state (its meeting
+    // session data), which only the server writes.
+    const daily = {
+      setClassState: jest.fn() as jest.Mock<
+        Promise<void>,
+        [string, Record<string, unknown>]
+      >,
     };
 
     beforeEach(() => {
-      client.listRooms.mockReset().mockResolvedValue([]);
-      client.updateRoomMetadata.mockReset().mockResolvedValue(undefined);
+      daily.setClassState.mockReset().mockResolvedValue(undefined);
       classroom = new ClassroomService(
         prisma,
         {} as never,
@@ -1349,19 +1349,12 @@ describeDb('Class recordings (real Postgres, R2 faked)', () => {
         new RoomDirectoryService(prisma),
         {} as never,
         {} as never,
+        daily as never,
       );
-      jest
-        .spyOn(classroom as never, 'getRoomServiceClient')
-        .mockReturnValue(client as never);
     });
 
     const flags = () =>
-      client.updateRoomMetadata.mock.calls.map(
-        (c) =>
-          JSON.parse((c as unknown as [string, string])[1]) as {
-            recording: boolean;
-          },
-      );
+      daily.setClassState.mock.calls.map((c) => c[1] as { recording: boolean });
 
     it('only the class’s teacher can record it', async () => {
       const room = lessonRoom(await makeLesson(students[0]));
@@ -1382,6 +1375,7 @@ describeDb('Class recordings (real Postgres, R2 faked)', () => {
       );
       expect(started.ok).toBe(true);
       expect(flags()).toEqual([{ recording: true }]);
+      expect(daily.setClassState.mock.calls[0][0]).toBe(room);
 
       await classroom.stopTeacherRecording(
         teacher.id,
@@ -1418,7 +1412,7 @@ describeDb('Class recordings (real Postgres, R2 faked)', () => {
     });
 
     it('recording does not depend on the badge: it works when the live room is unreachable', async () => {
-      client.updateRoomMetadata.mockRejectedValue(new Error('no such room'));
+      daily.setClassState.mockRejectedValue(new Error('no active meeting'));
       const room = lessonRoom(await makeLesson(students[0]));
       const started = await classroom.startTeacherRecording(
         teacher.id,

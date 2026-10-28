@@ -20,9 +20,6 @@ import {
 
 useIntegrationDatabase();
 process.env.JWT_SECRET = 'http-spec-jwt-secret-that-is-long-enough';
-process.env.LIVEKIT_API_KEY = 'test-key';
-process.env.LIVEKIT_API_SECRET = 'test-secret-that-is-long-enough-for-hs256';
-process.env.LIVEKIT_URL = 'wss://livekit.test';
 process.env.STRIPE_SECRET_KEY ??= 'sk_test_not_a_real_key';
 delete process.env.SMTP_USER;
 delete process.env.SMTP_PASS;
@@ -718,16 +715,34 @@ describeDb('Recording endpoints (real app and Postgres, R2 faked)', () => {
   // ─── The live classroom is untouched ──────────────────────────────────────
 
   describe('the live classroom', () => {
-    it('still answers its own routes (the webhook accepts a call and always replies 200)', async () => {
-      await http().post('/classroom/webhook/livekit').send({}).expect(200);
+    it('no longer has a LiveKit webhook: the room limits are enforced without one', async () => {
+      await http().post('/classroom/webhook/livekit').send({}).expect(404);
     });
 
-    it('the teacher’s other classroom controls are still behind the same guard', async () => {
-      await http().post(`/classroom/${room}/mute-all`).expect(401);
+    it('the teacher’s classroom controls are still behind the same guard', async () => {
       await http()
-        .post(`/classroom/${room}/mute-all`)
+        .post(`/classroom/${room}/lock`)
+        .send({ locked: true })
+        .expect(401);
+      await http()
+        .post(`/classroom/${room}/lock`)
         .set(as(student))
+        .send({ locked: true })
         .expect(403);
+    });
+
+    it('moderation that Daily does for the teacher’s own browser has no server route any more', async () => {
+      for (const route of [
+        'mute-all',
+        'mute-participant',
+        'stop-screen-share',
+        'participant-mic-lock',
+      ]) {
+        await http()
+          .post(`/classroom/${room}/${route}`)
+          .set(as(student))
+          .expect(404);
+      }
     });
   });
 });
