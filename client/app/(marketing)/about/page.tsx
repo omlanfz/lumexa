@@ -26,9 +26,9 @@ import PolicyTrigger from "@/components/about/PolicyTrigger";
 import { FOUNDER, TITIR } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "About · Lumexa AI School",
+  title: "About Lumexa AI School",
   description:
-    "Lumexa AI School offers live, hands-on coding classes for ages 6–18. Meet the thinking behind Lumexa, how we teach, and how we keep children safe.",
+    "Discover Lumexa's approach to live coding education for ages 6–18, with teacher-guided lessons, practical projects, and structured learning pathways.",
 };
 
 // ── Shared styles ───────────────────────────────────────────────────────────

@@ -178,10 +178,6 @@ export default function MarketingFooter() {
               <Link href="/refund-policy" className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline">
                 Refund Policy
               </Link>
-              <span>·</span>
-              <Link href="/teacher-dashboard" className="hover:text-gray-400 transition-colors underline-offset-2 hover:underline">
-                Teacher Hub
-              </Link>
             </div>
           </div>
         </div>
