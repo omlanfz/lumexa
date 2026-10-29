@@ -8,11 +8,12 @@ export default function manifest(): MetadataRoute.Manifest {
       "Connect with expert teachers for live one-on-one tutoring sessions.",
     start_url: "/",
     display: "standalone",
-    background_color: "#08090F",
+    background_color: "#0B1026",
     theme_color: "#2DD4BF",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+      { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
   };
 }

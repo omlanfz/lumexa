@@ -239,7 +239,7 @@ function PaymentContent() {
       <div className="max-w-5xl mx-auto mb-10">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group w-fit">
-            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-sm shadow-purple-100 dark:shadow-none">
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-[#0B1026]">
               <Image
                 src="/logo-mark.png"
                 alt="Lumexa AI School"
@@ -248,8 +248,8 @@ function PaymentContent() {
                 className="object-cover w-full h-full"
               />
             </div>
-            <span className="text-[#0F172A] dark:text-white font-black text-lg tracking-tight">
-              Lumexa <span className="text-purple-600 dark:text-purple-400 font-bold">AI School</span>
+            <span className="text-[#111827] dark:text-white font-black text-lg tracking-tight">
+              Lumexa <span className="text-[#7928CA] dark:text-purple-400 font-bold">AI School</span>
             </span>
           </Link>
           <ThemeToggle variant="teacher" />

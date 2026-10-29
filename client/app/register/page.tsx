@@ -194,7 +194,7 @@ function RegisterContent() {
         {/* Logo + Title */}
         <div className="text-center mb-6">
           <Link href="/" className="inline-block">
-            <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 shadow-lg shadow-blue-600/30 overflow-hidden hover:shadow-blue-500/50 transition-shadow">
+            <div className="w-14 h-14 rounded-2xl bg-[#0B1026] flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4 overflow-hidden">
               <Image
                 src="/logo-mark.png"
                 width={56}

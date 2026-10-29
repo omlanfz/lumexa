@@ -28,7 +28,7 @@ export default function MarketingFooter() {
             {/* Brand */}
             <div className="sm:col-span-2 lg:col-span-1">
               <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
+                <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0 bg-[#0B1026]">
                   <Image
                     src="/logo-mark.png"
                     alt="Lumexa AI School"
