@@ -12,7 +12,7 @@ export interface BrandImage {
 export const FOUNDER = {
   name: "Fairooz Omlan",
   role: "Founder & CEO, Lumexa AI School",
-  credentials: "CS graduate and coding educator with 6+ years of teaching experience.",
+  credentials: "NSU CSE graduate and coding educator with 6+ years of experience.",
   photo: {
     src: "/brand/fairooz-omlan.webp",
     width: 1122,
