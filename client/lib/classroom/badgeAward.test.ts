@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   awardSignature,
+  congratulation,
   newRequestId,
   requestFor,
   summarizeAward,
@@ -96,4 +97,12 @@ test('undo time left counts down to zero and never below', () => {
   assert.equal(undoSecondsLeft(until, t0 + 120_000), 0);
   assert.equal(undoSecondsLeft(until, t0 + 999_000), 0);
   assert.equal(undoSecondsLeft('garbage', t0), 0);
+});
+
+test('congratulation: a friendly line, the same for the same award', () => {
+  const a = congratulation('award-1');
+  assert.ok(a.length > 5);
+  assert.equal(congratulation('award-1'), a);
+  const lines = new Set(Array.from({ length: 40 }, (_, i) => congratulation(`award-${i}`)));
+  assert.ok(lines.size > 1);
 });

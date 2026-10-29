@@ -15,16 +15,13 @@ import {
 } from 'class-validator';
 import { SUBMISSION_FEEDBACK_TAGS } from '../submission-feedback-tags';
 
+/** A file already uploaded with POST /uploads/homework, named by the id that
+ * returned. (A file is never named by a URL: it lives in private storage.) */
 export class SubmissionFileDto {
   @IsString()
   @MinLength(1)
-  @MaxLength(2000)
-  url: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  name?: string;
+  @MaxLength(64)
+  id: string;
 }
 
 export class SubmitHomeworkDto {

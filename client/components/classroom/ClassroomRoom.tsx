@@ -74,7 +74,7 @@ import {
   type PendingAdmission,
   type EndClassParams,
 } from '@/lib/classroom/api';
-import { playClassroomTone } from '@/lib/classroom/sounds';
+import { armSoundUnlock, playClassroomTone, resetClassroomSounds } from '@/lib/classroom/sounds';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 
 interface ClassroomRoomProps {
@@ -111,6 +111,16 @@ interface HandToast {
 }
 
 const ADMISSION_POLL_INTERVAL_MS = 4_000;
+
+// Presence sounds. When you come in, the people already there appear one by one
+// — that is not "everyone joined"; and a dropped connection that comes straight
+// back is not "left, then joined". So arrivals are silent while the roster
+// settles, and a departure only sounds if the person is still gone a moment later.
+const ROSTER_SETTLE_MS = 2_500;
+const LEAVE_GRACE_MS = 2_500;
+/** A hand that goes up again this soon after it was heard is a reconnection
+ * replaying the state, not a new raise. */
+const HAND_SOUND_REPEAT_MS = 8_000;
 
 export default function ClassroomRoom({
   roomName,
@@ -174,6 +184,12 @@ export default function ClassroomRoom({
   const prevPeopleRef = useRef<Set<string> | null>(null);
   const participantRolesRef = useRef<Record<string, 'TEACHER' | 'STUDENT'>>({});
   const prevAdmissionIdsRef = useRef<Set<string> | null>(null);
+  /** When the roster first included you — arrivals before that are people who were already here. */
+  const rosterSettledAtRef = useRef<number | null>(null);
+  const pendingLeavesRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const lastHandSoundRef = useRef<Record<string, number>>({});
+  /** Badge awards already celebrated: a message delivered twice is celebrated once. */
+  const celebratedAwardsRef = useRef<Set<string>>(new Set());
   const rootRef = useRef<HTMLDivElement>(null);
 
   // "lesson-<scheduledLessonId>" rooms are the ones with real lesson
@@ -242,6 +258,18 @@ export default function ClassroomRoom({
     setTimeout(() => setControlError(null), 6000);
   };
 
+  // Sounds: allowed from the person's first interaction, and a new class starts
+  // with a clean slate (what was heard in another class does not count here).
+  useEffect(() => {
+    resetClassroomSounds();
+    armSoundUnlock();
+    const pendingLeaves = pendingLeavesRef.current;
+    return () => {
+      pendingLeaves.forEach((timer) => clearTimeout(timer));
+      pendingLeaves.clear();
+    };
+  }, [roomName]);
+
   const handleToggleLock = async () => {
     if (lockBusy) return;
     setLockBusy(true);
@@ -260,11 +288,24 @@ export default function ClassroomRoom({
   useServerEvents((event) => {
     if (event.type === 'badge-awarded') {
       if (isTeacher || observerMode) return;
+      // Once per award, however many times the message is delivered (the sound
+      // and the animation both follow this).
+      if (celebratedAwardsRef.current.has(event.awardId)) return;
+      celebratedAwardsRef.current.add(event.awardId);
       setCelebrations((queue) => (queue.some((c) => c.awardId === event.awardId) ? queue : [...queue, event]));
     } else if (event.type === 'room-denied') {
       setDenied(event.message);
     }
   });
+  // The teacher hears the achievement sound for an award that was just made — not
+  // for a repeat of one already saved (a double click answers with the same
+  // request id and nothing new), nor for one that was undone.
+  const handleAwarded = (result: AwardResponse) => {
+    setAwardResult(result);
+    if (result.awards.some((a) => a.created && !a.revoked)) {
+      playClassroomTone('badge-awarded', `award:${result.requestId}`);
+    }
+  };
   const finishCelebration = useCallback((awardId: string) => {
     setCelebrations((queue) => queue.filter((c) => c.awardId !== awardId));
   }, []);
@@ -301,28 +342,44 @@ export default function ClassroomRoom({
   // Subtle presence sounds — another person (never you, on any of your own
   // devices) arriving or leaving plays a short, space-themed chime. It is
   // about people, not connections: someone opening a second device is not a
-  // new arrival.
+  // new arrival, and someone whose connection drops and comes straight back
+  // (a reconnect) is neither a leave nor a join.
   useEffect(() => {
     const currentKeys = new Set(people.map((p) => p.userId));
     const prev = prevPeopleRef.current;
+    const pendingLeaves = pendingLeavesRef.current;
 
     for (const p of people) participantRolesRef.current[p.userId] = p.role;
+    if (rosterSettledAtRef.current === null && currentKeys.has(localKey)) {
+      rosterSettledAtRef.current = Date.now();
+    }
 
-    if (prev) {
+    if (prev && !observerMode) {
       for (const key of currentKeys) {
-        if (key === localKey) continue;
-        if (!prev.has(key)) {
-          const role = participantRolesRef.current[key];
-          playClassroomTone(role === 'TEACHER' ? 'teacher-join' : 'student-join');
+        if (key === localKey || prev.has(key)) continue;
+        const returning = pendingLeaves.get(key);
+        if (returning) {
+          // Back within the grace period: they never really left.
+          clearTimeout(returning);
+          pendingLeaves.delete(key);
+          continue;
         }
+        const settledAt = rosterSettledAtRef.current;
+        if (settledAt === null || Date.now() - settledAt < ROSTER_SETTLE_MS) continue;
+        const role = participantRolesRef.current[key];
+        playClassroomTone(role === 'TEACHER' ? 'teacher-join' : 'student-join');
       }
       for (const key of prev) {
-        if (key === localKey) continue;
-        if (!currentKeys.has(key)) {
-          const role = participantRolesRef.current[key];
-          playClassroomTone(role === 'TEACHER' ? 'teacher-leave' : 'student-leave');
-          delete participantRolesRef.current[key];
-        }
+        if (key === localKey || currentKeys.has(key) || pendingLeaves.has(key)) continue;
+        const role = participantRolesRef.current[key];
+        pendingLeaves.set(
+          key,
+          setTimeout(() => {
+            pendingLeaves.delete(key);
+            playClassroomTone(role === 'TEACHER' ? 'teacher-leave' : 'student-leave');
+            delete participantRolesRef.current[key];
+          }, LEAVE_GRACE_MS),
+        );
       }
     }
     prevPeopleRef.current = currentKeys;
@@ -367,7 +424,13 @@ export default function ClassroomRoom({
         const name = person ? person.displayName : 'A student';
         const id = `${who}-${Date.now()}`;
         setHandToasts((prev) => [...prev, { id, name }]);
-        playClassroomTone('hand-raised');
+        // A hand that comes back up straight after it was heard is the state
+        // being replayed after a reconnection, not a new raise.
+        const heardAt = lastHandSoundRef.current[who];
+        if (heardAt === undefined || Date.now() - heardAt > HAND_SOUND_REPEAT_MS) {
+          playClassroomTone('hand-raised');
+        }
+        lastHandSoundRef.current[who] = Date.now();
         setTimeout(() => setHandToasts((prev) => prev.filter((t) => t.id !== id)), 5000);
       }
     });
@@ -379,17 +442,19 @@ export default function ClassroomRoom({
     if (activePanel === 'chat') setLastSeenChatCount(chatMessages.length);
   }, [activePanel, chatMessages.length]);
 
-  // Subtle tone on every new chat message from someone else — own sent
-  // messages stay silent (that's already visible feedback enough).
-  const prevChatCountRef = useRef(chatMessages.length);
+  // A soft tone for a new chat message from someone else — never for your own
+  // (sending is feedback enough), never while you are looking at the chat (you
+  // can see it arrive), and once per message however it is announced.
+  const lastChatKeyRef = useRef<string | null>(chatMessages[chatMessages.length - 1]?.key ?? null);
   useEffect(() => {
-    if (chatMessages.length > prevChatCountRef.current) {
-      const latest = chatMessages[chatMessages.length - 1];
-      if (latest && latest.fromUserId !== localKey) {
-        playClassroomTone('chat-message');
-      }
-    }
-    prevChatCountRef.current = chatMessages.length;
+    const latest = chatMessages[chatMessages.length - 1];
+    const previousKey = lastChatKeyRef.current;
+    if (!latest || latest.key === previousKey) return;
+    lastChatKeyRef.current = latest.key;
+    if (observerMode || latest.fromUserId === localKey) return;
+    const lookingAtChat = activePanel === 'chat' && typeof document !== 'undefined' && !document.hidden;
+    if (!lookingAtChat) playClassroomTone('chat-message', latest.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatMessages, localKey]);
 
   useEffect(() => {
@@ -778,7 +843,7 @@ export default function ClassroomRoom({
                     roomName,
                     isBatch: classType === 'BATCH',
                     students: listStudents(peers),
-                    onAwarded: setAwardResult,
+                    onAwarded: handleAwarded,
                   }
                 : undefined
             }

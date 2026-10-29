@@ -1,7 +1,8 @@
 // FILE PATH: client/components/classroom/Header.tsx
 //
 // Top bar: Lumexa branding, current lesson/session title, LIVE status, the
-// server-anchored class timer, and the classroom's own light/dark toggle.
+// server-anchored class timer, the classroom sound switch, and the classroom's
+// own light/dark toggle.
 // Kept subtle — this is a video call, not a marketing page. Stays visible
 // during normal screen sharing (shared screens sit in the equal-priority
 // grid, not a special cropped "presentation" layout) — it only becomes the
@@ -12,6 +13,7 @@
 
 import { Lock, LockOpen, Loader2 } from 'lucide-react';
 import ClassTimer from './ClassTimer';
+import SoundToggle from './SoundToggle';
 import ThemeToggle from './ThemeToggle';
 import type { ClassroomTheme } from '@/lib/classroom/useClassroomTheme';
 
@@ -136,6 +138,7 @@ export default function Header({
             <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Live
           </span>
         )}
+        <SoundToggle />
         <ThemeToggle theme={theme} onToggle={onToggleTheme} />
       </div>
     </header>

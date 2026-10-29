@@ -14,7 +14,7 @@
 
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import LumiChat from "@/components/LumiChat";
@@ -22,6 +22,8 @@ import TeacherPageSkeleton from "@/components/TeacherPageSkeleton";
 import { isTeacherProfileComplete } from "@/lib/teacherProfileCompletion";
 import { isDemoTeacherEmail } from "@/lib/demoClassroom";
 import { WHATSAPP_URL } from "@/lib/siteContact";
+import { splitDuration } from "@/lib/liveClass";
+import { useLiveClass } from "@/lib/useLiveClass";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,8 @@ interface NextClass {
   lessonTitle?: string | null;
   isLive: boolean;
   joinable: boolean;
+  /** Milliseconds from the server's "now" to the start when it answered. */
+  msUntilStart?: number;
 }
 
 interface Profile {
@@ -98,32 +102,6 @@ interface DashboardAlertItem {
 const RANK_NAMES = ["Cadet", "Navigator", "Pilot", "Commander", "Admiral", "Starmaster"];
 const RANK_ICONS = ["🌱", "🧭", "✈️", "🎖️", "⭐", "🌟"];
 
-function pad(n: number) {
-  return String(n).padStart(2, "0");
-}
-
-function splitDuration(ms: number) {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  return {
-    hours: Math.floor(total / 3600),
-    minutes: Math.floor((total % 3600) / 60),
-    seconds: total % 60,
-  };
-}
-
-/** Ticks once a second while a class is on screen — used for both the
- * "starts in" countdown and the "elapsed" timer once it goes live, so both
- * always derive from the class's own start/end instant. */
-function useClock(active: boolean) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [active]);
-  return now;
-}
-
 function greeting() {
   const h = new Date().getHours();
   if (h < 12) return "Good morning";
@@ -145,14 +123,35 @@ function TeacherDashboardContent() {
   const [pendingSubmissions, setPendingSubmissions] = useState<number>(0);
   const [testReports, setTestReports] = useState<{ needsAction: number; readyToShare: number }>({ needsAction: 0, readyToShare: 0 });
 
-  const now = useClock(!!nextClass);
-  const { hours, minutes, seconds } = nextClass
-    ? splitDuration(
-        nextClass.isLive
-          ? now - new Date(nextClass.start).getTime()
-          : new Date(nextClass.start).getTime() - now,
-      )
-    : { hours: 0, minutes: 0, seconds: 0 };
+  // When `nextClass` arrived: the card corrects for a wrong device clock with it.
+  const [nextClassReceivedAt, setNextClassReceivedAt] = useState(0);
+
+  // Re-reads just the class card from the server. Asked when the card changes
+  // state (the classroom opens, the class starts or runs out) and every minute
+  // as a backstop; a failed background read leaves the card as it is.
+  const syncNextClass = useCallback(async () => {
+    try {
+      const res = await api.get("/teachers/me/next-class");
+      setNextClass(res.data ?? null);
+      setNextClassReceivedAt(Date.now());
+    } catch {
+      // keep what is on screen
+    }
+  }, []);
+
+  // The card follows the clock itself: it turns Live the moment the class
+  // starts, with the elapsed time and the join actions, with no reload.
+  const clock = useLiveClass(nextClass, nextClassReceivedAt, syncNextClass);
+  const isLive = clock ? clock.isLive : !!nextClass?.isLive;
+  const canJoin = clock ? clock.joinable : !!nextClass?.joinable;
+  const { hours, minutes, seconds } = splitDuration(
+    isLive ? (clock?.elapsedMs ?? 0) : (clock?.startsInMs ?? 0),
+  );
+
+  useEffect(() => {
+    const id = setInterval(() => void syncNextClass(), 60_000);
+    return () => clearInterval(id);
+  }, [syncNextClass]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -176,6 +175,7 @@ function TeacherDashboardContent() {
 
         setStats(statsRes.data);
         setNextClass(nextRes.data ?? null);
+        setNextClassReceivedAt(Date.now());
         setProfile(profileRes.data);
         setStudents(studentsRes.data ?? []);
         setAlerts((alertsRes.data ?? []).filter((a: DashboardAlertItem) => !a.read));
@@ -308,15 +308,23 @@ function TeacherDashboardContent() {
         {/* ── 2. Next class ───────────────────────────────────────────── */}
         <section className="mb-6">
           <p className="text-xs uppercase tracking-wide font-medium text-[var(--t-text-muted)] mb-2">
-            {nextClass?.isLive ? "Live Now" : "Next Class"}
+            {isLive ? "Live Now" : "Next Class"}
           </p>
           {nextClass ? (
-            <div className={`${card} p-5 relative overflow-hidden`}>
+            <div
+              data-testid="next-class-card"
+              data-live={isLive ? "true" : "false"}
+              className={`${card} p-5 relative overflow-hidden transition-colors duration-500 ${
+                isLive
+                  ? "!border-emerald-400/60 dark:!border-emerald-500/40 bg-emerald-50/70 dark:bg-emerald-500/[0.07] shadow-[0_0_0_3px_rgba(16,185,129,0.12)]"
+                  : ""
+              }`}
+            >
               <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
                 <div>
-                  {nextClass.isLive && (
+                  {isLive && (
                     <span className="inline-flex items-center gap-1.5 mb-1.5 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-500 text-xs font-bold uppercase tracking-wide">
-                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Live
+                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse motion-reduce:animate-none" /> Live
                     </span>
                   )}
                   {nextClass.type === "trial" && (
@@ -380,11 +388,15 @@ function TeacherDashboardContent() {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-[var(--t-text-muted)] mr-1">
-                    {nextClass.isLive ? "Elapsed" : "Starts in"}
+                    {isLive ? "Elapsed" : "Starts in"}
                   </p>
                   {[hours, minutes, seconds].map((val, i) => (
                     <div key={i} className="text-center px-2.5 py-1.5 rounded-lg bg-[var(--t-nav-active)]">
-                      <p className="text-sm font-bold tabular-nums text-[var(--t-text)]">
+                      <p
+                        className={`text-sm font-bold tabular-nums ${
+                          isLive ? "text-emerald-600 dark:text-emerald-400" : "text-[var(--t-text)]"
+                        }`}
+                      >
                         {String(val).padStart(2, "0")}
                       </p>
                     </div>
@@ -405,10 +417,12 @@ function TeacherDashboardContent() {
                       View Lesson
                     </button>
                   )}
-                  {nextClass.joinable && (
+                  {canJoin && (
                     <button
                       onClick={() => router.push(`/classroom/${nextClass.id}?type=${nextClass.type}`)}
-                      className="px-4 py-2 bg-[var(--t-success)] hover:opacity-90 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98]"
+                      className={`px-4 py-2 bg-[var(--t-success)] hover:opacity-90 text-white text-sm font-medium rounded-xl transition-all duration-150 active:scale-[0.98] ${
+                        isLive ? "shadow-md shadow-emerald-500/30" : ""
+                      }`}
                     >
                       Join Class →
                     </button>

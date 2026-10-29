@@ -174,8 +174,12 @@ export default function ClassroomExperience({
   const fetchLessonDetails = (lessonId: string) => {
     if (lessonRequested.current) return;
     lessonRequested.current = true;
+    // The classroom's own endpoint: it also opens the lesson of the class this
+    // student is attending right now (the standalone lesson page keeps an
+    // upcoming lesson locked). It checks on the server that they really are in
+    // this class, so it is asked for only once they have come in (see below).
     api
-      .get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${lessonId}/details`)
+      .get<LessonDetailsResponse>(`/curriculum/scheduled-lessons/${lessonId}/classroom-details`)
       .then((res) => setLessonData(res.data))
       .catch(() => setLessonData(null));
   };
@@ -223,9 +227,12 @@ export default function ClassroomExperience({
         setBlocked(null);
         setJoin(res.data);
         // A batch class is entered by its own id: the lesson page is the one of
-        // the row the server let this person in through.
-        if (isBatch && !adminObserve && res.data.scheduledLessonId) {
-          fetchLessonDetails(res.data.scheduledLessonId);
+        // the row the server let this person in through. A 1:1 class is its own
+        // lesson. Asked for after the join is recorded, never in parallel with
+        // it: a student's access to the current lesson depends on having joined.
+        if (!adminObserve) {
+          if (isBatch && res.data.scheduledLessonId) fetchLessonDetails(res.data.scheduledLessonId);
+          else if (isLesson && !isBatch && !demo) fetchLessonDetails(id);
         }
       }
     } catch (err: unknown) {
@@ -243,10 +250,6 @@ export default function ClassroomExperience({
     }
 
     void attemptJoin();
-
-    if (isLesson && !isBatch && !demo && !adminObserve) {
-      fetchLessonDetails(id);
-    }
 
     // The demo room has no real ScheduledLesson, so "View Lesson" there
     // shows this fixed example instead — see getDemoExampleLessonDetails.

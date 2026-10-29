@@ -44,6 +44,17 @@ export class CurriculumController {
     return this.curriculum.getScheduledLessonDetails(id, req.user);
   }
 
+  /** The same lesson, asked for from inside the classroom: additionally open to
+   * the student who is attending this class right now (and only that class's
+   * lesson — see CurriculumService.isAttendingNow). Everything else is exactly
+   * as above, so the standalone lesson page never unlocks an upcoming lesson. */
+  @Get('scheduled-lessons/:id/classroom-details')
+  getScheduledLessonClassroomDetails(@Param('id') id: string, @Req() req: any) {
+    return this.curriculum.getScheduledLessonDetails(id, req.user, {
+      inClassroom: true,
+    });
+  }
+
   /** QA demo classroom only — a fixed, always-unlocked example lesson
    * (see CurriculumService.getDemoExampleLessonDetails) shown in "View
    * Lesson" there since the demo room has no real ScheduledLesson. */

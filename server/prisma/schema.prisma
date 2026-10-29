@@ -1110,9 +1110,71 @@ model Submission {
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
+  // Files handed in since homework moved to Cloudflare R2 (see HomeworkFile).
+  // `files` above only holds what was uploaded to Cloudinary before that.
+  homeworkFiles     HomeworkFile[]
+
   @@index([studentUserId])
   @@index([teacherId, status])
   @@index([lessonId])
+}
+
+// One homework file kept in the PRIVATE homework R2 bucket (HOMEWORK_R2_BUCKET —
+// never the class-recordings bucket). The row is the only record of the object:
+// who it belongs to, where it is, and whether it is still needed. The file lives
+// exactly as long as its submission waits for a review; once the teacher has
+// saved the review it is removed from R2 (status DELETE_PENDING until R2
+// confirms it, then DELETED) while the row — and the submission, grade and
+// feedback — stay as history. See HomeworkFilesService.
+model HomeworkFile {
+  id                  String                    @id @default(uuid())
+  // Set when the file becomes part of a submission; null while it is only
+  // uploaded. If the submission is ever deleted the file is orphaned and swept.
+  submissionId        String?
+  submission          Submission?               @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  // Whose work it is, for which assignment (the ScheduledLesson that owns the
+  // lesson's homework slot) and which course. Plain ids, not foreign keys: the
+  // file's lifecycle must never block deleting those records.
+  studentUserId       String
+  scheduledLessonId   String
+  courseId            String
+  // The object's key in the homework bucket (unique: one row per object).
+  objectKey           String                    @unique
+  originalName        String
+  contentType         String
+  sizeBytes           Int
+  status              HomeworkFileStatus        @default(UPLOADED)
+  deleteReason        HomeworkFileDeleteReason?
+  // Removal attempts that failed, the last error and when — the retry backoff.
+  deleteAttempts      Int                       @default(0)
+  lastDeleteError     String?
+  lastDeleteAttemptAt DateTime?
+  // Set when a newer submission replaced this one's files: it is no longer the
+  // file anyone is shown, whatever state its removal is in.
+  supersededAt        DateTime?
+  createdAt           DateTime                  @default(now())
+  attachedAt          DateTime?
+  deleteRequestedAt   DateTime?
+  deletedAt           DateTime?
+
+  @@index([submissionId])
+  @@index([studentUserId, scheduledLessonId])
+  @@index([status, createdAt])
+  @@index([status, lastDeleteAttemptAt])
+}
+
+enum HomeworkFileStatus {
+  UPLOADED // stored in R2, not (yet) part of a submission
+  ATTACHED // part of a submission — kept until it has been reviewed
+  DELETE_PENDING // no longer needed; removal from R2 not confirmed yet (retried)
+  DELETED // removed from R2 (the row is kept as history)
+}
+
+enum HomeworkFileDeleteReason {
+  REVIEWED // the teacher saved the review
+  REPLACED // the student handed in different work
+  ABANDONED // uploaded but never submitted
+  ORPHANED // its submission no longer exists
 }
 
 enum SubmissionStatus {

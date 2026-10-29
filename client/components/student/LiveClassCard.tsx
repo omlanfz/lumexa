@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { LABELS } from '@/lib/labels';
+import { useLiveClass } from '@/lib/useLiveClass';
 
 export interface LiveClass {
   type: 'lesson' | 'booking';
@@ -26,6 +26,12 @@ export interface LiveClass {
 
 interface LiveClassCardProps {
   liveClass: LiveClass | null;
+  /** When `liveClass` was received (Date.now()): lets the card correct for a
+   * device clock that is off, using the server's own "until start". */
+  receivedAt?: number;
+  /** Asked each time the class changes state (its classroom opens, it starts,
+   * it runs out): re-read it from the server. */
+  onSync?: () => void;
 }
 
 function pad(n: number) {
@@ -40,15 +46,14 @@ function formatDuration(ms: number): string {
   return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
-  const router = useRouter();
-  const [now, setNow] = useState(() => Date.now());
+const noop = () => {};
 
-  useEffect(() => {
-    if (!liveClass) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [liveClass]);
+export default function LiveClassCard({ liveClass, receivedAt = 0, onSync = noop }: LiveClassCardProps) {
+  const router = useRouter();
+  // The card follows the clock itself — it turns Live the moment the start
+  // arrives, with no reload — and asks the server again whenever its state
+  // changes, so it never shows a class the server no longer has.
+  const clock = useLiveClass(liveClass, receivedAt, onSync);
 
   if (!liveClass) {
     return (
@@ -64,8 +69,11 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
 
   const start = new Date(liveClass.start);
   const initial = liveClass.teacherName ? liveClass.teacherName.charAt(0).toUpperCase() : 'T';
-  const elapsedMs = now - start.getTime();
-  const startsInMs = start.getTime() - now;
+  // Until the first tick the server's own answer stands.
+  const isLive = clock ? clock.isLive : liveClass.isLive;
+  const joinable = clock ? clock.joinable : liveClass.joinable;
+  const elapsedMs = clock?.elapsedMs ?? Math.max(0, -liveClass.msUntilStart);
+  const startsInMs = clock?.startsInMs ?? Math.max(0, liveClass.msUntilStart);
 
   const subtitle =
     liveClass.type === 'lesson'
@@ -79,9 +87,11 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
 
   return (
     <div
-      className={`rounded-2xl p-6 sm:p-7 border card-hover ${
-        liveClass.isLive
-          ? 'bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/10 border-red-200 dark:border-red-800/30'
+      data-testid="live-class-card"
+      data-live={isLive ? 'true' : 'false'}
+      className={`rounded-2xl p-6 sm:p-7 border card-hover transition-colors duration-500 ${
+        isLive
+          ? 'bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/25 dark:to-teal-900/10 border-emerald-300 dark:border-emerald-700/50 shadow-[0_0_0_3px_rgba(16,185,129,0.12)]'
           : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800/30'
       }`}
     >
@@ -100,9 +110,9 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              {liveClass.isLive ? (
+              {isLive ? (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400 text-xs font-bold uppercase tracking-wide">
-                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Live
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse motion-reduce:animate-none" /> Live
                 </span>
               ) : (
                 <span className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
@@ -131,23 +141,27 @@ export default function LiveClassCard({ liveClass }: LiveClassCardProps) {
 
         <div className="text-right flex-shrink-0">
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-            {liveClass.isLive ? 'Elapsed' : 'Starts in'}
+            {isLive ? 'Elapsed' : 'Starts in'}
           </p>
           <p
             className={`text-2xl sm:text-3xl font-mono font-bold tabular-nums ${
-              liveClass.isLive ? 'text-red-500 dark:text-red-400' : 'text-teal-600 dark:text-teal-400'
+              isLive ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'
             }`}
           >
-            {liveClass.isLive ? formatDuration(elapsedMs) : formatDuration(startsInMs)}
+            {isLive ? formatDuration(elapsedMs) : formatDuration(startsInMs)}
           </p>
         </div>
       </div>
 
       <div className="mt-5 flex items-center gap-3">
-        {liveClass.joinable ? (
+        {joinable ? (
           <button
             onClick={() => router.push(joinHref)}
-            className="flex-1 py-3 rounded-lg font-semibold text-sm bg-teal-500 hover:bg-teal-400 text-black active:scale-[0.98] transition-all duration-200"
+            className={`flex-1 py-3 rounded-lg font-semibold text-sm active:scale-[0.98] transition-all duration-200 ${
+              isLive
+                ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-md shadow-emerald-500/25'
+                : 'bg-teal-500 hover:bg-teal-400 text-black'
+            }`}
           >
             {LABELS.STUDENT_ENTER_CLASS.primary}
           </button>
