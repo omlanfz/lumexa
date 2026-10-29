@@ -237,6 +237,47 @@ describe('ClassFinalizationService.finalizeLesson', () => {
     ).resolves.toEqual({ finalized: true, status: 'COMPLETED' });
   });
 
+  it('1:1: a student who did not attend is never charged, even when an admin settles the class as paid', async () => {
+    for (const outcome of ['COMPLETED', 'PARTIALLY_COMPLETED'] as const) {
+      const t = setup(makeLesson({ studentJoinedAt: null }));
+      await t.service.finalizeLesson(LESSON_ID, { outcome, actor: admin });
+      expect(
+        t.ledger.consumeLessonForScheduledLessonInTx,
+      ).not.toHaveBeenCalled();
+    }
+    const incomplete = setup(makeLesson({ studentJoinedAt: null }));
+    await incomplete.service.finalizeLesson(LESSON_ID, {
+      outcome: 'INCOMPLETE',
+      reason: ClassEndReason.STUDENT_NO_SHOW,
+      actor: teacher,
+    });
+    expect(
+      incomplete.ledger.consumeLessonForScheduledLessonInTx,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('1:1: an attended class is still charged exactly once, for the payout-eligible outcomes only', async () => {
+    const attended = setup();
+    await attended.service.finalizeLesson(LESSON_ID, {
+      outcome: 'COMPLETED',
+      actor: admin,
+    });
+    expect(
+      attended.ledger.consumeLessonForScheduledLessonInTx,
+    ).toHaveBeenCalledTimes(1);
+
+    // Attended but ended Incomplete (e.g. technical issue): still not charged.
+    const incomplete = setup();
+    await incomplete.service.finalizeLesson(LESSON_ID, {
+      outcome: 'INCOMPLETE',
+      reason: ClassEndReason.TECHNICAL_ISSUE,
+      actor: teacher,
+    });
+    expect(
+      incomplete.ledger.consumeLessonForScheduledLessonInTx,
+    ).not.toHaveBeenCalled();
+  });
+
   it('losing the compare-and-set race writes nothing and notifies no one', async () => {
     const t = setup();
     t.tx.scheduledLesson.updateMany.mockResolvedValue({ count: 0 });
@@ -440,7 +481,7 @@ describe('ClassFinalizationService.finalizeBatchSession', () => {
     );
   });
 
-  it('a student who never joined is recorded as an Incomplete no-show: no lesson consumed, not counted, told about the recording', async () => {
+  it('a student who never joined is recorded as an Incomplete no-show: still charged for the class, not counted as taught, told about the recording', async () => {
     const t = setupBatch(
       makeSession([
         participant(1),
@@ -471,7 +512,15 @@ describe('ClassFinalizationService.finalizeBatchSession', () => {
       t.ledger.consumeLessonForScheduledLessonInTx.mock.calls.map(
         (c) => c[1].scheduledLessonId,
       ),
-    ).toEqual(['row-1', 'row-3']);
+    ).toEqual(['row-1', 'row-2', 'row-3']);
+    // The absent student's charge says why, and is for the same class.
+    const absentCharge =
+      t.ledger.consumeLessonForScheduledLessonInTx.mock.calls.find(
+        (c) => c[1].scheduledLessonId === 'row-2',
+      )![1];
+    expect(absentCharge.description).toContain('Evening Odyssey');
+    expect(absentCharge.description).toContain('Lesson 5');
+    expect(absentCharge.description).toContain('absent');
     // The class is paid once, for the students who were taught.
     expect(t.payouts.recordBatchSessionEarningInTx).toHaveBeenCalledTimes(1);
     expect(
@@ -523,7 +572,7 @@ describe('ClassFinalizationService.finalizeBatchSession', () => {
     expect(t.batches.insertMakeupSession).not.toHaveBeenCalled();
   });
 
-  it('INCOMPLETE: nobody is paid or charged, every student is recorded Incomplete, ONE make-up class is added', async () => {
+  it('INCOMPLETE: the teacher is not paid, but EVERY enrolled student is charged, is recorded Incomplete (no progression) and ONE make-up class is added', async () => {
     const t = setupBatch();
     const res = await t.service.finalizeBatchSession(SESSION_ID, {
       outcome: 'INCOMPLETE',
@@ -533,7 +582,14 @@ describe('ClassFinalizationService.finalizeBatchSession', () => {
 
     expect(res.lessons.every((l) => l.status === 'INCOMPLETE')).toBe(true);
     expect(t.payouts.recordBatchSessionEarningInTx).not.toHaveBeenCalled();
-    expect(t.ledger.consumeLessonForScheduledLessonInTx).not.toHaveBeenCalled();
+    expect(
+      t.ledger.consumeLessonForScheduledLessonInTx.mock.calls.map(
+        (c) => c[1].scheduledLessonId,
+      ),
+    ).toEqual(['row-1', 'row-2', 'row-3']);
+    expect(
+      t.ledger.consumeLessonForScheduledLessonInTx.mock.calls[0][1].description,
+    ).toContain('class incomplete');
     expect(t.batches.insertMakeupSession).toHaveBeenCalledTimes(1);
     expect(t.tx.batchSession.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -544,6 +600,42 @@ describe('ClassFinalizationService.finalizeBatchSession', () => {
       }),
     );
     expect(t.alerts.create).not.toHaveBeenCalled();
+  });
+
+  it('INCOMPLETE with nobody present still charges every enrolled student', async () => {
+    const t = setupBatch(
+      makeSession(
+        [1, 2, 3].map((n) => participant(n, { studentJoinedAt: null })),
+      ),
+    );
+    const res = await t.service.finalizeBatchSession(SESSION_ID, {
+      outcome: 'INCOMPLETE',
+      reason: ClassEndReason.STUDENT_NO_SHOW,
+      actor: system,
+    });
+    expect(res.finalized).toBe(true);
+    expect(t.ledger.consumeLessonForScheduledLessonInTx).toHaveBeenCalledTimes(
+      3,
+    );
+    expect(t.payouts.recordBatchSessionEarningInTx).not.toHaveBeenCalled();
+  });
+
+  it('a cancelled student row is never charged', async () => {
+    const t = setupBatch(
+      makeSession([
+        participant(1),
+        participant(2, { status: LessonStatus.CANCELLED }),
+      ]),
+    );
+    await t.service.finalizeBatchSession(SESSION_ID, {
+      outcome: 'COMPLETED',
+      actor: teacher,
+    });
+    expect(
+      t.ledger.consumeLessonForScheduledLessonInTx.mock.calls.map(
+        (c) => c[1].scheduledLessonId,
+      ),
+    ).toEqual(['row-1']);
   });
 
   it('INCOMPLETE needs one of the three reasons — the same rule as a 1-to-1 class', async () => {

@@ -1647,12 +1647,17 @@ describeDb('Batches (real Postgres)', () => {
       const row = detail.members.find((m) => m.studentUserId === absent.id)!;
       expect(row).toMatchObject({ sync: 'BEHIND', nextLesson: 1, missed: 1 });
       expect(detail.warnings.join(' ')).toContain(absent.fullName);
-      // Their own ledger is untouched.
-      expect(
-        await prisma.studentLedgerEntry.count({
-          where: { studentUserId: absent.id, type: 'LESSON_COMPLETED' },
-        }),
-      ).toBe(0);
+      // Batch billing is strict: they are charged for the class they missed
+      // (on their own ledger, once) without it counting as a lesson taught.
+      const charges = await prisma.studentLedgerEntry.findMany({
+        where: { studentUserId: absent.id, type: 'LESSON_COMPLETED' },
+      });
+      expect(charges).toHaveLength(1);
+      expect(charges[0]).toMatchObject({
+        amountCents: -100_000,
+        balanceAfterCents: 500_000,
+        scheduledLessonId: missed[0].id,
+      });
     });
 
     it('the batch class counts as ONE class for the teacher however many students: paid once; each attending student is charged one lesson on their own ledger', async () => {
@@ -1694,6 +1699,275 @@ describeDb('Batches (real Postgres)', () => {
       expect(session).toMatchObject({
         status: 'COMPLETED',
         endedByRole: 'TEACHER',
+      });
+    });
+
+    // ─── Strict batch billing & 1:1 attendance flexibility ───────────────────
+
+    const chargesOf = (s: Person) =>
+      prisma.studentLedgerEntry.findMany({
+        where: { studentUserId: s.id, type: 'LESSON_COMPLETED' },
+        orderBy: { createdAt: 'asc' },
+      });
+    const balanceOf = async (s: Person) =>
+      (await w.ledger.getSummary(s.id)).balanceCents;
+
+    it('batch billing: every enrolled student is charged once for a Completed class — all present', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const a = await student('ada', { paid: true });
+      const b = await student('ben', { paid: true });
+      await enroll(a, batch.id);
+      await enroll(b, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, [a, b]);
+      await finish(first.id);
+
+      for (const s of [a, b]) {
+        const charges = await chargesOf(s);
+        expect(charges).toHaveLength(1);
+        expect(charges[0]).toMatchObject({
+          amountCents: -100_000,
+          rateCents: 100_000,
+          balanceAfterCents: 500_000,
+        });
+        expect(charges[0].description).toContain('Evening Odyssey');
+        expect(charges[0].description).toContain('Lesson 1');
+        expect(charges[0].description).not.toContain('absent');
+        expect(await balanceOf(s)).toBe(500_000);
+      }
+    });
+
+    it('batch billing: an absent student is charged exactly like the one who attended (A attends, B absent — both charged)', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const a = await student('ada', { paid: true });
+      const b = await student('ben', { paid: true });
+      await enroll(a, batch.id);
+      await enroll(b, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, [a]);
+      await finish(first.id);
+
+      const [chargeA] = await chargesOf(a);
+      const [chargeB] = await chargesOf(b);
+      expect(await chargesOf(a)).toHaveLength(1);
+      expect(await chargesOf(b)).toHaveLength(1);
+      expect(chargeA.amountCents).toBe(-100_000);
+      expect(chargeB.amountCents).toBe(-100_000);
+      expect(chargeB.description).toContain('absent');
+      expect(chargeA.description).not.toContain('absent');
+      expect(await balanceOf(a)).toBe(500_000);
+      expect(await balanceOf(b)).toBe(500_000);
+
+      // The charge is tied to the student's own row of that class, and being
+      // charged does not advance the absent student's lesson.
+      const rowB = await rowsOf(b, { batchSessionId: first.id });
+      expect(chargeB.scheduledLessonId).toBe(rowB[0].id);
+      expect(rowB[0].status).toBe('INCOMPLETE');
+      const detail = await w.batches.getBatchDetail(batch.id);
+      expect(
+        detail.members.find((m) => m.studentUserId === b.id),
+      ).toMatchObject({ completedLessons: 0, nextLesson: 1 });
+    });
+
+    it('batch billing: nobody present and the class marked Incomplete still charges every enrolled student — and the SAME lesson is repeated, never advanced', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const a = await student('ada', { paid: true });
+      const b = await student('ben', { paid: true });
+      await enroll(a, batch.id);
+      await enroll(b, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, []);
+      const res = await w.finalization.finalizeBatchSession(first.id, {
+        outcome: 'INCOMPLETE',
+        reason: 'STUDENT_NO_SHOW',
+        actor: { role: 'SYSTEM' },
+      });
+      expect(res).toMatchObject({ finalized: true, status: 'INCOMPLETE' });
+
+      for (const s of [a, b]) {
+        const charges = await chargesOf(s);
+        expect(charges).toHaveLength(1);
+        expect(charges[0].amountCents).toBe(-100_000);
+        expect(charges[0].description).toContain('class incomplete');
+        expect(await balanceOf(s)).toBe(500_000);
+      }
+      // The teacher is not paid for a class that was not taught.
+      expect(
+        await prisma.payoutEntry.count({ where: { type: 'CLASS_COMPLETED' } }),
+      ).toBe(0);
+
+      // Lesson continuation: no one moved on; the next class repeats lesson 1.
+      const sessions = await sessionsOf(batch.id);
+      expect(sessions.filter((x) => x.status === 'COMPLETED')).toHaveLength(0);
+      const next = sessions.find((x) => x.status === 'UPCOMING')!;
+      expect(next.lessonNumber).toBe(1);
+      expect(next.participants.map((p) => p.lessonNumber)).toEqual([1, 1]);
+      const detail = await w.batches.getBatchDetail(batch.id);
+      expect(detail.batch.progress).toMatchObject({ nextLesson: 1 });
+      expect(detail.members.every((m) => m.nextLesson === 1)).toBe(true);
+
+      // Teaching that repeat class charges again — a different class, a
+      // different (single) charge per student, and then lesson 2 follows.
+      await runSession(next.id, [a, b]);
+      await finish(next.id);
+      for (const s of [a, b]) {
+        expect(await chargesOf(s)).toHaveLength(2);
+        expect(await balanceOf(s)).toBe(400_000);
+      }
+      const after = await sessionsOf(batch.id);
+      expect(after.find((x) => x.status === 'UPCOMING')!.lessonNumber).toBe(2);
+    });
+
+    it('batch billing: a Partially Completed class charges every student once too', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const a = await student('ada', { paid: true });
+      const b = await student('ben', { paid: true });
+      await enroll(a, batch.id);
+      await enroll(b, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, [a]);
+      await finish(first.id, 'PARTIALLY_COMPLETED');
+      for (const s of [a, b]) {
+        expect(await chargesOf(s)).toHaveLength(1);
+        expect(await balanceOf(s)).toBe(500_000);
+      }
+    });
+
+    it('batch billing is idempotent: retries, a different status, a racing admin and the failsafe never charge twice', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const a = await student('ada', { paid: true });
+      const b = await student('ben', { paid: true });
+      await enroll(a, batch.id);
+      await enroll(b, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, [a]);
+
+      // Concurrent finalizers: the teacher, an admin and the system failsafe.
+      const settled = await Promise.allSettled([
+        finish(first.id),
+        finish(first.id),
+        w.finalization.finalizeBatchSession(first.id, {
+          outcome: 'COMPLETED',
+          actor: { role: 'ADMIN', userId: admin.id },
+        }),
+        w.finalization.finalizeBatchSession(first.id, {
+          outcome: 'COMPLETED',
+          actor: { role: 'SYSTEM' },
+        }),
+      ]);
+      expect(settled.some((r) => r.status === 'fulfilled')).toBe(true);
+      // A later retry, and an attempt to change the outcome, charge nothing.
+      await finish(first.id).catch(() => undefined);
+      await finish(first.id, 'INCOMPLETE').catch(() => undefined);
+      await w.finalization
+        .finalizeLesson((await rowsOf(a, { batchSessionId: first.id }))[0].id, {
+          outcome: 'INCOMPLETE',
+          reason: 'OTHER',
+          note: 'x',
+          actor: { role: 'ADMIN', userId: admin.id },
+        })
+        .catch(() => undefined);
+
+      for (const s of [a, b]) {
+        expect(await chargesOf(s)).toHaveLength(1);
+        expect(await balanceOf(s)).toBe(500_000);
+      }
+      // The ledger chain is consistent: each row's balance follows the last.
+      for (const s of [a, b]) {
+        const all = await prisma.studentLedgerEntry.findMany({
+          where: { studentUserId: s.id },
+          orderBy: { createdAt: 'asc' },
+        });
+        let running = 0;
+        for (const e of all) {
+          running += e.amountCents;
+          expect(e.balanceAfterCents).toBe(running);
+        }
+      }
+    });
+
+    it('a cancelled batch class charges no one, and cannot be finalized afterwards', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const a = await student('ada', { paid: true });
+      await enroll(a, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await w.sessions.adminCancelSession(first.id, 'Teacher unwell', admin.id);
+      await refused(finish(first.id));
+      await w.finalization
+        .finalizeBatchSession(first.id, {
+          outcome: 'INCOMPLETE',
+          reason: 'STUDENT_NO_SHOW',
+          actor: { role: 'SYSTEM' },
+        })
+        .catch(() => undefined);
+      expect(await chargesOf(a)).toHaveLength(0);
+      expect(await balanceOf(a)).toBe(600_000);
+    });
+
+    it('a batch student with no billing history is not charged (no rate is invented)', async () => {
+      const { batch } = await create('Evening Odyssey');
+      const unbilled = await student('unbilled');
+      const billed = await student('billed', { paid: true });
+      await enroll(unbilled, batch.id);
+      await enroll(billed, batch.id);
+      const [first] = await sessionsOf(batch.id);
+      await runSession(first.id, [billed]);
+      await finish(first.id);
+      expect(await chargesOf(unbilled)).toHaveLength(0);
+      expect(await chargesOf(billed)).toHaveLength(1);
+    });
+
+    describe('1:1 classes', () => {
+      async function oneToOne(s: Person, attended: boolean, lessonNumber = 1) {
+        const start = new Date(Date.now() - 30 * 60_000);
+        return prisma.scheduledLesson.create({
+          data: {
+            studentUserId: s.id,
+            teacherId: teacherA.profileId!,
+            courseId: course.id,
+            lessonNumber,
+            start,
+            end: new Date(start.getTime() + 45 * 60_000),
+            classType: ClassType.ONE_TO_ONE,
+            status: LessonStatus.UPCOMING,
+            teacherJoinedAt: start,
+            studentJoinedAt: attended ? start : null,
+          },
+        });
+      }
+      const end1to1 = (
+        id: string,
+        outcome: 'COMPLETED' | 'PARTIALLY_COMPLETED' | 'INCOMPLETE',
+        by: 'TEACHER' | 'ADMIN' | 'SYSTEM' = 'TEACHER',
+      ) =>
+        w.finalization.finalizeLesson(id, {
+          outcome,
+          ...(outcome === 'INCOMPLETE'
+            ? { reason: 'STUDENT_NO_SHOW' as const }
+            : {}),
+          actor: { role: by, userId: by === 'SYSTEM' ? undefined : admin.id },
+        });
+
+      it('an attended 1:1 class is charged exactly once, however often it is re-ended', async () => {
+        const s = await student('solo', { paid: true });
+        const l = await oneToOne(s, true);
+        await end1to1(l.id, 'COMPLETED');
+        await end1to1(l.id, 'COMPLETED').catch(() => undefined);
+        await end1to1(l.id, 'INCOMPLETE', 'ADMIN').catch(() => undefined);
+        const charges = await chargesOf(s);
+        expect(charges).toHaveLength(1);
+        expect(charges[0].amountCents).toBe(-100_000);
+        expect(await balanceOf(s)).toBe(500_000);
+      });
+
+      it('a 1:1 class the student did not attend is not charged — Incomplete, or even settled as Completed by an admin', async () => {
+        const s = await student('solo', { paid: true });
+        const missed = await oneToOne(s, false, 1);
+        await end1to1(missed.id, 'INCOMPLETE');
+        const adminSettled = await oneToOne(s, false, 2);
+        await end1to1(adminSettled.id, 'COMPLETED', 'ADMIN');
+        expect(await chargesOf(s)).toHaveLength(0);
+        expect(await balanceOf(s)).toBe(600_000);
       });
     });
 

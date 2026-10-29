@@ -1036,9 +1036,10 @@ describeDb('Classrooms (real Postgres, Daily faked)', () => {
         teacherId: teacher.profileId,
         referenceType: 'BATCH_SESSION',
       });
-      // …and one lesson from each of the two students who were taught.
+      // …and one lesson from EVERY enrolled student — the one who never
+      // came is charged too (strict batch billing).
       expect(ledger.consumeLessonForScheduledLessonInTx).toHaveBeenCalledTimes(
-        2,
+        3,
       );
 
       // The student who never came gets no private make-up (the batch's
@@ -1095,7 +1096,7 @@ describeDb('Classrooms (real Postgres, Daily faked)', () => {
       expect(recording.stopActiveSegmentIfAny).toHaveBeenCalledTimes(1);
     });
 
-    it('Incomplete applies the teacher’s reason to everyone, pays no one, and adds ONE make-up class for the whole batch', async () => {
+    it('Incomplete applies the teacher’s reason to everyone, pays no teacher (students are still charged), and adds ONE make-up class for the whole batch', async () => {
       const { batch, room, who } = await runningClass([true, false]);
       const before = await prisma.batchSession.count();
       await classroom.endClass(teacher.id, room, {
@@ -1107,7 +1108,10 @@ describeDb('Classrooms (real Postgres, Daily faked)', () => {
       });
       expect(ended.map((l) => l.status)).toEqual(['INCOMPLETE', 'INCOMPLETE']);
       expect(await earnings()).toHaveLength(0);
-      expect(ledger.consumeLessonForScheduledLessonInTx).not.toHaveBeenCalled();
+      // Nobody is paid, but both enrolled students are still charged.
+      expect(ledger.consumeLessonForScheduledLessonInTx).toHaveBeenCalledTimes(
+        2,
+      );
 
       // One extra class of the same lesson, with a row for each student.
       const upcoming = await prisma.batchSession.findMany({
