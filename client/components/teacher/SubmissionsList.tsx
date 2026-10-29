@@ -3,11 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import api from '@/lib/axios';
 import { SUBMISSION_FEEDBACK_TAGS } from '@/lib/submissionFeedbackTags';
+import { errorMessage, formatFileSize, openHomeworkFile, type HomeworkFileRef } from '@/lib/homeworkFiles';
 
-interface SubmissionFile {
-  url: string;
-  name: string | null;
-}
+type SubmissionFile = HomeworkFileRef;
 
 type SubmissionStatus = 'PENDING' | 'APPROVED' | 'NEEDS_CHANGES';
 
@@ -67,6 +65,19 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
   const [customFeedback, setCustomFeedback] = useState('');
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
+  // A file that could not be opened, and a note about files still waiting to be
+  // removed after a saved review.
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const openFile = async (f: SubmissionFile) => {
+    setFileError(null);
+    try {
+      await openHomeworkFile(f);
+    } catch (err) {
+      setFileError(errorMessage(err, 'Could not open this file.'));
+    }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -113,6 +124,7 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
     setSelectedTags([]);
     setCustomFeedback('');
     setReviewError(null);
+    setNotice(null);
   };
 
   const cancelReview = () => setReviewingId(null);
@@ -133,13 +145,19 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
     setSubmittingReview(true);
     setReviewError(null);
     try {
-      await api.patch(`/submissions/${id}/review`, {
+      const res = await api.patch<{ homeworkFilesPendingRemoval?: number }>(`/submissions/${id}/review`, {
         status: reviewStatus,
         rating: rating > 0 ? rating : undefined,
         feedbackTags: selectedTags,
         feedback: customFeedback.trim() || undefined,
       });
       setReviewingId(null);
+      // The review is saved either way; this only says if a file is still on its way out.
+      setNotice(
+        res.data?.homeworkFilesPendingRemoval
+          ? 'Review saved. The student’s file could not be removed from storage just now — it will be removed automatically shortly.'
+          : null,
+      );
       load();
     } catch (err: any) {
       setReviewError(err?.response?.data?.message ?? 'Could not save this review.');
@@ -174,17 +192,27 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
             {STATUS_LABEL[s.status]}
           </span>
           {s.status !== 'PENDING' && s.rating && <Stars value={s.rating} />}
-          {s.files.map((f, i) => (
-            <a
-              key={`f-${i}`}
-              href={f.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs px-3 py-1.5 rounded-lg border border-[var(--t-border)] text-[var(--t-text)] hover:bg-[var(--t-nav-hover)] truncate max-w-[160px]"
-            >
-              📎 {f.name || `File ${i + 1}`}
-            </a>
-          ))}
+          {s.files.map((f, i) =>
+            f.removed ? (
+              <span
+                key={`f-${i}`}
+                title="Removed from storage after the review"
+                className="text-xs px-3 py-1.5 rounded-lg border border-dashed border-[var(--t-border)] text-[var(--t-text-muted)] truncate max-w-[200px]"
+              >
+                📎 {f.name || `File ${i + 1}`} · removed
+              </span>
+            ) : (
+              <button
+                key={`f-${i}`}
+                type="button"
+                onClick={() => void openFile(f)}
+                title={f.size ? `${f.name ?? 'File'} · ${formatFileSize(f.size)}` : (f.name ?? undefined)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-[var(--t-border)] text-[var(--t-text)] hover:bg-[var(--t-nav-hover)] truncate max-w-[200px]"
+              >
+                📎 {f.name || `File ${i + 1}`}
+              </button>
+            ),
+          )}
           {s.links.map((l, i) => (
             <a
               key={`l-${i}`}
@@ -314,6 +342,11 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
             className="w-full px-3 py-2 rounded-lg border border-[var(--t-border)] bg-[var(--t-surface)] text-sm text-[var(--t-text)]"
           />
 
+          {s.files.some((f) => f.id && !f.removed) && (
+            <p className="text-xs text-[var(--t-text-muted)]">
+              The student’s file{s.files.filter((f) => f.id && !f.removed).length > 1 ? 's are' : ' is'} deleted from storage when you submit this review — your grade and feedback are kept. Download anything you want to keep first.
+            </p>
+          )}
           {reviewError && <p className="text-xs text-red-500">{reviewError}</p>}
 
           <div className="flex items-center gap-2">
@@ -358,6 +391,12 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
+      {fileError && (
+        <p className="text-sm text-red-500" role="alert">
+          {fileError}
+        </p>
+      )}
+      {notice && <p className="text-sm text-[var(--t-warning)]">{notice}</p>}
       {loading && <p className="text-sm text-[var(--t-text-muted)]">Loading…</p>}
       {!loading && visible.length === 0 && (
         <p className="text-sm text-[var(--t-text-muted)]">

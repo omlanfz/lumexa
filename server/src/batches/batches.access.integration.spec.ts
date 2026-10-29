@@ -39,7 +39,9 @@ import { PrismaModule } from '../prisma.module';
 import { PrismaService } from '../prisma.service';
 import { SchedulingController } from '../scheduling/scheduling.controller';
 import { SchedulingService } from '../scheduling/scheduling.service';
+import { HomeworkFilesService } from '../submissions/homework-files.service';
 import { SubmissionsService } from '../submissions/submissions.service';
+import { MemoryHomeworkStorage } from '../submissions/testing/memory-homework-storage';
 import { TeachersController } from '../teachers/teachers.controller';
 import { TeachersService } from '../teachers/teachers.service';
 import { BatchSessionsService } from './batch-sessions.service';
@@ -795,7 +797,10 @@ describeDb(
 
       it('homework is each student’s own: separate submissions, and the shared lesson page never shows one student’s work to the teacher as if it were the class’s', async () => {
         const rows = await completedClassWithHomework();
-        const submissions = new SubmissionsService(prisma);
+        const submissions = new SubmissionsService(
+          prisma,
+          new HomeworkFilesService(prisma, new MemoryHomeworkStorage()),
+        );
         await submissions.submitHomework(adaA.id, {
           scheduledLessonId: rows[adaA.id],
           links: ['https://example.com/ada'],

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import api from '@/lib/axios';
+import { errorMessage, openHomeworkFile, type HomeworkFileRef } from '@/lib/homeworkFiles';
 import CopyCodeButton from '@/components/curriculum/CopyCodeButton';
 import SimpleMarkdown from '@/components/curriculum/SimpleMarkdown';
 import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/ProjectLinksSection';
@@ -13,10 +14,7 @@ interface CodeSnippet {
   part?: string;
 }
 
-export interface SubmissionFile {
-  url: string;
-  name: string | null;
-}
+export type SubmissionFile = HomeworkFileRef;
 
 export interface SubmissionInfo {
   id: string;
@@ -283,6 +281,19 @@ function HomeworkSubmission({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resubmitting, setResubmitting] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  // Files that are already safely uploaded. If the submit fails afterwards the
+  // student tries again without sending them all a second time.
+  const uploadedRef = useRef<Map<File, string>>(new Map());
+
+  const openFile = async (f: SubmissionFile) => {
+    setFileError(null);
+    try {
+      await openHomeworkFile(f);
+    } catch (err) {
+      setFileError(errorMessage(err, 'Could not open this file.'));
+    }
+  };
 
   const addFiles = (newFiles: File[]) => {
     if (newFiles.length === 0) return;
@@ -310,29 +321,41 @@ function HomeworkSubmission({
     setUploading(true);
     setError(null);
     try {
-      let uploadedFiles: { url: string; name: string }[] = [];
-      if (files.length > 0) {
+      // Each file goes to private storage first; the work is only submitted once
+      // every file has arrived. A file that fails stops here with the reason, and
+      // nothing is submitted.
+      const pending = files.filter((f) => !uploadedRef.current.has(f));
+      if (pending.length > 0) {
         const form = new FormData();
-        files.forEach((f) => form.append('homework', f));
-        const uploadRes = await api.post('/uploads/homework', form, {
+        form.append('scheduledLessonId', scheduledLessonId);
+        pending.forEach((f) => form.append('homework', f));
+        const uploadRes = await api.post<{ id: string }[]>('/uploads/homework', form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        uploadedFiles = uploadRes.data;
+        pending.forEach((f, i) => uploadedRef.current.set(f, uploadRes.data[i].id));
       }
       const res = await api.post('/submissions', {
         scheduledLessonId,
-        files: uploadedFiles,
+        files: files.map((f) => ({ id: uploadedRef.current.get(f)! })),
         links: cleanLinks,
         note: note.trim() || undefined,
       });
       onSubmitted(res.data);
+      uploadedRef.current = new Map();
       setFiles([]);
       setLinks(['']);
       setNote('');
       setResubmitting(false);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(message || 'Could not submit your work. Please try again.');
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setError(
+        errorMessage(
+          err,
+          status === 413
+            ? 'One of your files is too large (15 MB is the most for a single file).'
+            : 'Could not submit your work. Please check your connection and try again.',
+        ),
+      );
     } finally {
       setUploading(false);
     }
@@ -375,17 +398,26 @@ function HomeworkSubmission({
         </p>
         {(submission.files.length > 0 || submission.links.length > 0) && (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {submission.files.map((f, i) => (
-              <a
-                key={`f-${i}`}
-                href={f.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs px-2 py-1 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400 hover:bg-teal-500/20 truncate max-w-[180px]"
-              >
-                📎 {f.name || `File ${i + 1}`}
-              </a>
-            ))}
+            {submission.files.map((f, i) =>
+              f.removed ? (
+                <span
+                  key={`f-${i}`}
+                  title="Your teacher has reviewed this work, so the file was deleted from storage. Your grade and feedback are kept."
+                  className="text-xs px-2 py-1 rounded-md border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 truncate max-w-[220px]"
+                >
+                  📎 {f.name || `File ${i + 1}`} · removed after review
+                </span>
+              ) : (
+                <button
+                  key={`f-${i}`}
+                  type="button"
+                  onClick={() => void openFile(f)}
+                  className="text-xs px-2 py-1 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400 hover:bg-teal-500/20 truncate max-w-[180px]"
+                >
+                  📎 {f.name || `File ${i + 1}`}
+                </button>
+              ),
+            )}
             {submission.links.map((l, i) => (
               <a
                 key={`l-${i}`}
@@ -398,6 +430,12 @@ function HomeworkSubmission({
               </a>
             ))}
           </div>
+        )}
+
+        {fileError && (
+          <p className="mt-1.5 text-xs text-red-500" role="alert">
+            {fileError}
+          </p>
         )}
 
         {isApproved && submission.rating && (

@@ -20,7 +20,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Lesson, LessonStatus, Role, SessionType } from '@prisma/client';
+import {
+  ClassroomAdmissionStatus,
+  Lesson,
+  LessonStatus,
+  Role,
+  SessionType,
+} from '@prisma/client';
 import {
   COUNTS_AS_COMPLETED,
   findCanonicalCompletedRow,
@@ -30,11 +36,17 @@ import {
   todayDhakaDateStr,
   utcToDhakaParts,
 } from '../scheduling/dhaka-time.util';
+import { getClassWindow } from '../scheduling/lesson-window.util';
+import { roomForLessonRecord } from '../classroom/room-ref.util';
 import {
   getProjectLinksFallback,
   tableizeKeyTerminology,
 } from '../courses/curriculum-catalog.seed';
 import { getBankSummary } from '../assessments/bank-summary';
+import {
+  PRESENTABLE_FILE_SELECT,
+  presentFiles,
+} from '../submissions/homework-files.service';
 import {
   BANK_OWNER_SELECT,
   ensureLinkedAssessment,
@@ -52,6 +64,19 @@ import {
 interface Requester {
   userId: string;
   role: Role;
+}
+
+/** A submission as the lesson page shows it: its files as one list (links from
+ * before homework moved to R2, plus the files kept there), never raw rows. */
+function presentSubmission<
+  T extends {
+    files: unknown;
+    homeworkFiles?: Parameters<typeof presentFiles>[1];
+  },
+>(submission: T | null) {
+  if (!submission) return null;
+  const { homeworkFiles, ...rest } = submission;
+  return { ...rest, files: presentFiles(submission.files, homeworkFiles) };
 }
 
 function dhakaDateStrOf(date: Date): string {
@@ -87,7 +112,9 @@ export class CurriculumService {
     });
     const module = course
       ? await this.prisma.courseModule.findUnique({
-          where: { courseId_slug: { courseId: course.id, slug: 'language-models' } },
+          where: {
+            courseId_slug: { courseId: course.id, slug: 'language-models' },
+          },
         })
       : null;
     const lesson = module
@@ -136,7 +163,11 @@ export class CurriculumService {
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
-        projectLinks: this.resolveProjectLinks('ai-builder-path', lesson.order, lesson.projectLinks),
+        projectLinks: this.resolveProjectLinks(
+          'ai-builder-path',
+          lesson.order,
+          lesson.projectLinks,
+        ),
         module: lesson.module
           ? {
               id: lesson.module.id,
@@ -218,12 +249,19 @@ export class CurriculumService {
         title: lesson.title,
         type: lesson.type,
         objectives: lesson.objectives,
-        contentMarkdown: this.tableizeContent(lesson.course.slug, lesson.contentMarkdown),
+        contentMarkdown: this.tableizeContent(
+          lesson.course.slug,
+          lesson.contentMarkdown,
+        ),
         reviewNotes: lesson.reviewNotes,
         homework: lesson.homework,
         checkpoint: lesson.checkpoint,
         codeSnippets: lesson.codeSnippets,
-        projectLinks: this.resolveProjectLinks(lesson.course.slug, lesson.order, lesson.projectLinks),
+        projectLinks: this.resolveProjectLinks(
+          lesson.course.slug,
+          lesson.order,
+          lesson.projectLinks,
+        ),
         module: lesson.module
           ? {
               id: lesson.module.id,
@@ -243,13 +281,23 @@ export class CurriculumService {
     };
   }
 
+  /**
+   * `inClassroom: true` is the classroom's own request (GET .../classroom-
+   * details). It additionally lets the student see the lesson of the class they
+   * are attending right now — see `isAttendingNow`. The standalone lesson page
+   * never passes it, so an upcoming lesson stays locked everywhere else.
+   */
   async getScheduledLessonDetails(
     scheduledLessonId: string,
     requester: Requester,
+    opts: { inClassroom?: boolean } = {},
   ) {
     const sl = await this.prisma.scheduledLesson.findUnique({
       where: { id: scheduledLessonId },
       include: {
+        batchSession: {
+          select: { id: true, status: true, start: true, end: true },
+        },
         lesson: {
           include: {
             module: true,
@@ -281,6 +329,7 @@ export class CurriculumService {
             submittedAt: true,
             reviewedAt: true,
             feedback: true,
+            homeworkFiles: { select: PRESENTABLE_FILE_SELECT },
           },
         },
       },
@@ -316,7 +365,10 @@ export class CurriculumService {
       courseId: sl.courseId,
       lessonNumber: sl.lessonNumber,
     });
-    const lessonUnlocked = COUNTS_AS_COMPLETED.includes(sl.status) || !!canonical;
+    const lessonUnlocked =
+      COUNTS_AS_COMPLETED.includes(sl.status) || !!canonical;
+    const attendingNow =
+      !!opts.inClassroom && isOwner && (await this.isAttendingNow(sl));
 
     let available = false;
     let reason: string | null = null;
@@ -324,7 +376,7 @@ export class CurriculumService {
     if (teacherOrAdmin) {
       available = true;
     } else if (isTest) {
-      if (lessonUnlocked) {
+      if (lessonUnlocked || attendingNow) {
         available = true;
       } else if (
         sl.status === LessonStatus.UPCOMING &&
@@ -337,7 +389,7 @@ export class CurriculumService {
         reason = 'CANCELLED';
       }
     } else {
-      if (lessonUnlocked) {
+      if (lessonUnlocked || attendingNow) {
         available = true;
       } else if (sl.status === LessonStatus.UPCOMING) {
         reason = 'UPCOMING_LOCKED';
@@ -359,12 +411,19 @@ export class CurriculumService {
         title: sl.lesson.title,
         type: sl.lesson.type,
         objectives: sl.lesson.objectives,
-        contentMarkdown: this.tableizeContent(sl.course.slug, sl.lesson.contentMarkdown),
+        contentMarkdown: this.tableizeContent(
+          sl.course.slug,
+          sl.lesson.contentMarkdown,
+        ),
         reviewNotes: sl.lesson.reviewNotes,
         homework: sl.lesson.homework,
         checkpoint: sl.lesson.checkpoint,
         codeSnippets: sl.lesson.codeSnippets,
-        projectLinks: this.resolveProjectLinks(sl.course.slug, sl.lesson.order, sl.lesson.projectLinks),
+        projectLinks: this.resolveProjectLinks(
+          sl.course.slug,
+          sl.lesson.order,
+          sl.lesson.projectLinks,
+        ),
         module: sl.lesson.module
           ? {
               id: sl.lesson.module.id,
@@ -385,13 +444,60 @@ export class CurriculumService {
       // is shared, so what the teacher or an admin opens through one student's
       // row must not show that one student's work as if it were the class's —
       // they review each student's work on that student's own homework.
-      submission:
+      submission: presentSubmission(
         sl.lesson.homework && !(sl.batchId && !isOwner)
           ? canonical && canonical.id !== sl.id
             ? await this.findSubmission(canonical.id)
             : sl.submission
           : null,
+      ),
     };
+  }
+
+  /**
+   * Is this student in the classroom of this class right now? The same things
+   * that let them into the room, and nothing wider:
+   *   - the class (and, for a batch class, its session) is still UPCOMING — the
+   *     teacher has not ended it, and it is not cancelled;
+   *   - its classroom has opened (10 minutes before the start);
+   *   - they have actually come in through the join flow (studentJoinedAt is
+   *     set there, after the lock and admission checks);
+   *   - the teacher has not removed them and not yet let them back.
+   * Only the lesson of THIS class is ever unlocked by it — never a later one.
+   */
+  private async isAttendingNow(sl: {
+    id: string;
+    status: LessonStatus;
+    start: Date;
+    end: Date;
+    classType: 'ONE_TO_ONE' | 'BATCH';
+    teacherId: string;
+    studentUserId: string;
+    studentJoinedAt: Date | null;
+    batchSessionId: string | null;
+    batchSession: {
+      status: LessonStatus;
+      start: Date;
+      end: Date;
+    } | null;
+  }): Promise<boolean> {
+    const classStatus = sl.batchSession?.status ?? sl.status;
+    if (sl.status !== LessonStatus.UPCOMING) return false;
+    if (classStatus !== LessonStatus.UPCOMING) return false;
+    if (!sl.studentJoinedAt) return false;
+
+    const window = getClassWindow(
+      sl.batchSession?.start ?? sl.start,
+      sl.batchSession?.end ?? sl.end,
+    );
+    if (!window.joinable) return false;
+
+    const latest = await this.prisma.classroomAdmission.findFirst({
+      where: { room: roomForLessonRecord(sl), userId: sl.studentUserId },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true },
+    });
+    return latest?.status !== ClassroomAdmissionStatus.REMOVED;
   }
 
   private findSubmission(scheduledLessonId: string) {
@@ -409,6 +515,7 @@ export class CurriculumService {
         submittedAt: true,
         reviewedAt: true,
         feedback: true,
+        homeworkFiles: { select: PRESENTABLE_FILE_SELECT },
       },
     });
   }
@@ -767,13 +874,18 @@ export class CurriculumService {
       duration: source.duration,
       type: source.type,
       objectives: source.objectives,
-      contentMarkdown: this.tableizeContent(source.course.slug, source.contentMarkdown),
+      contentMarkdown: this.tableizeContent(
+        source.course.slug,
+        source.contentMarkdown,
+      ),
       reviewNotes: source.reviewNotes,
       checkpoint: source.checkpoint,
       codeSnippets: source.codeSnippets as object | undefined,
-      projectLinks: this.resolveProjectLinks(source.course.slug, source.order, source.projectLinks) as
-        | object
-        | undefined,
+      projectLinks: this.resolveProjectLinks(
+        source.course.slug,
+        source.order,
+        source.projectLinks,
+      ) as object | undefined,
       homework: source.homework,
       sourceRefs: { importedFromLessonId: source.id } as object,
     };

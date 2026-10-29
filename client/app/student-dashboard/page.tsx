@@ -199,6 +199,8 @@ function OnboardingChecklist({
 export default function StudentDashboardPage() {
   const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
+  // When `data` arrived: the live-class card corrects for a wrong device clock with it.
+  const [receivedAt, setReceivedAt] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pendingReview, setPendingReview] = useState<PendingReview | null>(null);
@@ -221,16 +223,20 @@ export default function StudentDashboardPage() {
     }
 
     fetchDashboard();
-    // Refresh periodically so a class transitions to "Live" without a manual reload.
-    const id = setInterval(fetchDashboard, 60_000);
+    // Refresh periodically as a backstop; the live-class card also re-reads the
+    // dashboard itself the moment its class opens, starts or runs out.
+    const id = setInterval(() => void fetchDashboard({ quiet: true }), 60_000);
     return () => clearInterval(id);
   }, [router]);
 
-  const fetchDashboard = async () => {
-    setError('');
+  // `quiet`: a refresh in the background — a failed one leaves what is on screen
+  // as it is instead of replacing the dashboard with an error.
+  const fetchDashboard = async ({ quiet = false }: { quiet?: boolean } = {}) => {
+    if (!quiet) setError('');
     try {
       const res = await api.get<DashboardData>('/students/me/dashboard');
       setData(res.data);
+      setReceivedAt(Date.now());
       setPendingReview(res.data.pendingReview);
 
       // Rank-up ceremony: compare stored rank to current rank
@@ -244,6 +250,7 @@ export default function StudentDashboardPage() {
         localStorage.setItem('lumexa_last_rank', currentRank);
       }
     } catch (err: unknown) {
+      if (quiet) return;
       const e = err as { response?: { data?: { message?: string | string[] } } };
       const msg = e.response?.data?.message;
       setError(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to load dashboard.'));
@@ -264,7 +271,7 @@ export default function StudentDashboardPage() {
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-4">
         <p className="text-5xl">🚫</p>
         <p className="text-red-500 dark:text-red-400 text-sm max-w-sm text-center">{error}</p>
-        <button onClick={fetchDashboard} className="text-teal-500 dark:text-teal-400 underline text-sm">
+        <button onClick={() => void fetchDashboard()} className="text-teal-500 dark:text-teal-400 underline text-sm">
           Try again
         </button>
       </div>
@@ -331,7 +338,7 @@ export default function StudentDashboardPage() {
       ) : (
         <>
           {/* 2. Live / Next Class — the primary, largest card */}
-          <LiveClassCard liveClass={liveClass} />
+          <LiveClassCard liveClass={liveClass} receivedAt={receivedAt} onSync={() => void fetchDashboard({ quiet: true })} />
 
           {pendingReview && (
             <SessionReviewCard

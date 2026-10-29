@@ -101,3 +101,18 @@ export function undoSecondsLeft(undoUntil: string, now: number): number {
   if (Number.isNaN(until)) return 0;
   return Math.max(0, Math.ceil((until - now) / 1000));
 }
+
+const CONGRATS = [
+  'Great job — keep shining!',
+  'Awesome work, you earned it!',
+  'Way to go, superstar!',
+  'Fantastic effort — well done!',
+];
+
+/** A short, friendly line for a celebration. The same award always gets the same
+ * line (it is chosen from the award's id), so a repeat never reads differently. */
+export function congratulation(awardId: string): string {
+  let sum = 0;
+  for (let i = 0; i < awardId.length; i++) sum = (sum + awardId.charCodeAt(i)) % 9973;
+  return CONGRATS[sum % CONGRATS.length];
+}

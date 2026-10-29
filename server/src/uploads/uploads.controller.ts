@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import { cloudinary } from '../lib/cloudinary';
 import { PrismaService } from '../prisma.service';
@@ -19,6 +20,13 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { CloudinaryUploadErrorInterceptor } from './cloudinary-upload-error.interceptor';
+import { HomeworkFilesService } from '../submissions/homework-files.service';
+import {
+  HOMEWORK_MAX_FILES_PER_UPLOAD,
+  HOMEWORK_MAX_FILE_BYTES,
+  extensionOf,
+  isAllowedHomeworkFile,
+} from '../submissions/homework-file-types';
 
 // Avatars: images only, cropped to a square face-centered thumbnail.
 //
@@ -68,103 +76,6 @@ const documentStorage = new CloudinaryStorage({
   })) as any,
 });
 
-// Homework submissions: PDFs, photos of written work, common document/
-// archive formats, and coding/programming project files (both text-based —
-// Python, web, Java, etc. — and block-based — Scratch .sb3, Roblox .rbxl).
-// Same raw-vs-image resource_type split as documentStorage above — PDFs and
-// non-image files need 'raw' delivery or Cloudinary's restricted-media-types
-// setting 401s the download link the teacher clicks to review it.
-//
-// Validation is extension-based (see HOMEWORK_ALLOWED_EXTENSIONS below)
-// rather than MIME-based: browsers/OSes report wildly inconsistent (or
-// generic "application/octet-stream") mimetypes for code files, so a
-// mimetype allowlist would reject legitimate submissions.
-const HOMEWORK_ALLOWED_EXTENSIONS = new Set([
-  // Documents & archives
-  'pdf',
-  'doc',
-  'docx',
-  'txt',
-  'rtf',
-  'odt',
-  'zip',
-  'rar',
-  '7z',
-  // Images
-  'jpg',
-  'jpeg',
-  'png',
-  'heic',
-  'heif',
-  'gif',
-  'webp',
-  // Text-based programming, markup, and data files
-  'py',
-  'ipynb',
-  'html',
-  'htm',
-  'css',
-  'scss',
-  'js',
-  'jsx',
-  'ts',
-  'tsx',
-  'java',
-  'c',
-  'cpp',
-  'h',
-  'hpp',
-  'cs',
-  'php',
-  'rb',
-  'go',
-  'rs',
-  'swift',
-  'kt',
-  'kts',
-  'json',
-  'xml',
-  'sql',
-  'sh',
-  'yml',
-  'yaml',
-  'md',
-  'csv',
-  'lua',
-  'r',
-  'pl',
-  'scala',
-  'dart',
-  'vue',
-  'svelte',
-  // Block-based coding project files
-  'sb3',
-  'sb2',
-  'rbxl',
-  'rbxlx',
-]);
-
-const homeworkStorage = new CloudinaryStorage({
-  cloudinary,
-  params: (async (_req: any, file: Express.Multer.File) => ({
-    folder: 'lumexa/homework',
-    resource_type: file.mimetype.startsWith('image/') ? 'image' : 'raw',
-    // No `allowed_formats` here (unlike avatarStorage/documentStorage
-    // above): Cloudinary's own format allowlist only recognizes a fixed,
-    // conservative set of "known" extensions, and rejecting the upload
-    // outright with a raw API error for anything outside it (e.g. .py,
-    // .ipynb, .sb3, .rbxl) — which multer-storage-cloudinary then surfaces
-    // as an unhandled 500, not a clean 400. The fileFilter below (extension
-    // against HOMEWORK_ALLOWED_EXTENSIONS) already gates what's accepted
-    // before a file ever reaches Cloudinary, so a second, less permissive
-    // allowlist here only breaks legitimate submissions.
-    // Same phone-camera HEIC/HEIF problem as avatars/documents above.
-    ...((file.mimetype === 'image/heic' || file.mimetype === 'image/heif') && {
-      format: 'jpg',
-    }),
-  })) as any,
-});
-
 const REQUIRED_DOC_TYPES = new Set([
   'nid',
   'birth_certificate',
@@ -182,7 +93,10 @@ const REQUIRED_DOC_TYPES = new Set([
 @UseGuards(AuthGuard('jwt'))
 @UseInterceptors(CloudinaryUploadErrorInterceptor)
 export class UploadsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly homeworkFiles: HomeworkFilesService,
+  ) {}
 
   /**
    * POST /uploads/avatar
@@ -353,38 +267,51 @@ export class UploadsController {
 
   /**
    * POST /uploads/homework
-   * Multer field name: "homework" (up to 10 files per request)
-   * Uploads a student's homework file(s) for a completed lesson. Just
-   * returns the stored URLs — SubmissionsController.submit is what actually
-   * records them (plus any links) against the scheduled lesson.
+   * Multipart: field "homework" (up to 10 files) + text field "scheduledLessonId".
+   *
+   * Stores a student's homework file(s) in the private homework bucket on
+   * Cloudflare R2 (NOT Cloudinary — that is for avatars and documents). The files
+   * pass through this server, which checks them, stores them and records them; a
+   * file that cannot be stored fails the whole upload and nothing is kept.
+   * Returns [{ id, name, size, kind }] — POST /submissions then names the files by
+   * these ids. The browser never receives a storage URL or credential.
+   *
+   * Validation is by extension (browsers report inconsistent mime types for code
+   * files) and, for PDFs and images, by the file's own first bytes.
    */
   @Post('homework')
   @UseGuards(RolesGuard)
   @Roles(Role.STUDENT)
   @UseInterceptors(
-    FilesInterceptor('homework', 10, {
-      storage: homeworkStorage,
+    FilesInterceptor('homework', HOMEWORK_MAX_FILES_PER_UPLOAD, {
+      // Held in memory only until they are in R2 (15 MB at most per file).
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
-        const ext = (file.originalname.split('.').pop() || '').toLowerCase();
-        if (!HOMEWORK_ALLOWED_EXTENSIONS.has(ext)) {
+        if (!isAllowedHomeworkFile(file.originalname)) {
           return cb(
             new BadRequestException(
-              `".${ext || 'unknown'}" files are not allowed. You can submit documents (PDF, Word, TXT), archives (ZIP), images (JPG, PNG), and coding/programming project files (e.g. .py, .ipynb, .html, .css, .js, .java, .sb3, .rbxl).`,
+              `".${extensionOf(file.originalname) || 'unknown'}" files are not allowed. You can submit documents (PDF, Word, TXT), archives (ZIP), images (JPG, PNG), and coding/programming project files (e.g. .py, .ipynb, .html, .css, .js, .java, .sb3, .rbxl).`,
             ) as unknown as Error,
             false,
           );
         }
         cb(null, true);
       },
-      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB per file — a zipped mini-project can be bigger than a single doc
+      limits: {
+        fileSize: HOMEWORK_MAX_FILE_BYTES,
+        files: HOMEWORK_MAX_FILES_PER_UPLOAD,
+      },
     }),
   )
-  uploadHomework(@UploadedFiles() files: Express.Multer.File[]) {
-    if (!files || files.length === 0)
-      throw new BadRequestException('No file provided.');
-    return files.map((file) => ({
-      url: (file as any).path ?? (file as any).secure_url,
-      name: file.originalname,
-    }));
+  uploadHomework(
+    @Request() req: any,
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body() body: { scheduledLessonId?: string },
+  ) {
+    return this.homeworkFiles.uploadFiles(
+      req.user.userId,
+      body?.scheduledLessonId,
+      files,
+    );
   }
 }
