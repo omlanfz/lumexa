@@ -397,7 +397,11 @@ export default function StudentDetailPage() {
                     <tr key={entry.id} className="border-b border-[var(--a-border)] last:border-0 align-top">
                       <td className="px-4 py-3 text-[var(--a-text-muted)] whitespace-nowrap">{formatDateTime(entry.createdAt)}</td>
                       <td className="px-4 py-3">
-                        <p className="text-[var(--a-text)] font-medium">{LEDGER_EVENT_LABELS[entry.type] ?? entry.type}</p>
+                        <p className="text-[var(--a-text)] font-medium">
+                          {entry.type === "LESSON_COMPLETED" && entry.description?.startsWith("Batch class")
+                            ? "Batch class charged"
+                            : (LEDGER_EVENT_LABELS[entry.type] ?? entry.type)}
+                        </p>
                         {entry.description && <p className="text-xs text-[var(--a-text-faint)] mt-0.5">{entry.description}</p>}
                         {entry.paymentMethod && (
                           <p className="text-xs text-[var(--a-text-faint)] mt-0.5">
@@ -594,7 +598,11 @@ function DeleteLedgerEntryModal({
           This will permanently remove this payment record from the student&apos;s payment history. Continue?
         </p>
         <div className="p-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm">
-          <p className="text-[var(--a-text)] font-medium">{LEDGER_EVENT_LABELS[entry.type] ?? entry.type}</p>
+          <p className="text-[var(--a-text)] font-medium">
+                          {entry.type === "LESSON_COMPLETED" && entry.description?.startsWith("Batch class")
+                            ? "Batch class charged"
+                            : (LEDGER_EVENT_LABELS[entry.type] ?? entry.type)}
+                        </p>
           <p className="text-xs text-[var(--a-text-faint)] mt-0.5">
             {formatDateTime(entry.createdAt)}
             {entry.amountCents !== 0 ? ` · ${entry.amountCents > 0 ? "+" : ""}${formatBDT(entry.amountCents)}` : ""}

@@ -22,8 +22,19 @@
 //                        the SAME lesson is scheduled right after this one
 //                        (everything later shifts by one class). Allowed once
 //                        per student + curriculum + lesson number.
-//   INCOMPLETE           no earning, no deduction, no progression; a make-up
-//                        occurrence of the same lesson is scheduled.
+//   INCOMPLETE           no earning, no progression; a make-up occurrence of
+//                        the same lesson is scheduled. A 1:1 student is not
+//                        charged. A BATCH class still charges every enrolled
+//                        student (see below).
+//
+// Student charging (the student's own ledger, never the teacher's):
+//   - 1:1 class: one lesson, only when the class was paid (Completed /
+//     Partially Completed) AND the student attended. A student who did not
+//     attend is never charged, whoever finalizes the class.
+//   - BATCH class: one lesson from EVERY student enrolled in the class, for
+//     Completed, Partially Completed and Incomplete alike, whether or not they
+//     attended. Charging never changes a student's outcome or progression: an
+//     Incomplete class repeats the same lesson in its make-up class.
 //
 // ─── Why this is safe to call concurrently ──────────────────────────────────
 // The status change is a compare-and-set (`UPDATE ... WHERE status =
@@ -216,16 +227,21 @@ export class ClassFinalizationService {
             studentName: lesson.student.fullName,
             end: lesson.end,
           });
-          lessonConsumed =
-            await this.studentLedger.consumeLessonForScheduledLessonInTx(tx, {
-              scheduledLessonId: lesson.id,
-              studentUserId: lesson.studentUserId,
-              eventDate: lesson.end,
-              note:
-                outcome === 'PARTIALLY_COMPLETED'
-                  ? 'extra class scheduled'
-                  : undefined,
-            });
+          // A 1:1 student who did not attend is not charged (an admin may
+          // still settle the class; the balance is then corrected, if needed,
+          // with an Admin adjustment).
+          if (lesson.studentJoinedAt) {
+            lessonConsumed =
+              await this.studentLedger.consumeLessonForScheduledLessonInTx(tx, {
+                scheduledLessonId: lesson.id,
+                studentUserId: lesson.studentUserId,
+                eventDate: lesson.end,
+                note:
+                  outcome === 'PARTIALLY_COMPLETED'
+                    ? 'extra class scheduled'
+                    : undefined,
+              });
+          }
         }
 
         const makeup =
@@ -437,17 +453,18 @@ export class ClassFinalizationService {
                   : null,
             },
           });
+          // Strict batch billing: every enrolled student is charged for the
+          // class, whatever their attendance and the class outcome. This never
+          // touches the row's status above, so an Incomplete class still
+          // repeats the same lesson. The ledger's unique (class row, type)
+          // makes this at most one charge per student per class.
           const consumed =
-            individual !== 'INCOMPLETE' &&
-            (await this.studentLedger.consumeLessonForScheduledLessonInTx(tx, {
+            await this.studentLedger.consumeLessonForScheduledLessonInTx(tx, {
               scheduledLessonId: p.id,
               studentUserId: p.studentUserId,
               eventDate: session.end,
-              note:
-                outcome === 'PARTIALLY_COMPLETED'
-                  ? 'extra class scheduled'
-                  : undefined,
-            }));
+              description: this.batchChargeDescription(session, outcome, p),
+            });
           results.push({
             lessonId: p.id,
             studentUserId: p.studentUserId,
@@ -516,6 +533,29 @@ export class ClassFinalizationService {
     };
   }
 
+  /** What the student's Payments tab says about a batch-class charge: which
+   * class and date, and why they were charged when they did not benefit from
+   * a taught lesson. */
+  private batchChargeDescription(
+    session: {
+      end: Date;
+      lessonNumber: number;
+      batch: { name: string };
+    },
+    outcome: ClassOutcome,
+    participant: { studentJoinedAt: Date | null },
+  ): string {
+    const reasons: string[] = [];
+    if (!participant.studentJoinedAt) reasons.push('absent');
+    if (outcome === 'INCOMPLETE') reasons.push('class incomplete');
+    if (outcome === 'PARTIALLY_COMPLETED')
+      reasons.push('extra class scheduled');
+    return (
+      `Batch class "${session.batch.name}" · Lesson ${session.lessonNumber} on ${session.end.toDateString()}` +
+      (reasons.length ? ` (${reasons.join(', ')})` : '')
+    );
+  }
+
   /** Closes out the class's recording (a browser still recording now only waits
    * for its upload) and closes the live room — once, for the whole class. */
   private async wrapUpSessionRoom(sessionId: string) {
@@ -548,7 +588,12 @@ export class ClassFinalizationService {
     },
     params: FinalizeParams,
     claim: {
-      results: { lessonId: string; status: ClassOutcome; noShow: boolean }[];
+      results: {
+        lessonId: string;
+        status: ClassOutcome;
+        noShow: boolean;
+        consumed: boolean;
+      }[];
       makeup: { shiftedCount: number } | null;
       taught: number;
     },
@@ -576,6 +621,7 @@ export class ClassFinalizationService {
           lessonNumber: session.lessonNumber,
           students: claim.results.length,
           studentsTaught: claim.taught,
+          studentsCharged: claim.results.filter((r) => r.consumed).length,
           teacherEarningCents: isPaid ? CLASS_COMPLETED_AMOUNT_CENTS : 0,
           extraClassScheduled: claim.makeup !== null,
           shiftedCount: claim.makeup?.shiftedCount ?? 0,

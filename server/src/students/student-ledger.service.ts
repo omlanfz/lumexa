@@ -536,8 +536,11 @@ export class StudentLedgerService {
   // Booking/marketplace-only). Runs inside the finalize transaction of
   // ClassFinalizationService when a class is finalized as COMPLETED or
   // PARTIALLY_COMPLETED — never for INCOMPLETE — so exactly one lesson is
-  // consumed per paid class, atomically with the status change. Idempotency is
-  // the DB-level @@unique([scheduledLessonId, type]) constraint plus an
+  // consumed per paid class, atomically with the status change. A BATCH class
+  // is the exception to "paid class only": every student enrolled in it is
+  // charged one lesson whatever the outcome and whatever their attendance
+  // (including Incomplete), while a 1:1 class charges only an attended,
+  // paid one. Idempotency is the DB-level @@unique([scheduledLessonId, type]) constraint plus an
   // explicit existence check. The per-student advisory lock serialises
   // concurrent writers to the same student's running balance (balanceAfterCents
   // is read-modify-write), e.g. two of a student's classes finalizing at once.
@@ -548,6 +551,9 @@ export class StudentLedgerService {
       studentUserId: string;
       eventDate: Date;
       note?: string;
+      /** Replaces the default "Lesson completed on …" text (batch classes say
+       * which class was charged and why, e.g. an absent student). */
+      description?: string;
     },
   ): Promise<boolean> {
     const { scheduledLessonId, studentUserId, eventDate } = params;
@@ -580,8 +586,9 @@ export class StudentLedgerService {
         courseId: prev.courseId,
         courseName: prev.courseName,
         description:
+          params.description ??
           `Lesson completed on ${eventDate.toDateString()}` +
-          (params.note ? ` (${params.note})` : ''),
+            (params.note ? ` (${params.note})` : ''),
         scheduledLessonId,
       },
     });
