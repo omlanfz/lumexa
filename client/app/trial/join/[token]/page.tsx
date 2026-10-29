@@ -22,7 +22,7 @@ function Shell({ children }: { children: React.ReactNode }) {
     <div className="cr-root min-h-screen flex items-center justify-center p-5" data-theme="dark">
       <div className="w-full max-w-md rounded-2xl border border-[var(--cr-border)] bg-[var(--cr-surface)] p-6 sm:p-8 shadow-2xl text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-mark.png" alt="Lumexa" className="mx-auto h-12 w-12 mb-4" />
+        <img src="/logo-mark.png" alt="Lumexa" className="mx-auto h-12 w-12 mb-4 rounded-xl bg-[#0B1026]" />
         {children}
       </div>
     </div>

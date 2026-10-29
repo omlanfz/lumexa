@@ -63,7 +63,7 @@ export default function Header({
       }`}
     >
       <div className="flex items-center gap-2.5 min-w-0">
-        <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg flex-shrink-0" />
+        <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg flex-shrink-0 bg-[#0B1026]" />
         <div className="min-w-0 hidden sm:block">
           <p className="text-[11px] font-semibold text-[var(--cr-text-muted)] leading-none">Lumexa AI School</p>
         </div>

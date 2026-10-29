@@ -89,7 +89,7 @@ export default function TeacherTopNav({ teacherName, avatarUrl }: TeacherTopNavP
           onClick={() => router.push("/teacher-dashboard")}
           className="flex items-center gap-2.5 flex-shrink-0 transition-opacity hover:opacity-80"
         >
-          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#0B1026]">
             <Image
               src="/logo-mark.png"
               width={32}

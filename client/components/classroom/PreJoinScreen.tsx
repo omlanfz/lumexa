@@ -189,7 +189,7 @@ export default function PreJoinScreen({
         {/* Session info + join */}
         <div className="cr-fade-in">
           <div className="flex items-center gap-2 mb-3">
-            <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg" />
+            <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg bg-[#0B1026]" />
             <span className="text-sm font-semibold text-[var(--cr-text)]">Lumexa AI School</span>
           </div>
           {isLive && (

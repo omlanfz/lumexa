@@ -245,7 +245,7 @@ export default function AboutPage() {
 
               <div>
                 <div className="flex items-center gap-2.5 mb-4">
-                  <span className="relative h-7 w-7 overflow-hidden rounded-lg ring-1 ring-slate-900/10 dark:ring-white/10">
+                  <span className="relative h-7 w-7 overflow-hidden rounded-lg bg-[#0B1026]">
                     <Image src="/logo-mark.png" alt="" width={28} height={28} className="h-full w-full object-cover" />
                   </span>
                   <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-gray-500">

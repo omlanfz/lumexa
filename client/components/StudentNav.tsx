@@ -99,7 +99,7 @@ export default function StudentNav({
       <div className={`flex items-center justify-between px-4 py-5 border-b border-teal-800/30 flex-shrink-0 ${collapsed ? 'justify-center px-2' : ''}`}>
         {!collapsed && (
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0">
+            <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-[#0B1026]">
               <Image
                 src="/logo-mark.png"
                 width={32}

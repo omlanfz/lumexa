@@ -101,7 +101,7 @@ export default function MarketingNav() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/" onClick={handleLogoClick} className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 shadow-md shadow-purple-100 group-hover:shadow-purple-200 transition-shadow">
+            <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 bg-[#0B1026]">
               <Image
                 src="/logo-mark.png"
                 alt="Lumexa AI School"
@@ -110,9 +110,9 @@ export default function MarketingNav() {
                 className="object-cover w-full h-full"
               />
             </div>
-            <span className="font-black text-base min-[380px]:text-lg tracking-tight leading-tight text-[#0F172A] dark:text-white">
+            <span className="font-black text-base min-[380px]:text-lg tracking-tight leading-tight text-[#111827] dark:text-white">
               Lumexa{" "}
-              <span className="text-purple-600 dark:text-purple-400 font-bold">AI School</span>
+              <span className="text-[#7928CA] dark:text-purple-400 font-bold">AI School</span>
             </span>
           </Link>
 
