@@ -167,8 +167,8 @@ function LessonsContent() {
         grade={student?.grade ?? null}
         parentName={student?.parent?.fullName ?? null}
       />
-      <div className="pl-64">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="lg:pl-64">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-20 pb-8 lg:py-8">
           <div className="mb-6">
             <h1 className={`text-2xl font-bold ${txtp}`}>My Lessons</h1>
             <p className={`text-sm ${txtm}`}>

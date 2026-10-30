@@ -111,8 +111,8 @@ function StudentViewContent() {
         isTeacherView
         onExitTeacherView={() => router.push("/teacher-students")}
       />
-      <div className="pl-64">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="lg:pl-64">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-20 pb-8 lg:py-8">
           {/* Teacher view banner */}
           <div
             className={`${card} p-4 mb-6 flex items-center gap-3 border-amber-500/30 dark:bg-amber-900/10 bg-amber-50`}

@@ -351,6 +351,41 @@ export default function StudentDetailPage() {
               </p>
             )}
             {student.ledgerSummary.paymentBadge && <PaymentBadge badge={student.ledgerSummary.paymentBadge} />}
+            {student.ledgerSummary.credits && (
+              <div data-testid="class-credits" className="pt-3 mt-1 border-t border-[var(--a-border)]">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-2">
+                  Class credits <span className="normal-case font-normal">· 1 credit = 1 scheduled class · what the student sees in their navbar</span>
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: "Purchased", value: student.ledgerSummary.credits.purchased, hint: "from confirmed payments" },
+                    { label: "Used", value: student.ledgerSummary.credits.used, hint: "attended classes charged" },
+                    {
+                      label: "Refunds & adjustments",
+                      value: student.ledgerSummary.credits.adjustments,
+                      hint: "refunds, corrections, rate changes",
+                      signed: true,
+                    },
+                    { label: "Remaining", value: student.ledgerSummary.credits.remaining, hint: "available to attend", strong: true },
+                  ].map((c) => (
+                    <div key={c.label}>
+                      <p className="text-xs text-[var(--a-text-muted)]">{c.label}</p>
+                      <p className={`text-xl font-bold ${c.strong ? "text-[var(--a-accent)]" : "text-[var(--a-text)]"}`}>
+                        {c.signed && c.value > 0 ? "+" : ""}
+                        {formatLessons(c.value)}
+                      </p>
+                      <p className="text-[11px] text-[var(--a-text-faint)]">{c.hint}</p>
+                    </div>
+                  ))}
+                </div>
+                {student.ledgerSummary.credits.remainingRaw < 0 && (
+                  <p className="mt-2 text-xs text-[var(--a-danger,#dc2626)]">
+                    Overdrawn by {formatLessons(Math.abs(student.ledgerSummary.credits.remainingRaw))} class
+                    {Math.abs(student.ledgerSummary.credits.remainingRaw) === 1 ? "" : "es"} — the student sees 0 credits until the next payment is recorded.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="pt-2 flex flex-wrap gap-2">
               <button
                 onClick={() => setModal("PAYMENT_RECEIVED")}

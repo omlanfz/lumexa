@@ -62,6 +62,7 @@ import { AlertsService } from '../alerts/alerts.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
+import { StudentProgressService } from '../students/progress/student-progress.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { CLASS_COMPLETED_AMOUNT_CENTS } from '../payouts/payout.constants';
 import { DailyRoomsService } from './daily-rooms.service';
@@ -140,6 +141,7 @@ export class ClassFinalizationService {
     private readonly recording: RecordingService,
     private readonly batches: BatchSessionsService,
     private readonly rooms: DailyRoomsService,
+    private readonly studentProgress: StudentProgressService,
   ) {}
 
   // ─── Public: finalize one class ───────────────────────────────────────────
@@ -601,6 +603,19 @@ export class ClassFinalizationService {
     const { outcome, actor } = params;
     const isPaid = outcome !== 'INCOMPLETE';
 
+    // Each student who was credited with the class moves on in rank, streak
+    // and badges (derived from their own row, so an absent student is not).
+    if (isPaid) {
+      const ids = session.participants
+        .filter((p) =>
+          claim.results.some(
+            (r) => r.lessonId === p.id && r.status !== 'INCOMPLETE',
+          ),
+        )
+        .map((p) => p.student.id);
+      await this.studentProgress.syncAfterClass(ids);
+    }
+
     await this.wrapUpSessionRoom(session.id);
 
     await this.audit
@@ -742,6 +757,12 @@ export class ClassFinalizationService {
     const { outcome, actor } = params;
     const room = roomForLessonRecord(lesson);
     const isPaid = outcome !== 'INCOMPLETE';
+
+    // The student's rank, streak and badges follow the class (a no-op for an
+    // Incomplete class — nothing was attended).
+    if (isPaid) {
+      await this.studentProgress.syncAfterClass([lesson.studentUserId]);
+    }
 
     // The classroom itself (recording, the live room) belongs to the whole
     // batch, so it is wrapped up once the LAST student's lesson has ended —

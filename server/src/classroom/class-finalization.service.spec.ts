@@ -79,6 +79,9 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     insertMakeupSession: jest.fn().mockResolvedValue({ shiftedCount: 2 }),
   };
   const rooms = { deleteRoom: jest.fn().mockResolvedValue(undefined) };
+  const studentProgress = {
+    syncAfterClass: jest.fn().mockResolvedValue(undefined),
+  };
 
   const service = new ClassFinalizationService(
     prisma as any,
@@ -91,6 +94,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     recording as any,
     batches as any,
     rooms as any,
+    studentProgress as any,
   );
   return {
     service,
@@ -105,6 +109,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     recording,
     batches,
     rooms,
+    studentProgress,
   };
 }
 
@@ -931,5 +936,49 @@ describe('ClassFinalizationService.sweepOverdueClasses', () => {
         actor: { role: 'SYSTEM' },
       }),
     );
+  });
+});
+
+// ─── Student progress follows the class ─────────────────────────────────────
+
+describe('ClassFinalizationService — student progress hook', () => {
+  it('a 1:1 COMPLETED class syncs the student’s rank / streak / badges', async () => {
+    const t = setup();
+    await t.service.finalizeLesson(LESSON_ID, {
+      outcome: 'COMPLETED',
+      actor: teacher,
+    });
+    expect(t.studentProgress.syncAfterClass).toHaveBeenCalledWith([
+      'student-1',
+    ]);
+  });
+
+  it('an INCOMPLETE 1:1 class syncs nobody (nothing was attended)', async () => {
+    const t = setup();
+    await t.service.finalizeLesson(LESSON_ID, {
+      outcome: 'INCOMPLETE',
+      reason: ClassEndReason.TECHNICAL_ISSUE,
+      actor: teacher,
+    });
+    expect(t.studentProgress.syncAfterClass).not.toHaveBeenCalled();
+  });
+
+  it('a batch class syncs only the students who were credited, not an absent one', async () => {
+    const t = setupBatch(
+      makeSession([
+        participant(1),
+        participant(2),
+        participant(3, { studentJoinedAt: null }),
+      ]),
+    );
+    await t.service.finalizeBatchSession(SESSION_ID, {
+      outcome: 'COMPLETED',
+      actor: teacher,
+    });
+    expect(t.studentProgress.syncAfterClass).toHaveBeenCalledTimes(1);
+    expect(t.studentProgress.syncAfterClass.mock.calls[0][0].sort()).toEqual([
+      'student-1',
+      'student-2',
+    ]);
   });
 });

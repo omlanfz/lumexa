@@ -12,6 +12,7 @@ import { PayoutsService } from '../../payouts/payouts.service';
 import { PrismaService } from '../../prisma.service';
 import { SchedulingService } from '../../scheduling/scheduling.service';
 import { utcToDhakaParts } from '../../scheduling/dhaka-time.util';
+import { StudentProgressService } from '../../students/progress/student-progress.service';
 import { StudentLedgerService } from '../../students/student-ledger.service';
 import { BatchSessionsService } from '../batch-sessions.service';
 import { BatchesService } from '../batches.service';
@@ -101,6 +102,7 @@ export function buildBatchWorld(prisma: PrismaService): BatchWorld {
     sessions,
     // No video provider in these tests: closing a room is a no-op.
     { deleteRoom: () => Promise.resolve() } as never,
+    new StudentProgressService(prisma, notifications as never),
   );
   return {
     prisma,
