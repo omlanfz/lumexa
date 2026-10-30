@@ -23,18 +23,22 @@ const rank = (over: Partial<RankInfo> = {}): RankInfo => ({
   ...over,
 });
 
-test('credits are shown as whole classes, with one decimal only for a part-class balance', () => {
+test('credits are always rounded DOWN to whole classes — never a fraction, never rounded up', () => {
   assert.equal(formatCredits(8), '8');
-  assert.equal(formatCredits(7.99999), '8');
-  assert.equal(formatCredits(7.5), '7.5');
+  assert.equal(formatCredits(4.5), '4');
+  assert.equal(formatCredits(4.9), '4');
+  assert.equal(formatCredits(4.99), '4');
+  assert.equal(formatCredits(0.9), '0');
   assert.equal(formatCredits(0), '0');
+  assert.equal(formatCredits(-1.5), '0');
 });
 
 test('"1 Credit" is singular, everything else plural', () => {
   assert.equal(creditsLabel(1), 'Credit');
   assert.equal(creditsLabel(0), 'Credits');
   assert.equal(creditsLabel(8), 'Credits');
-  assert.equal(creditsLabel(1.5), 'Credits');
+  assert.equal(creditsLabel(1.9), 'Credit'); // shown as 1
+  assert.equal(creditsLabel(0.9), 'Credits'); // shown as 0
 });
 
 test('the credits tooltip is the agreed wording', () => {

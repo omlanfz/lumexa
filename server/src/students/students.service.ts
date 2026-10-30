@@ -711,13 +711,11 @@ export class StudentsService {
       totalSessions: result.sessions,
       streakWeeks: result.streak.current,
       rank: this.rankPayload(result),
+      // Whole classes only — a student never sees a part-credit (4.9 → 4).
       credits: {
-        remaining: credits.remaining,
-        purchased: credits.purchased,
-        used: credits.used,
-        adjustments: credits.adjustments,
-        low: credits.remaining > 0 && credits.remaining < 3,
-        exhausted: credits.remaining <= 0,
+        remaining: credits.remainingWhole,
+        low: credits.remainingWhole >= 1 && credits.remainingWhole < 3,
+        exhausted: credits.remainingWhole < 1,
       },
     };
   }

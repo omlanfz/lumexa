@@ -21,6 +21,10 @@
   **Batch classes keep their existing rule** — every enrolled student is charged one
   credit for every finalized class, attended or not (documented in
   `class-finalization.service.ts`). This was deliberately left unchanged.
+* **Students always see whole credits, rounded down** (4.5 → 4, 4.9 → 4, never
+  below 0; `wholeCredits()` in `student-ledger.service.ts`, mirrored by
+  `formatCredits()` on the client). The admin Payments tab keeps the exact figure
+  (e.g. 4.9). The "balance running low" email uses the same whole number.
 * `GET /students/me/nav-summary` serves the navbar (credits + rank). The client
   re-reads it on every navigation, tab focus and once a minute.
 
@@ -67,3 +71,20 @@ stored numbers the records do not explain (e.g. `totalSessions` higher than the
 classes found, a stored rank the classes do not support, classes still UPCOMING two
 days after they ended) — those are reported, not "fixed". No schema migration is
 required.
+
+## What happens when credits reach 0 (or go below 0)
+
+Credits are informational plus billing alerts — **nothing is blocked or paused automatically.**
+
+1. Student navbar shows `💎 0 Credits` in red (a part-credit such as 0.9 also shows 0).
+2. The ledger balance is allowed to go negative: the next attended class is still charged
+   (balance below 0); the student pill stays at 0, the admin tab shows "Overdrawn by N".
+3. Classes, reminders, joining the classroom, recordings, homework and tests carry on as normal.
+4. Account is not paused (pausing a student is a manual admin action only).
+5. Daily 09:00 (Dhaka) check emails the billing contact (or the student) **once**
+   "Action needed: balance has run out" when the balance drops below one class
+   (an earlier "running low" email goes at ≤ 2 classes); it re-arms after the next payment.
+6. Admin lists show the badge "Balance exhausted" (≤ 0) or "Payment due soon" (< 3 classes).
+7. A recorded payment (or admin adjustment) restores credits immediately; the student's
+   navbar updates within a minute or on the next page change/tab focus.
+8. A student who never had any payment recorded has no ledger: classes are not charged at all.

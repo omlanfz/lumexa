@@ -454,6 +454,34 @@ describeDb('Student progress & credits (real Postgres)', () => {
       expect((await w.ledger.getCredits(ada.id)).purchased).toBe(0);
     });
 
+    it('the student-facing credit count is always rounded DOWN (4.5 and 4.9 both show 4)', async () => {
+      const ada = await student('ada');
+      await pay(ada.id, 8000, 8); // ৳1000 / class
+      await w.ledger.recordAdjustment(ada.id, admin.id, {
+        amountTaka: -3500,
+        description: 'part-class correction',
+      });
+      let c = await w.ledger.getCredits(ada.id);
+      expect(c.remaining).toBe(4.5); // admins still see the exact figure
+      expect(c.remainingWhole).toBe(4);
+
+      await w.ledger.recordAdjustment(ada.id, admin.id, {
+        amountTaka: -400,
+        description: 'another correction',
+      });
+      c = await w.ledger.getCredits(ada.id);
+      expect(c.remaining).toBe(4.1);
+      expect(c.remainingWhole).toBe(4);
+
+      await w.ledger.recordAdjustment(ada.id, admin.id, {
+        amountTaka: 800,
+        description: 'top up',
+      });
+      c = await w.ledger.getCredits(ada.id);
+      expect(c.remaining).toBe(4.9);
+      expect(c.remainingWhole).toBe(4);
+    });
+
     it('never shows a negative balance', async () => {
       const ada = await student('ada');
       await pay(ada.id, 1000, 1);
@@ -466,6 +494,7 @@ describeDb('Student progress & credits (real Postgres)', () => {
       }
       const credits = await w.ledger.getCredits(ada.id);
       expect(credits.remaining).toBe(0);
+      expect(credits.remainingWhole).toBe(0);
       expect(credits.remainingRaw).toBe(-1);
     });
   });
