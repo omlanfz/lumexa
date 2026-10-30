@@ -17,7 +17,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PackageAlertLevel } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
-import { StudentLedgerService } from '../students/student-ledger.service';
+import {
+  StudentLedgerService,
+  wholeCredits,
+} from '../students/student-ledger.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 // "Less than 3 lessons remaining" ⇒ balance <= 2 lesson amounts.
@@ -109,7 +112,8 @@ export class PackageAlertsService {
         studentUserId: student.id,
         studentName: student.fullName,
         billingContactName: student.fullName,
-        lessonsRemaining: Math.max(1, Math.round(summary.lessonsRemaining)),
+        // Whole classes, rounded down — the same figure the student sees.
+        lessonsRemaining: Math.max(1, wholeCredits(summary.lessonsRemaining)),
         courseName: summary.courseName ?? 'their curriculum',
         monthBucket: bucket,
       });

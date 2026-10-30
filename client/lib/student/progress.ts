@@ -34,10 +34,9 @@ export interface RankInfo {
 }
 
 export interface CreditsInfo {
+  /** Whole classes the student can still attend (the backend already rounds
+   * down; formatCredits floors again so a fraction can never be shown). */
   remaining: number;
-  purchased: number;
-  used: number;
-  adjustments: number;
   low: boolean;
   exhausted: boolean;
 }
@@ -135,11 +134,10 @@ export interface ProgressData {
   };
 }
 
-/** "8", "7.5" — credits are whole classes; a part-class balance keeps one
- * decimal. */
+/** Credits are whole classes and are always rounded DOWN for the student:
+ * 4.5 → "4", 4.9 → "4", never below "0". */
 export function formatCredits(n: number): string {
-  const v = Math.round(n * 10) / 10;
-  return Number.isInteger(v) ? String(v) : v.toFixed(1);
+  return String(Math.max(0, Math.floor(n + 1e-6)));
 }
 
 export function creditsLabel(n: number): string {

@@ -62,6 +62,10 @@ export interface CreditSummary {
   adjustments: number;
   remaining: number;
   remainingRaw: number;
+  /** What the STUDENT sees: `remaining` rounded DOWN to whole classes (4.9 →
+   * 4), because a part-class balance cannot buy a class. Admin screens keep
+   * the exact figure. */
+  remainingWhole: number;
 }
 
 export interface LedgerSummary {
@@ -73,6 +77,14 @@ export interface LedgerSummary {
   paymentBadge: PaymentBadge | null;
   /** Only filled by getSummary (single student), not by the list summaries. */
   credits?: CreditSummary;
+}
+
+/** Whole credits a student can see for a balance of `ratio` classes: always
+ * rounded DOWN (4.5 → 4, 4.9 → 4), never below 0. The small tolerance only
+ * absorbs the cent-rounding of the per-class rate (8 classes bought at
+ * ৳1000 must not read 7.99999 → 7). */
+export function wholeCredits(ratio: number): number {
+  return Math.max(0, Math.floor(ratio + 1e-3));
 }
 
 function round1(n: number): number {
@@ -164,16 +176,18 @@ export class StudentLedgerService {
       }),
     ]);
     const purchased = round1(purchasedAgg._sum.lessonsPurchased ?? 0);
-    const remainingRaw =
+    const exactRemaining =
       latest && latest.rateCents > 0
-        ? round1(latest.balanceAfterCents / latest.rateCents)
+        ? latest.balanceAfterCents / latest.rateCents
         : 0;
+    const remainingRaw = round1(exactRemaining);
     return {
       purchased,
       used,
       adjustments: round1(remainingRaw - (purchased - used)),
       remaining: Math.max(0, remainingRaw),
       remainingRaw,
+      remainingWhole: wholeCredits(exactRemaining),
     };
   }
 
