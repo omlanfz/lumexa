@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   ForbiddenException,
   ConflictException,
@@ -20,17 +21,19 @@ import { RegisterStudentDto } from './dto/register-student.dto';
 import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
 import { Prisma, SpaceRank, AccountStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { StudentLedgerService } from './student-ledger.service';
+import { StudentProgressService } from './progress/student-progress.service';
+import {
+  BADGE_DEFS,
+  RANK_TIERS,
+  type ProgressResult,
+} from './progress/progress.rules';
+import { utcToDhakaParts } from '../scheduling/dhaka-time.util';
 
 // ─── Space Rank Helpers ───────────────────────────────────────────────────────
 
-const RANK_THRESHOLDS: { rank: SpaceRank; min: number; icon: string }[] = [
-  { rank: 'STARCHILD', min: 0, icon: '🌟' },
-  { rank: 'EXPLORER', min: 5, icon: '🔭' },
-  { rank: 'COSMONAUT', min: 15, icon: '🛸' },
-  { rank: 'NAVIGATOR', min: 30, icon: '🧭' },
-  { rank: 'CAPTAIN', min: 60, icon: '🎖️' },
-  { rank: 'GALAXY_COMMANDER', min: 100, icon: '🌌' },
-];
+// One rank ladder for the whole app — defined with the progress rules.
+const RANK_THRESHOLDS = RANK_TIERS;
 
 function computeSpaceRank(sessions: number): SpaceRank {
   for (let i = RANK_THRESHOLDS.length - 1; i >= 0; i--) {
@@ -101,11 +104,15 @@ function classesToNextRank(completedClasses: number): number | null {
 
 @Injectable()
 export class StudentsService {
+  private readonly logger = new Logger(StudentsService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private notifications: NotificationsService,
     private scheduling: SchedulingService,
+    private progress: StudentProgressService,
+    private ledger: StudentLedgerService,
   ) {}
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -196,6 +203,7 @@ export class StudentsService {
   }
 
   async getMyProfile(userId: string) {
+    await this.syncProgressQuietly(userId);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -287,6 +295,7 @@ export class StudentsService {
   }
 
   async getMyDashboard(userId: string) {
+    await this.syncProgressQuietly(userId);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -512,7 +521,9 @@ export class StudentsService {
       continueLearning,
       metrics: {
         lessonsCompleted: completedLessonCount,
-        classesAttended: completedLessonCount + capturedBookingsCount,
+        // Every class the student actually attended (a lesson that needed an
+        // extra class counts both), as ranks and streaks count them.
+        classesAttended: user.totalSessions,
       },
       pendingReview: pendingReview
         ? {
@@ -623,51 +634,154 @@ export class StudentsService {
     };
   }
 
+  // ─── Gamified progress (rank, streak, badges, milestones) ───────────────
+  //
+  // All of it is derived from the student's real class records by
+  // StudentProgressService (see progress/). Every read below re-derives first,
+  // so what the student sees can never drift from the records — an admin
+  // correcting a class or a payment shows up on the next load.
+
+  /** Brings the stored counters/badges up to the records before a read. A
+   * failure here must never take the page down — the page then shows what was
+   * last stored. */
+  private async syncProgressQuietly(userId: string) {
+    try {
+      await this.progress.sync(userId, { mode: 'silent' });
+    } catch (err) {
+      this.logger.error(`Progress sync failed for student ${userId}: ${err}`);
+    }
+  }
+
+  private rankPayload(result: ProgressResult) {
+    const { rank, nextRank, sessions } = result;
+    return {
+      id: rank.rank,
+      label: rank.label,
+      icon: rank.icon,
+      min: rank.min,
+      sessions,
+      progressPct: result.rankProgressPct,
+      sessionsToNext: result.sessionsToNextRank,
+      next: nextRank
+        ? {
+            id: nextRank.rank,
+            label: nextRank.label,
+            icon: nextRank.icon,
+            min: nextRank.min,
+            sessionsNeeded: result.sessionsToNextRank,
+          }
+        : null,
+      requirement: nextRank
+        ? `Attend ${nextRank.min - sessions} more class${nextRank.min - sessions === 1 ? '' : 'es'} (${nextRank.min} in total) to reach ${nextRank.label}.`
+        : 'You have reached the highest rank in the fleet.',
+      ladder: RANK_TIERS.map((t) => ({
+        id: t.rank,
+        label: t.label,
+        icon: t.icon,
+        min: t.min,
+        unlocked: result.rank.min >= t.min,
+        current: t.rank === rank.rank,
+      })),
+    };
+  }
+
+  /**
+   * Everything the student navbar shows: class credits and rank. Polled by the
+   * student layout, so an admin-side payment or class change reaches the pills
+   * without the student doing anything.
+   */
+  async getMyNavSummary(userId: string) {
+    const synced = await this.progress.sync(userId, { mode: 'silent' });
+    if (!synced) throw new NotFoundException('Student not found.');
+    const [user, credits] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, fullName: true, avatarUrl: true },
+      }),
+      this.ledger.getCredits(userId),
+    ]);
+    if (!user) throw new NotFoundException('Student not found.');
+    const { result } = synced;
+    return {
+      id: user.id,
+      fullName: user.fullName,
+      avatarUrl: user.avatarUrl,
+      spaceRank: result.rank.rank,
+      rankIcon: result.rank.icon,
+      totalSessions: result.sessions,
+      streakWeeks: result.streak.current,
+      rank: this.rankPayload(result),
+      credits: {
+        remaining: credits.remaining,
+        purchased: credits.purchased,
+        used: credits.used,
+        adjustments: credits.adjustments,
+        low: credits.remaining > 0 && credits.remaining < 3,
+        exhausted: credits.remaining <= 0,
+      },
+    };
+  }
+
   // ─── Progress / stats for progress sub-page ───────────────────────────────
 
   async getMyProgress(userId: string) {
+    const synced = await this.progress.sync(userId, { mode: 'silent' });
+    if (!synced) throw new NotFoundException('Student not found.');
+    const { result, curriculum } = synced;
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
-        spaceRank: true,
-        totalSessions: true,
-        streakWeeks: true,
         gemBalance: true,
         subjects: true,
         createdAt: true,
         billingContactEmail: true,
+        assignedCourse: { select: { title: true, emoji: true } },
       },
     });
     if (!user) throw new NotFoundException('Student not found.');
     const now = new Date();
 
-    const completedBookings = await this.prisma.booking.findMany({
-      where: { studentUserId: userId, paymentStatus: 'CAPTURED' },
-      select: {
-        shift: {
-          select: {
-            start: true,
-            end: true,
-            teacher: { select: { subjects: true } },
+    // Sessions by subject: every attended curriculum class counts under its
+    // curriculum; legacy marketplace sessions under their teacher's subjects.
+    const [capturedBookings, upcomingLessons, upcomingBookings, completedRows] =
+      await Promise.all([
+        this.prisma.booking.findMany({
+          where: {
+            studentUserId: userId,
+            paymentStatus: 'CAPTURED',
+            shift: { end: { lt: now } },
           },
-        },
-      },
-    });
+          select: {
+            shift: { select: { teacher: { select: { subjects: true } } } },
+          },
+        }),
+        this.prisma.scheduledLesson.count({
+          where: {
+            studentUserId: userId,
+            status: 'UPCOMING',
+            end: { gte: now },
+          },
+        }),
+        this.prisma.booking.count({
+          where: {
+            studentUserId: userId,
+            paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+            shift: { start: { gt: now } },
+          },
+        }),
+        this.prisma.scheduledLesson.count({
+          where: { studentUserId: userId, status: 'COMPLETED' },
+        }),
+      ]);
 
-    const totalMinutes = completedBookings.reduce((sum, b) => {
-      return (
-        sum +
-        Math.round(
-          (new Date(b.shift.end).getTime() -
-            new Date(b.shift.start).getTime()) /
-            60000,
-        )
-      );
-    }, 0);
-
-    // Subject breakdown from teacher subjects
     const subjectMap = new Map<string, number>();
-    for (const b of completedBookings) {
+    for (const c of synced.classes) {
+      if (c.courseTitle) {
+        subjectMap.set(c.courseTitle, (subjectMap.get(c.courseTitle) ?? 0) + 1);
+      }
+    }
+    for (const b of capturedBookings) {
       for (const subj of b.shift.teacher.subjects) {
         subjectMap.set(subj, (subjectMap.get(subj) ?? 0) + 1);
       }
@@ -676,83 +790,120 @@ export class StudentsService {
       .map(([subject, count]) => ({ subject, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Rank journey — show unlocked + next locked tier
-    const rankHistory = RANK_THRESHOLDS.map((t) => ({
-      rank: t.rank,
-      icon: t.icon,
-      minSessions: t.min,
-      unlocked: user.totalSessions >= t.min,
-    }));
+    const monthKey = (d: Date) => utcToDhakaParts(d).dateStr.slice(0, 7);
+    const thisMonth = monthKey(now);
+    const classesThisMonth = synced.classes.filter(
+      (c) => monthKey(c.at) === thisMonth,
+    ).length;
 
-    const rankInfo = rankMeta(user.spaceRank);
-    const toNext = sessionsToNextRank(user.totalSessions);
-    const badges = await this.getDbBadges(userId);
-    const nextBadge = badges.find((b) => !b.earned) ?? null;
+    // Badges: requirement + live progress from the rules, "earned" from the
+    // stored rows (which sync() has just reconciled with the records).
+    const stored = await this.prisma.studentBadge.findMany({
+      where: { userId },
+      select: { type: true, earnedAt: true },
+    });
+    const storedAt = new Map(stored.map((b) => [b.type, b.earnedAt]));
+    const badges = BADGE_DEFS.map((def) => {
+      const state = result.badges.find((b) => b.id === def.id)!;
+      const earned = storedAt.has(def.id) || state.earned;
+      return {
+        id: def.id,
+        label: def.label,
+        icon: def.icon,
+        description: def.description,
+        requirement: def.requirement,
+        earned,
+        earnedAt: storedAt.get(def.id) ?? state.earnedAt ?? null,
+        progress: {
+          current: earned ? state.target : state.current,
+          target: state.target,
+          unit: state.unit,
+          pct: Math.round(
+            ((earned ? state.target : state.current) / state.target) * 100,
+          ),
+        },
+        hint: earned ? null : state.hint,
+      };
+    });
+    const nextBadge =
+      badges
+        .filter((b) => !b.earned)
+        .sort((a, b) => b.progress.pct - a.progress.pct)[0] ?? null;
 
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const [totalLessonsCompleted, lessonsCompletedThisMonth] =
-      await Promise.all([
-        this.prisma.scheduledLesson.count({
-          where: { studentUserId: userId, status: { in: COUNTS_AS_COMPLETED } },
-        }),
-        this.prisma.scheduledLesson.count({
-          where: {
-            studentUserId: userId,
-            status: { in: COUNTS_AS_COMPLETED },
-            end: { gte: monthStart },
-          },
-        }),
-      ]);
+    // Milestones: what is done, what is next in each family, and the single
+    // nearest one to feature.
+    const done = result.milestones.filter((m) => m.achieved);
+    const pending = result.milestones.filter((m) => !m.achieved);
+    const nextPerGroup = ['classes', 'curriculum', 'streak', 'homework']
+      .map((g) => pending.find((m) => m.group === g))
+      .filter((m): m is NonNullable<typeof m> => !!m);
+    const nextMilestone =
+      [...nextPerGroup].sort(
+        (a, b) => b.current / b.target - a.current / a.target,
+      )[0] ?? null;
 
     return {
-      spaceRank: user.spaceRank,
-      rankIcon: rankInfo.icon,
-      totalSessions: user.totalSessions,
-      totalHours: Math.round((totalMinutes / 60) * 10) / 10,
-      streakWeeks: user.streakWeeks,
-      sessionsToNextRank: toNext,
+      // ── existing fields (kept for the other student pages) ──
+      spaceRank: result.rank.rank,
+      rankIcon: result.rank.icon,
+      totalSessions: result.sessions,
+      totalHours: Math.round((result.totalMinutes / 60) * 10) / 10,
+      streakWeeks: result.streak.current,
+      sessionsToNextRank: result.sessionsToNextRank,
       subjects: user.subjects,
       subjectBreakdown,
-      rankHistory,
+      rankHistory: RANK_THRESHOLDS.map((t) => ({
+        rank: t.rank,
+        icon: t.icon,
+        minSessions: t.min,
+        unlocked: result.rank.min >= t.min,
+      })),
       badges,
       nextBadge,
-      totalLessonsCompleted,
-      lessonsCompletedThisMonth,
+      totalLessonsCompleted: completedRows,
+      lessonsCompletedThisMonth: classesThisMonth,
       recentGemTransactions: await this.getRecentGemTransactions(userId),
       memberSince: user.createdAt,
       gemBalance: user.gemBalance,
       hasBillingContact: !!user.billingContactEmail,
+      // ── structured, backend-derived progress ──
+      rank: this.rankPayload(result),
+      streak: {
+        current: result.streak.current,
+        longest: result.streak.longest,
+        thisWeekDone: result.streak.thisWeekDone,
+        weeks: result.streak.weeks,
+        next: result.streak.next,
+      },
+      milestones: {
+        completed: done,
+        next: nextMilestone,
+        nextPerGroup,
+        completedCount: done.length,
+        totalCount: result.milestones.length,
+        classesThisMonth,
+      },
+      overview: {
+        classesAttended: result.sessions,
+        lessonsCompleted: curriculum?.completedLessons ?? 0,
+        totalLessons: curriculum?.totalLessons ?? null,
+        curriculumProgressPct: curriculum
+          ? Math.min(
+              100,
+              Math.round(
+                (curriculum.completedLessons / curriculum.totalLessons) * 100,
+              ),
+            )
+          : null,
+        courseTitle: user.assignedCourse?.title ?? null,
+        courseEmoji: user.assignedCourse?.emoji ?? null,
+        earnedBadges: badges.filter((b) => b.earned).length,
+        totalBadges: badges.length,
+        upcomingClasses: upcomingLessons + upcomingBookings,
+        homeworkSubmitted: synced.homeworkSubmitted,
+        lastClassAt: result.lastClassAt,
+      },
     };
-  }
-
-  // ─── Badge definitions ────────────────────────────────────────────────────
-
-  static readonly BADGE_DEFS = [
-    { type: 'FIRST_MISSION', label: 'First Launch', icon: '🚀' },
-    { type: 'STREAK_4', label: '4-Week Streak', icon: '🔥' },
-    { type: 'STREAK_8', label: '8-Week Streak', icon: '🌟' },
-    { type: 'STREAK_12', label: 'Galaxy Streak', icon: '💫' },
-    { type: 'RANK_EXPLORER', label: 'Explorer', icon: '🔭' },
-    { type: 'RANK_COSMONAUT', label: 'Cosmonaut', icon: '🛸' },
-    { type: 'RANK_NAVIGATOR', label: 'Navigator', icon: '🧭' },
-    { type: 'RANK_CAPTAIN', label: 'Captain', icon: '🎖️' },
-    { type: 'RANK_COMMANDER', label: 'Galaxy Commander', icon: '🌌' },
-    { type: 'COMEBACK_CADET', label: 'Comeback Cadet', icon: '🌠' },
-  ] as const;
-
-  private async getDbBadges(userId: string) {
-    const earned = await this.prisma.studentBadge.findMany({
-      where: { userId },
-      select: { type: true, earnedAt: true },
-    });
-    const earnedMap = new Map(earned.map((b) => [b.type, b.earnedAt]));
-    return StudentsService.BADGE_DEFS.map((def) => ({
-      id: def.type,
-      label: def.label,
-      icon: def.icon,
-      earned: earnedMap.has(def.type),
-      earnedAt: earnedMap.get(def.type) ?? null,
-    }));
   }
 
   private async getRecentGemTransactions(userId: string, limit = 10) {
@@ -789,87 +940,16 @@ export class StudentsService {
     ]);
   }
 
-  // ─── Check and award badges (run after session captured) ──────────────────
+  // ─── Check and award badges (run after a class is completed) ──────────────
   //
-  // Also the single centralized trigger for the "level-up / mission
-  // completed" email — a RANK_* badge newly earned here means the caller
-  // already persisted the new spaceRank (see ClassroomService.
-  // finalizeBookingIfDue, which updates spaceRank then calls this in the
-  // same flow), so this is the one place that knows both "a rank changed"
-  // and "a non-rank milestone was hit" without duplicating that check
-  // anywhere else.
+  // Kept as the entry point the legacy marketplace flows already call; the
+  // rules, the badge rows, the level-up email and the streak gem bonuses all
+  // live in StudentProgressService now, so there is exactly one place that
+  // decides what a student has earned.
 
   async checkAndAwardBadges(userId: string): Promise<string[]> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        email: true,
-        fullName: true,
-        totalSessions: true,
-        streakWeeks: true,
-        spaceRank: true,
-      },
-    });
-    if (!user) return [];
-
-    const existingBadges = await this.prisma.studentBadge.findMany({
-      where: { userId },
-      select: { type: true },
-    });
-    const earned = new Set(existingBadges.map((b) => b.type));
-
-    const rankOrder = [
-      'STARCHILD',
-      'EXPLORER',
-      'COSMONAUT',
-      'NAVIGATOR',
-      'CAPTAIN',
-      'GALAXY_COMMANDER',
-    ];
-    const rankIdx = rankOrder.indexOf(user.spaceRank);
-
-    const toAward: string[] = [];
-    const checks: { type: string; condition: boolean }[] = [
-      { type: 'FIRST_MISSION', condition: user.totalSessions >= 1 },
-      { type: 'STREAK_4', condition: user.streakWeeks >= 4 },
-      { type: 'STREAK_8', condition: user.streakWeeks >= 8 },
-      { type: 'STREAK_12', condition: user.streakWeeks >= 12 },
-      { type: 'RANK_EXPLORER', condition: rankIdx >= 1 },
-      { type: 'RANK_COSMONAUT', condition: rankIdx >= 2 },
-      { type: 'RANK_NAVIGATOR', condition: rankIdx >= 3 },
-      { type: 'RANK_CAPTAIN', condition: rankIdx >= 4 },
-      { type: 'RANK_COMMANDER', condition: rankIdx >= 5 },
-    ];
-
-    for (const check of checks) {
-      if (check.condition && !earned.has(check.type)) {
-        toAward.push(check.type);
-      }
-    }
-
-    if (toAward.length > 0) {
-      await this.prisma.studentBadge.createMany({
-        data: toAward.map((type) => ({ userId, type })),
-        skipDuplicates: true,
-      });
-
-      const newRankBadge = toAward.find((t) => t.startsWith('RANK_'));
-      const badgeMeta = toAward
-        .map((type) => StudentsService.BADGE_DEFS.find((d) => d.type === type))
-        .filter((d): d is (typeof StudentsService.BADGE_DEFS)[number] => !!d)
-        .map((d) => ({ label: d.label, icon: d.icon }));
-
-      this.notifications
-        .sendAchievementEmail(user.email, {
-          userId,
-          studentName: user.fullName,
-          badges: badgeMeta,
-          newRank: newRankBadge ? user.spaceRank : undefined,
-        })
-        .catch(() => {});
-    }
-
-    return toAward;
+    const out = await this.progress.sync(userId, { mode: 'live' });
+    return out?.newBadges ?? [];
   }
 
   // ─── Teacher list for teachers sub-page ──────────────────────────────────

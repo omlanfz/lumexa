@@ -113,85 +113,104 @@ function ProgressNav({
   studentId: string;
 }) {
   const router = useRouter();
+  const items = [
+    { label: "Dashboard", icon: "🏠", href: `/student-dashboard/${studentId}` },
+    { label: "Schedule", icon: "📅", href: `/student-schedule/${studentId}` },
+    { label: "Progress", icon: "📈", href: `/student-progress/${studentId}`, active: true },
+    { label: "My Teachers", icon: "👨‍🏫", href: `/student-teachers/${studentId}` },
+    { label: "Recordings", icon: "🎬", href: `/student-recordings/${studentId}` },
+  ];
   return (
-    <div className="fixed top-0 left-0 h-full w-64 bg-[var(--s-nav-bg)] border-r border-[var(--s-nav-border)] flex flex-col z-30 overflow-hidden">
-      {/* Logo */}
-      <div className="p-4 border-b border-[var(--s-nav-border)] flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center font-bold text-white text-sm">
-          L
-        </div>
-        <div>
-          <p className="font-bold text-[var(--s-text)] text-sm">Lumexa</p>
-          <p className="text-xs text-[var(--s-text-muted)]">Mission Control</p>
-        </div>
-      </div>
-
-      {/* Student identity */}
-      <div className="px-4 py-3 border-b border-[var(--s-nav-border)]">
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F7CFF] to-[#27D6C5] flex items-center justify-center font-bold text-white mb-2">
-          {/* SAFE: studentName may be undefined while loading */}
-          {studentName ? studentName.charAt(0).toUpperCase() : "…"}
-        </div>
-        <p className="font-semibold text-[var(--s-text)] text-sm">
-          {studentName ?? "Loading…"}
-        </p>
-        <p className="text-xs text-[var(--s-text-muted)]">Cadet</p>
-      </div>
-
-      {/* Nav links */}
-      <nav className="flex-1 p-3 space-y-1">
-        {[
-          {
-            label: "Dashboard",
-            icon: "🏠",
-            href: `/student-dashboard/${studentId}`,
-          },
-          {
-            label: "Schedule",
-            icon: "📅",
-            href: `/student-schedule/${studentId}`,
-          },
-          {
-            label: "Progress",
-            icon: "📈",
-            href: `/student-progress/${studentId}`,
-            active: true,
-          },
-          {
-            label: "My Teachers",
-            icon: "👨‍🏫",
-            href: `/student-teachers/${studentId}`,
-          },
-          {
-            label: "Recordings",
-            icon: "🎬",
-            href: `/student-recordings/${studentId}`,
-          },
-        ].map((item) => (
+    <>
+      {/* Phones and tablets: a top bar with the same links (the sidebar below
+          is desktop-only, it would cover the page). */}
+      <div className="lg:hidden sticky top-0 z-30 bg-[var(--s-nav-bg)] border-b border-[var(--s-nav-border)]">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center font-bold text-white text-sm flex-shrink-0">
+              L
+            </div>
+            <p className="font-semibold text-[var(--s-text)] text-sm truncate">
+              {studentName ?? "Loading…"}
+            </p>
+          </div>
           <button
-            key={item.label}
-            onClick={() => router.push(item.href)}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition-all ${
-              item.active
-                ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)]"
-                : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
-            }`}
+            onClick={() => router.push("/dashboard")}
+            className="min-h-11 px-2 text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] flex-shrink-0"
           >
-            <span>{item.icon}</span>
-            <span>{item.label}</span>
+            ← Parent Dashboard
           </button>
-        ))}
-      </nav>
-
-      <div className="p-4 border-t border-[var(--s-nav-border)]">
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="w-full text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] text-left"
-        >
-          ← Back to Parent Dashboard
-        </button>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Student sections">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => router.push(item.href)}
+              className={`min-h-11 flex-shrink-0 flex items-center gap-1.5 px-3 rounded-xl text-sm whitespace-nowrap transition-all ${
+                item.active
+                  ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)]"
+                  : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
+              }`}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
       </div>
-    </div>
+
+      <div className="hidden lg:flex fixed top-0 left-0 h-full w-64 bg-[var(--s-nav-bg)] border-r border-[var(--s-nav-border)] flex-col z-30 overflow-hidden">
+        {/* Logo */}
+        <div className="p-4 border-b border-[var(--s-nav-border)] flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-[var(--s-accent)] flex items-center justify-center font-bold text-white text-sm">
+            L
+          </div>
+          <div>
+            <p className="font-bold text-[var(--s-text)] text-sm">Lumexa</p>
+            <p className="text-xs text-[var(--s-text-muted)]">Mission Control</p>
+          </div>
+        </div>
+
+        {/* Student identity */}
+        <div className="px-4 py-3 border-b border-[var(--s-nav-border)]">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#4F7CFF] to-[#27D6C5] flex items-center justify-center font-bold text-white mb-2">
+            {/* SAFE: studentName may be undefined while loading */}
+            {studentName ? studentName.charAt(0).toUpperCase() : "…"}
+          </div>
+          <p className="font-semibold text-[var(--s-text)] text-sm">
+            {studentName ?? "Loading…"}
+          </p>
+          <p className="text-xs text-[var(--s-text-muted)]">Cadet</p>
+        </div>
+
+        {/* Nav links */}
+        <nav className="flex-1 p-3 space-y-1">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => router.push(item.href)}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition-all ${
+                item.active
+                  ? "bg-[var(--s-nav-active)] text-[var(--s-nav-active-text)]"
+                  : "text-[var(--s-text-muted)] hover:bg-[var(--s-nav-hover)] hover:text-[var(--s-text)]"
+              }`}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-[var(--s-nav-border)]">
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="w-full text-xs text-[var(--s-text-muted)] hover:text-[var(--s-text)] text-left"
+          >
+            ← Back to Parent Dashboard
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -306,8 +325,8 @@ function ProgressContent() {
       {/* CHANGE: ProgressNav instead of StudentNav — no parent.fullName access */}
       <ProgressNav studentName={student?.name} studentId={studentId} />
 
-      <div className="pl-64">
-        <div className="max-w-4xl mx-auto px-6 py-8">
+      <div className="lg:pl-64">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
           {/* Header */}
           <div className="mb-6">
             {/* CHANGE: student?.name — safe optional chain */}

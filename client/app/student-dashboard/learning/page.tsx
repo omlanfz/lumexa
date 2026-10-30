@@ -9,6 +9,9 @@ import SessionReviewCard from '@/components/student/SessionReviewCard';
 import RankProgressBar from '@/components/student/RankProgressBar';
 import StreakCounter from '@/components/student/StreakCounter';
 import BadgeGrid from '@/components/student/BadgeGrid';
+import MilestonesCard from '@/components/student/MilestonesCard';
+import OverviewTab from '@/components/student/OverviewTab';
+import type { ProgressData } from '@/lib/student/progress';
 import RecordingPlayerModal from '@/components/recordings/RecordingPlayerModal';
 import { fetchMyRecordings, recordingErrorMessage } from '@/lib/classroom/recording/library';
 import type { MyRecordings, RecordingClass } from '@/lib/classroom/recording/library';
@@ -67,34 +70,6 @@ const CLASS_TYPE_LABELS: Record<string, string> = {
   BATCH: 'Batch',
 };
 
-interface SubjectCount {
-  subject: string;
-  count: number;
-}
-
-interface Badge {
-  id: string;
-  label: string;
-  icon: string;
-  earned: boolean;
-}
-
-interface ProgressData {
-  spaceRank: string;
-  rankIcon: string;
-  totalSessions: number;
-  totalHours: number;
-  streakWeeks: number;
-  sessionsToNextRank: number | null;
-  subjects: string[];
-  subjectBreakdown: SubjectCount[];
-  badges: Badge[];
-  nextBadge: Badge | null;
-  totalLessonsCompleted: number;
-  lessonsCompletedThisMonth: number;
-  memberSince: string;
-}
-
 function Skeleton({ className }: { className: string }) {
   return <div className={`bg-gray-200 dark:bg-gray-800 animate-pulse rounded-lg ${className}`} />;
 }
@@ -133,7 +108,7 @@ function LessonRow({
 
   return (
     <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden card-hover">
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4">
         {lesson.teacherAvatarUrl ? (
           <img
             src={lesson.teacherAvatarUrl}
@@ -157,7 +132,7 @@ function LessonRow({
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full pl-14">
           <StatusBadge lesson={lesson} />
           {!lesson.isUpcoming && !lesson.review && (
             <button
@@ -206,7 +181,7 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
 
   return (
     <div className="bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl overflow-hidden card-hover">
-      <div className="flex items-center gap-3 p-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-4">
         {lesson.teacher.user.avatarUrl ? (
           <img
             src={lesson.teacher.user.avatarUrl}
@@ -243,7 +218,7 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2 w-full pl-14">
           <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 font-medium">
             {lesson.batch ? `Batch · ${lesson.batch.name}` : (CLASS_TYPE_LABELS[lesson.classType] ?? lesson.classType)}
           </span>
@@ -273,8 +248,18 @@ function ScheduledLessonRow({ lesson }: { lesson: ScheduledLessonItem }) {
 function LearningHubContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = (searchParams.get('tab') as TabId) || 'overview';
-  const [tab, setTab] = useState<TabId>(TABS.some((t) => t.id === initialTab) ? initialTab : 'overview');
+  // Lessons is where a student lands. Another tab only opens when the address
+  // asks for it (?tab=progress …); Overview is no longer the default.
+  const requestedTab = searchParams.get('tab');
+  const urlTab: TabId = TABS.some((t) => t.id === requestedTab) ? (requestedTab as TabId) : 'lessons';
+  const [tab, setTab] = useState<TabId>(urlTab);
+  // Following the address bar: choosing "Learning" in the navbar while on
+  // ?tab=progress drops the query, and that must land on Lessons again.
+  const [seenUrlTab, setSeenUrlTab] = useState<TabId>(urlTab);
+  if (urlTab !== seenUrlTab) {
+    setSeenUrlTab(urlTab);
+    setTab(urlTab);
+  }
 
   const [lessonsTabFilter, setLessonsTabFilter] = useState<'upcoming' | 'completed'>('upcoming');
   const [upcomingData, setUpcomingData] = useState<LessonsData | null>(null);
@@ -410,12 +395,19 @@ function LearningHubContent() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700/50 w-full overflow-x-auto sm:w-fit">
+      <div
+        role="tablist"
+        aria-label="Learning sections"
+        className="grid grid-cols-2 gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700/50 w-full sm:flex sm:w-fit"
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            data-testid={`tab-${t.id}`}
             onClick={() => goTab(t.id)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
+            className={`min-h-11 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium text-center leading-tight transition-all sm:whitespace-nowrap ${
               tab === t.id
                 ? 'bg-teal-500 text-black'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
@@ -428,64 +420,33 @@ function LearningHubContent() {
 
       {/* ─── Overview ─────────────────────────────────────────────────── */}
       {tab === 'overview' && progress && (
-        <div className="grid lg:grid-cols-3 gap-4 fade-in">
-          <div className="lg:col-span-2 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">
-              Current Progress
-            </p>
-            <RankProgressBar currentRank={progress.spaceRank} totalSessions={progress.totalSessions} variant="dashboard" />
-
-            {nextLesson ? (
-              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700/50">
-                <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-2">
-                  Next Lesson
-                </p>
-                <p className="text-gray-900 dark:text-white text-sm font-medium">
-                  With {nextLesson.teacherName} ·{' '}
-                  {new Date(nextLesson.classStart).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                  {nextLesson.batchName && ` · 👥 ${nextLesson.batchName}`}
-                </p>
-              </div>
-            ) : (
-              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700/50">
-                <p className="text-gray-500 dark:text-gray-400 text-sm">
-                  No upcoming lesson scheduled yet — your teacher will confirm your next session.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
-            <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
-              At a Glance
-            </p>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Total sessions</span>
-                <span className="text-gray-900 dark:text-white font-semibold">{progress.totalSessions}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Total hours</span>
-                <span className="text-gray-900 dark:text-white font-semibold">{progress.totalHours}h</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Streak</span>
-                <span className="text-orange-500 dark:text-orange-400 font-semibold">🔥 {progress.streakWeeks}w</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <OverviewTab
+          progress={progress}
+          upcoming={scheduledUpcoming.slice(0, 3).map((l) => ({
+            id: l.id,
+            title: `Lesson ${l.lessonNumber}${l.lessonTitle ? `: ${l.lessonTitle}` : ''}`,
+            course: l.course.title,
+            start: l.start,
+            teacher: l.teacher.user.fullName,
+            batchName: l.batch?.name ?? null,
+          }))}
+          legacyNext={
+            fromBooking
+              ? { teacher: fromBooking.teacherName, start: fromBooking.classStart }
+              : null
+          }
+        />
       )}
 
       {/* ─── Lessons ──────────────────────────────────────────────────── */}
       {tab === 'lessons' && (
         <div className="space-y-4 fade-in">
-          <div className="flex gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700/50 w-fit">
+          <div className="grid grid-cols-2 gap-1 p-1 bg-gray-100 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700/50 w-full sm:flex sm:w-fit">
             {(['upcoming', 'completed'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => switchLessonsFilter(t)}
-                className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+                className={`min-h-11 px-5 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                   lessonsTabFilter === t
                     ? 'bg-teal-500 text-black'
                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
@@ -515,7 +476,7 @@ function LearningHubContent() {
               );
             }
             return (
-              <div className="grid sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {scheduledList.map((lesson) => (
                   <ScheduledLessonRow key={lesson.id} lesson={lesson} />
                 ))}
@@ -540,32 +501,32 @@ function LearningHubContent() {
       {/* ─── Progress & Achievements ──────────────────────────────────── */}
       {tab === 'progress' && progress && (
         <div className="space-y-6 fade-in">
-          <div className="grid lg:grid-cols-2 gap-4">
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">
                 Rank Journey
               </p>
-              <RankProgressBar currentRank={progress.spaceRank} totalSessions={progress.totalSessions} variant="full" />
+              <RankProgressBar rank={progress.rank} variant="full" />
             </div>
-            <StreakCounter streakWeeks={progress.streakWeeks} variant="full" />
+            <StreakCounter variant="full" streak={progress.streak} />
           </div>
 
           <BadgeGrid badges={progress.badges} />
 
           {progress.subjectBreakdown.length > 0 && (
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
+            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-4">
                 Sessions by Subject
               </p>
-              <div className="grid sm:grid-cols-2 gap-x-8 gap-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                 {progress.subjectBreakdown.map(({ subject, count }) => {
                   const max = progress.subjectBreakdown[0].count;
                   const pct = Math.round((count / max) * 100);
                   return (
                     <div key={subject}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-700 dark:text-gray-300">{subject}</span>
-                        <span className="text-gray-500">{count} session{count !== 1 ? 's' : ''}</span>
+                      <div className="flex justify-between gap-3 text-sm mb-1">
+                        <span className="text-gray-700 dark:text-gray-300 min-w-0 break-words">{subject}</span>
+                        <span className="text-gray-500 flex-shrink-0">{count} session{count !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
                         <div className="bg-teal-400 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
@@ -577,47 +538,7 @@ function LearningHubContent() {
             </div>
           )}
 
-          {/* Milestones — motivating, personal, no cohort comparison needed */}
-          <div className="bg-gradient-to-br from-teal-50 to-cyan-50 dark:from-teal-900/20 dark:to-cyan-900/10 border border-teal-200 dark:border-teal-800/30 rounded-xl p-6">
-            <p className="text-xs text-teal-700 dark:text-teal-300 uppercase tracking-wide font-medium mb-4">
-              Milestones
-            </p>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="bg-white/70 dark:bg-black/10 rounded-lg p-4">
-                <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {progress.lessonsCompletedThisMonth}
-                </p>
-                <p className="text-gray-600 dark:text-gray-300 text-sm mt-1">
-                  {progress.lessonsCompletedThisMonth > 0
-                    ? `Lesson${progress.lessonsCompletedThisMonth !== 1 ? 's' : ''} completed this month — keep it up! 🚀`
-                    : 'Complete a lesson this month to get the streak going! 🌱'}
-                </p>
-              </div>
-              <div className="bg-white/70 dark:bg-black/10 rounded-lg p-4">
-                {progress.nextBadge ? (
-                  <>
-                    <p className="text-3xl">{progress.nextBadge.icon}</p>
-                    <p className="text-gray-900 dark:text-white text-sm font-medium mt-1">
-                      Next badge: {progress.nextBadge.label}
-                    </p>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
-                      {progress.totalLessonsCompleted} lesson{progress.totalLessonsCompleted !== 1 ? 's' : ''} completed so far
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-3xl">🏆</p>
-                    <p className="text-gray-900 dark:text-white text-sm font-medium mt-1">
-                      All badges earned!
-                    </p>
-                    <p className="text-gray-500 dark:text-gray-400 text-xs mt-0.5">
-                      You&apos;re a Lumexa legend.
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+          <MilestonesCard milestones={progress.milestones} />
         </div>
       )}
 
@@ -643,7 +564,7 @@ function LearningHubContent() {
             </div>
           )}
           {!myRecordings && recordingsLoading && (
-            <div className="grid sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Skeleton className="h-24 w-full rounded-xl" />
               <Skeleton className="h-24 w-full rounded-xl" />
             </div>
@@ -658,7 +579,7 @@ function LearningHubContent() {
             </div>
           )}
           {myRecordings && myRecordings.recordings.length > 0 && (
-            <div className="grid sm:grid-cols-2 gap-3" data-testid="recordings-list">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="recordings-list">
               {myRecordings.recordings.map((rec) => {
                 const date = new Date(rec.classStart);
                 const initial = rec.teacherName ? rec.teacherName.charAt(0).toUpperCase() : 'T';

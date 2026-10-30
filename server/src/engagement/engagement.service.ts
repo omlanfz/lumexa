@@ -1,18 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { StudentsService } from '../students/students.service';
-
-// Calendar-week boundary used consistently across the app for weekly
-// grouping (see teachers.service.ts rating trend: Sunday-Saturday weeks,
-// derived from `Date#getDay()`).
-function startOfWeek(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - d.getDay());
-  return d;
-}
+import { StudentProgressService } from '../students/progress/student-progress.service';
 
 @Injectable()
 export class EngagementService {
@@ -21,16 +11,20 @@ export class EngagementService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
-    private readonly studentsService: StudentsService,
+    private readonly progress: StudentProgressService,
   ) {}
 
   // ─── Weekly streak check — every Monday at 00:05 UTC ──────────────────────
   //
-  // Spec: a student earns 1 streak week when they complete at least one
-  // scheduled lesson (a CAPTURED booking) during a calendar week. Consecutive
-  // completed weeks accumulate; a week with zero completed lessons resets the
-  // streak to 0. This runs the Monday after each week closes, so it evaluates
-  // the just-finished calendar week (last Sunday through last Saturday).
+  // The streak itself is derived from real class records (see
+  // StudentProgressService / progress.rules.ts): one streak week for every
+  // Sunday–Saturday (Asia/Dhaka) week with at least one attended class,
+  // consecutive weeks accumulate, and a whole week without one resets it. The
+  // number is always current — it is re-derived after every class and on every
+  // dashboard read — so this job no longer counts anything. What is left for it
+  // is the one thing nothing else triggers: telling the student, once, that the
+  // week which just closed ended their streak, and persisting any progress that
+  // changed without a class being finalized (e.g. an admin correction).
 
   @Cron('5 0 * * 1')
   async checkStreaks() {
@@ -38,69 +32,40 @@ export class EngagementService {
 
     const students = await this.prisma.user.findMany({
       where: { role: 'STUDENT', accountStatus: 'ACTIVE' },
-      select: {
-        id: true,
-        email: true,
-        fullName: true,
-        streakWeeks: true,
-      },
+      select: { id: true, email: true, fullName: true },
     });
-
-    const now = new Date();
-    const thisWeekStart = startOfWeek(now);
-    const lastWeekStart = new Date(thisWeekStart);
-    lastWeekStart.setDate(lastWeekStart.getDate() - 7);
 
     for (const student of students) {
       try {
-        const lessonsLastWeek = await this.prisma.booking.count({
-          where: {
-            studentUserId: student.id,
-            paymentStatus: 'CAPTURED',
-            shift: { end: { gte: lastWeekStart, lt: thisWeekStart } },
-          },
-        });
+        const out = await this.progress.sync(student.id, { mode: 'live' });
+        if (!out) continue;
 
-        if (lessonsLastWeek > 0) {
-          // Completed at least one lesson last week — streak continues.
-          await this.prisma.user.update({
-            where: { id: student.id },
-            data: { streakWeeks: { increment: 1 } },
-          });
-
-          // Check streak milestone gems
-          const newStreak = student.streakWeeks + 1;
-          if (newStreak === 4) {
-            await this.studentsService.awardGems(student.id, 10, 'STREAK_MILESTONE', '4-week streak bonus');
-          } else if (newStreak === 8) {
-            await this.studentsService.awardGems(student.id, 20, 'STREAK_MILESTONE', '8-week streak bonus');
-          }
-
-          // Check streak badges
-          await this.studentsService.checkAndAwardBadges(student.id);
-        } else {
-          // No completed lesson last week — streak resets to 0.
-          const prevStreak = student.streakWeeks;
-          await this.prisma.user.update({
-            where: { id: student.id },
-            data: { streakWeeks: 0 },
-          });
-
-          if (prevStreak > 0) {
-            this.notifications
-              .sendStreakLostNotice(student.email, {
-                studentName: student.fullName,
-                streakWeeks: prevStreak,
-              })
-              .catch(() => {});
-          }
+        // weeks[last] = this week, [last-1] = the week that just closed,
+        // [last-2] = the one before. A streak was running into the closed
+        // week and that week had no class → the streak ended.
+        const weeks = out.result.streak.weeks;
+        const closed = weeks[weeks.length - 2];
+        const before = weeks[weeks.length - 3];
+        if (before?.done && closed && !closed.done) {
+          let lost = 0;
+          for (let i = weeks.length - 3; i >= 0 && weeks[i].done; i--) lost++;
+          this.notifications
+            .sendStreakLostNotice(student.email, {
+              studentName: student.fullName,
+              streakWeeks: lost,
+            })
+            .catch(() => {});
         }
       } catch (err) {
-        this.logger.error(`Streak check failed for student ${student.id}: ${err}`);
+        this.logger.error(
+          `Streak check failed for student ${student.id}: ${err}`,
+        );
       }
     }
 
-    this.logger.log(`Streak check done. Processed ${students.length} students.`);
+    this.logger.log(
+      `Streak check done. Processed ${students.length} students.`,
+    );
   }
 
   // ─── Monthly digest email — 1st of each month at 08:00 UTC ───────────────
@@ -120,74 +85,104 @@ export class EngagementService {
         id: true,
         fullName: true,
         billingContactEmail: true,
-        spaceRank: true,
-        streakWeeks: true,
       },
     });
 
     const now = new Date();
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthLabel = lastMonthStart.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    const monthLabel = lastMonthStart.toLocaleString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    });
     const marketplaceUrl = `${process.env.FRONTEND_URL}/marketplace`;
 
     const RANK_ICONS: Record<string, string> = {
-      STARCHILD: '🌟', EXPLORER: '🔭', COSMONAUT: '🛸',
-      NAVIGATOR: '🧭', CAPTAIN: '🎖️', GALAXY_COMMANDER: '🌌',
+      STARCHILD: '🌟',
+      EXPLORER: '🔭',
+      COSMONAUT: '🛸',
+      NAVIGATOR: '🧭',
+      CAPTAIN: '🎖️',
+      GALAXY_COMMANDER: '🌌',
     };
 
     for (const student of students) {
       try {
-        const completedBookings = await this.prisma.booking.findMany({
-          where: {
-            studentUserId: student.id,
-            paymentStatus: 'CAPTURED',
-            shift: { start: { gte: lastMonthStart, lt: lastMonthEnd } },
-          },
-          include: { shift: { select: { start: true, end: true } } },
-        });
+        // Rank and streak are the derived, up-to-date ones; the month's
+        // sessions are every class the student actually attended in it.
+        const synced = await this.progress.sync(student.id, { mode: 'silent' });
+        if (!synced) continue;
+        const attended = synced.classes.filter(
+          (c) => c.at >= lastMonthStart && c.at < lastMonthEnd,
+        );
+        const sessionsThisMonth = attended.length;
+        const totalMinutes = attended.reduce((sum, c) => sum + c.minutes, 0);
 
-        const sessionsThisMonth = completedBookings.length;
-        const totalMinutes = completedBookings.reduce((sum, b) => {
-          return sum + Math.round(
-            (new Date(b.shift.end).getTime() - new Date(b.shift.start).getTime()) / 60000,
-          );
-        }, 0);
-
-        const nextBooking = await this.prisma.booking.findFirst({
-          where: {
-            studentUserId: student.id,
-            paymentStatus: { in: ['PENDING', 'CAPTURED'] },
-            shift: { start: { gt: now } },
-          },
-          include: {
-            shift: {
-              include: {
-                teacher: { include: { user: { select: { fullName: true } } } },
+        const [nextBooking, nextLesson] = await Promise.all([
+          this.prisma.booking.findFirst({
+            where: {
+              studentUserId: student.id,
+              paymentStatus: { in: ['PENDING', 'CAPTURED'] },
+              shift: { start: { gt: now } },
+            },
+            include: {
+              shift: {
+                include: {
+                  teacher: {
+                    include: { user: { select: { fullName: true } } },
+                  },
+                },
               },
             },
-          },
-          orderBy: { shift: { start: 'asc' } },
-        });
+            orderBy: { shift: { start: 'asc' } },
+          }),
+          this.prisma.scheduledLesson.findFirst({
+            where: {
+              studentUserId: student.id,
+              status: 'UPCOMING',
+              start: { gt: now },
+            },
+            include: {
+              teacher: { include: { user: { select: { fullName: true } } } },
+            },
+            orderBy: { start: 'asc' },
+          }),
+        ]);
+        const nextSession =
+          nextBooking &&
+          (!nextLesson || nextBooking.shift.start < nextLesson.start)
+            ? {
+                start: nextBooking.shift.start,
+                teacherName: nextBooking.shift.teacher.user.fullName,
+              }
+            : nextLesson
+              ? {
+                  start: nextLesson.start,
+                  teacherName: nextLesson.teacher.user.fullName,
+                }
+              : null;
 
-        await this.notifications.sendMonthlyDigest(student.billingContactEmail!, {
-          studentName: student.fullName,
-          monthLabel,
-          sessionsThisMonth,
-          totalHoursThisMonth: Math.round((totalMinutes / 60) * 10) / 10,
-          currentRank: student.spaceRank,
-          rankIcon: RANK_ICONS[student.spaceRank] ?? '🌟',
-          streakWeeks: student.streakWeeks,
-          nextSession: nextBooking
-            ? { start: nextBooking.shift.start, teacherName: nextBooking.shift.teacher.user.fullName }
-            : null,
-          marketplaceUrl,
-        });
+        await this.notifications.sendMonthlyDigest(
+          student.billingContactEmail!,
+          {
+            studentName: student.fullName,
+            monthLabel,
+            sessionsThisMonth,
+            totalHoursThisMonth: Math.round((totalMinutes / 60) * 10) / 10,
+            currentRank: synced.result.rank.rank,
+            rankIcon: RANK_ICONS[synced.result.rank.rank] ?? '🌟',
+            streakWeeks: synced.result.streak.current,
+            nextSession,
+            marketplaceUrl,
+          },
+        );
       } catch (err) {
         this.logger.error(`Digest failed for student ${student.id}: ${err}`);
       }
     }
 
-    this.logger.log(`Monthly digests sent to ${students.length} billing contacts.`);
+    this.logger.log(
+      `Monthly digests sent to ${students.length} billing contacts.`,
+    );
   }
 }

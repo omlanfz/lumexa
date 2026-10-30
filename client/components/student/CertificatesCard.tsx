@@ -37,7 +37,7 @@ export default function CertificatesCard() {
       <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
         Your Certificates
       </p>
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {certificates.map((cert) => (
           <div
             key={cert.id}

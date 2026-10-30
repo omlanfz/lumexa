@@ -104,7 +104,7 @@ function DashboardSkeleton() {
     <div className="space-y-6">
       <Skeleton className="h-8 w-64" />
       <Skeleton className="h-52 rounded-2xl" />
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Skeleton className="h-32 rounded-xl" />
         <Skeleton className="h-32 rounded-xl" />
       </div>
@@ -357,9 +357,9 @@ export default function StudentDashboardPage() {
 
           {data && data.pendingHomework.length > 0 && <HomeworkDueCard items={data.pendingHomework} />}
 
-          <div className="grid lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* 3. Continue Learning */}
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
+            <div className="min-w-0 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6 card-hover">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
                 Continue Learning
               </p>
@@ -401,7 +401,7 @@ export default function StudentDashboardPage() {
             </div>
 
             {/* 4. Your Path */}
-            <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 card-hover">
+            <div className="min-w-0 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6 card-hover">
               <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium mb-3">
                 Your Path
               </p>

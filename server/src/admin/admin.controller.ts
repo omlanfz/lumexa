@@ -26,6 +26,7 @@ import { AdminService } from './admin.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { RescheduleService } from '../reschedule/reschedule.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
+import { StudentProgressService } from '../students/progress/student-progress.service';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { BatchSessionsService } from '../batches/batch-sessions.service';
 import { DisputesService } from '../disputes/disputes.service';
@@ -145,6 +146,7 @@ export class AdminController {
     private readonly disputesService: DisputesService,
     private readonly classFinalization: ClassFinalizationService,
     private readonly batchSessions: BatchSessionsService,
+    private readonly studentProgress: StudentProgressService,
   ) {}
 
   // ── Dashboard ────────────────────────────────────────────────────────────
@@ -598,6 +600,19 @@ export class AdminController {
     @Request() req: any,
   ) {
     return this.adminService.impersonateStudent(studentUserId, req.user.userId);
+  }
+
+  // ── Student progress backfill ───────────────────────────────────────────
+  //
+  // Rebuilds every student's total sessions / rank / streak / badges from
+  // their real class history (see StudentProgressService.backfillAll). Silent
+  // and idempotent; `dryRun=true` only reports. The response lists the
+  // students whose records cannot settle their progress under `needsReview`.
+  @Post('students/progress/backfill')
+  backfillStudentProgress(@Query('dryRun') dryRun?: string) {
+    return this.studentProgress.backfillAll({
+      dryRun: dryRun === 'true' || dryRun === '1',
+    });
   }
 
   // ── Student BDT ledger ──────────────────────────────────────────────────

@@ -151,8 +151,8 @@ function LeaderboardContent() {
         grade={studentGrade}
         parentName={parentName}
       />
-      <div className="pl-64">
-        <div className="max-w-3xl mx-auto px-6 py-8">
+      <div className="lg:pl-64">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-20 pb-8 lg:py-8">
           <div className="mb-6">
             <h1 className={`text-2xl font-bold ${txtp}`}>Leaderboard</h1>
             <p className={`text-sm ${txtm}`}>

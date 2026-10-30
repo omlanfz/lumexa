@@ -301,9 +301,9 @@ export default function StudentSettingsPage() {
         <p className="text-gray-500 dark:text-gray-500 dark:text-gray-400 text-sm mt-1">Manage your account details</p>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
       {/* ── Profile section ─────────────────────────────────────────────────── */}
-      <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5 transition-colors">
+      <section className="min-w-0 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6 space-y-5 transition-colors">
         <SectionHeader title="Profile" sub="Your identity and learning preferences" />
 
         {/* Avatar */}
@@ -342,7 +342,7 @@ export default function StudentSettingsPage() {
               type="email"
               value={profile.email}
               readOnly
-              className="flex-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-500 text-sm rounded-lg px-3 py-2.5 cursor-not-allowed"
+              className="flex-1 min-w-0 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 text-gray-500 text-sm rounded-lg px-3 py-2.5 cursor-not-allowed"
             />
             <span className="text-xs text-gray-600 whitespace-nowrap">Cannot change</span>
           </div>
@@ -369,14 +369,14 @@ export default function StudentSettingsPage() {
         {/* Read-only stats */}
         <div className="pt-2 border-t border-gray-200 dark:border-gray-700/50">
           <p className="text-xs text-gray-500 font-medium mb-3">Account Info</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-3">
             {[
               { label: 'Space Rank', value: `${profile.rankIcon} ${profile.spaceRank.replace(/_/g, ' ')}` },
               { label: 'Sessions', value: String(profile.totalSessions) },
               { label: 'Streak', value: `${profile.streakWeeks}w` },
             ].map((s) => (
-              <div key={s.label} className="bg-gray-100 dark:bg-gray-800/60 rounded-lg px-3 py-2 text-center">
-                <p className="text-gray-900 dark:text-white text-sm font-semibold">{s.value}</p>
+              <div key={s.label} className="bg-gray-100 dark:bg-gray-800/60 rounded-lg px-3 py-2 text-center min-w-0">
+                <p className="text-gray-900 dark:text-white text-sm font-semibold break-words">{s.value}</p>
                 <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
               </div>
             ))}
@@ -397,7 +397,7 @@ export default function StudentSettingsPage() {
       </section>
 
       {/* ── Password section ─────────────────────────────────────────────────── */}
-      <section className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-6 space-y-5">
+      <section className="min-w-0 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6 space-y-5">
         <SectionHeader title="Change Password" sub="Update your account password" />
 
         <div>

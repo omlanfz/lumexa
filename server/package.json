@@ -19,6 +19,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "backfill:assigned-teacher": "ts-node -r tsconfig-paths/register prisma/backfill-assigned-teacher.ts",
+    "backfill:student-progress": "ts-node -r tsconfig-paths/register prisma/backfill-student-progress.ts",
     "seed:courses": "ts-node -r tsconfig-paths/register prisma/seed-courses.ts",
     "export:public-catalog": "ts-node -r tsconfig-paths/register prisma/export-public-catalog.ts",
     "verify:banks": "ts-node -r tsconfig-paths/register prisma/verify-banks.ts"

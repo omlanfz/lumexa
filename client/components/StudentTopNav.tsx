@@ -5,13 +5,38 @@ import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
 import { ThemeToggle } from '@/components/ThemeProvider';
 import RankBadgeButton from '@/components/student/RankBadgeButton';
+import CreditsPill from '@/components/student/CreditsPill';
+import { useNavSummary } from '@/lib/student/useNavSummary';
+import type { RankInfo } from '@/lib/student/progress';
 
 interface StudentTopNavProps {
   fullName: string;
+  /** Used until the nav summary (credits + rank) arrives from the backend. */
   spaceRank: string;
   rankIcon: string;
-  streakWeeks: number;
+  streakWeeks?: number;
   avatarUrl: string | null;
+}
+
+// Shown for the instant before the backend has answered.
+function placeholderRank(spaceRank: string, rankIcon: string): RankInfo {
+  const label = spaceRank
+    .toLowerCase()
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+  return {
+    id: spaceRank,
+    label,
+    icon: rankIcon,
+    min: 0,
+    sessions: 0,
+    progressPct: 0,
+    sessionsToNext: null,
+    next: null,
+    requirement: '',
+    ladder: [],
+  };
 }
 
 const NAV_ITEMS = [
@@ -25,10 +50,10 @@ export default function StudentTopNav({
   fullName,
   spaceRank,
   rankIcon,
-  streakWeeks,
   avatarUrl,
 }: StudentTopNavProps) {
   const router = useRouter();
+  const { summary } = useNavSummary();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -59,7 +84,7 @@ export default function StudentTopNav({
               alt="Lumexa"
             />
           </div>
-          <span className="font-bold text-teal-500 dark:text-teal-400 text-sm hidden sm:inline">
+          <span className="font-bold text-teal-500 dark:text-teal-400 text-sm hidden lg:inline">
             Lumexa
           </span>
         </button>
@@ -81,20 +106,10 @@ export default function StudentTopNav({
           ))}
         </nav>
 
-        {/* Right cluster: streak, rank, theme, avatar */}
-        <div className="flex items-center gap-2.5 flex-shrink-0">
-          {streakWeeks > 0 && (
-            <div
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20"
-              title={`${streakWeeks}-week streak`}
-            >
-              <span className="text-sm">🔥</span>
-              <span className="text-orange-500 dark:text-orange-400 text-xs font-semibold">
-                {streakWeeks}w
-              </span>
-            </div>
-          )}
-          <RankBadgeButton rank={spaceRank} icon={rankIcon} />
+        {/* Right cluster: credits → rank → theme → avatar (→ logout on desktop) */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+          {summary && <CreditsPill credits={summary.credits} />}
+          <RankBadgeButton rank={summary?.rank ?? placeholderRank(spaceRank, rankIcon)} />
 
           <ThemeToggle variant="student" />
 

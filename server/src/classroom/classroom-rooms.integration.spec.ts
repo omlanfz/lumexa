@@ -37,6 +37,7 @@ import { PrismaService } from '../prisma.service';
 import { findTeacherConflict } from '../scheduling/teacher-conflict.util';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { AdmissionService } from './admission.service';
+import { StudentProgressService } from '../students/progress/student-progress.service';
 import { ClassFinalizationService } from './class-finalization.service';
 import { ClassroomService } from './classroom.service';
 import type { MeetingTokenParams, RoomConnection } from './daily-rooms.service';
@@ -226,6 +227,7 @@ describeDb('Classrooms (real Postgres, Daily faked)', () => {
       recording as never,
       batchSessions,
       rooms as never,
+      new StudentProgressService(prisma, notifications as never),
     );
     classroom = new ClassroomService(
       prisma,

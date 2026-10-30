@@ -45,6 +45,25 @@ export interface PaymentBadge {
   label: string;
 }
 
+/**
+ * A student's class credits. One credit = one scheduled class session.
+ *   purchased   sum of "lessons purchased" on every confirmed PAYMENT_RECEIVED
+ *   used        classes already charged (LESSON_COMPLETED rows)
+ *   adjustments refunds / admin adjustments / rate changes, in credits — what
+ *               is needed for purchased − used + adjustments = remainingRaw
+ *   remaining   what the student can still attend (never below 0)
+ * Credits are the ledger's own balance expressed in classes at the student's
+ * current per-class rate (the same "lessons remaining" figure the admin
+ * Payments tab shows); nothing is converted from BDT by any other rule.
+ */
+export interface CreditSummary {
+  purchased: number;
+  used: number;
+  adjustments: number;
+  remaining: number;
+  remainingRaw: number;
+}
+
 export interface LedgerSummary {
   balanceCents: number;
   rateCents: number;
@@ -52,6 +71,8 @@ export interface LedgerSummary {
   courseId: string | null;
   courseName: string | null;
   paymentBadge: PaymentBadge | null;
+  /** Only filled by getSummary (single student), not by the list summaries. */
+  credits?: CreditSummary;
 }
 
 function round1(n: number): number {
@@ -120,7 +141,40 @@ export class StudentLedgerService {
   }
 
   async getSummary(studentUserId: string): Promise<LedgerSummary> {
-    return this.summarize(await this.latestEntry(studentUserId));
+    const [latest, credits] = await Promise.all([
+      this.latestEntry(studentUserId),
+      this.getCredits(studentUserId),
+    ]);
+    return { ...this.summarize(latest), credits };
+  }
+
+  /** The student's class credits, straight from their ledger rows. */
+  async getCredits(studentUserId: string): Promise<CreditSummary> {
+    const [latest, purchasedAgg, used] = await Promise.all([
+      this.latestEntry(studentUserId),
+      this.prisma.studentLedgerEntry.aggregate({
+        where: {
+          studentUserId,
+          type: StudentLedgerEntryType.PAYMENT_RECEIVED,
+        },
+        _sum: { lessonsPurchased: true },
+      }),
+      this.prisma.studentLedgerEntry.count({
+        where: { studentUserId, type: StudentLedgerEntryType.LESSON_COMPLETED },
+      }),
+    ]);
+    const purchased = round1(purchasedAgg._sum.lessonsPurchased ?? 0);
+    const remainingRaw =
+      latest && latest.rateCents > 0
+        ? round1(latest.balanceAfterCents / latest.rateCents)
+        : 0;
+    return {
+      purchased,
+      used,
+      adjustments: round1(remainingRaw - (purchased - used)),
+      remaining: Math.max(0, remainingRaw),
+      remainingRaw,
+    };
   }
 
   /** Batch summaries for a page of students (admin list) — one query, latest row per student picked in JS since Prisma can't do "latest per group" portably. */

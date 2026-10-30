@@ -10,6 +10,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { Throttle } from '@nestjs/throttler';
 import { StudentsService } from './students.service';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { RegisterStudentDto } from './dto/register-student.dto';
@@ -67,6 +68,17 @@ export class StudentsController {
   @Roles(Role.STUDENT)
   getMyDashboard(@Request() req: any) {
     return this.studentsService.getMyDashboard(req.user.userId);
+  }
+
+  // Credits + rank for the student navbar. The layout re-reads it on every
+  // navigation, on tab focus and once a minute, so it gets its own, higher
+  // allowance (each route is limited separately) than the default 20/minute.
+  @Get('me/nav-summary')
+  @Throttle({ default: { limit: 120, ttl: 60_000 } })
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.STUDENT)
+  getMyNavSummary(@Request() req: any) {
+    return this.studentsService.getMyNavSummary(req.user.userId);
   }
 
   @Get('me/lessons')
