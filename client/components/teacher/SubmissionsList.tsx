@@ -65,10 +65,8 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
   const [customFeedback, setCustomFeedback] = useState('');
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [submittingReview, setSubmittingReview] = useState(false);
-  // A file that could not be opened, and a note about files still waiting to be
-  // removed after a saved review.
+  // A file that could not be opened.
   const [fileError, setFileError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   const openFile = async (f: SubmissionFile) => {
     setFileError(null);
@@ -124,7 +122,6 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
     setSelectedTags([]);
     setCustomFeedback('');
     setReviewError(null);
-    setNotice(null);
   };
 
   const cancelReview = () => setReviewingId(null);
@@ -145,19 +142,13 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
     setSubmittingReview(true);
     setReviewError(null);
     try {
-      const res = await api.patch<{ homeworkFilesPendingRemoval?: number }>(`/submissions/${id}/review`, {
+      await api.patch(`/submissions/${id}/review`, {
         status: reviewStatus,
         rating: rating > 0 ? rating : undefined,
         feedbackTags: selectedTags,
         feedback: customFeedback.trim() || undefined,
       });
       setReviewingId(null);
-      // The review is saved either way; this only says if a file is still on its way out.
-      setNotice(
-        res.data?.homeworkFilesPendingRemoval
-          ? 'Review saved. The student’s file could not be removed from storage just now — it will be removed automatically shortly.'
-          : null,
-      );
       load();
     } catch (err: any) {
       setReviewError(err?.response?.data?.message ?? 'Could not save this review.');
@@ -196,7 +187,7 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
             f.removed ? (
               <span
                 key={`f-${i}`}
-                title="Removed from storage after the review"
+                title="Removed from storage because the student finished this program"
                 className="text-xs px-3 py-1.5 rounded-lg border border-dashed border-[var(--t-border)] text-[var(--t-text-muted)] truncate max-w-[200px]"
               >
                 📎 {f.name || `File ${i + 1}`} · removed
@@ -342,11 +333,6 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
             className="w-full px-3 py-2 rounded-lg border border-[var(--t-border)] bg-[var(--t-surface)] text-sm text-[var(--t-text)]"
           />
 
-          {s.files.some((f) => f.id && !f.removed) && (
-            <p className="text-xs text-[var(--t-text-muted)]">
-              The student’s file{s.files.filter((f) => f.id && !f.removed).length > 1 ? 's are' : ' is'} deleted from storage when you submit this review — your grade and feedback are kept. Download anything you want to keep first.
-            </p>
-          )}
           {reviewError && <p className="text-xs text-red-500">{reviewError}</p>}
 
           <div className="flex items-center gap-2">
@@ -396,7 +382,6 @@ export default function SubmissionsList({ studentUserId }: { studentUserId?: str
           {fileError}
         </p>
       )}
-      {notice && <p className="text-sm text-[var(--t-warning)]">{notice}</p>}
       {loading && <p className="text-sm text-[var(--t-text-muted)]">Loading…</p>}
       {!loading && visible.length === 0 && (
         <p className="text-sm text-[var(--t-text-muted)]">

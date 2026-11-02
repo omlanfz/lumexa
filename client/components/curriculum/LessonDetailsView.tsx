@@ -402,10 +402,10 @@ function HomeworkSubmission({
               f.removed ? (
                 <span
                   key={`f-${i}`}
-                  title="Your teacher has reviewed this work, so the file was deleted from storage. Your grade and feedback are kept."
+                  title="You finished this program, so the file was deleted from storage. Your grade and feedback are kept."
                   className="text-xs px-2 py-1 rounded-md border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 truncate max-w-[220px]"
                 >
-                  📎 {f.name || `File ${i + 1}`} · removed after review
+                  📎 {f.name || `File ${i + 1}`} · removed (program completed)
                 </span>
               ) : (
                 <button

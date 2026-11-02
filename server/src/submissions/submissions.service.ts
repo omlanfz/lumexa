@@ -12,7 +12,6 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import {
@@ -34,8 +33,6 @@ import { resolveHomeworkTarget } from './homework-target';
 
 @Injectable()
 export class SubmissionsService {
-  private readonly logger = new Logger(SubmissionsService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly homeworkFiles: HomeworkFilesService,
@@ -364,50 +361,20 @@ export class SubmissionsService {
       );
     }
 
-    // 1. Save the review — grade, feedback and status. This either succeeds
-    //    or throws; nothing below runs unless it did.
-    // 2. Only then are the submission's files marked for removal from R2 (in
-    //    the same transaction, so a saved review and "files to remove" can
-    //    never disagree)...
-    const now = new Date();
-    const { saved, toRemove } = await this.prisma.$transaction(async (tx) => {
-      const updated = await tx.submission.update({
-        where: { id: submissionId },
-        data: {
-          status: SubmissionStatus[params.status],
-          rating: params.rating ?? null,
-          feedbackTags,
-          feedback,
-          reviewedAt: now,
-        },
-      });
-      const ids = await this.homeworkFiles.markForRemoval(
-        {
-          submissionId,
-          status: HomeworkFileStatus.ATTACHED,
-          supersededAt: null,
-        },
-        HomeworkFileDeleteReason.REVIEWED,
-        tx,
-      );
-      return { saved: updated, toRemove: ids };
+    // The review (grade, feedback, status) is all that is saved. The student's
+    // files are NOT touched: they stay in the homework bucket, ATTACHED, until
+    // the student has finished the program (see HomeworkFilesService).
+    const saved = await this.prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        status: SubmissionStatus[params.status],
+        rating: params.rating ?? null,
+        feedbackTags,
+        feedback,
+        reviewedAt: new Date(),
+      },
     });
-
-    // 3. ...and removed. The review is already saved, so a failure here (R2
-    //    unreachable) never undoes or fails it: the files stay marked and the
-    //    scheduled sweep retries until R2 confirms.
-    const outcome = await this.homeworkFiles.removeMarked(toRemove);
-    if (outcome.pending > 0) {
-      this.logger.warn(
-        `Review of submission ${submissionId} saved; ${outcome.pending} homework file(s) will be removed on a retry.`,
-      );
-    }
-    const presented = await this.presentOwn(saved.id);
-    return {
-      ...presented,
-      homeworkFilesRemoved: outcome.removed,
-      homeworkFilesPendingRemoval: outcome.pending,
-    };
+    return this.presentOwn(saved.id);
   }
 
   private mapSubmission(row: {

@@ -1121,11 +1121,12 @@ model Submission {
 
 // One homework file kept in the PRIVATE homework R2 bucket (HOMEWORK_R2_BUCKET —
 // never the class-recordings bucket). The row is the only record of the object:
-// who it belongs to, where it is, and whether it is still needed. The file lives
-// exactly as long as its submission waits for a review; once the teacher has
-// saved the review it is removed from R2 (status DELETE_PENDING until R2
-// confirms it, then DELETED) while the row — and the submission, grade and
-// feedback — stay as history. See HomeworkFilesService.
+// who it belongs to, where it is, and whether it is still needed. The file is
+// kept (status ATTACHED) through the teacher's review and for as long as the
+// student is on the program it was submitted for; once the student has finished
+// that program it is removed from R2 (status DELETE_PENDING until R2 confirms
+// it, then DELETED) while the row — and the submission, grade and feedback —
+// stay as history. See HomeworkFilesService.
 model HomeworkFile {
   id                  String                    @id @default(uuid())
   // Set when the file becomes part of a submission; null while it is only
@@ -1165,13 +1166,14 @@ model HomeworkFile {
 
 enum HomeworkFileStatus {
   UPLOADED // stored in R2, not (yet) part of a submission
-  ATTACHED // part of a submission — kept until it has been reviewed
+  ATTACHED // part of a submission — kept, reviewed or not, until the student finishes the program
   DELETE_PENDING // no longer needed; removal from R2 not confirmed yet (retried)
   DELETED // removed from R2 (the row is kept as history)
 }
 
 enum HomeworkFileDeleteReason {
-  REVIEWED // the teacher saved the review
+  REVIEWED // legacy: files used to be removed as soon as the teacher saved the review
+  PROGRAM_COMPLETED // the student finished the program (curriculum) the work belongs to
   REPLACED // the student handed in different work
   ABANDONED // uploaded but never submitted
   ORPHANED // its submission no longer exists

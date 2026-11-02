@@ -137,6 +137,31 @@ describeDb(
       return row.id;
     }
 
+    /** The student has now had the course's last lesson (lesson 4 of 4). */
+    async function finishProgram(
+      studentId: string,
+      teacherProfileId: string,
+      courseId: string = course.id,
+      status: LessonStatus = LessonStatus.COMPLETED,
+    ) {
+      const row = await prisma.scheduledLesson.create({
+        data: {
+          studentUserId: studentId,
+          teacherId: teacherProfileId,
+          courseId,
+          lessonNumber: 4,
+          start: new Date(Date.now() - 86_400_000),
+          end: new Date(Date.now() - 86_400_000 + 3_600_000),
+          classType: ClassType.ONE_TO_ONE,
+          status,
+        },
+      });
+      return row.id;
+    }
+
+    const fileRow = (id: string) =>
+      prisma.homeworkFile.findUniqueOrThrow({ where: { id } });
+
     beforeAll(async () => {
       releaseLock = await acquireDatabaseLock(IT_DB_URL as string);
       jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
@@ -655,14 +680,12 @@ describeDb(
       });
     });
 
-    // ═══ Review, then removal ══════════════════════════════════════════════════
+    // ═══ Review: the files are kept ════════════════════════════════════════════
 
     describe('submitting the review', () => {
-      it('saves the review first, then removes the file from R2 and records it — keeping the submission, grade and feedback', async () => {
+      it('saves the review and KEEPS the file: still in R2, still attached, still openable by the student, the teacher and an admin', async () => {
         const { submissionId, fileId } = await handIn('main.py');
-        const row = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
-        });
+        const row = await fileRow(fileId);
         expect(storage.objects.has(row.objectKey)).toBe(true);
 
         const res = await review(teacher, submissionId, {
@@ -675,33 +698,31 @@ describeDb(
           status: 'APPROVED',
           rating: 5,
           feedback: 'Great work!',
-          homeworkFilesRemoved: 1,
-          homeworkFilesPendingRemoval: 0,
         });
+        expect(res.body.files).toEqual([
+          expect.objectContaining({ name: 'main.py', removed: false }),
+        ]);
 
-        expect(storage.objects.has(row.objectKey)).toBe(false);
-        expect(storage.deleted).toEqual([row.objectKey]);
-        const after = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
+        // Nothing was removed from the bucket, nothing was marked.
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+        expect(storage.deleted).toEqual([]);
+        expect(await fileRow(fileId)).toMatchObject({
+          status: HomeworkFileStatus.ATTACHED,
+          deleteReason: null,
+          deletedAt: null,
         });
-        expect(after).toMatchObject({
-          status: HomeworkFileStatus.DELETED,
-          deleteReason: 'REVIEWED',
-          lastDeleteError: null,
-        });
-        expect(after.deletedAt).not.toBeNull();
-        const sub = await prisma.submission.findUniqueOrThrow({
-          where: { id: submissionId },
-        });
-        expect(sub).toMatchObject({
+        expect(
+          await prisma.submission.findUniqueOrThrow({
+            where: { id: submissionId },
+          }),
+        ).toMatchObject({
           status: SubmissionStatus.APPROVED,
           rating: 5,
           feedback: 'Great work!',
           note: 'done!',
         });
-        expect(sub.reviewedAt).not.toBeNull();
 
-        // The record of the work stays; the file does not.
+        // The student's page still shows the file as a normal, openable file.
         const page = await get(
           `/curriculum/scheduled-lessons/${classId}/details`,
           student,
@@ -709,33 +730,39 @@ describeDb(
         expect(page.body.submission).toMatchObject({
           status: 'APPROVED',
           rating: 5,
-          feedback: 'Great work!',
         });
         expect(page.body.submission.files).toEqual([
-          expect.objectContaining({ name: 'main.py', removed: true }),
+          expect.objectContaining({ name: 'main.py', removed: false }),
         ]);
-        const access = await get(
-          `/submissions/files/${fileId}/access`,
-          teacher,
-        );
-        expect(access.status).toBe(410);
-        expect(access.body.message).toMatch(/removed after the review/i);
+
+        // …and each of the people allowed to open it still can.
+        for (const who of [student, teacher, admin]) {
+          const access = await get(`/submissions/files/${fileId}/access`, who);
+          expect(access.status).toBe(200);
+          expect(access.body).toMatchObject({ kind: 'SOURCE' });
+        }
+        const text = await get(`/submissions/files/${fileId}/text`, teacher);
+        expect(text.status).toBe(200);
+        expect(text.body.text).toBe('print(1)\n');
+        // The review queue (reviewed tab) still lists it as a file that can be opened.
+        const reviewed = await get('/submissions?status=APPROVED', teacher);
+        expect(reviewed.body[0].files[0]).toMatchObject({
+          name: 'main.py',
+          removed: false,
+        });
       });
 
-      it('NEEDS_CHANGES also removes the file, and a resubmission starts clean', async () => {
+      it('NEEDS_CHANGES keeps the file too; only when the student hands in different work is the old file replaced', async () => {
         const { submissionId, fileId } = await handIn('main.py');
         const res = await review(teacher, submissionId, {
           status: 'NEEDS_CHANGES',
           feedback: 'Add comments',
         });
         expect(res.status).toBe(200);
-        expect(
-          (
-            await prisma.homeworkFile.findUniqueOrThrow({
-              where: { id: fileId },
-            })
-          ).status,
-        ).toBe(HomeworkFileStatus.DELETED);
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
+        expect(storage.deleted).toEqual([]);
 
         const up = await upload(student, [
           { name: 'main2.py', body: 'print(2)' },
@@ -752,17 +779,17 @@ describeDb(
         expect(again.body.files).toEqual([
           expect.objectContaining({ name: 'main2.py', removed: false }),
         ]);
-        const fresh = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: up.body[0].id },
+        const fresh = await fileRow(up.body[0].id);
+        expect(storage.objects.has(fresh.objectKey)).toBe(true); // the new file is kept
+        expect(await fileRow(fileId)).toMatchObject({
+          status: HomeworkFileStatus.DELETED,
+          deleteReason: 'REPLACED',
         });
-        expect(storage.objects.has(fresh.objectKey)).toBe(true); // the new, unreviewed file is kept
       });
 
-      it('a review that cannot be saved removes nothing', async () => {
+      it('a review that cannot be saved changes nothing', async () => {
         const { submissionId, fileId } = await handIn('main.py');
-        const row = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
-        });
+        const row = await fileRow(fileId);
         // Invalid: changes requested with no feedback at all.
         expect(
           (await review(teacher, submissionId, { status: 'NEEDS_CHANGES' }))
@@ -777,13 +804,9 @@ describeDb(
         expect(
           (await review(student, submissionId, { status: 'APPROVED' })).status,
         ).toBe(403);
-        expect(
-          (
-            await prisma.homeworkFile.findUniqueOrThrow({
-              where: { id: fileId },
-            })
-          ).status,
-        ).toBe(HomeworkFileStatus.ATTACHED);
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
         expect(storage.objects.has(row.objectKey)).toBe(true);
         expect(storage.deleted).toEqual([]);
         expect(
@@ -795,88 +818,404 @@ describeDb(
         ).toBe(SubmissionStatus.PENDING);
       });
 
-      it('if R2 refuses the removal the review still stands, the file stays marked, and a retry removes it', async () => {
-        const { submissionId, fileId } = await handIn('main.py');
-        const row = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
-        });
-        storage.failDelete = true;
-
-        const res = await review(teacher, submissionId, {
-          status: 'APPROVED',
-          rating: 4,
-        });
-        expect(res.status).toBe(200); // the review is saved whatever happens to the file
-        expect(res.body).toMatchObject({
-          status: 'APPROVED',
-          rating: 4,
-          homeworkFilesRemoved: 0,
-          homeworkFilesPendingRemoval: 1,
-        });
-        const stuck = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
-        });
-        expect(stuck).toMatchObject({
-          status: HomeworkFileStatus.DELETE_PENDING,
-          deleteAttempts: 1,
-        });
-        expect(stuck.lastDeleteError).toMatch(/R2 unreachable/);
-        expect(storage.objects.has(row.objectKey)).toBe(true);
-        // The file is no longer offered to anyone while it waits to go.
-        expect(
-          (await get(`/submissions/files/${fileId}/access`, teacher)).status,
-        ).toBe(410);
-
-        // The sweep right away waits out the backoff; still failing, still pending.
-        expect(await files.runSweep(new Date())).toMatchObject({ removed: 0 });
-        // Later, with R2 reachable again, the sweep finishes the job.
-        storage.failDelete = false;
-        const later = new Date(Date.now() + 2 * 3_600_000);
-        expect(await files.runSweep(later)).toMatchObject({
-          removed: 1,
-          stillPending: 0,
-        });
-        expect(storage.objects.has(row.objectKey)).toBe(false);
-        expect(
-          await prisma.homeworkFile.findUniqueOrThrow({
-            where: { id: fileId },
-          }),
-        ).toMatchObject({
-          status: HomeworkFileStatus.DELETED,
-          lastDeleteError: null,
-        });
-      });
-
       it('reviewing twice is harmless', async () => {
-        const { submissionId } = await handIn('main.py');
-        expect(
-          (
-            await review(teacher, submissionId, {
-              status: 'APPROVED',
-              rating: 5,
-            })
-          ).status,
-        ).toBe(200);
-        const again = await review(teacher, submissionId, {
-          status: 'APPROVED',
-          rating: 5,
-        });
-        expect(again.status).toBe(200);
-        expect(again.body.homeworkFilesRemoved).toBe(0);
-        expect(storage.deleted).toHaveLength(1);
+        const { submissionId, fileId } = await handIn('main.py');
+        for (let i = 0; i < 2; i++) {
+          const res = await review(teacher, submissionId, {
+            status: 'APPROVED',
+            rating: 5,
+          });
+          expect(res.status).toBe(200);
+        }
+        expect(storage.deleted).toEqual([]);
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
       });
 
-      it('a submission with only links reviews fine (nothing to remove)', async () => {
+      it('a submission with only links reviews fine', async () => {
         const sub = await submit(student, {
           scheduledLessonId: classId,
           links: ['https://replit.com/@ada/x'],
         });
         const res = await review(teacher, sub.body.id, { status: 'APPROVED' });
         expect(res.status).toBe(200);
-        expect(res.body).toMatchObject({
-          homeworkFilesRemoved: 0,
-          homeworkFilesPendingRemoval: 0,
+        expect(res.body.links).toEqual(['https://replit.com/@ada/x']);
+      });
+    });
+
+    // ═══ Kept until the program is finished, then removed ══════════════════════
+
+    describe('files are kept until the student finishes the program', () => {
+      const daysFromNow = (d: number) => new Date(Date.now() + d * 86_400_000);
+
+      it('NEVER removes reviewed work while the program is unfinished, however long it has been', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+        const row = await fileRow(fileId);
+        // Lesson 2 of 4 taught; the student has also had lesson 3.
+        await prisma.scheduledLesson.create({
+          data: {
+            studentUserId: student.id,
+            teacherId: teacher.profileId!,
+            courseId: course.id,
+            lessonNumber: 3,
+            start: daysFromNow(-2),
+            end: daysFromNow(-2),
+            classType: ClassType.ONE_TO_ONE,
+            status: LessonStatus.COMPLETED,
+          },
         });
+        // …and lesson 4 is booked but not taught yet.
+        await prisma.scheduledLesson.create({
+          data: {
+            studentUserId: student.id,
+            teacherId: teacher.profileId!,
+            courseId: course.id,
+            lessonNumber: 4,
+            start: daysFromNow(2),
+            end: daysFromNow(2),
+            classType: ClassType.ONE_TO_ONE,
+            status: LessonStatus.UPCOMING,
+          },
+        });
+        for (const now of [new Date(), daysFromNow(30), daysFromNow(365)]) {
+          expect(await files.runSweep(now)).toMatchObject({
+            marked: 0,
+            removed: 0,
+          });
+        }
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+        expect(storage.deleted).toEqual([]);
+      });
+
+      it('NEVER removes the file of work still waiting for review, even when the program is finished', async () => {
+        const { fileId } = await handIn('main.py');
+        const row = await fileRow(fileId);
+        await finishProgram(student.id, teacher.profileId!);
+        await prisma.homeworkFile.update({
+          where: { id: fileId },
+          data: { createdAt: daysFromNow(-90), attachedAt: daysFromNow(-90) },
+        });
+        for (const now of [new Date(), daysFromNow(30), daysFromNow(365)]) {
+          expect(await files.runSweep(now)).toMatchObject({
+            marked: 0,
+            removed: 0,
+          });
+        }
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+      });
+
+      it('once the last lesson is taught, removes the student’s reviewed files from R2 and records why — the submission, grade and feedback stay', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, {
+          status: 'APPROVED',
+          rating: 5,
+          feedback: 'Great work!',
+        });
+        const row = await fileRow(fileId);
+        expect(await files.runSweep()).toMatchObject({ marked: 0, removed: 0 });
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+
+        await finishProgram(student.id, teacher.profileId!);
+        expect(await files.runSweep()).toMatchObject({
+          marked: 1,
+          removed: 1,
+          stillPending: 0,
+        });
+
+        expect(storage.objects.has(row.objectKey)).toBe(false);
+        expect(storage.deleted).toEqual([row.objectKey]);
+        const after = await fileRow(fileId);
+        expect(after).toMatchObject({
+          status: HomeworkFileStatus.DELETED,
+          deleteReason: 'PROGRAM_COMPLETED',
+          lastDeleteError: null,
+        });
+        expect(after.deletedAt).not.toBeNull();
+        expect(
+          await prisma.submission.findUniqueOrThrow({
+            where: { id: submissionId },
+          }),
+        ).toMatchObject({
+          status: SubmissionStatus.APPROVED,
+          rating: 5,
+          feedback: 'Great work!',
+        });
+
+        // The record of the work stays; the file is shown as removed and says why.
+        const page = await get(
+          `/curriculum/scheduled-lessons/${classId}/details`,
+          student,
+        );
+        expect(page.body.submission).toMatchObject({
+          status: 'APPROVED',
+          feedback: 'Great work!',
+        });
+        expect(page.body.submission.files).toEqual([
+          expect.objectContaining({ name: 'main.py', removed: true }),
+        ]);
+        const access = await get(
+          `/submissions/files/${fileId}/access`,
+          teacher,
+        );
+        expect(access.status).toBe(410);
+        expect(access.body.message).toMatch(/no longer kept/i);
+
+        // A second sweep has nothing left to do.
+        expect(await files.runSweep()).toMatchObject({ marked: 0, removed: 0 });
+      });
+
+      it('removes every file of the student for the program — several submissions, several files — and nobody else’s', async () => {
+        // Student: lesson 2 (two files) + lesson 3 (one file).
+        const two = await upload(student, [
+          { name: 'a.py', body: 'a' },
+          { name: 'b.py', body: 'b' },
+        ]);
+        const first = await submit(student, {
+          scheduledLessonId: classId,
+          files: two.body.map((f: { id: string }) => ({ id: f.id })),
+        });
+        const lesson3 = await prisma.scheduledLesson.create({
+          data: {
+            studentUserId: student.id,
+            teacherId: teacher.profileId!,
+            courseId: course.id,
+            lessonNumber: 3,
+            lessonId: (
+              await prisma.lesson.findFirstOrThrow({
+                where: { courseId: course.id, order: 3 },
+              })
+            ).id,
+            start: daysFromNow(-2),
+            end: daysFromNow(-2),
+            classType: ClassType.ONE_TO_ONE,
+            status: LessonStatus.COMPLETED,
+          },
+        });
+        await prisma.lesson.update({
+          where: {
+            id: (
+              await prisma.lesson.findFirstOrThrow({
+                where: { courseId: course.id, order: 3 },
+              })
+            ).id,
+          },
+          data: { homework: 'Homework 3' },
+        });
+        const up3 = await upload(
+          student,
+          [{ name: 'c.py', body: 'c' }],
+          lesson3.id,
+        );
+        const second = await submit(student, {
+          scheduledLessonId: lesson3.id,
+          files: [{ id: up3.body[0].id }],
+        });
+        expect(second.status).toBe(201);
+        // Another student, who has NOT finished.
+        const ben = await upload(
+          otherStudent,
+          [{ name: 'ben.py', body: 'ben' }],
+          otherClassId,
+        );
+        const benSub = await submit(otherStudent, {
+          scheduledLessonId: otherClassId,
+          files: [{ id: ben.body[0].id }],
+        });
+        expect(benSub.status).toBe(201);
+        for (const id of [first.body.id, second.body.id, benSub.body.id]) {
+          await review(teacher, id, { status: 'APPROVED' });
+        }
+
+        await finishProgram(student.id, teacher.profileId!);
+        expect(await files.runSweep()).toMatchObject({
+          marked: 3,
+          removed: 3,
+        });
+        const mine = await prisma.homeworkFile.findMany({
+          where: { studentUserId: student.id },
+        });
+        expect(mine).toHaveLength(3);
+        for (const f of mine) {
+          expect(f.status).toBe(HomeworkFileStatus.DELETED);
+          expect(storage.objects.has(f.objectKey)).toBe(false);
+        }
+        const bens = await prisma.homeworkFile.findMany({
+          where: { studentUserId: otherStudent.id },
+        });
+        expect(bens).toHaveLength(1);
+        expect(bens[0].status).toBe(HomeworkFileStatus.ATTACHED);
+        expect(storage.objects.has(bens[0].objectKey)).toBe(true);
+      });
+
+      it('work handed in while the program is finished is held until it is reviewed, then removed', async () => {
+        await finishProgram(student.id, teacher.profileId!);
+        const { submissionId, fileId } = await handIn('late.py');
+        const row = await fileRow(fileId);
+        expect(await files.runSweep()).toMatchObject({ marked: 0, removed: 0 });
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+
+        await review(teacher, submissionId, {
+          status: 'APPROVED',
+          feedback: 'Nice',
+        });
+        // The review itself still keeps the file; the next sweep removes it.
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+        expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
+        expect(storage.objects.has(row.objectKey)).toBe(false);
+        expect((await fileRow(fileId)).deleteReason).toBe('PROGRAM_COMPLETED');
+      });
+
+      it('a partially completed last lesson is not the end: its extra class is still to come', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+        await finishProgram(
+          student.id,
+          teacher.profileId!,
+          course.id,
+          LessonStatus.PARTIALLY_COMPLETED,
+        );
+        const extra = await prisma.scheduledLesson.create({
+          data: {
+            studentUserId: student.id,
+            teacherId: teacher.profileId!,
+            courseId: course.id,
+            lessonNumber: 4,
+            start: daysFromNow(3),
+            end: daysFromNow(3),
+            classType: ClassType.ONE_TO_ONE,
+            status: LessonStatus.UPCOMING,
+          },
+        });
+        expect(await files.runSweep()).toMatchObject({ marked: 0, removed: 0 });
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
+
+        // The extra class is taught: now the program is over.
+        await prisma.scheduledLesson.update({
+          where: { id: extra.id },
+          data: { status: LessonStatus.COMPLETED },
+        });
+        expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
+      });
+
+      it('a certificate (final test passed) also means the program is finished', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+        expect(await files.runSweep()).toMatchObject({ marked: 0 });
+        await prisma.certificate.create({
+          data: {
+            studentUserId: student.id,
+            courseId: course.id,
+            courseName: 'hw course',
+            certificateNumber: `LMX-IT-${Date.now()}`,
+            pdfUrl: 'https://example.invalid/c.pdf',
+          },
+        });
+        expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
+        expect((await fileRow(fileId)).status).toBe(HomeworkFileStatus.DELETED);
+      });
+
+      it('finishing one program does not touch the files of another', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+
+        // The same student's work in a second program, not finished.
+        const other = await makeCourse(prisma, 'second-course', 4);
+        const otherLesson = await prisma.lesson.findFirstOrThrow({
+          where: { courseId: other.id, order: 2 },
+        });
+        const otherClass = await prisma.scheduledLesson.create({
+          data: {
+            studentUserId: student.id,
+            teacherId: teacher.profileId!,
+            courseId: other.id,
+            lessonNumber: 2,
+            lessonId: otherLesson.id,
+            start: daysFromNow(-3),
+            end: daysFromNow(-3),
+            classType: ClassType.ONE_TO_ONE,
+            status: LessonStatus.COMPLETED,
+          },
+        });
+        const up = await upload(
+          student,
+          [{ name: 'other.py', body: 'x' }],
+          otherClass.id,
+        );
+        const sub = await submit(student, {
+          scheduledLessonId: otherClass.id,
+          files: [{ id: up.body[0].id }],
+        });
+        expect(sub.status).toBe(201);
+        await review(teacher, sub.body.id, { status: 'APPROVED' });
+
+        await finishProgram(student.id, teacher.profileId!); // the first course only
+        expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
+        expect((await fileRow(fileId)).status).toBe(HomeworkFileStatus.DELETED);
+        expect((await fileRow(up.body[0].id)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
+      });
+
+      it('if R2 refuses the removal, the file stays marked and a later sweep finishes it', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+        const row = await fileRow(fileId);
+        await finishProgram(student.id, teacher.profileId!);
+
+        storage.failDelete = true;
+        expect(await files.runSweep()).toMatchObject({
+          marked: 1,
+          removed: 0,
+          stillPending: 1,
+        });
+        const stuck = await fileRow(fileId);
+        expect(stuck).toMatchObject({
+          status: HomeworkFileStatus.DELETE_PENDING,
+          deleteReason: 'PROGRAM_COMPLETED',
+          deleteAttempts: 1,
+        });
+        expect(stuck.lastDeleteError).toMatch(/R2 unreachable/);
+        expect(storage.objects.has(row.objectKey)).toBe(true);
+        // Not offered to anyone while it waits to go.
+        expect(
+          (await get(`/submissions/files/${fileId}/access`, teacher)).status,
+        ).toBe(410);
+
+        // Right away: still inside the retry delay.
+        expect(await files.runSweep(new Date())).toMatchObject({ removed: 0 });
+        // Later, with R2 reachable again, the sweep finishes the job.
+        storage.failDelete = false;
+        expect(
+          await files.runSweep(new Date(Date.now() + 2 * 3_600_000)),
+        ).toMatchObject({ removed: 1, stillPending: 0 });
+        expect(storage.objects.has(row.objectKey)).toBe(false);
+        expect(await fileRow(fileId)).toMatchObject({
+          status: HomeworkFileStatus.DELETED,
+          lastDeleteError: null,
+        });
+      });
+
+      it('keeps retrying a removal that keeps failing, never giving up', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+        await finishProgram(student.id, teacher.profileId!);
+        storage.failDelete = true;
+        for (let i = 1; i <= 4; i++) {
+          await files.runSweep(new Date(Date.now() + i * 2 * 3_600_000));
+        }
+        const row = await fileRow(fileId);
+        expect(row.status).toBe(HomeworkFileStatus.DELETE_PENDING);
+        expect(row.deleteAttempts).toBeGreaterThanOrEqual(4);
       });
     });
 
@@ -911,55 +1250,6 @@ describeDb(
         expect(storage.objects.size).toBe(1);
       });
 
-      it('NEVER removes the file of a submission that is still waiting for review, however old', async () => {
-        const { fileId } = await handIn('main.py');
-        const row = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
-        });
-        await prisma.submission.updateMany({
-          data: { submittedAt: daysFromNow(-90) },
-        });
-        await prisma.homeworkFile.update({
-          where: { id: fileId },
-          data: { createdAt: daysFromNow(-90), attachedAt: daysFromNow(-90) },
-        });
-        for (const now of [new Date(), daysFromNow(30), daysFromNow(365)]) {
-          expect(await files.runSweep(now)).toMatchObject({
-            marked: 0,
-            removed: 0,
-          });
-        }
-        expect(
-          (
-            await prisma.homeworkFile.findUniqueOrThrow({
-              where: { id: fileId },
-            })
-          ).status,
-        ).toBe(HomeworkFileStatus.ATTACHED);
-        expect(storage.objects.has(row.objectKey)).toBe(true);
-        expect(storage.deleted).toEqual([]);
-      });
-
-      it('removes the file of a reviewed submission whose removal was never recorded', async () => {
-        const { submissionId, fileId } = await handIn('main.py');
-        // A review saved, then the server died before marking the file.
-        await prisma.submission.update({
-          where: { id: submissionId },
-          data: {
-            status: SubmissionStatus.APPROVED,
-            reviewedAt: new Date(Date.now() - 3_600_000),
-          },
-        });
-        expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
-        expect(
-          (
-            await prisma.homeworkFile.findUniqueOrThrow({
-              where: { id: fileId },
-            })
-          ).status,
-        ).toBe(HomeworkFileStatus.DELETED);
-      });
-
       it('removes files whose submission no longer exists', async () => {
         const { submissionId, fileId } = await handIn('main.py');
         await prisma.submission.delete({ where: { id: submissionId } });
@@ -975,20 +1265,6 @@ describeDb(
           data: { createdAt: daysFromNow(-1) },
         });
         expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
-      });
-
-      it('keeps retrying a removal that keeps failing, never giving up', async () => {
-        const { submissionId, fileId } = await handIn('main.py');
-        storage.failDelete = true;
-        await review(teacher, submissionId, { status: 'APPROVED' });
-        for (let i = 1; i <= 4; i++) {
-          await files.runSweep(new Date(Date.now() + i * 2 * 3_600_000));
-        }
-        const row = await prisma.homeworkFile.findUniqueOrThrow({
-          where: { id: fileId },
-        });
-        expect(row.status).toBe(HomeworkFileStatus.DELETE_PENDING);
-        expect(row.deleteAttempts).toBeGreaterThanOrEqual(4);
       });
     });
   },
