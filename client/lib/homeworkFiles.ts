@@ -19,7 +19,7 @@ export interface HomeworkFileRef {
   name: string | null;
   size?: number;
   kind?: HomeworkViewKind;
-  /** Removed from storage after the review. */
+  /** Removed from storage because the student finished the program. */
   removed?: boolean;
 }
 
@@ -56,7 +56,7 @@ export async function openHomeworkFile(file: HomeworkFileRef): Promise<void> {
     return;
   }
   if (!file.id) throw new Error('This file cannot be opened.');
-  if (file.removed) throw new Error('This file was removed after the review.');
+  if (file.removed) throw new Error('This file was removed because the program was completed.');
 
   // Code and notebooks: the viewer page does the rest (it asks the server for the text).
   if (file.kind === 'SOURCE' || file.kind === 'NOTEBOOK') {

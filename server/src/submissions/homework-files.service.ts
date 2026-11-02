@@ -10,19 +10,25 @@
 //               and only then attaches it to the submission (ATTACHED). A file
 //               that never finished uploading can therefore never be part of a
 //               submission that looks successful.
-//   review      The review (grade, feedback, status) is saved FIRST. Only after
-//               that has been committed are the submission's files marked
-//               DELETE_PENDING and removed from R2 (then DELETED). The submission
-//               row, grade and feedback are never touched by the removal.
+//   review      The teacher's review (grade, feedback, status) does NOT touch the
+//               files: they stay in R2, ATTACHED, and stay openable by the
+//               student, the teacher and admins.
+//   program     The files are kept until the student has FINISHED THE PROGRAM
+//   end         (curriculum) they were submitted for — see studentsWhoFinished.
+//               The scheduled sweep then marks that student's files for that
+//               course DELETE_PENDING and removes them from R2 (then DELETED). The
+//               submission row, grade and feedback are never touched by the
+//               removal. A file of a submission still waiting for review is held
+//               back until it has been reviewed, so work is never removed unseen.
 //   cleanup     If R2 refuses or is unreachable the file stays DELETE_PENDING and a
 //               scheduled sweep retries with a growing delay. The same sweep
 //               removes uploads that were never submitted, files replaced by a
-//               newer hand-in, files of reviewed submissions that somehow still
-//               stand, and files whose submission is gone.
+//               newer hand-in, and files whose submission is gone.
 //
 // A file of a submission that is still waiting for review (ATTACHED, current) is
 // never deleted by any path here: every deletion starts from DELETE_PENDING, which
-// only the review, a replacement or the sweep above can set.
+// only a finished program (after the review), a replacement or the sweep above can
+// set.
 
 import {
   BadGatewayException,
@@ -43,11 +49,13 @@ import {
   HomeworkFile,
   HomeworkFileDeleteReason,
   HomeworkFileStatus,
+  LessonStatus,
   Prisma,
   Role,
   SubmissionStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
+import { COUNTS_AS_COMPLETED } from '../scheduling/lesson-state.util';
 import {
   HOMEWORK_MAX_FILES_PER_UPLOAD,
   HOMEWORK_MAX_FILE_BYTES,
@@ -94,7 +102,8 @@ export interface PresentedHomeworkFile {
   name: string | null;
   size?: number;
   kind?: HomeworkViewKind;
-  /** The file is no longer kept: it was removed after the review (or is being). */
+  /** The file is no longer kept: it was removed because the student finished the
+   * program (or is being removed). */
   removed?: boolean;
 }
 
@@ -445,6 +454,125 @@ export class HomeworkFilesService {
     return ids;
   }
 
+  // ─── End of a program ────────────────────────────────────────────────────
+
+  /**
+   * Which of these students have FINISHED the program (course) — pure reads.
+   *
+   * Finished means one of:
+   *   • a certificate was issued for the course (the final test was passed), or
+   *   • the student has had the course's LAST lesson (a completed class at, or
+   *     after, the highest lesson number — a batch student who joined mid-way
+   *     never had the early lessons, so every lesson is not required) AND has no
+   *     class of this course still coming up (a partially completed last lesson
+   *     has an extra class, so it is not over yet).
+   *
+   * "Last lesson" is the larger of the course's session count and its highest
+   * lesson order, so a course whose lessons are not all written yet is not
+   * mistaken for a finished one. Removal is irreversible, so every doubt means
+   * "not finished".
+   */
+  async studentsWhoFinished(
+    courseId: string,
+    studentUserIds: string[],
+  ): Promise<string[]> {
+    if (studentUserIds.length === 0) return [];
+    const course = await this.prisma.course.findUnique({
+      where: { id: courseId },
+      select: { sessions: true },
+    });
+    if (!course) return [];
+    const highest = await this.prisma.lesson.aggregate({
+      where: { courseId },
+      _max: { order: true },
+    });
+    const lastLesson = Math.max(course.sessions, highest._max.order ?? 0);
+
+    const certified = (
+      await this.prisma.certificate.findMany({
+        where: { courseId, studentUserId: { in: studentUserIds } },
+        select: { studentUserId: true },
+      })
+    ).map((c) => c.studentUserId);
+
+    const taughtLast =
+      lastLesson > 0
+        ? (
+            await this.prisma.scheduledLesson.findMany({
+              where: {
+                courseId,
+                studentUserId: { in: studentUserIds },
+                lessonNumber: { gte: lastLesson },
+                status: { in: COUNTS_AS_COMPLETED },
+              },
+              distinct: ['studentUserId'],
+              select: { studentUserId: true },
+            })
+          ).map((r) => r.studentUserId)
+        : [];
+    const stillComing = new Set(
+      taughtLast.length === 0
+        ? []
+        : (
+            await this.prisma.scheduledLesson.findMany({
+              where: {
+                courseId,
+                studentUserId: { in: taughtLast },
+                status: LessonStatus.UPCOMING,
+              },
+              distinct: ['studentUserId'],
+              select: { studentUserId: true },
+            })
+          ).map((r) => r.studentUserId),
+    );
+
+    return [
+      ...new Set([
+        ...certified,
+        ...taughtLast.filter((id) => !stillComing.has(id)),
+      ]),
+    ];
+  }
+
+  /**
+   * Marks, for every student who has finished a program, their homework files
+   * for that program — except the files of work still waiting for a review.
+   * Returns the ids marked (the sweep removes them from R2).
+   */
+  async markFinishedPrograms(): Promise<string[]> {
+    // Work that has been reviewed (not PENDING), still kept, and current.
+    const reviewedAndKept: Prisma.HomeworkFileWhereInput = {
+      status: HomeworkFileStatus.ATTACHED,
+      supersededAt: null,
+      submission: { is: { status: { not: SubmissionStatus.PENDING } } },
+    };
+    const candidates = await this.prisma.homeworkFile.findMany({
+      where: reviewedAndKept,
+      distinct: ['courseId', 'studentUserId'],
+      select: { courseId: true, studentUserId: true },
+    });
+    const byCourse = new Map<string, string[]>();
+    for (const c of candidates) {
+      byCourse.set(c.courseId, [
+        ...(byCourse.get(c.courseId) ?? []),
+        c.studentUserId,
+      ]);
+    }
+
+    const marked: string[] = [];
+    for (const [courseId, studentUserIds] of byCourse) {
+      const finished = await this.studentsWhoFinished(courseId, studentUserIds);
+      if (finished.length === 0) continue;
+      marked.push(
+        ...(await this.markForRemoval(
+          { ...reviewedAndKept, courseId, studentUserId: { in: finished } },
+          HomeworkFileDeleteReason.PROGRAM_COMPLETED,
+        )),
+      );
+    }
+    return marked;
+  }
+
   // ─── Scheduled cleanup ───────────────────────────────────────────────────
 
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -463,24 +591,10 @@ export class HomeworkFilesService {
     const ago = (ms: number) => new Date(now.getTime() - ms);
     let marked = 0;
 
-    // 1. A reviewed submission whose files still stand (the review was saved but
-    //    their removal was never recorded, e.g. the server restarted between the
-    //    two). Reviewed — not waiting — so they are no longer needed.
-    marked += (
-      await this.markForRemoval(
-        {
-          status: HomeworkFileStatus.ATTACHED,
-          supersededAt: null,
-          submission: {
-            is: {
-              status: { not: SubmissionStatus.PENDING },
-              reviewedAt: { lt: ago(5 * 60_000) },
-            },
-          },
-        },
-        HomeworkFileDeleteReason.REVIEWED,
-      )
-    ).length;
+    // 1. Students who have finished a program: their reviewed work for that
+    //    program is no longer needed. (Files of work still waiting for review
+    //    are not matched — they are picked up once it has been reviewed.)
+    marked += (await this.markFinishedPrograms()).length;
 
     // 2. Files whose submission no longer exists.
     marked += (
@@ -562,7 +676,9 @@ export class HomeworkFilesService {
       throw new ForbiddenException('You do not have access to this file.');
 
     if (row.supersededAt || row.status !== HomeworkFileStatus.ATTACHED) {
-      throw new GoneException('This file was removed after the review.');
+      throw new GoneException(
+        'This file is no longer kept. Homework files are removed once the student finishes the program, or when newer work replaces them.',
+      );
     }
     return row;
   }
