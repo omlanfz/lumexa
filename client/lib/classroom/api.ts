@@ -66,3 +66,53 @@ export async function setRoomLocked(room: string, locked: boolean): Promise<bool
   const res = await api.post<{ locked: boolean }>(`/classroom/${room}/lock`, { locked });
   return res.data.locked;
 }
+
+// ─── Saved chat ─────────────────────────────────────────────────────────────
+// Live chat travels as Daily app messages; these keep it (server/src/classroom/
+// chat). A class whose chat is not saved (a free trial, or storage not set up)
+// answers `enabled: false` and the chat simply stays live-only.
+
+export interface SavedChatMessage {
+  id: string;
+  text: string;
+  /** When the server received it (epoch ms). */
+  sentAt: number;
+  fromUserId: string;
+  fromName: string;
+  fromRole: 'TEACHER' | 'STUDENT';
+}
+
+export interface SavedChatPage {
+  enabled: boolean;
+  /** Oldest first. */
+  messages: SavedChatMessage[];
+  /** Older messages exist than these. */
+  hasMore: boolean;
+}
+
+/** The newest saved messages this person may see — or, with `before`, the ones just
+ * before that time (the message at exactly `before` may be repeated). */
+export async function fetchChatHistory(
+  room: string,
+  opts: { before?: number; limit?: number } = {},
+): Promise<SavedChatPage> {
+  const res = await api.get<SavedChatPage>(`/classroom/${room}/chat`, { params: opts });
+  return res.data;
+}
+
+/** Saves a message that has just been sent. */
+export async function saveChatMessage(room: string, id: string, text: string): Promise<void> {
+  await api.post(`/classroom/${room}/chat`, { id, text });
+}
+
+/** Teacher only: deletes one message, whoever sent it. */
+export async function deleteChatMessage(room: string, authorUserId: string, id: string): Promise<void> {
+  await api.delete(
+    `/classroom/${room}/chat/messages/${encodeURIComponent(authorUserId)}/${encodeURIComponent(id)}`,
+  );
+}
+
+/** Teacher only: deletes the whole chat, for everyone in it. */
+export async function clearChat(room: string): Promise<void> {
+  await api.delete(`/classroom/${room}/chat`);
+}

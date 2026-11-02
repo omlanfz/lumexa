@@ -34,7 +34,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Hand, Lock, PhoneOff, Minimize2, Monitor } from 'lucide-react';
 import Header from './Header';
 import Stage from './Stage';
@@ -152,7 +152,14 @@ export default function ClassroomRoom({
   // anyone that (a student can rename themselves, but not that).
   const isTeacher = !observerMode && !!local?.isOwner;
   const media = useLocalMedia();
-  const { messages: chatMessages, send: sendChat } = useChat({ isTeacher });
+  // The chat is saved (and loaded again later) for curriculum classes, bookings and
+  // the demo room — not for a free trial (the guest has no account) or the silent
+  // admin observer.
+  const chat = useChat({
+    isTeacher,
+    roomName,
+    persist: !observerMode && !roomName.startsWith('trial-'),
+  });
 
   const { state: classroomState, patch: patchState } = useClassroomState(roomName, isTeacher);
   const { raisedHands, reactions, spotlightUserId, setOwnHandRaised, lowerHand, sendReaction, setSpotlight } =
@@ -437,17 +444,21 @@ export default function ClassroomRoom({
     prevRaisedRef.current = raisedHands;
   }, [raisedHands, isTeacher, people, localKey]);
 
-  const unreadChat = activePanel === 'chat' ? 0 : Math.max(0, chatMessages.length - lastSeenChatCount);
+  // Unread and the new-message tone look only at messages heard in this class: the
+  // saved history that loads when the chat opens is not "new".
+  const liveChat = useMemo(() => chat.messages.filter((m) => !m.saved), [chat.messages]);
+  const unreadChat = activePanel === 'chat' ? 0 : Math.max(0, liveChat.length - lastSeenChatCount);
   useEffect(() => {
-    if (activePanel === 'chat') setLastSeenChatCount(chatMessages.length);
-  }, [activePanel, chatMessages.length]);
+    // Also catches up when messages are deleted while the chat is closed.
+    if (activePanel === 'chat' || liveChat.length < lastSeenChatCount) setLastSeenChatCount(liveChat.length);
+  }, [activePanel, liveChat.length, lastSeenChatCount]);
 
   // A soft tone for a new chat message from someone else — never for your own
   // (sending is feedback enough), never while you are looking at the chat (you
   // can see it arrive), and once per message however it is announced.
-  const lastChatKeyRef = useRef<string | null>(chatMessages[chatMessages.length - 1]?.key ?? null);
+  const lastChatKeyRef = useRef<string | null>(liveChat[liveChat.length - 1]?.key ?? null);
   useEffect(() => {
-    const latest = chatMessages[chatMessages.length - 1];
+    const latest = liveChat[liveChat.length - 1];
     const previousKey = lastChatKeyRef.current;
     if (!latest || latest.key === previousKey) return;
     lastChatKeyRef.current = latest.key;
@@ -455,7 +466,7 @@ export default function ClassroomRoom({
     const lookingAtChat = activePanel === 'chat' && typeof document !== 'undefined' && !document.hidden;
     if (!lookingAtChat) playClassroomTone('chat-message', latest.key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatMessages, localKey]);
+  }, [liveChat, localKey]);
 
   useEffect(() => {
     if (activePanel !== 'lesson') setLessonFocused(false);
@@ -751,14 +762,21 @@ export default function ClassroomRoom({
           >
             {activePanel === 'chat' ? (
               <ChatPanel
-                messages={chatMessages}
-                onSend={sendChat}
+                messages={chat.messages}
+                onSend={chat.send}
                 onClose={() => setActivePanel(null)}
                 locked={!!classroomState.chatLocked}
                 isTeacher={isTeacher}
                 onToggleLock={() => patchState({ chatLocked: !classroomState.chatLocked })}
                 onReact={sendReaction}
                 localUserId={localKey}
+                historyStatus={chat.historyStatus}
+                onRetryHistory={chat.retryHistory}
+                hasEarlier={chat.hasEarlier}
+                loadingEarlier={chat.loadingEarlier}
+                onLoadEarlier={chat.loadEarlier}
+                onRemoveMessage={chat.removeMessage}
+                onClearAll={chat.clearAll}
               />
             ) : (
               <ParticipantsPanel

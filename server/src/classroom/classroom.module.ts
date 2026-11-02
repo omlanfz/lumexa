@@ -12,6 +12,9 @@ import { RoomDirectoryService } from './room-directory.service';
 import { TrialClassroomModule } from './trial-classroom.module';
 import { ClassroomBadgesController } from './badges/classroom-badges.controller';
 import { ClassroomBadgesService } from './badges/classroom-badges.service';
+import { ChatController } from './chat/chat.controller';
+import { ChatService } from './chat/chat.service';
+import { CHAT_STORAGE, ChatStorageService } from './chat/chat-storage.service';
 import { StudentsModule } from '../students/students.module';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { PayoutsModule } from '../payouts/payouts.module';
@@ -33,6 +36,7 @@ import { BatchesModule } from '../batches/batches.module';
     RecordingController,
     RecordingsController,
     ClassroomBadgesController,
+    ChatController,
   ],
   providers: [
     ClassroomService,
@@ -43,6 +47,9 @@ import { BatchesModule } from '../batches/batches.module';
     AdmissionService,
     RoomDirectoryService,
     ClassroomBadgesService,
+    ChatService,
+    ChatStorageService,
+    { provide: CHAT_STORAGE, useExisting: ChatStorageService },
   ],
   exports: [
     RecordingService,

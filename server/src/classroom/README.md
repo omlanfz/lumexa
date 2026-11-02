@@ -223,6 +223,35 @@ Recording again in the same class adds a part; a student sees the parts in order
 - **A free trial is never recorded**; the QA demo room is, and the QA demo student
   sees those recordings in their Recordings tab.
 
+## Chat (`chat/`)
+
+The class chat is **live** (Daily app messages between the browsers, as before) **and
+saved** (every message is also sent to the server, which keeps it in its own private R2
+bucket — `CHAT_R2_*`, see `docs/CLASSROOM_CHAT_SETUP.md`). A **conversation** outlives any
+one class: for a 1:1 it is _this teacher + this student_ (a new curriculum keeps it, a
+new teacher is empty); for a batch it is _this batch + this teacher_ — the teacher and the
+batch's **current** members see it, a student who joined late sees only what was said
+after `BatchMember.joinedAt`, a student who left is refused, a new teacher is empty.
+A free trial is not saved.
+
+| Route                                         | Who                                         |                                                    |
+| --------------------------------------------- | ------------------------------------------- | -------------------------------------------------- |
+| `GET /classroom/:room/chat?before=&limit=`    | the teacher and the room's students         | the newest page of what the caller may see (+ `hasMore`) |
+| `POST /classroom/:room/chat`                  | the same (a student not while chat is locked) | `{ id, text }` — saved under the server's time, sender, name, role |
+| `DELETE /classroom/:room/chat/messages/:author/:id` | the room's teacher only                | one message                                        |
+| `DELETE /classroom/:room/chat`                | the room's teacher only                     | the whole conversation ("Clear all chats")         |
+
+- **Stored** as one JSON file per author per month (`chat/<conversation>/<YYYY-MM>/<author>.json`),
+  so nobody ever overwrites anybody else (R2 has no append). Rules are pure functions in
+  `chat/chat-thread.ts`; who-sees-what is `chat/chat.service.ts`.
+- **Deleting** is done by the server first; only then does the teacher's browser tell the
+  class (a `chat-remove` / `chat-clear` Daily message, believed only from the room's owner).
+  Someone who joins later just loads the saved history.
+- **The lock** is also enforced here: a student's message is refused while the room's shared
+  state (read from Daily, fail-open) says `chatLocked`.
+- **Not configured / R2 down** → chat stays live-only; nothing is lost that was not already
+  ephemeral.
+
 ## Badges (`badges/`)
 
 Recognition, not a game — no points, levels, streaks or rankings. Separate from

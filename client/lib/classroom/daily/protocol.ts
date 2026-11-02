@@ -13,7 +13,9 @@
 //     raise someone else's hand or send a reaction in someone else's name;
 //   - lowering a hand and the spotlight are the TEACHER'S (the room's owner),
 //     and ignored from anyone else;
-//   - chat from a student is dropped while the teacher has locked the chat.
+//   - chat from a student is dropped while the teacher has locked the chat;
+//   - removing a chat message, or clearing the chat, is the TEACHER'S (the room's
+//     owner), and ignored from anyone else.
 //
 // Messages from the SERVER (a badge celebration…) are a different thing and are
 // checked by key, not by sender: see ../serverEvents.ts.
@@ -40,10 +42,36 @@ export type ControlWire =
 
 export type AppPayload =
   | { app: typeof APP; kind: 'chat'; id: string; text: string }
+  /** The teacher deleted one message: its author's user id and the message id. */
+  | { app: typeof APP; kind: 'chat-remove'; userId: string; id: string }
+  /** The teacher cleared the whole chat. */
+  | { app: typeof APP; kind: 'chat-clear' }
   | { app: typeof APP; kind: 'control'; control: ControlWire };
 
 export function chatPayload(id: string, text: string): AppPayload {
   return { app: APP, kind: 'chat', id, text };
+}
+
+export function chatRemovePayload(userId: string, id: string): AppPayload {
+  return { app: APP, kind: 'chat-remove', userId, id };
+}
+
+export function chatClearPayload(): AppPayload {
+  return { app: APP, kind: 'chat-clear' };
+}
+
+/** A message's text as it is sent, shown and saved: line breaks kept (`\n`), a long
+ * run of blank lines shortened to one, the edges trimmed. Null when nothing is left
+ * or it is too long. Must stay in step with the server's normalizeChatText
+ * (server/src/classroom/chat/chat-thread.ts), so a message reads the same live and
+ * when it is loaded again later. */
+export function normalizeChatText(raw: string): string | null {
+  const text = raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return text.length === 0 || text.length > MAX_CHAT_CHARS ? null : text;
 }
 
 export function controlPayload(control: ControlWire): AppPayload {
@@ -64,10 +92,17 @@ export function parseAppPayload(data: unknown): AppPayload | null {
   if (msg.kind === 'chat') {
     if (typeof msg.id !== 'string' || msg.id.length === 0 || msg.id.length > 64) return null;
     if (typeof msg.text !== 'string') return null;
-    const text = msg.text.trim();
-    if (text.length === 0 || text.length > MAX_CHAT_CHARS) return null;
-    return chatPayload(msg.id, text);
+    const text = normalizeChatText(msg.text);
+    return text === null ? null : chatPayload(msg.id, text);
   }
+
+  if (msg.kind === 'chat-remove') {
+    const author = userId(msg.userId);
+    if (!author || typeof msg.id !== 'string' || msg.id.length === 0 || msg.id.length > 64) return null;
+    return chatRemovePayload(author, msg.id);
+  }
+
+  if (msg.kind === 'chat-clear') return chatClearPayload();
 
   if (msg.kind === 'control') {
     const c = msg.control;
@@ -125,16 +160,28 @@ export function authorizeControl(control: ControlWire, sender: Sender): ControlM
   }
 }
 
+/** The key of a chat message: its author (a person, not a device — the same on
+ * every device and in the saved history) and the id they gave it. */
+export function chatKey(fromUserId: string, id: string): string {
+  return `${fromUserId}:${id}`;
+}
+
 /** A message in the class chat. */
 export interface ChatEntry {
-  /** Unique per message: the sender's connection and the id they gave it. */
+  /** Unique per message — see chatKey. */
   key: string;
+  /** The id the author gave it (with `fromUserId`, how the teacher deletes it). */
+  id: string;
   text: string;
-  /** When it arrived here (Daily does not say when it was sent). */
+  /** When it arrived here (Daily does not say when it was sent); for a saved
+   * message, when the server received it. */
   sentAt: number;
   fromUserId: string;
   fromName: string;
   fromRole: ClassroomRole;
+  /** Loaded from the saved history rather than heard in this class — so it never
+   * counts as unread and never plays the new-message tone. */
+  saved?: boolean;
 }
 
 /** The chat entry a message amounts to, or null when it is dropped: students'
@@ -147,11 +194,18 @@ export function acceptChat(
 ): ChatEntry | null {
   if (state.chatLocked && !sender.isOwner) return null;
   return {
-    key: `${sender.sessionId}:${payload.id}`,
+    key: chatKey(sender.userId, payload.id),
+    id: payload.id,
     text: payload.text,
     sentAt: now,
     fromUserId: sender.userId,
     fromName: sender.name,
     fromRole: sender.role,
   };
+}
+
+/** True when this sender may remove chat messages (delete one, or clear all):
+ * only the room's owner, the teacher. */
+export function mayRemoveChat(sender: Sender): boolean {
+  return sender.isOwner;
 }
