@@ -400,6 +400,32 @@ export class DailyRoomsService {
     });
   }
 
+  /**
+   * The room's shared state as it is now, or null when it cannot be known (Daily
+   * not configured, no meeting in progress, or Daily could not be asked). Callers
+   * use it to ENFORCE a setting on the server (the chat lock) and must treat null
+   * as "not locked" — a class is never shut out because Daily was slow.
+   * https://docs.daily.co/reference/rest-api/rooms/session/get-session-data
+   */
+  async getClassState(room: string): Promise<Record<string, unknown> | null> {
+    if (!this.isConfigured()) return null;
+    try {
+      const res = await this.request<{ data?: unknown } | undefined>(
+        'GET',
+        `/rooms/${enc(room)}/get-session-data`,
+      );
+      const data = res?.data;
+      return typeof data === 'object' && data !== null && !Array.isArray(data)
+        ? (data as Record<string, unknown>)
+        : null;
+    } catch (err) {
+      if (!(err instanceof DailyApiError && err.status === 404)) {
+        this.logger.warn(`Could not read the class state of ${room}: ${err}`);
+      }
+      return null;
+    }
+  }
+
   // ─── The HTTP call ─────────────────────────────────────────────────────
 
   private async request<T = unknown>(

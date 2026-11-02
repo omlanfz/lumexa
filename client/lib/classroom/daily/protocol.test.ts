@@ -4,8 +4,13 @@ import {
   MAX_CHAT_CHARS,
   acceptChat,
   authorizeControl,
+  chatClearPayload,
+  chatKey,
   chatPayload,
+  chatRemovePayload,
   controlPayload,
+  mayRemoveChat,
+  normalizeChatText,
   parseAppPayload,
   type Sender,
 } from './protocol.ts';
@@ -16,6 +21,9 @@ const student: Sender = { sessionId: 's-a', userId: 'u-a', name: 'Ada (Student)'
 test('what is sent is what is read: chat and each classroom signal', () => {
   const sent = [
     chatPayload('m1', 'hello class'),
+    chatPayload('m2', 'two\nlines'),
+    chatRemovePayload('u-a', 'm1'),
+    chatClearPayload(),
     controlPayload({ type: 'raise-hand', raised: true }),
     controlPayload({ type: 'lower-hand', userId: 'u-a' }),
     controlPayload({ type: 'reaction', emoji: '👍' }),
@@ -95,12 +103,13 @@ test('lowering a hand and the spotlight are the teacher’s alone', () => {
   assert.equal(authorizeControl({ type: 'spotlight', userId: null }, student), null);
 });
 
-test('chat is attributed to the real sender and keyed by their connection and the message', () => {
+test('chat is attributed to the real sender and keyed by the person and the message', () => {
   const payload = chatPayload('m1', 'hello');
   assert.equal(payload.kind, 'chat');
   const entry = acceptChat(payload as Extract<typeof payload, { kind: 'chat' }>, student, {}, 12345);
   assert.deepEqual(entry, {
-    key: 's-a:m1',
+    key: 'u-a:m1',
+    id: 'm1',
     text: 'hello',
     sentAt: 12345,
     fromUserId: 'u-a',
@@ -114,4 +123,40 @@ test('while the chat is locked a student’s message is dropped, the teacher’s
   assert.equal(acceptChat(payload, student, { chatLocked: true }, 1), null);
   assert.ok(acceptChat(payload, teacher, { chatLocked: true }, 1));
   assert.ok(acceptChat(payload, student, { chatLocked: false }, 1));
+});
+
+test('a message keeps its line breaks, and a long run of blank lines is shortened', () => {
+  assert.equal(normalizeChatText('  one\r\ntwo  \n\n\n\nthree\n'), 'one\ntwo\n\nthree');
+  const read = parseAppPayload({ app: 'lumexa', kind: 'chat', id: 'm', text: 'a\nb' });
+  assert.equal(read?.kind === 'chat' && read.text, 'a\nb');
+  assert.equal(normalizeChatText(' \n  '), null);
+  assert.equal(normalizeChatText('x'.repeat(MAX_CHAT_CHARS + 1)), null);
+});
+
+test('a message has the same key live and when it is loaded again, on any device', () => {
+  assert.equal(chatKey('u-a', 'm1'), 'u-a:m1');
+  const first = acceptChat(chatPayload('m1', 'hi') as Extract<ReturnType<typeof chatPayload>, { kind: 'chat' }>, student, {}, 1);
+  const otherDevice = acceptChat(
+    chatPayload('m1', 'hi') as Extract<ReturnType<typeof chatPayload>, { kind: 'chat' }>,
+    { ...student, sessionId: 's-a-phone' },
+    {},
+    2,
+  );
+  assert.equal(first?.key, otherDevice?.key);
+});
+
+test('deleting a message or clearing the chat is read from the wire, and only the teacher may do it', () => {
+  assert.deepEqual(parseAppPayload({ app: 'lumexa', kind: 'chat-remove', userId: 'u-a', id: 'm1' }), chatRemovePayload('u-a', 'm1'));
+  assert.deepEqual(parseAppPayload({ app: 'lumexa', kind: 'chat-clear' }), chatClearPayload());
+  for (const bad of [
+    { app: 'lumexa', kind: 'chat-remove', userId: '', id: 'm1' },
+    { app: 'lumexa', kind: 'chat-remove', userId: 'u-a', id: '' },
+    { app: 'lumexa', kind: 'chat-remove', userId: 'u-a' },
+    { app: 'lumexa', kind: 'chat-remove', userId: 'x'.repeat(65), id: 'm1' },
+    { app: 'lumexa', kind: 'chat-remove', userId: 5, id: 'm1' },
+  ]) {
+    assert.equal(parseAppPayload(bad), null, JSON.stringify(bad));
+  }
+  assert.equal(mayRemoveChat(teacher), true);
+  assert.equal(mayRemoveChat(student), false);
 });

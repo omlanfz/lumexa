@@ -35,6 +35,8 @@ class FakeDaily {
   seen: Seen[] = [];
   rooms = new Map<string, { name: string; url: string }>();
   presence: Record<string, unknown>[] = [];
+  /** What GET get-session-data answers with (the room's shared state). */
+  sessionData: Record<string, unknown> = {};
   /** When set, every request fails with this status and body. */
   failWith: { status: number; body: unknown } | null = null;
   /** Rooms POST /rooms answers "already exists" for, once. */
@@ -82,6 +84,7 @@ class FakeDaily {
     this.seen = [];
     this.rooms.clear();
     this.presence = [];
+    this.sessionData = {};
     this.failWith = null;
     this.raceOnCreate.clear();
     this.tokenCounter = 0;
@@ -191,6 +194,12 @@ class FakeDaily {
       const extra = only(body, ['ids', 'user_ids', 'ban']);
       if (extra.length) return bad(`unknown fields: ${extra.join(', ')}`);
       return reply(200, { ejectedIds: body?.ids ?? [] });
+    }
+    if (
+      (m = path.match(/^\/v1\/rooms\/([^/]+)\/get-session-data$/)) &&
+      method === 'GET'
+    ) {
+      return reply(200, { room_name: m[1], data: this.sessionData });
     }
     if (
       (m = path.match(/^\/v1\/rooms\/([^/]+)\/set-session-data$/)) &&
@@ -704,6 +713,27 @@ describe('DailyRoomsService (against a fake Daily REST API)', () => {
       await expect(
         service.setClassState('lesson-abc', { recording: true }),
       ).rejects.toBeInstanceOf(DailyApiError);
+    });
+  });
+
+  describe('getClassState', () => {
+    it('reads the room’s shared state', async () => {
+      daily.sessionData = { chatLocked: true, studentsMuted: false };
+      await expect(service.getClassState('lesson-abc')).resolves.toEqual({
+        chatLocked: true,
+        studentsMuted: false,
+      });
+      expect(lastSeen()).toMatchObject({
+        method: 'GET',
+        path: '/v1/rooms/lesson-abc/get-session-data',
+      });
+    });
+
+    it('is null — not an error — when there is no meeting or Daily cannot be asked', async () => {
+      daily.failWith = { status: 404, body: { error: 'not-found' } };
+      await expect(service.getClassState('lesson-abc')).resolves.toBeNull();
+      daily.failWith = { status: 500, body: { error: 'internal-error' } };
+      await expect(service.getClassState('lesson-abc')).resolves.toBeNull();
     });
   });
 
