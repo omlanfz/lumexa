@@ -36,6 +36,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { standardInstructions } from '../assessments/bank/bank.constants';
 import type { BankTestType } from '../assessments/bank/bank.types';
+import { ADVANCED_DATA_SCIENCE_FIXES } from './advanced-data-science.content';
 
 const DATA_DIR = path.join(__dirname, '../../prisma/curriculum-data');
 
@@ -617,6 +618,7 @@ export async function seedCurriculumContent(
   await backfillProjectLinks(prisma, logger, 'data-scientist-path');
   await backfillDataScientistKeyTerminologyTables(prisma, logger);
   await backfillWebDeveloperLessonContent(prisma, logger);
+  await backfillAdvancedDataScience(prisma, logger);
 }
 
 // ── Portfolio-project links (per pathway) ───────────────────────────────────
@@ -985,5 +987,67 @@ async function backfillWebDeveloperLessonContent(
     if (updated > 0) {
       logger.log(`[curriculum-seed] ${course.slug}: backfilled full lesson material on ${updated} lesson(s).`);
     }
+  }
+}
+
+// ── Advanced Data Science (custom course): full lesson redesign ────────────
+//
+// "Advanced Data Science" (slug: advanced-data-science) is a one-off CUSTOM
+// curriculum (Course.isCustom) an admin built via the Custom Curriculum
+// Builder, importing lessons from little-coders-path's
+// python-for-young-builders module (orders 1-8) and game-creator-path's
+// python-arcade-games module (order 10 and 17) — see lessonImportData in
+// curriculum.service.ts. Unlike every pathway above, this course is never
+// touched by the course loop in seedCurriculumContent (that only processes
+// PATHWAY_SLUGS + lumexa-odyssey) and has no CourseModule of its own —
+// custom course lessons are always flat, moduleId: null — so it needs its
+// own direct, course-slug-scoped backfill, the same shape as
+// backfillWebDeveloperLessonContent above. The little-coders-path/
+// game-creator-path source JSON is deliberately left untouched: those
+// modules still serve every other course/student using them unchanged.
+// See advanced-data-science.content.ts for the actual replacement content
+// (title/objectives/contentMarkdown/homework/codeSnippets/projectLinks per
+// lesson) and why each one changed. Orders 11-16 and 18-46 have no entry in
+// that file and are therefore never touched here, left exactly as imported.
+//
+// Idempotent and admin-safe: each fix only applies while the lesson's
+// CURRENT title still exactly matches its known original (pre-redesign)
+// title — so re-running this on every boot is a no-op once applied, and an
+// admin who has since retitled a lesson by hand is never overwritten.
+async function backfillAdvancedDataScience(
+  prisma: PrismaClient,
+  logger: { log: (msg: string) => void; warn: (msg: string) => void },
+) {
+  const course = await prisma.course.findUnique({
+    where: { slug: 'advanced-data-science' },
+    select: { id: true },
+  });
+  if (!course) return;
+
+  const lessons = await prisma.lesson.findMany({
+    where: { courseId: course.id, order: { in: ADVANCED_DATA_SCIENCE_FIXES.map((f) => f.order) } },
+    select: { id: true, order: true, title: true },
+  });
+  const byOrder = new Map(lessons.map((l) => [l.order, l]));
+
+  let updated = 0;
+  for (const fix of ADVANCED_DATA_SCIENCE_FIXES) {
+    const lesson = byOrder.get(fix.order);
+    if (!lesson || lesson.title !== fix.matchTitle) continue;
+    await prisma.lesson.update({
+      where: { id: lesson.id },
+      data: {
+        ...(fix.title ? { title: fix.title } : {}),
+        objectives: fix.objectives,
+        contentMarkdown: fix.contentMarkdown,
+        homework: fix.homework,
+        codeSnippets: fix.codeSnippets as unknown as object,
+        projectLinks: fix.projectLinks as unknown as object,
+      },
+    });
+    updated++;
+  }
+  if (updated > 0) {
+    logger.log(`[curriculum-seed] advanced-data-science: redesigned ${updated} lesson(s).`);
   }
 }
