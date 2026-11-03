@@ -996,7 +996,7 @@ async function backfillWebDeveloperLessonContent(
 // curriculum (Course.isCustom) an admin built via the Custom Curriculum
 // Builder, importing lessons from little-coders-path's
 // python-for-young-builders module (orders 1-8) and game-creator-path's
-// python-arcade-games module (order 10 and 17) — see lessonImportData in
+// python-arcade-games module (orders 10-17) — see lessonImportData in
 // curriculum.service.ts. Unlike every pathway above, this course is never
 // touched by the course loop in seedCurriculumContent (that only processes
 // PATHWAY_SLUGS + lumexa-odyssey) and has no CourseModule of its own —
@@ -1006,13 +1006,15 @@ async function backfillWebDeveloperLessonContent(
 // game-creator-path source JSON is deliberately left untouched: those
 // modules still serve every other course/student using them unchanged.
 // See advanced-data-science.content.ts for the actual replacement content
-// (title/objectives/contentMarkdown/homework/codeSnippets/projectLinks per
-// lesson) and why each one changed. Orders 11-16 and 18-46 have no entry in
-// that file and are therefore never touched here, left exactly as imported.
+// (title/objectives/contentMarkdown/homework/checkpoint/codeSnippets/
+// projectLinks per lesson) and why each one changed — including orders
+// 11-16, reimagined as one cumulative "Cosmic Defender" Pygame project.
+// Order 18 (Course Test) and orders 19-46 have no entry in that file and
+// are therefore never touched here, left exactly as imported.
 //
 // Idempotent and admin-safe: each fix only applies while the lesson's
-// CURRENT title still exactly matches its known original (pre-redesign)
-// title — so re-running this on every boot is a no-op once applied, and an
+// CURRENT title still exactly matches one of its known prior (pre-this-fix)
+// titles — so re-running this on every boot is a no-op once applied, and an
 // admin who has since retitled a lesson by hand is never overwritten.
 async function backfillAdvancedDataScience(
   prisma: PrismaClient,
@@ -1033,7 +1035,11 @@ async function backfillAdvancedDataScience(
   let updated = 0;
   for (const fix of ADVANCED_DATA_SCIENCE_FIXES) {
     const lesson = byOrder.get(fix.order);
-    if (!lesson || lesson.title !== fix.matchTitle) continue;
+    if (!lesson) continue;
+    const titleMatches = Array.isArray(fix.matchTitle)
+      ? fix.matchTitle.includes(lesson.title)
+      : lesson.title === fix.matchTitle;
+    if (!titleMatches) continue;
     await prisma.lesson.update({
       where: { id: lesson.id },
       data: {
@@ -1041,6 +1047,7 @@ async function backfillAdvancedDataScience(
         objectives: fix.objectives,
         contentMarkdown: fix.contentMarkdown,
         homework: fix.homework,
+        ...(fix.checkpoint !== undefined ? { checkpoint: fix.checkpoint } : {}),
         codeSnippets: fix.codeSnippets as unknown as object,
         projectLinks: fix.projectLinks as unknown as object,
       },
