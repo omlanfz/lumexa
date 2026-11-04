@@ -30,7 +30,17 @@ test('credits are always rounded DOWN to whole classes — never a fraction, nev
   assert.equal(formatCredits(4.99), '4');
   assert.equal(formatCredits(0.9), '0');
   assert.equal(formatCredits(0), '0');
-  assert.equal(formatCredits(-1.5), '0');
+});
+
+test('an overdrawn student sees the negative number — the pill does not stop at 0', () => {
+  assert.equal(formatCredits(-1), '-1');
+  assert.equal(formatCredits(-2), '-2');
+  assert.equal(formatCredits(-12), '-12');
+  // …rounded the same way the backend does: a part-class debt is the next whole credit owed.
+  assert.equal(formatCredits(-1.5), '-2');
+  // a hair below zero is zero, not "-0" or "-1"
+  assert.equal(formatCredits(-0.0000001), '0');
+  assert.equal(formatCredits(-0), '0');
 });
 
 test('"1 Credit" is singular, everything else plural', () => {
@@ -39,6 +49,8 @@ test('"1 Credit" is singular, everything else plural', () => {
   assert.equal(creditsLabel(8), 'Credits');
   assert.equal(creditsLabel(1.9), 'Credit'); // shown as 1
   assert.equal(creditsLabel(0.9), 'Credits'); // shown as 0
+  assert.equal(creditsLabel(-1), 'Credit'); // "-1 Credit"
+  assert.equal(creditsLabel(-2), 'Credits');
 });
 
 test('the credits tooltip is the agreed wording', () => {

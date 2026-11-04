@@ -34,10 +34,13 @@ export interface RankInfo {
 }
 
 export interface CreditsInfo {
-  /** Whole classes the student can still attend (the backend already rounds
-   * down; formatCredits floors again so a fraction can never be shown). */
+  /** Whole credits (1 credit = 1 class). The backend already rounds down;
+   * formatCredits floors again so a fraction can never be shown. Negative when
+   * the student is overdrawn. */
   remaining: number;
+  /** One to three credits left — the pill turns yellow. */
   low: boolean;
+  /** No credits left, or overdrawn — the pill turns red. */
   exhausted: boolean;
 }
 
@@ -135,13 +138,15 @@ export interface ProgressData {
 }
 
 /** Credits are whole classes and are always rounded DOWN for the student:
- * 4.5 → "4", 4.9 → "4", never below "0". */
+ * 4.5 → "4", 4.9 → "4". An overdrawn student sees the negative number ("-2"),
+ * not "0". */
 export function formatCredits(n: number): string {
-  return String(Math.max(0, Math.floor(n + 1e-6)));
+  return String(Math.floor(n + 1e-6));
 }
 
+/** "Credit" for exactly one (or minus one), "Credits" for everything else. */
 export function creditsLabel(n: number): string {
-  return formatCredits(n) === '1' ? 'Credit' : 'Credits';
+  return Math.abs(Number(formatCredits(n))) === 1 ? 'Credit' : 'Credits';
 }
 
 export const CREDITS_TOOLTIP =
