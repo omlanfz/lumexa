@@ -7,6 +7,7 @@ import { getStoredRole, getStoredToken, parseStoredUser } from '@/lib/storage';
 import { isDemoStudentEmail } from '@/lib/demoClassroom';
 import LiveClassCard, { LiveClass } from '@/components/student/LiveClassCard';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
+import CreditsReminder from '@/components/student/CreditsReminder';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
 import CertificatesCard from '@/components/student/CertificatesCard';
 import HomeworkDueCard, { PendingHomeworkItem } from '@/components/student/HomeworkDueCard';
@@ -337,6 +338,9 @@ export default function StudentDashboardPage() {
         />
       ) : (
         <>
+          {/* Class-credit reminder — only when the balance is low (3 or fewer) */}
+          <CreditsReminder />
+
           {/* 2. Live / Next Class — the primary, largest card */}
           <LiveClassCard liveClass={liveClass} receivedAt={receivedAt} onSync={() => void fetchDashboard({ quiet: true })} />
 

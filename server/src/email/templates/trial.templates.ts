@@ -11,8 +11,11 @@
 // Every value that came from the public form (names, message, program) is
 // HTML-escaped. Times are always shown in Bangladesh Time with the timezone
 // spelled out, plus the parent's own local time when it differs.
+//
+// Every parent email opens "Dear Parent," like all Lumexa emails to a family, so
+// `parentName` is still accepted (callers pass it) but no longer printed.
 
-import { emailButton, emailLayout, escapeHtml } from './layout';
+import { dearParent, emailButton, emailLayout, escapeHtml } from './layout';
 
 export interface TrialEmailAppointment {
   /** "Wednesday, 29 October 2026" (Bangladesh time) */
@@ -68,8 +71,7 @@ export function trialBookingConfirmedParentEmail(params: {
   programsUrl: string;
   contact: TrialContact;
 }) {
-  const { parentName, childName, program, appointment, programsUrl, contact } =
-    params;
+  const { childName, program, appointment, programsUrl, contact } = params;
   return {
     subject: `Trial class request received: ${childName} — ${appointment.date}`,
     html: emailLayout({
@@ -77,7 +79,7 @@ export function trialBookingConfirmedParentEmail(params: {
       previewText: `We received your request and reserved ${escapeHtml(appointment.date)} for ${escapeHtml(childName)}'s 30-minute trial.`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">We received your trial class request ✅</h2>
-        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">Thank you! We've received your request, and the time you chose is <strong>reserved</strong> for <strong>${escapeHtml(childName)}</strong>'s free 30-minute trial class. Nothing more is needed from you to hold it.</p>
         ${appointmentBox(appointment, program)}
         <p style="margin: 0 0 8px;"><strong>What happens next:</strong> we're assigning a Lumexa teacher. As soon as that's done we'll email and WhatsApp you the trial details and a private link to join the online classroom — no account or sign-up needed. We'll also remind you an hour before the class.</p>
@@ -107,8 +109,7 @@ export function trialClassDetailsParentEmail(params: {
   joinUrl: string;
   contact: TrialContact;
 }) {
-  const { parentName, childName, program, appointment, joinUrl, contact } =
-    params;
+  const { childName, program, appointment, joinUrl, contact } = params;
   return {
     subject: `Your trial class link: ${childName} — ${appointment.date}, ${appointment.timeRange}`,
     html: emailLayout({
@@ -116,7 +117,7 @@ export function trialClassDetailsParentEmail(params: {
       previewText: `${escapeHtml(childName)}'s trial class is confirmed with a teacher. Here is the link to join.`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your trial class is ready 🎉</h2>
-        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">A Lumexa teacher has been assigned to <strong>${escapeHtml(childName)}</strong>'s free trial class. Here are the details and the link to join.</p>
         ${appointmentBox(appointment, program)}
         ${joinBox(joinUrl, childName)}
@@ -136,7 +137,7 @@ export function trialReminderParentEmail(params: {
   joinUrl: string;
   contact: TrialContact;
 }) {
-  const { parentName, childName, appointment, joinUrl, contact } = params;
+  const { childName, appointment, joinUrl, contact } = params;
   return {
     subject: `Starting in 1 hour: ${childName}'s trial class (${appointment.timeRange})`,
     html: emailLayout({
@@ -144,7 +145,7 @@ export function trialReminderParentEmail(params: {
       previewText: `${escapeHtml(childName)}'s trial class starts in about an hour. Your join link is inside.`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Reminder: the trial class starts in 1 hour ⏰</h2>
-        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;"><strong>${escapeHtml(childName)}</strong>'s free trial class is about to start.</p>
         ${appointmentBox(appointment, null)}
         ${joinBox(joinUrl, childName)}
@@ -205,15 +206,8 @@ export function trialRescheduledParentEmail(params: {
   /** Present once a teacher is assigned: the SAME private link as before. */
   joinUrl?: string | null;
 }) {
-  const {
-    parentName,
-    childName,
-    program,
-    previous,
-    appointment,
-    contact,
-    joinUrl,
-  } = params;
+  const { childName, program, previous, appointment, contact, joinUrl } =
+    params;
   return {
     subject: `Updated time for ${childName}'s trial class — ${appointment.date}`,
     html: emailLayout({
@@ -221,7 +215,7 @@ export function trialRescheduledParentEmail(params: {
       previewText: `${escapeHtml(childName)}'s trial class has a new time: ${escapeHtml(appointment.date)}.`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your trial class has a new time</h2>
-        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">We've moved <strong>${escapeHtml(childName)}</strong>'s free trial class. Your time is still reserved — here is the updated time:</p>
         <div style="${BOX}">
           <p style="margin: 0; color: #94a3b8; text-decoration: line-through;"><strong>Previously:</strong> ${escapeHtml(previous.date)}, ${escapeHtml(previous.timeRange)}</p>
@@ -249,15 +243,14 @@ export function trialCancelledParentEmail(params: {
   trialUrl: string;
   contact: TrialContact;
 }) {
-  const { parentName, childName, appointment, note, trialUrl, contact } =
-    params;
+  const { childName, appointment, note, trialUrl, contact } = params;
   return {
     subject: `Cancelled: ${childName}'s trial class on ${appointment.date}`,
     html: emailLayout({
       title: 'Trial class cancelled',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your trial class has been cancelled</h2>
-        <p style="margin: 0 0 8px;">Hi ${escapeHtml(parentName)},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">The free trial class for <strong>${escapeHtml(childName)}</strong> has been cancelled:</p>
         <div style="${BOX}">
           <p style="margin: 0; color: #94a3b8; text-decoration: line-through;">${escapeHtml(appointment.date)}, ${escapeHtml(appointment.timeRange)} (${escapeHtml(appointment.timezoneLabel)})</p>

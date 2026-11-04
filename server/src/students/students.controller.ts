@@ -81,6 +81,16 @@ export class StudentsController {
     return this.studentsService.getMyNavSummary(req.user.userId);
   }
 
+  // The Payments & Credits page: balance, per-class price, what each credit
+  // package costs and the confirmed payment history. Read-only — requesting
+  // credits is a WhatsApp chat with the admin, never a write.
+  @Get('me/payments')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.STUDENT)
+  getMyPayments(@Request() req: any) {
+    return this.studentsService.getMyPayments(req.user.userId);
+  }
+
   @Get('me/lessons')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles(Role.STUDENT)

@@ -21,6 +21,7 @@ import {
   PAYMENT_METHOD_LABELS,
 } from "@/components/admin/AdminUI";
 import { ClassTypePill, Notice } from "@/components/admin/batches/BatchUI";
+import type { PackageQuote } from "@/lib/student/payments";
 import ScheduleFields, {
   EMPTY_SCHEDULE,
   scheduleProblem,
@@ -379,9 +380,12 @@ export default function StudentDetailPage() {
                   ))}
                 </div>
                 {student.ledgerSummary.credits.remainingRaw < 0 && (
-                  <p className="mt-2 text-xs text-[var(--a-danger,#dc2626)]">
+                  <p className="mt-2 text-xs text-[var(--a-danger,#dc2626)]" data-testid="overdrawn-note">
                     Overdrawn by {formatLessons(Math.abs(student.ledgerSummary.credits.remainingRaw))} class
-                    {Math.abs(student.ledgerSummary.credits.remainingRaw) === 1 ? "" : "es"} — the student sees 0 credits until the next payment is recorded.
+                    {Math.abs(student.ledgerSummary.credits.remainingRaw) === 1 ? "" : "es"} — the student sees{" "}
+                    {student.ledgerSummary.credits.remainingWhole} credits until the next payment is recorded. Record that
+                    payment for the package <em>plus</em> the overdue lessons (Record payment pre-fills it) so they end up
+                    with the full package they asked for.
                   </p>
                 )}
               </div>
@@ -557,6 +561,8 @@ export default function StudentDetailPage() {
         <LedgerEntryModal
           type={modal}
           courseName={student.assignedCourse?.title ?? null}
+          quotes={student.packageQuotes ?? []}
+          rateCents={student.ledgerSummary?.rateCents ?? 0}
           onSubmit={async (body) => {
             const path =
               modal === "PAYMENT_RECEIVED" ? "payments" : modal === "REFUND" ? "refunds" : "adjustments";
@@ -1303,11 +1309,17 @@ const LEDGER_MODAL_META = {
 function LedgerEntryModal({
   type,
   courseName,
+  quotes,
+  rateCents,
   onSubmit,
   onClose,
 }: {
   type: "PAYMENT_RECEIVED" | "REFUND" | "ADMIN_ADJUSTMENT";
   courseName: string | null;
+  /** What each credit package costs this student (the backend's quote — the same
+   * figures the student saw), overdue credits included. */
+  quotes: PackageQuote[];
+  rateCents: number;
   onSubmit: (body: Record<string, any>) => Promise<void>;
   onClose: () => void;
 }) {
@@ -1320,6 +1332,23 @@ function LedgerEntryModal({
   const [error, setError] = useState<string | null>(null);
 
   const takesPaymentMethod = type === "PAYMENT_RECEIVED" || type === "REFUND";
+  // Only a student with a known per-class price can be quoted.
+  const priced = quotes.length > 0 && quotes[0].totalCents !== null;
+  const overdueCredits = quotes[0]?.overdueCredits ?? 0;
+
+  // Fill the form with exactly what the student was quoted for this package.
+  const prefill = (q: PackageQuote) => {
+    setAmountTaka(String((q.totalCents ?? 0) / 100));
+    setLessonsPurchased(String(q.lessonsToRecord));
+    setDescription((d) =>
+      d.trim()
+        ? d
+        : q.overdueCredits > 0
+          ? `${q.credits} credits + ${q.overdueCredits} overdue credits settled`
+          : `${q.credits} credits`,
+    );
+    setError(null);
+  };
 
   const submit = async () => {
     const amount = Number(amountTaka);
@@ -1364,6 +1393,42 @@ function LedgerEntryModal({
           <p className="text-xs text-[var(--a-text-faint)]">
             Curriculum: {courseName ?? "Unassigned"}. The effective per-lesson rate is calculated as amount ÷ lessons purchased.
           </p>
+        )}
+        {type === "PAYMENT_RECEIVED" && priced && (
+          <div
+            data-testid="payment-quotes"
+            className="space-y-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] p-3"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)]">
+              Pre-fill from a credit request
+            </p>
+            {overdueCredits > 0 && (
+              <p className="text-xs text-[var(--a-danger-text)]" data-testid="payment-quotes-overdue">
+                Overdrawn by {overdueCredits} credit{overdueCredits === 1 ? "" : "s"} ({formatBDT(quotes[0].overdueCents ?? 0)}).
+                Record the payment for the package <em>plus</em> those {overdueCredits} lesson
+                {overdueCredits === 1 ? "" : "s"} — the buttons below do — so the balance ends on exactly the package the
+                parent asked for and the per-lesson rate stays {formatBDT(rateCents)}.
+              </p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {quotes.map((q) => (
+                <button
+                  key={q.credits}
+                  type="button"
+                  onClick={() => prefill(q)}
+                  data-testid={`prefill-${q.credits}`}
+                  className="rounded-lg border border-[var(--a-border)] px-3 py-1.5 text-left text-xs font-semibold text-[var(--a-text)] hover:bg-[var(--a-nav-hover)]"
+                >
+                  {q.credits} credits · {formatBDT(q.totalCents ?? 0)}
+                  {q.overdueCredits > 0 && (
+                    <span className="block font-normal text-[var(--a-text-faint)]">
+                      {q.credits} + {q.overdueCredits} overdue = {q.lessonsToRecord} lessons
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>

@@ -185,7 +185,6 @@ export class CertificatesService {
           studentUserId,
           courseId,
           studentName: student.fullName,
-          billingContactName: student.fullName,
           courseName: course.title,
           progressSummaryHtml,
           recommendedCourseName: recommended?.title ?? null,

@@ -19,9 +19,20 @@ import { getClassWindow } from '../scheduling/lesson-window.util';
 import { CreateStudentDto } from './dto/create-student.dto';
 import { RegisterStudentDto } from './dto/register-student.dto';
 import { UpdateStudentProfileDto } from './dto/update-student-profile.dto';
-import { Prisma, SpaceRank, AccountStatus } from '@prisma/client';
+import {
+  Prisma,
+  SpaceRank,
+  AccountStatus,
+  StudentLedgerEntryType,
+} from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { StudentLedgerService } from './student-ledger.service';
+import {
+  DEFAULT_CREDIT_PACKAGE,
+  creditLevel,
+  overdueCreditsOf,
+  quoteCreditPackages,
+} from './credit-packages';
 import { StudentProgressService } from './progress/student-progress.service';
 import {
   BADGE_DEFS,
@@ -702,6 +713,7 @@ export class StudentsService {
     ]);
     if (!user) throw new NotFoundException('Student not found.');
     const { result } = synced;
+    const level = creditLevel(credits.remainingWhole);
     return {
       id: user.id,
       fullName: user.fullName,
@@ -711,12 +723,67 @@ export class StudentsService {
       totalSessions: result.sessions,
       streakWeeks: result.streak.current,
       rank: this.rankPayload(result),
-      // Whole classes only — a student never sees a part-credit (4.9 → 4).
+      // Whole classes only — a student never sees a part-credit (4.9 → 4). An
+      // overdrawn student sees the negative number (−2), not 0.
       credits: {
         remaining: credits.remainingWhole,
-        low: credits.remainingWhole >= 1 && credits.remainingWhole < 3,
-        exhausted: credits.remainingWhole < 1,
+        low: level === 'low',
+        exhausted: level === 'exhausted',
       },
+    };
+  }
+
+  /**
+   * Everything the student's Payments & Credits page shows: the balance
+   * (negative when overdrawn), the per-class price, what each credit package
+   * would cost this student (see credit-packages.ts) and their confirmed
+   * payment history. Read-only: asking for credits is a WhatsApp chat with the
+   * admin, so nothing is created or changed here — only an admin recording the
+   * confirmed payment adds credits.
+   */
+  async getMyPayments(userId: string) {
+    const [user, summary, history] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, fullName: true, assignedClassType: true },
+      }),
+      this.ledger.getSummary(userId),
+      this.ledger.getPaymentHistory(userId),
+    ]);
+    if (!user) throw new NotFoundException('Student not found.');
+
+    const balance = summary.credits?.remainingWhole ?? 0;
+    return {
+      studentName: user.fullName,
+      credits: {
+        remaining: balance,
+        overdue: overdueCreditsOf(balance),
+        level: creditLevel(balance),
+      },
+      pricing: {
+        // The student's own per-class rate; null until a payment has set one.
+        rateCents: summary.rateCents > 0 ? summary.rateCents : null,
+        classType: user.assignedClassType,
+        courseName: summary.courseName,
+      },
+      defaultPackage: DEFAULT_CREDIT_PACKAGE,
+      packages: quoteCreditPackages({
+        rateCents: summary.rateCents,
+        balance,
+        studentName: user.fullName,
+      }),
+      history: history.map((entry) => {
+        const refund = entry.type === StudentLedgerEntryType.REFUND;
+        return {
+          id: entry.id,
+          date: entry.createdAt,
+          kind: refund ? ('REFUND' as const) : ('PAYMENT' as const),
+          status: refund ? ('REFUNDED' as const) : ('CONFIRMED' as const),
+          amountCents: entry.amountCents,
+          credits: refund ? null : entry.lessonsPurchased,
+          courseName: entry.courseName,
+        };
+      }),
     };
   }
 

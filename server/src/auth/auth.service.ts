@@ -202,6 +202,7 @@ export class AuthService {
         this.notifications
           .sendPasswordResetEmail(user.email, {
             name: user.fullName,
+            role: user.role,
             token,
             expiresMinutes: RESET_TOKEN_TTL_MINUTES,
           })

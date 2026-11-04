@@ -31,6 +31,7 @@ import {
 } from '../../batches/testing/batch-world';
 import { createBatchWithSession } from '../../batches/testing/batch-fixtures';
 import { StudentProgressService } from './student-progress.service';
+import { creditLevel, quoteCreditPackages } from '../credit-packages';
 
 const describeDb = IT_DB_URL ? describe : describe.skip;
 
@@ -482,7 +483,7 @@ describeDb('Student progress & credits (real Postgres)', () => {
       expect(c.remainingWhole).toBe(4);
     });
 
-    it('never shows a negative balance', async () => {
+    it('shows a negative balance once the student is overdrawn — it does not stop at 0', async () => {
       const ada = await student('ada');
       await pay(ada.id, 1000, 1);
       for (const n of [1, 2]) {
@@ -493,9 +494,114 @@ describeDb('Student progress & credits (real Postgres)', () => {
         });
       }
       const credits = await w.ledger.getCredits(ada.id);
-      expect(credits.remaining).toBe(0);
-      expect(credits.remainingWhole).toBe(0);
-      expect(credits.remainingRaw).toBe(-1);
+      expect(credits.remaining).toBe(0); // the admin "Remaining" tile still floors at 0…
+      expect(credits.remainingRaw).toBe(-1); // …next to the exact, negative figure
+      expect(credits.remainingWhole).toBe(-1); // and the student sees what is owed
+      expect(creditLevel(credits.remainingWhole)).toBe('exhausted');
+    });
+
+    // The student is overdrawn by 2 credits and asks for 8 new ones. The quote
+    // charges the 2 overdue credits on top, the admin records that single
+    // payment as 10 lessons, and the student ends up with the full 8.
+    describe('settling overdue credits with a requested package', () => {
+      const overdraw = async () => {
+        const ada = await student('ada');
+        await pay(ada.id, 1000, 1); // ৳1000 / class, 1 credit
+        for (const n of [1, 2, 3]) {
+          const c = await liveClass(ada.id, n);
+          await w.finalization.finalizeLesson(c.id, {
+            outcome: 'COMPLETED',
+            actor: { role: 'TEACHER', userId: teacher.id },
+          });
+        }
+        return ada;
+      };
+
+      it('quotes (8 + 2) × the rate, and recording it leaves exactly 8 credits at the same rate', async () => {
+        const ada = await overdraw();
+        const before = await w.ledger.getSummary(ada.id);
+        expect(before.credits?.remainingWhole).toBe(-2);
+        expect(before.rateCents).toBe(100_000);
+
+        const [p8] = quoteCreditPackages({
+          rateCents: before.rateCents,
+          balance: before.credits!.remainingWhole,
+          studentName: 'ada',
+        });
+        expect(p8).toMatchObject({
+          credits: 8,
+          overdueCredits: 2,
+          totalCents: 1_000_000,
+          lessonsToRecord: 10,
+        });
+
+        // Asking for the package changed nothing.
+        expect(
+          (await w.ledger.getSummary(ada.id)).credits?.remainingWhole,
+        ).toBe(-2);
+
+        // The admin confirms the real payment: ৳10,000 for 10 lessons.
+        await pay(ada.id, p8.totalCents! / 100, p8.lessonsToRecord);
+
+        const after = await w.ledger.getSummary(ada.id);
+        expect(after.credits?.remainingWhole).toBe(8); // the full package
+        expect(after.credits?.remaining).toBe(8);
+        expect(after.rateCents).toBe(before.rateCents); // price unchanged
+        expect(after.credits).toMatchObject({
+          purchased: 11, // 1 + 10
+          used: 3,
+          adjustments: 0, // purchased − used + adjustments = remaining
+        });
+        expect(after.paymentBadge).toBeNull();
+      });
+
+      it('records the package alone and the student is NOT left with the full package (why the overdue credits are part of the total)', async () => {
+        const ada = await overdraw();
+        await pay(ada.id, 8000, 8); // only 8 lessons' worth: the 2 overdue eat into it
+        expect((await w.ledger.getCredits(ada.id)).remainingWhole).toBe(6);
+      });
+
+      it('payment history shows the confirmed payments only — no per-class deductions', async () => {
+        const ada = await overdraw();
+        await pay(ada.id, 10_000, 10);
+        const history = await w.ledger.getPaymentHistory(ada.id);
+        expect(
+          history.map((h) => [h.type, h.amountCents, h.lessonsPurchased]),
+        ).toEqual([
+          ['PAYMENT_RECEIVED', 1_000_000, 10],
+          ['PAYMENT_RECEIVED', 100_000, 1],
+        ]);
+        expect(Object.keys(history[0]).sort()).toEqual(
+          [
+            'amountCents',
+            'courseName',
+            'createdAt',
+            'id',
+            'lessonsPurchased',
+            'type',
+          ].sort(),
+        );
+      });
+
+      it('the admin badge agrees with the student: low from 3 credits, exhausted below 1', async () => {
+        const ada = await student('ada');
+        await pay(ada.id, 4000, 4); // 4 credits
+        expect((await w.ledger.getSummary(ada.id)).paymentBadge).toBeNull();
+        await w.ledger.recordAdjustment(ada.id, admin.id, {
+          amountTaka: -1000,
+          description: 'one class less',
+        });
+        expect((await w.ledger.getSummary(ada.id)).paymentBadge?.level).toBe(
+          'due_soon', // 3 credits
+        );
+        await w.ledger.recordAdjustment(ada.id, admin.id, {
+          amountTaka: -2500,
+          description: 'two and a half classes less',
+        });
+        expect((await w.ledger.getSummary(ada.id)).paymentBadge?.level).toBe(
+          'exhausted', // 0.5 credits is shown to the student as 0
+        );
+      });
     });
   });
 });

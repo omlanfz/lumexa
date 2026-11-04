@@ -307,11 +307,17 @@ export class NotificationsService {
   /** Never deduped — a parent/teacher/student may legitimately request a new reset link more than once. */
   async sendPasswordResetEmail(
     to: string,
-    data: { name: string; token: string; expiresMinutes: number },
+    data: {
+      name: string;
+      role?: string;
+      token: string;
+      expiresMinutes: number;
+    },
   ): Promise<void> {
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${data.token}`;
     const { subject, html } = passwordResetEmail({
       name: data.name,
+      role: data.role,
       resetUrl,
       expiresMinutes: data.expiresMinutes,
     });
@@ -439,19 +445,21 @@ export class NotificationsService {
     await this.send(to, subject, html, 'ACHIEVEMENT', key);
   }
 
+  /** `paymentUrl` is the wa.me link to the admin's WhatsApp with the payment
+   * request typed in (see students/credit-packages.ts) — payments are arranged
+   * by hand, so the "Make a payment" button opens that chat. */
   async sendPackageExpiringSoon(
     to: string,
     data: {
       studentUserId: string;
       studentName: string;
-      billingContactName: string;
-      lessonsRemaining: number;
+      creditsRemaining: number;
       courseName: string;
+      paymentUrl: string;
       monthBucket: string;
     },
   ): Promise<void> {
-    const paymentUrl = `${process.env.FRONTEND_URL}/dashboard`;
-    const { subject, html } = packageExpiringSoonEmail({ ...data, paymentUrl });
+    const { subject, html } = packageExpiringSoonEmail(data);
     await this.send(
       to,
       subject,
@@ -466,13 +474,12 @@ export class NotificationsService {
     data: {
       studentUserId: string;
       studentName: string;
-      billingContactName: string;
       courseName: string;
+      paymentUrl: string;
       monthBucket: string;
     },
   ): Promise<void> {
-    const paymentUrl = `${process.env.FRONTEND_URL}/dashboard`;
-    const { subject, html } = packageExpiredEmail({ ...data, paymentUrl });
+    const { subject, html } = packageExpiredEmail(data);
     await this.send(
       to,
       subject,
@@ -488,7 +495,6 @@ export class NotificationsService {
       studentUserId: string;
       courseId: string;
       studentName: string;
-      billingContactName: string;
       courseName: string;
       progressSummaryHtml: string;
       recommendedCourseName: string | null;
