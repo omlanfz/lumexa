@@ -1,4 +1,10 @@
-import { emailButton, emailLayout, escapeHtml, formatDateTime } from './layout';
+import {
+  dearParent,
+  emailButton,
+  emailLayout,
+  escapeHtml,
+  formatDateTime,
+} from './layout';
 
 export function classBookedEmail(params: {
   studentName: string;
@@ -13,7 +19,7 @@ export function classBookedEmail(params: {
       title: 'Class confirmed',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your class is confirmed</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.studentName},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">Your class with <strong>${params.teacherName}</strong> is booked.</p>
         <div style="background: #0f2027; color: #5eead4; padding: 16px; border-radius: 8px; margin: 16px 0;">
           <p style="margin: 0;"><strong>📅 When:</strong> ${formatDateTime(params.classStart)}</p>
@@ -38,7 +44,7 @@ export function classRescheduledEmail(params: {
       title: 'Class rescheduled',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your class has been rescheduled</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.studentName},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">Your class with <strong>${params.teacherName}</strong> was rescheduled by ${params.changedBy === 'TEACHER' ? 'your teacher' : 'Lumexa Operations'}.</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 16px; border-radius: 8px; margin: 16px 0;">
           <p style="margin: 0 0 6px; color: #94a3b8; text-decoration: line-through;"><strong>Previously:</strong> ${formatDateTime(params.oldStart)}</p>
@@ -63,7 +69,7 @@ export function classCancelledEmail(params: {
       title: 'Class cancelled',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Your class has been cancelled</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.studentName},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">Your class with <strong>${params.teacherName}</strong> scheduled for ${formatDateTime(params.classStart)} was cancelled by ${params.cancelledBy === 'TEACHER' ? 'your teacher' : 'Lumexa Operations'}.</p>
         ${params.refundText ? `<p style="margin: 0 0 8px; color: #475569;">${params.refundText}</p>` : ''}
       `,
@@ -83,7 +89,7 @@ export function classReminderEmail(params: {
       title: 'Class starting soon',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">⏰ Your class starts in 1 hour</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.studentName},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">Your class with <strong>${params.teacherName}</strong> starts at ${formatDateTime(params.classStart)}.</p>
         ${emailButton('Join classroom', params.classUrl)}
       `,
@@ -105,7 +111,7 @@ export function missedClassEmail(params: {
       title: 'Missed class',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">We missed you in class</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.studentName},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">Your class with <strong>${params.teacherName}</strong> scheduled for ${formatDateTime(params.classStart)} was marked as a no-show — our records show you didn't join.</p>
         ${
           params.batchName
@@ -146,42 +152,55 @@ export function achievementEmail(params: {
   };
 }
 
+// The two class-credit payment emails. Their "Make a payment" button opens the
+// admin's WhatsApp with the payment request already typed in (`paymentUrl`,
+// built by students/credit-packages.ts) — payments are arranged by hand.
+
+/** First reminder: three or fewer class credits left (never zero — that is the
+ * second email). */
 export function packageExpiringSoonEmail(params: {
   studentName: string;
-  billingContactName: string;
-  lessonsRemaining: number;
   courseName: string;
+  /** Whole class credits the student has left. */
+  creditsRemaining: number;
   paymentUrl: string;
 }) {
+  const student = escapeHtml(params.studentName);
+  const course = escapeHtml(params.courseName);
+  const credits = `${params.creditsRemaining} class credit${params.creditsRemaining === 1 ? '' : 's'}`;
   return {
-    subject: `${params.studentName}'s Lumexa balance is running low`,
+    subject: `${params.studentName}'s Lumexa class credits are running low`,
     html: emailLayout({
-      title: 'Package expiring soon',
+      title: 'Class credits running low',
       bodyHtml: `
-        <h2 style="margin: 0 0 12px; color: #0f172a;">${params.studentName}'s lesson balance is running low</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.billingContactName},</p>
-        <p style="margin: 0 0 8px;">${params.studentName}'s current balance on <strong>${params.courseName}</strong> covers about <strong>${params.lessonsRemaining} more lesson${params.lessonsRemaining === 1 ? '' : 's'}</strong>. To make sure classes continue without interruption, consider making your next payment soon.</p>
+        ${dearParent()}
+        <p style="margin: 0 0 8px;">${student} has only ${credits} remaining for ${course} at Lumexa.</p>
+        <p style="margin: 0 0 8px;">To help ensure upcoming classes continue without interruption, we kindly recommend arranging the next payment soon.</p>
         ${emailButton('Make a payment', params.paymentUrl, '#f59e0b')}
+        <p style="margin: 0 0 8px;">Thank you for your continued support.</p>
       `,
     }),
   };
 }
 
+/** Second reminder: no credits left (also sent when the student is overdrawn). */
 export function packageExpiredEmail(params: {
   studentName: string;
-  billingContactName: string;
   courseName: string;
   paymentUrl: string;
 }) {
+  const student = escapeHtml(params.studentName);
+  const course = escapeHtml(params.courseName);
   return {
-    subject: `Action needed: ${params.studentName}'s Lumexa balance has run out`,
+    subject: `Action needed: ${params.studentName}'s Lumexa class credits have run out`,
     html: emailLayout({
-      title: 'Package expired',
+      title: 'Class credits have run out',
       bodyHtml: `
-        <h2 style="margin: 0 0 12px; color: #0f172a;">${params.studentName}'s lesson balance has run out</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.billingContactName},</p>
-        <p style="margin: 0 0 8px;">${params.studentName}'s balance on <strong>${params.courseName}</strong> has been fully used. To keep upcoming classes on schedule, please make a payment as soon as possible.</p>
+        ${dearParent()}
+        <p style="margin: 0 0 8px;">${student}’s available class credits for ${course} at Lumexa have been fully used.</p>
+        <p style="margin: 0 0 8px;">Please make a payment to add more credits and keep upcoming classes on schedule.</p>
         ${emailButton('Make a payment', params.paymentUrl, '#dc2626')}
+        <p style="margin: 0 0 8px;">Thank you for your understanding and continued support.</p>
       `,
     }),
   };
@@ -189,7 +208,6 @@ export function packageExpiredEmail(params: {
 
 export function certificateIssuedEmail(params: {
   studentName: string;
-  billingContactName: string;
   courseName: string;
   progressSummaryHtml: string;
   recommendedCourseName: string | null;
@@ -211,7 +229,7 @@ export function certificateIssuedEmail(params: {
       title: 'Certificate issued',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">🎓 Congratulations, ${params.studentName}!</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.billingContactName},</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">${params.studentName} has successfully completed <strong>${params.courseName}</strong>! Their certificate is attached to this email and also available anytime on their Lumexa dashboard.</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
           ${params.progressSummaryHtml}
@@ -282,7 +300,7 @@ export function testReportEmail(params: TestReportEmailParams) {
       previewText: `${params.studentName} scored ${fmt(params.percentage)}% on ${params.testTitle}.`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">📝 ${escapeHtml(params.studentName)}'s test report</h2>
-        <p style="margin: 0 0 8px;">Hello,</p>
+        ${dearParent()}
         <p style="margin: 0 0 8px;">${escapeHtml(params.teacherName)} has reviewed ${escapeHtml(params.studentName)}'s <strong>${escapeHtml(params.testTitle)}</strong> (${escapeHtml(params.courseTitle)}) and approved the report card below.</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 16px; margin: 16px 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size: 14px;">

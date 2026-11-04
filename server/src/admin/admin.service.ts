@@ -11,6 +11,7 @@ import { StripeService } from '../payments/stripe.service';
 import { AuditService } from '../audit/audit.service';
 import { PayoutsService } from '../payouts/payouts.service';
 import { StudentLedgerService } from '../students/student-ledger.service';
+import { quoteCreditPackages } from '../students/credit-packages';
 import { SchedulingService } from '../scheduling/scheduling.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ClassroomService } from '../classroom/classroom.service';
@@ -1123,6 +1124,16 @@ export class AdminService {
 
     const ledgerSummary = await this.studentLedger.getSummary(studentUserId);
 
+    // What each credit package costs this student, overdue credits included —
+    // the very quote the student sees on their Payments & Credits page. The
+    // Record-payment form pre-fills from it, so a confirmed payment leaves an
+    // overdrawn student with exactly the package they asked for.
+    const packageQuotes = quoteCreditPackages({
+      rateCents: ledgerSummary.rateCents,
+      balance: ledgerSummary.credits?.remainingWhole ?? 0,
+      studentName: student.fullName,
+    });
+
     const { batchMemberships, ...studentFields } = student;
     return {
       ...studentFields,
@@ -1131,6 +1142,7 @@ export class AdminService {
       rescheduleHistory,
       auditHistory,
       ledgerSummary,
+      packageQuotes,
       ledger,
     };
   }

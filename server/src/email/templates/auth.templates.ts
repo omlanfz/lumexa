@@ -1,4 +1,12 @@
-import { emailButton, emailLayout } from './layout';
+import { dearParent, dearStaff, emailButton, emailLayout } from './layout';
+
+/** Teachers and admins are addressed by name; everyone else — a parent, or a
+ * student whose account email is the family's — gets "Dear Parent,". */
+function salutation(name: string, role?: string): string {
+  return role === 'TEACHER' || role === 'ADMIN'
+    ? dearStaff(name)
+    : dearParent();
+}
 
 export function welcomeEmail(params: {
   name: string;
@@ -27,7 +35,7 @@ export function welcomeEmail(params: {
       previewText: copy.body,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">${copy.headline}</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.name},</p>
+        ${salutation(params.name, params.role)}
         <p style="margin: 0 0 8px;">${copy.body}</p>
         ${emailButton('Go to my dashboard', params.dashboardUrl)}
       `,
@@ -37,6 +45,8 @@ export function welcomeEmail(params: {
 
 export function passwordResetEmail(params: {
   name: string;
+  /** The account's role — a teacher or admin is addressed by name. */
+  role?: string;
   resetUrl: string;
   expiresMinutes: number;
 }) {
@@ -47,7 +57,7 @@ export function passwordResetEmail(params: {
       previewText: 'Use this link to reset your Lumexa password.',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Reset your password</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.name},</p>
+        ${salutation(params.name, params.role)}
         <p style="margin: 0 0 8px;">We received a request to reset your Lumexa password. Click the button below to choose a new one — this link expires in <strong>${params.expiresMinutes} minutes</strong> and can only be used once.</p>
         ${emailButton('Reset my password', params.resetUrl)}
         <p style="margin: 16px 0 0; color: #64748b; font-size: 13px;">If you didn't request this, you can safely ignore this email — your password won't change.</p>

@@ -30,8 +30,7 @@ import { Prisma, StudentLedgerEntryType } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BDT } from '../payouts/payout.constants';
-
-const LOW_BALANCE_LESSON_THRESHOLD = 3;
+import { creditLevel } from './credit-packages';
 
 type LatestEntry = {
   balanceAfterCents: number;
@@ -52,6 +51,7 @@ export interface PaymentBadge {
  *   adjustments refunds / admin adjustments / rate changes, in credits — what
  *               is needed for purchased − used + adjustments = remainingRaw
  *   remaining   what the student can still attend (never below 0)
+ *   remainingRaw the same, exact, and negative when the student is overdrawn
  * Credits are the ledger's own balance expressed in classes at the student's
  * current per-class rate (the same "lessons remaining" figure the admin
  * Payments tab shows); nothing is converted from BDT by any other rule.
@@ -62,9 +62,10 @@ export interface CreditSummary {
   adjustments: number;
   remaining: number;
   remainingRaw: number;
-  /** What the STUDENT sees: `remaining` rounded DOWN to whole classes (4.9 →
-   * 4), because a part-class balance cannot buy a class. Admin screens keep
-   * the exact figure. */
+  /** What the STUDENT sees: the exact balance rounded DOWN to whole classes
+   * (4.9 → 4, because a part-class balance cannot buy a class), and negative
+   * when they are overdrawn (−2 → −2, −0.5 → −1: what is owed is never
+   * understated). Admin screens keep the exact figure. */
   remainingWhole: number;
 }
 
@@ -80,11 +81,13 @@ export interface LedgerSummary {
 }
 
 /** Whole credits a student can see for a balance of `ratio` classes: always
- * rounded DOWN (4.5 → 4, 4.9 → 4), never below 0. The small tolerance only
- * absorbs the cent-rounding of the per-class rate (8 classes bought at
- * ৳1000 must not read 7.99999 → 7). */
+ * rounded DOWN (4.5 → 4, 4.9 → 4). An overdrawn student sees a negative
+ * number (−2 → −2); a part-class debt rounds to the next whole credit owed
+ * (−0.5 → −1). The small tolerance only absorbs the cent-rounding of the
+ * per-class rate (8 classes bought at ৳1000 must not read 7.99999 → 7, and
+ * a balance of −0.0004 is zero, not −1). */
 export function wholeCredits(ratio: number): number {
-  return Math.max(0, Math.floor(ratio + 1e-3));
+  return Math.floor(ratio + 1e-3);
 }
 
 function round1(n: number): number {
@@ -130,11 +133,14 @@ export class StudentLedgerService {
     const lessonsRemaining =
       entry.rateCents > 0 ? entry.balanceAfterCents / entry.rateCents : null;
 
+    // The same levels the student sees (whole credits), so the admin badge, the
+    // navbar pill and the two payment emails always agree.
     let paymentBadge: PaymentBadge | null = null;
     if (lessonsRemaining !== null) {
-      if (lessonsRemaining <= 0) {
+      const level = creditLevel(wholeCredits(lessonsRemaining));
+      if (level === 'exhausted') {
         paymentBadge = { level: 'exhausted', label: 'Balance exhausted' };
-      } else if (lessonsRemaining < LOW_BALANCE_LESSON_THRESHOLD) {
+      } else if (level === 'low') {
         paymentBadge = {
           level: 'due_soon',
           label: `Payment due soon · ${round1(lessonsRemaining)} lessons remaining`,
@@ -228,6 +234,37 @@ export class StudentLedgerService {
       where: { studentUserId },
       orderBy: { createdAt: 'desc' },
       include: { createdByAdmin: { select: { fullName: true } } },
+    });
+  }
+
+  /**
+   * What a student (or their parent) may see of their own payment history:
+   * only the confirmed payments and refunds an admin recorded — never the
+   * per-class deductions, admin notes, bKash/bank details or admin names that
+   * the admin Payments tab shows. A row exists only once an admin has
+   * confirmed the money, so every payment here is "confirmed".
+   */
+  getPaymentHistory(studentUserId: string) {
+    return this.prisma.studentLedgerEntry.findMany({
+      where: {
+        studentUserId,
+        type: {
+          in: [
+            StudentLedgerEntryType.PAYMENT_RECEIVED,
+            StudentLedgerEntryType.REFUND,
+          ],
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      select: {
+        id: true,
+        type: true,
+        amountCents: true,
+        lessonsPurchased: true,
+        courseName: true,
+        createdAt: true,
+      },
     });
   }
 

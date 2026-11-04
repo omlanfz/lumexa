@@ -2,10 +2,17 @@
 //
 // Daily sweep that turns each student's REAL current balance/rate (from
 // StudentLedgerService — the same ledger the admin Payments tab reads, see
-// student-ledger.service.ts) into a package "expiring soon" / "expired"
-// email. Never hard-codes a lesson price: rateCents always comes from that
-// student's own ledger (their actual course price ÷ sessions, or their
-// last real payment's rate — see StudentLedgerEntry.rateCents).
+// student-ledger.service.ts) into a "class credits running low" / "class
+// credits have run out" email to the parent. Never hard-codes a lesson price:
+// rateCents always comes from that student's own ledger (their actual course
+// price ÷ sessions, or their last real payment's rate — see
+// StudentLedgerEntry.rateCents).
+//
+// The levels are the whole credits the student sees on their navbar pill (see
+// creditLevel): three or fewer is "running low", none (or overdrawn) is "run
+// out". Both emails' "Make a payment" button opens the admin's WhatsApp with
+// the default package (8 credits, plus any overdue ones) already requested —
+// the same quote the student's Payments & Credits page makes.
 //
 // Idempotency: PackageAlertState.lastState only allows an email on an
 // actual state TRANSITION (see checkStudent) — sitting in the same
@@ -21,10 +28,12 @@ import {
   StudentLedgerService,
   wholeCredits,
 } from '../students/student-ledger.service';
+import {
+  DEFAULT_CREDIT_PACKAGE,
+  creditLevel,
+  quoteCreditPackage,
+} from '../students/credit-packages';
 import { NotificationsService } from '../notifications/notifications.service';
-
-// "Less than 3 lessons remaining" ⇒ balance <= 2 lesson amounts.
-const EXPIRING_SOON_LESSON_THRESHOLD = 2;
 
 function monthBucket(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -79,26 +88,30 @@ export class PackageAlertsService {
     // threshold against (never invent a universal lesson price).
     if (summary.rateCents <= 0 || summary.lessonsRemaining === null) return;
 
-    let level: PackageAlertLevel = 'NONE';
-    if (summary.balanceCents < summary.rateCents) {
-      level = 'EXPIRED';
-    } else if (summary.lessonsRemaining <= EXPIRING_SOON_LESSON_THRESHOLD) {
-      level = 'EXPIRING_SOON';
-    }
+    // Whole credits, exactly what the parent sees on the navbar (negative once
+    // the student is overdrawn) — the alert levels are the pill's levels.
+    const credits = wholeCredits(summary.lessonsRemaining);
+    const state = creditLevel(credits);
+    const level: PackageAlertLevel =
+      state === 'exhausted'
+        ? 'EXPIRED'
+        : state === 'low'
+          ? 'EXPIRING_SOON'
+          : 'NONE';
 
-    const state = await this.prisma.packageAlertState.upsert({
+    const alertState = await this.prisma.packageAlertState.upsert({
       where: { studentUserId: student.id },
       create: { studentUserId: student.id, lastState: 'NONE' },
       update: {},
     });
 
-    if (level === state.lastState) return; // no transition — nothing to do
+    if (level === alertState.lastState) return; // no transition — nothing to do
 
     await this.prisma.packageAlertState.update({
       where: { studentUserId: student.id },
       data: {
         lastState: level,
-        lastSentAt: level === 'NONE' ? state.lastSentAt : new Date(),
+        lastSentAt: level === 'NONE' ? alertState.lastSentAt : new Date(),
       },
     });
 
@@ -106,23 +119,31 @@ export class PackageAlertsService {
 
     const to = student.billingContactEmail || student.email;
     const bucket = monthBucket(new Date());
+    const courseName = summary.courseName ?? 'their curriculum';
+    // "Make a payment" opens the admin's WhatsApp with the default package
+    // requested; an overdrawn student's overdue credits are part of its total.
+    const { whatsappUrl: paymentUrl } = quoteCreditPackage({
+      credits: DEFAULT_CREDIT_PACKAGE,
+      rateCents: summary.rateCents,
+      balance: credits,
+      studentName: student.fullName,
+    });
 
     if (level === 'EXPIRING_SOON') {
       await this.notifications.sendPackageExpiringSoon(to, {
         studentUserId: student.id,
         studentName: student.fullName,
-        billingContactName: student.fullName,
-        // Whole classes, rounded down — the same figure the student sees.
-        lessonsRemaining: Math.max(1, wholeCredits(summary.lessonsRemaining)),
-        courseName: summary.courseName ?? 'their curriculum',
+        creditsRemaining: credits,
+        courseName,
+        paymentUrl,
         monthBucket: bucket,
       });
     } else {
       await this.notifications.sendPackageExpired(to, {
         studentUserId: student.id,
         studentName: student.fullName,
-        billingContactName: student.fullName,
-        courseName: summary.courseName ?? 'their curriculum',
+        courseName,
+        paymentUrl,
         monthBucket: bucket,
       });
     }

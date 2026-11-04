@@ -1,4 +1,4 @@
-import { emailButton, emailLayout, formatDateTime } from './layout';
+import { dearStaff, emailButton, emailLayout, formatDateTime } from './layout';
 
 export function teacherAccountCreatedEmail(params: {
   teacherName: string;
@@ -45,7 +45,7 @@ export function teacherStudentAssignedEmail(params: {
       title: 'New student assigned',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">You've been assigned a new student</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.teacherName},</p>
+        ${dearStaff(params.teacherName)}
         <p style="margin: 0 0 8px;"><strong>${params.studentName}</strong> has been assigned to you. Check your dashboard for their schedule and curriculum details.</p>
         ${emailButton('View my students', params.dashboardUrl)}
       `,
@@ -66,7 +66,7 @@ export function teacherClassChangedByStudentEmail(params: {
       title: `Class ${verb}`,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">A class was ${verb}</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.teacherName},</p>
+        ${dearStaff(params.teacherName)}
         <p style="margin: 0 0 8px;"><strong>${params.studentName}</strong> ${verb} the class scheduled for ${formatDateTime(params.classStart)}.</p>
       `,
     }),
@@ -95,7 +95,7 @@ export function teacherClassReminderEmail(params: {
       title: 'Class starting soon',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">⏰ Your class starts in 1 hour</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.teacherName},</p>
+        ${dearStaff(params.teacherName)}
         <p style="margin: 0 0 8px;">Your class with <strong>${who}</strong> starts at ${formatDateTime(params.classStart)}.</p>
         ${emailButton('Join classroom', params.classUrl)}
       `,
@@ -114,7 +114,7 @@ export function teacherAdminMessageEmail(params: {
       title: params.subject,
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">A message from Lumexa Operations</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.teacherName},</p>
+        ${dearStaff(params.teacherName)}
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; white-space: pre-wrap;">${params.message}</div>
       `,
     }),
@@ -135,7 +135,7 @@ export function teacherPenaltyEmail(params: {
       title: 'Penalty applied',
       bodyHtml: `
         <h2 style="margin: 0 0 12px; color: #0f172a;">Account penalty notice</h2>
-        <p style="margin: 0 0 8px;">Hi ${params.teacherName},</p>
+        ${dearStaff(params.teacherName)}
         <p style="margin: 0 0 8px;">A penalty (strike ${params.strikes}/3) has been recorded on your account.</p>
         <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin: 16px 0;">
           <p style="margin: 0; color: #991b1b;"><strong>Reason:</strong> ${params.reason}</p>

@@ -24,6 +24,17 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
+/** How every email to a student's family opens: "Dear Parent," — never a
+ *  first name. Only staff (teachers, admins) are addressed by name. */
+export function dearParent(): string {
+  return `<p style="margin: 0 0 8px;">Dear Parent,</p>`;
+}
+
+/** The same formal salutation for the emails that go to a teacher or admin. */
+export function dearStaff(name: string): string {
+  return `<p style="margin: 0 0 8px;">Dear ${escapeHtml(name)},</p>`;
+}
+
 export function emailButton(
   label: string,
   url: string,
