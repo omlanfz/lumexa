@@ -172,7 +172,7 @@ layout (`email/templates/layout.ts`) and `NotificationsService`.
 | Streak lost | weekly cron, Mon 00:05 (`engagement.service`) | student | yes |
 | Monthly digest | monthly cron, 1st 08:00 UTC (`engagement.service`) | billing contact | yes |
 | Gem top-up request | child requests gems (`gems.service`) | billing contact | yes |
-| Package expiring soon / expired | daily cron 03:00 UTC (`package-alerts.service`) | billing contact or student | yes |
+| Class credits running low (≤ 3) / run out | daily cron 03:00 UTC (`package-alerts.service`); the **Make a payment** button opens the admin's WhatsApp chat (see `docs/STUDENT_PROGRESS_AND_CREDITS.md`) | billing contact or student | yes |
 | Certificate issued | certificate generation (`certificates.service`) | billing contact or student | yes |
 | Admin: new registration / new teacher application | `auth.service`, `students.service` | `ADMIN_NOTIFICATION_EMAILS` | yes |
 | Admin: dispute filed | `disputes.service` | `ADMIN_NOTIFICATION_EMAILS` | yes |
@@ -193,6 +193,10 @@ layout (`email/templates/layout.ts`) and `NotificationsService`.
 
 (`r<n>` is the number of times the trial was rescheduled, so each time gets its
 own copy and a retry can never duplicate one.) No other email events were added.
+
+**Greeting.** No Lumexa email says "Hi {name}": every email to a family (trial,
+class, certificate, report card, welcome, password reset, the class-credit emails)
+opens "Dear Parent,". Emails to a teacher or admin open "Dear {name},".
 
 ### What was missing / changed
 
@@ -425,7 +429,7 @@ WHATSAPP_ENABLED=true
 WHATSAPP_GRAPH_API_VERSION=v25.0
 WHATSAPP_PHONE_NUMBER_ID=<Phone number ID>
 WHATSAPP_ACCESS_TOKEN=<permanent system-user token>
-WHATSAPP_ADMIN_RECIPIENT=<admin's private WhatsApp in +880… format>
+WHATSAPP_ADMIN_RECIPIENT=<admin's personal WhatsApp in +880… format; also the payment chat for parents>
 WHATSAPP_TEMPLATE_LANGUAGE=en
 WHATSAPP_TEMPLATE_PARENT_CONFIRMATION=lumexa_trial_confirmation
 WHATSAPP_TEMPLATE_PARENT_CLASS_DETAILS=lumexa_trial_class_details
@@ -481,13 +485,16 @@ Added or changed (see `server/.env.example`; placeholders only):
 | `WHATSAPP_GRAPH_API_VERSION` | `v25.0` | Graph API version |
 | `WHATSAPP_PHONE_NUMBER_ID` | | sender ID |
 | `WHATSAPP_ACCESS_TOKEN` | | **secret** |
-| `WHATSAPP_ADMIN_RECIPIENT` | | admin's private WhatsApp (never exposed to the frontend or API) |
+| `WHATSAPP_ADMIN_RECIPIENT` | | admin's personal WhatsApp: receives the trial alert, **and** is the chat parents are sent to when they ask to buy class credits (the low-credit emails' button and the student Payments & Credits page link to it, so parents see it). Empty → `DEFAULT_ADMIN_WHATSAPP_NUMBER` (`src/whatsapp/whatsapp.config.ts`) is used for those payment chats |
 | `WHATSAPP_TEMPLATE_LANGUAGE` | `en` | template language code |
 | `WHATSAPP_TEMPLATE_PARENT_CONFIRMATION` / `_PARENT_CLASS_DETAILS` / `_PARENT_REMINDER` / `_ADMIN_ALERT` | `lumexa_trial_confirmation` / `lumexa_trial_class_details` / `lumexa_trial_class_reminder` / `lumexa_trial_admin_alert` | approved template names |
 | `WHATSAPP_TEMPLATE_PARAMETER_FORMAT` | `positional` | or `named` |
 
-The admin's personal email and number exist only in these server variables. They
-are not in the client bundle, any public API response, or the repository.
+The admin's personal **email** exists only in these server variables. The admin's
+WhatsApp **number** is not in the client bundle either, but it is no longer private:
+parents are deliberately sent to a chat with it to arrange payments, so it appears in
+the payment emails and in the `GET /students/me/payments` response (a signed-in
+student's own page), and its default is written once in `whatsapp.config.ts`.
 
 ## 6. Deploy checklist
 
