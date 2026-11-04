@@ -20,13 +20,15 @@ interface Props {
 
 export default function PackageSelector({ packages, value, onChange, rateCents }: Props) {
   return (
-    <fieldset>
+    <fieldset className="flex min-w-0 flex-1 flex-col">
       <legend className="sr-only">Choose a credit package</legend>
-      <div className="grid grid-cols-3 gap-2.5 sm:gap-4" data-testid="package-selector">
+      {/* The card may be taller than its content (it matches the payment summary
+          beside it): the three packages share that height. */}
+      <div className="grid flex-1 grid-cols-3 gap-2.5 sm:gap-4" data-testid="package-selector">
         {packages.map((p) => {
           const selected = p.credits === value;
           return (
-            <label key={p.credits} className="relative block cursor-pointer" data-testid={`package-${p.credits}`}>
+            <label key={p.credits} className="relative flex cursor-pointer" data-testid={`package-${p.credits}`}>
               <input
                 type="radio"
                 name="credit-package"
@@ -36,7 +38,7 @@ export default function PackageSelector({ packages, value, onChange, rateCents }
                 className="peer sr-only"
               />
               <span
-                className="flex h-full flex-col items-center rounded-2xl border-2 border-gray-200 bg-white px-2 py-4 text-center transition hover:border-teal-400/70 peer-checked:border-teal-500 peer-checked:bg-teal-500/10 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500 peer-focus-visible:ring-offset-2 dark:border-gray-700/60 dark:bg-white/5 dark:peer-focus-visible:ring-offset-black sm:px-4 sm:py-5"
+                className="flex w-full flex-col items-center justify-center rounded-2xl border-2 border-gray-200 bg-white px-2 py-4 text-center transition hover:border-teal-400/70 peer-checked:border-teal-500 peer-checked:bg-teal-500/10 peer-focus-visible:ring-2 peer-focus-visible:ring-teal-500 peer-focus-visible:ring-offset-2 dark:border-gray-700/60 dark:bg-white/5 dark:peer-focus-visible:ring-offset-black sm:px-4 sm:py-5"
               >
                 <span className="text-3xl font-bold tabular-nums text-gray-900 dark:text-white sm:text-4xl">
                   {p.credits}

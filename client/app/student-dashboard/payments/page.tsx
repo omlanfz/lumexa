@@ -13,6 +13,15 @@
 // Every figure (package prices, the overdue settlement, the totals, the
 // WhatsApp message) is the backend's quote from GET /students/me/payments: this
 // page only chooses which of the three quotes to show.
+//
+// Layout. The page fills the same width as the rest of the student dashboard
+// (no narrow centred column) and is built from full-width bands, so no area is
+// left empty: the balance with the student's price details beside it; the
+// package choice with the payment summary — and its call to action — side by
+// side at the same height; then the explanation and the history, each the full
+// width. Smaller screens stack the same bands, the summary straight after the
+// package choice. Cards that care about their own width (the steps, the history
+// table) use container queries, so they adapt to the room they actually have.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -59,18 +68,57 @@ const BALANCE_STYLE: Record<ReminderTone, { box: string; value: string }> = {
 
 const CARD_TONE = 'border-gray-200 bg-gray-50 dark:border-gray-700/50 dark:bg-gray-800/50';
 
-/** `tone` replaces (never stacks on) the default border and background. */
-function Card({ children, tone = CARD_TONE }: { children: React.ReactNode; tone?: string }) {
-  return <section className={`rounded-2xl border p-4 sm:p-6 ${tone}`}>{children}</section>;
+/** `tone` replaces (never stacks on) the default border and background;
+ * `className` is for placement and layout only. */
+function Card({
+  children,
+  tone = CARD_TONE,
+  className = '',
+  testId,
+  'aria-label': ariaLabel,
+}: {
+  children: React.ReactNode;
+  tone?: string;
+  className?: string;
+  testId?: string;
+  'aria-label'?: string;
+}) {
+  return (
+    <section
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={`rounded-2xl border p-4 sm:p-6 ${tone} ${className}`}
+    >
+      {children}
+    </section>
+  );
 }
 
 function SectionTitle({ children, id }: { children: React.ReactNode; id?: string }) {
   return (
-    <h2 id={id} className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+    <h2 id={id} className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
       {children}
     </h2>
   );
 }
+
+/** One label-over-value tile of the price details beside the balance. */
+function Fact({ label, value, testId }: { label: string; value: string; testId?: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</dt>
+      <dd className="mt-1 break-words text-base font-semibold text-gray-900 dark:text-white" data-testid={testId}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+const STEPS = [
+  'Pick a package and press the request button.',
+  'Message our admin on WhatsApp — they will send you the payment instructions.',
+  'Once your payment is confirmed, your credits are added automatically.',
+];
 
 export default function PaymentsAndCreditsPage() {
   const router = useRouter();
@@ -132,7 +180,7 @@ export default function PaymentsAndCreditsPage() {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-3xl space-y-6" data-testid="payments-page">
+      <div className="space-y-6" data-testid="payments-page">
         {header}
         {failed ? (
           <div
@@ -173,34 +221,50 @@ export default function PaymentsAndCreditsPage() {
   const overdue = credits.overdue > 0;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6" data-testid="payments-page">
+    <div className="space-y-6" data-testid="payments-page">
       {header}
 
-      {/* Current balance — negative when overdrawn */}
+      {/* Current balance (negative when overdrawn), with the student's price details beside it */}
       <Card tone={style.box}>
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Current balance
-        </p>
-        <div className="mt-1 flex items-baseline gap-2" data-testid="balance" data-tone={tone}>
-          {/* tabular figures would gap a leading minus sign ("- 2") */}
-          <span
-            className={`text-5xl font-bold ${credits.remaining < 0 ? '' : 'tabular-nums'} ${style.value}`}
-            data-testid="balance-value"
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-10 xl:gap-16">
+          <div className="min-w-0 self-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              Current balance
+            </p>
+            <div className="mt-1 flex items-baseline gap-2.5" data-testid="balance" data-tone={tone}>
+              {/* tabular figures would gap a leading minus sign ("- 2") */}
+              <span
+                className={`text-5xl font-bold sm:text-6xl ${credits.remaining < 0 ? '' : 'tabular-nums'} ${style.value}`}
+                data-testid="balance-value"
+              >
+                {formatCredits(credits.remaining)}
+              </span>
+              <span className="text-lg font-semibold text-gray-700 dark:text-gray-200 sm:text-xl">
+                {creditsLabel(credits.remaining)}
+              </span>
+            </div>
+            <p
+              className="mt-3 max-w-2xl text-sm text-gray-700 dark:text-gray-200 sm:text-base"
+              data-testid="balance-status"
+            >
+              {balanceStatus(credits.remaining)}
+            </p>
+          </div>
+
+          <dl
+            className="grid grid-cols-2 gap-x-6 gap-y-5 border-t border-black/10 pt-5 dark:border-white/10 sm:grid-cols-4 lg:grid-cols-2 lg:content-center lg:border-l lg:border-t-0 lg:pl-10 lg:pt-0 xl:pl-16"
+            data-testid="price-details"
           >
-            {formatCredits(credits.remaining)}
-          </span>
-          <span className="text-lg font-semibold text-gray-700 dark:text-gray-200">
-            {creditsLabel(credits.remaining)}
-          </span>
+            <Fact
+              label="Price per class"
+              value={pricing.rateCents !== null ? formatTaka(pricing.rateCents) : 'To be confirmed'}
+              testId="price-per-class"
+            />
+            {classType && <Fact label="Class type" value={classType} testId="class-type" />}
+            {pricing.courseName && <Fact label="Curriculum" value={pricing.courseName} testId="course-name" />}
+            <Fact label="One credit" value="1 scheduled class" />
+          </dl>
         </div>
-        <p className="mt-2 text-sm text-gray-700 dark:text-gray-200" data-testid="balance-status">
-          {balanceStatus(credits.remaining)}
-        </p>
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400" data-testid="price-line">
-          {pricing.rateCents !== null
-            ? `Your price: ${formatTaka(pricing.rateCents)} per class${classType ? ` · ${classType}` : ''}`
-            : 'Your per-class price will be confirmed by Lumexa when you get in touch.'}
-        </p>
       </Card>
 
       {/* Outstanding due — only when the balance is below zero */}
@@ -230,73 +294,79 @@ export default function PaymentsAndCreditsPage() {
         </div>
       )}
 
-      {/* Package selector */}
-      <Card>
-        <SectionTitle id="packages-heading">Choose a credit package</SectionTitle>
-        <PackageSelector
-          packages={data.packages}
-          value={quote.credits}
-          onChange={setSelected}
-          rateCents={pricing.rateCents}
-        />
-        {pricing.rateCents === null && (
-          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            Prices depend on your plan. Lumexa will share the exact amount with you on WhatsApp.
-          </p>
-        )}
-      </Card>
+      {/* Choose a package, with what it costs right beside it: the two cards are the same height */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] xl:grid-cols-[minmax(0,1fr)_26rem]">
+        <Card className="flex flex-col">
+          <SectionTitle id="packages-heading">Choose a credit package</SectionTitle>
+          <PackageSelector
+            packages={data.packages}
+            value={quote.credits}
+            onChange={setSelected}
+            rateCents={pricing.rateCents}
+          />
+          {pricing.rateCents === null && (
+            <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+              Prices depend on your plan. Lumexa will share the exact amount with you on WhatsApp.
+            </p>
+          )}
+        </Card>
 
-      {/* Breakdown + the one call to action */}
-      <Card>
-        <SectionTitle>Payment summary</SectionTitle>
-        <div aria-live="polite">
-          <PaymentBreakdown quote={quote} />
+        {/* Breakdown + the one call to action */}
+        <Card className="flex flex-col" aria-label="Payment summary" testId="payment-summary">
+          <SectionTitle>Payment summary</SectionTitle>
+          <div aria-live="polite">
+            <PaymentBreakdown quote={quote} />
+          </div>
+          <div className="mt-auto pt-5">
+            <button
+              type="button"
+              onClick={() => {
+                void load(); // the dialog opens on the latest figures
+                setModalOpen(true);
+              }}
+              data-testid="request-credits-cta"
+              className="w-full rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-black transition hover:bg-teal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 active:scale-[0.99] dark:focus-visible:ring-offset-black"
+            >
+              {requestLabel(quote.credits)}
+            </button>
+            <p className="mt-3 text-center text-xs text-gray-500 dark:text-gray-400">
+              Nothing is charged on this site — you&apos;ll continue with our admin on WhatsApp.
+            </p>
+          </div>
+        </Card>
+      </div>
+
+      {/* How it works: the explanation beside the three steps on wide cards, stacked on narrow ones */}
+      <Card className="@container">
+        <div className="grid gap-5 @6xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] @6xl:gap-10">
+          <div>
+            <SectionTitle>How credits and payments work</SectionTitle>
+            <p className="max-w-3xl text-sm text-gray-600 dark:text-gray-300">{CREDITS_TOOLTIP}</p>
+          </div>
+          <ol className="grid gap-4 text-sm text-gray-700 dark:text-gray-200 @2xl:grid-cols-3 @2xl:gap-6 @6xl:content-center">
+            {STEPS.map((step, i) => (
+              <li key={step} className="flex gap-3">
+                <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-teal-500/15 text-xs font-bold text-teal-700 dark:text-teal-300">
+                  {i + 1}
+                </span>
+                <span className="min-w-0">{step}</span>
+              </li>
+            ))}
+          </ol>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            void load(); // the dialog opens on the latest figures
-            setModalOpen(true);
-          }}
-          data-testid="request-credits-cta"
-          className="mt-5 w-full rounded-xl bg-teal-500 px-6 py-3.5 text-base font-semibold text-black transition hover:bg-teal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2 active:scale-[0.99] dark:focus-visible:ring-offset-black"
+      </Card>
+
+      {/* Payment history: a table once the card is wide enough, stacked rows before that */}
+      <section
+        aria-labelledby="history-heading"
+        className={`@container overflow-hidden rounded-2xl border ${CARD_TONE}`}
+      >
+        <h2
+          id="history-heading"
+          className="px-4 pb-4 pt-4 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:px-6 sm:pt-6"
         >
-          {requestLabel(quote.credits)}
-        </button>
-        <p className="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
-          Nothing is charged on this site — you&apos;ll continue with our admin on WhatsApp.
-        </p>
-      </Card>
-
-      {/* How it works */}
-      <Card>
-        <SectionTitle>How credits and payments work</SectionTitle>
-        <p className="text-sm text-gray-600 dark:text-gray-300">{CREDITS_TOOLTIP}</p>
-        <ol className="mt-4 space-y-2 text-sm text-gray-700 dark:text-gray-200">
-          <li className="flex gap-3">
-            <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-teal-500/15 text-xs font-bold text-teal-700 dark:text-teal-300">
-              1
-            </span>
-            Pick a package and press the request button.
-          </li>
-          <li className="flex gap-3">
-            <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-teal-500/15 text-xs font-bold text-teal-700 dark:text-teal-300">
-              2
-            </span>
-            Message our admin on WhatsApp — they will send you the payment instructions.
-          </li>
-          <li className="flex gap-3">
-            <span className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-full bg-teal-500/15 text-xs font-bold text-teal-700 dark:text-teal-300">
-              3
-            </span>
-            Once your payment is confirmed, your credits are added automatically.
-          </li>
-        </ol>
-      </Card>
-
-      {/* Payment history */}
-      <section aria-labelledby="history-heading">
-        <SectionTitle id="history-heading">Payment history</SectionTitle>
+          Payment history
+        </h2>
         <PaymentHistory items={data.history} />
       </section>
 
