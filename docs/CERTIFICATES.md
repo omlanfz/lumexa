@@ -1,14 +1,15 @@
 # Lumexa certificates: design, dashboard, e-mail and workflow
 
-*Proposal for the founder's approval. Nothing here is wired into the running app yet. The template, renderer, e-mail and mockups live in [`certificates/`](certificates/) (see its [README](certificates/README.md) for how to run them).*
+*Proposal for the founder's approval. Nothing here is wired into the running app yet. The template, renderer, e-mail and mockups live in [`certificates/`](certificates/) (see its [README](certificates/README.md) for how to run them). The design below is the **final template, v2**; v1 was my first draft.*
 
-![The Lumexa certificate](certificates/samples/lumexa-certificate-sample.preview.jpg)
+![The final Lumexa certificate (v2)](certificates/samples/lumexa-certificate-sample.preview.jpg)
 
 ## 1. Decisions at a glance
 
 | Question | Decision |
 |---|---|
-| What should it look like? | The template above: ivory A4-landscape paper, navy ink, serif name, a woven "security print" border with microtext, a round seal, the founder's signature, date, ID and a QR code. One design for all seven programs ([contact sheet](certificates/samples/all-programs-contact-sheet.jpg)). |
+| Which design: option 1 or option 2? | **Neither as-is: option 2's look on option 1's engine.** Option 2 (the blue concept) has the better *look* but is only a picture: its QR cannot be scanned, its logo is a redraw, it says Game Creator uses Scratch (that is Little Coders) and its ID is sequential. Option 1 is the real, verifiable engine but looked heavy and bank-like, with a title too small for a phone screen. v2 takes the brand lockup, big title, program badge, sparkle motif and "verified" strip from option 2, and keeps the real QR, security-print frame, seal, signature and unique ID from option 1. Details in §3. |
+| What does the final look like? | Cool-white A4 landscape, deep-indigo ink, the Lumexa logo and wordmark, a large serif title, the student's name as the hero, a program badge with an icon, a ribbon seal, the founder's signature, date of completion, ID and QR code, and a "verified" strip. One layout for all seven programs ([contact sheet](certificates/samples/all-programs-contact-sheet.jpg)). |
 | What makes it "official"? | Not the decoration. It is a **unique ID + QR + a public verification page**, a stated award rule, a signature and the issuer's name. A PDF alone can always be faked; the page cannot. |
 | New "Certificates" item in the navbar? | **Yes.** Add **Certificates** after *My Badges*, show a one-time banner on Home when a certificate arrives, and add a certificate milestone to the Learning page. §5. |
 | E-mail | Congratulates the parent ("Dear Parent" is the house style), shows the certificate in the body, attaches the PDF, offers WhatsApp/Facebook sharing and recommends the next program with a mission-themed button: **"Start {Name}'s next mission"**. Copy in §6. |
@@ -45,46 +46,69 @@ Output of the current recommendation rule (verified by running it):
 | Web Developer Path (12–18) | Digital Independence Path | 15–18 (a 12-year-old is not eligible) |
 | Little Coders Path | Game Creator Path | 10–18 |
 
-## 3. The certificate template
+## 3. The certificate template (final v2)
 
-**What I took from your two samples, and what I left out**
+### The two options, judged
 
-| From CS50 | From Codingal | Deliberately left out |
+![Option 1, option 2 and the final v2 at phone-thumbnail size](certificates/samples/design-comparison.jpg)
+
+| | Option 1 (my first draft) | Option 2 (the blue concept) | **Final v2** |
+|---|---|---|---|
+| Look | Formal, bank-note feel on ivory paper; heavy woven border | Friendly, modern and brand-forward; blue/violet washes | Option 2's look, calmer: cool white, one gradient line, sparkle corners |
+| Readable as a phone thumbnail (WhatsApp) | No: title and brand are too small | Yes | Yes: large lockup, title and program badge |
+| Is it a template? | Yes: HTML → PDF/PNG, every field dynamic | **No, it is one picture.** A new name means regenerating the whole image | Yes |
+| QR code | Real, decodes | **Does not decode.** The corner squares look right but the data area is smeared (six attempts, including enhanced copies, all failed) | Real, decodes with two independent decoders |
+| Logo | Real asset | Redrawn by an image generator; the final "a" of the wordmark is malformed | Real asset (the one the app uses) plus a typeset wordmark |
+| Wording | Factual, from the database | "using Scratch" is wrong for Game Creator (Scratch is Little Coders) and "young creators" is wrong for ages 10–18 | Factual, from the database |
+| ID | Random | `…-GC-001234` is sequential: guessable, and it reveals how many certificates exist | Program code plus random: `LMX-WD-2026-7K3F-9QWM` |
+| Prints well | Yes | Soft colour washes print as blotchy tints | Yes, including in black and white |
+
+**What came from where**
+
+| From option 2 | From option 1 | From CS50 and Codingal |
 |---|---|---|
-| White paper, generous space, the name as the hero; one specific line about what was done ("including twelve projects"); signer name and title; a QR code and a short verification URL | A visible unique ID and date; a seal for the "official" feel; a signature; a confident program title | Third-party badges and claims ("STEM.org accredited", "built by alumni of Google/Amazon"): only print what is true for Lumexa. Dark backgrounds (ink-heavy, less formal). Emoji and gradient text (do not print reliably). |
+| Large Lumexa lockup; big bold serif title; the program name in a badge with an icon; the sparkle motif; a "verified certificate · issued by Lumexa AI School" strip; "Date of completion" wording; the cool blue/violet palette | Real QR and public verification; security-print frame with microtext; a seal with ring text; a unique ID; the factual database-driven sentence; the signature slot | CS50: restraint, the name as the hero, one specific line about what was done, signer name and title, QR. Codingal: a visible ID and date, a seal, a signature |
 
-**Anatomy**
+**Left out on purpose:** option 2's tagline "LEARN ✦ BUILD ✦ GROW" (I cannot find it anywhere in your site; one line to add back if it is yours); the soft colour washes and the mascot watermark (the faint rosette does that job); third-party badges and accreditation claims like Codingal's; emoji and gradient text (they do not print reliably).
+
+### Anatomy
 
 | Element | Purpose |
 |---|---|
-| Logo + "LUMEXA AI SCHOOL" | Issuer identity |
-| "Certificate of Completion" | Accurate document type. Avoid "Diploma"/"Degree"/"Accredited" unless Lumexa actually is. |
-| Student name (serif, auto-fits, wraps at the extreme) | The hero |
-| Program name | Indigo, second most important |
+| Logo + "Lumexa AI SCHOOL" lockup | Issuer identity that survives a phone thumbnail. The "Lumexa" wordmark is **typeset** (Outfit ExtraBold) as a stand-in: send your official wordmark file if you have one. |
+| "Certificate of Completion" (large serif) | Accurate document type. Avoid "Diploma"/"Degree"/"Accredited" unless Lumexa actually is. |
+| Student name | The hero: one line down to 36 pt, and a longer name goes onto two balanced lines at a larger size instead of one tiny line |
+| Program badge: icon + name | The program, with the same Lucide icon set the app already uses |
 | One factual line + "Awarded on passing the Final Test." | Counts come from the database; the criterion must match what the system enforces |
 | Optional "with Distinction" | Only when the Final Test score reaches the threshold |
 | Founder signature, name, title | Authority. The sample uses a font-made **stand-in** signature. |
-| Seal | The "official" mark (decorative, not a security feature) |
-| Date of issue (Dhaka time) and Certificate ID | Reference data |
-| QR code + printed URL | The actual verification |
-| Woven border and microtext | Security-print style. Decorative: it deters casual copying but is not what makes a certificate trustworthy. |
+| Seal with ribbon | The "official" mark (decorative, not a security feature) |
+| Date of completion (Dhaka time) and Certificate ID | Reference data |
+| QR code, "Scan to verify" and the printed URL | The actual verification |
+| "Verified certificate · issued by Lumexa AI School" strip | States what the document is |
+| Slim woven border, sparkle corners, microtext, faint rosette | Security-print style. It deters casual copying but is not what makes a certificate trustworthy. |
 
-**Fields that change per student** (everything else is fixed): `studentName`, `programName`, `programDescriptor`, `honors` (optional), `issueDate`, `certificateId`, `verifyUrl` (also becomes the QR), plus the founder's name, title and signature image.
+**Fields that change per student** (everything else is fixed): `studentName`, `programName`, `programIcon`, `programDescriptor`, `honors` (optional), `completionDate`, `certificateId`, `verifyUrl` (also becomes the QR), plus the founder's name, title and signature image.
+
+**Typography and assets.** Source Serif 4 (title, name, lead-ins), Inter (labels, program badge, small print; the app's own font), Outfit ExtraBold (the typeset wordmark), Noto Serif/Sans Bengali (fallback for Bangla names). All are SIL OFL, bundled with their licences, and never fetched from Google at render time. Icons are Lucide (ISC), the set the app already uses. I chose the serif from a side-by-side specimen of seven candidates: Cormorant (my v1 font) is too light for thumbnails, Fraunces too quirky, Libre Baskerville too wide.
 
 **Wording rules.** Say only what the system enforces. Today that is "passed the Final Test". Do not print attendance, hours or skills claims that nothing checks. Do not print age or grade (children's data).
 
-**Checks I ran** (all passing; `npm test` reruns 11 of them):
+### Checks I ran on the final template
 
-- **PDF:** one A4-landscape page, 289 KB, fonts embedded, name/ID/date extract as real text, tagged for screen readers, document properties set (title, author, subject). The border, rosette and seal stay vector; only the logo and signature are raster.
-- **QR code:** decodes to the verification URL from the PDF rasterized at 72, 100 and 150 dpi, from a deliberately degraded copy (grayscale, blur, JPEG quality 45), from the shared PNG and from the JPG preview. The 1200×630 link-preview card is a thumbnail, not meant to be scanned.
-- **Names:** a 2-letter name, a 37-character name (one line), an 82-character name (two lines) and a Bangla name (bundled fallback font, correct conjuncts) all stay inside the frame and clear of the signature row. A certificate issued at 1:10 a.m. Dhaka time correctly shows that day.
-- **Contrast:** all text passes WCAG AA (the gold labels failed at 4.3:1 on my first pass; I darkened them to 5.7:1).
-- **Black-and-white printing:** reads like an engraved certificate, QR still decodes.
+`npm test` reruns 21 of them (all pass).
+
+- **PDF:** one A4-landscape page, 286 KB, fonts embedded, name, ID and date extract as real text, document properties set (title, author, subject). Tagged for screen readers with a proper outline: H1 title, H2 name, H3 program; the decorative border and microtext are not in the tag tree, so a screen reader skips them. The border, rosette and seal stay vector; only the logo and signature are raster.
+- **QR code** (24 mm square): read by two independent decoders (jsQR and OpenCV) on the PDF rasterized from 60 to 300 dpi. jsQR reads every resolution; OpenCV from 100 dpi up. A deliberately degraded copy (grayscale, blur, JPEG quality 45) reads from 120 dpi up, and the shared PNG, the JPG preview and a grayscale print all read. An earlier 22 mm version missed one resolution in one decoder, so I enlarged it. The 1200×630 link-preview card is a thumbnail, not meant to be scanned. Not yet tried with a physical phone and a printed copy (on the launch checklist, §10).
+- **Names:** a 2-letter name, a 37-character name (two balanced lines at about 40 pt), an 82-character name (two lines, smaller), and a Bangla name (bundled fallback font, correct conjuncts) all stay inside the frame and clear of the signature row, also combined with the Distinction line. A certificate completed at 1:10 a.m. Dhaka time correctly shows that day.
+- **Contrast:** all text passes WCAG AA; the main text is AAA (the small gold labels first failed at 4.3:1 in an earlier pass; they are now 5.8:1).
+- **Black-and-white printing:** reads like an engraved certificate and the QR still decodes.
+- **Program icons:** rendering a second program exposed a bug (the AI Builder icon drew as a fragment, because my cleanup stripped the size from the `<rect>` inside it). It is fixed, and a regression test now checks that every shape of every program icon has a size. I confirmed the test fails when the bug is put back.
 - **Hostile names** (`<script>`, `<img onerror>`, template tokens): shown as plain text, nothing runs, no network request. See §7 for the negative control.
 
 ## 4. Verification and sharing (what makes it "official")
 
-**Certificate ID.** Keep the `LMX-` prefix and year. Lengthen the random part and drop look-alike characters, e.g. `LMX-2026-7K3F-9QWM` (8 characters from a 32-letter alphabet, about a trillion combinations; the current 8 hex characters is about 4 billion). The verification endpoint must be rate-limited, and must still accept old-format IDs.
+**Certificate ID.** `LMX-WD-2026-7K3F-9QWM`: Lumexa, a two-letter program code (OD, LC, GC, WD, AI, DS, DI), the year, then 8 random characters from a 32-symbol alphabet with no 0/1/I/O look-alikes (about a trillion combinations; the current 8 hex characters is about 4 billion). The program code makes an ID readable for staff and parents. Sequential numbers like option 2's `…-001234` are guessable and reveal how many certificates exist, which a public verify page must not. `generateCertificateId()` in `tools/render.mjs` does this and the self-test checks it. The verification endpoint must be rate-limited and must still accept old-format IDs.
 
 **Public verification page**, `https://<your domain>/verify/<ID>` ([phone mockup](certificates/mockups/mockup-verify-page-phone.png)). It reads the database, never the PDF: Valid / Revoked, name as printed, program, the award rule, date, ID, the certificate image, Download PDF. It is what the QR code, the e-mail link and every share link open, so it also serves as the share landing page (Open Graph tags give the preview card in WhatsApp and Facebook). Set `robots: noindex` so search engines do not list children's names.
 
@@ -136,7 +160,7 @@ Built from the same pieces as every Lumexa e-mail ([`certificates/email/certific
 >
 > **Share the good news:** [Share on WhatsApp] [Share on Facebook] [View online]
 >
-> *Program · Lessons completed · Final Test · Awarded on · Certificate ID*
+> *Program · Lessons completed · Final Test · Completed on · Certificate ID*
 >
 > **RECOMMENDED NEXT MISSION**
 > **{Next Program}**
@@ -192,16 +216,16 @@ If nothing is eligible (a 7-year-old finishing Little Coders cannot start Game C
 | C. Designed PDF + text stamped on (pdf-lib, Codingal's way) | Design in Canva/Figma, overlay the fields | Reasonable fallback if the host cannot run Chromium. Fixed text boxes break on long names; PNG needs a second pipeline. |
 | D. HTML → PDF web API | Send the HTML to a vendor | Avoid. It sends every child's name to a third party and adds a paid dependency. |
 
-**The pipeline** (`tools/render.mjs`, about 290 lines, ready to move into `server/src/certificates/`):
+**The pipeline** (`tools/render.mjs`, about 330 lines, ready to move into `server/src/certificates/`):
 
-1. Read `template/certificate.html`; embed the fonts and images as data URIs (so rendering needs no network and no Google Fonts).
+1. Read `template/certificate.html`; embed the fonts, icons and images as data URIs (so rendering needs no network and no Google Fonts).
 2. Fill the placeholders. **Every student-supplied value is HTML-escaped**, because a real browser will render it.
 3. Add a Content-Security-Policy that allows nothing but the page's own embedded data, and abort every non-`data:` request in Playwright.
 4. Open it in headless Chromium, wait for the fit script, then `page.pdf({ width: '297mm', height: '210mm', printBackground: true, tagged: true })` and a screenshot of `#certificate` for the PNG, JPG and the 1200×630 link card.
 5. Stamp the PDF document properties with `pdf-lib`.
 6. Upload, save URLs, e-mail.
 
-**Measured here:** about 0.5 s for a PDF alone and about 3 s for all four outputs; about 390 MB of real memory (630 MB if you naively add up every Chromium process) while it runs. Outputs: PDF 289 KB, PNG ~1 MB, e-mail JPG ~206 KB, link card 72 KB.
+**Measured here on the final template:** about 0.45 s for a PDF alone and 2–3 s for all four outputs; about 390 MB of real memory (630 MB if you naively add up every Chromium process) while it runs. Outputs: PDF 286 KB, PNG ~0.8 MB, e-mail JPG ~198 KB, link card 73 KB.
 
 **Hosting:** I do not know where your API runs. Plan on at least 1 GB of RAM, render one certificate at a time through a queue, and use a Chromium-ready image (Microsoft's Playwright image) or a slim serverless Chromium build. On a 512 MB host this will not fit; use option C there.
 
@@ -243,31 +267,32 @@ If nothing is eligible (a 7-year-old finishing Little Coders cannot start Game C
 | # | Decision | My default |
 |---|---|---|
 | 1 | Which **domain** goes on the certificates and QR codes? (permanent) | Buy one; sample shows `lumexa.school` |
-| 2 | Send a **scan of the founder's signature** (black pen, white paper, photo is fine) | Sample uses a font stand-in |
+| 2 | Send a **scan of the founder's signature** (black pen, white paper, photo is fine) and, if you have one, the **official wordmark** (SVG) | Samples use a font stand-in for the signature and a typeset "Lumexa" |
 | 3 | Is "Lumexa AI School" the legal name? Is there a **registration or trade-licence number** to print? What city if any? | Nothing printed; I did not want to assume a city |
 | 4 | What counts as **completed**? Today: passing the Final Test | Keep; if you add an attendance rule, change the printed sentence and the verify page |
 | 5 | **"With Distinction"**: on or off, and the threshold | On at 90%; only the top tier is labelled |
 | 6 | Verify page: **full name** or "Ayaan R."? | Full name, unguessable ID, `noindex`, policy sentence |
 | 7 | Name check: **before** issuing or fix **after** on request? | Ask once at about 80% |
 | 8 | Signatories: founder only, or add a second signature? | Founder only |
+| 9 | Print option 2's tagline **"LEARN ✦ BUILD ✦ GROW"**? | Not printed; I cannot find it anywhere in your site |
 
 ## 10. If you say go: implementation plan
 
 **Server**
 - Prisma migration on `Certificate`: `status` (`PENDING`/`READY`/`REVOKED`), `nameOnCertificate`, `templateVersion`, `pngUrl`, `previewUrl`, `revokedAt`/`revokedReason`, `seenAt`.
 - `CertificateRendererService`: `tools/render.mjs` moved in, with `playwright-core` and `qrcode`; template, fonts and images under `server/assets/certificate/`.
-- `CertificatesService`: pending-first issuance, retry sweeper, reissue and revoke (audited), age-aware recommender, e-mail with the new fields.
+- `CertificatesService`: pending-first issuance with the program-coded ID (`generateCertificateId`), retry sweeper, reissue and revoke (audited), age-aware recommender, e-mail with the new fields.
 - Public, throttled `GET /certificates/verify/:id`; image endpoints for the e-mail and link previews.
 
 **Client**
 - `StudentTopNav` item; `student-dashboard/certificates` page; share helper (Web Share API with fallbacks); public `/verify/[id]` page with Open Graph tags and `noindex`; Home banner; Learning milestone.
 
-**Test checklist:** the 11 self-checks, plus on real devices: WhatsApp and Facebook previews, the phone share sheet, e-mail in Gmail app and Outlook, a printed A4 copy scanned with a phone, and the production host's Chromium memory and timing.
+**Test checklist:** the 21 self-checks, plus on real devices: WhatsApp and Facebook previews, the phone share sheet, e-mail in Gmail app and Outlook, a printed A4 copy scanned with a phone, and the production host's Chromium memory and timing.
 
 ## 11. What is and is not verified
 
-**Verified by running:** the before-render; the recommendation table; all seven programs and the edge-case names; PDF properties; QR decoding at several qualities; hostile-name safety with a negative control; contrast; grayscale; timing and memory; font licences (all SIL OFL); LinkedIn's help page.
+**Verified by running:** the before-render; the recommendation table; all seven programs and the edge-case names; PDF properties and structure tree; QR decoding with two independent decoders across resolutions and a degraded copy; the typography specimen; hostile-name safety with a negative control; the icon regression test with a negative control; contrast; grayscale; timing and memory; font licences (all SIL OFL); LinkedIn's help page. Option 2's QR was decoded and does not decode.
 
-**Not verified:** e-mail rendering in Outlook/Gmail; share-sheet and link-preview behaviour on real phones; Chromium on your production host; whether you own the sample domain; the "24 / 28" counting issue against real data; the tablet-width navbar.
+**Not verified:** e-mail rendering in Outlook/Gmail; share-sheet and link-preview behaviour on real phones; a physical phone scanning a printed copy; Chromium on your production host; whether you own the sample domain; the "24 / 28" counting issue against real data; the tablet-width navbar.
 
-**Placeholders in the samples:** the founder's signature is a font-made stand-in; the domain is `lumexa.school`; student names, IDs and dates are invented.
+**Placeholders in the samples:** the founder's signature is a font-made stand-in; the "Lumexa" wordmark is typeset; the domain is `lumexa.school`; student names, IDs and dates are invented.

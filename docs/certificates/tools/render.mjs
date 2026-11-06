@@ -16,7 +16,7 @@
 //   const { pdf, png, preview, shareCard } = await renderCertificate({ ...data });
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -46,9 +46,35 @@ export function describeProgram({ lessons, courses, projects }) {
  *  public verification page, so it must describe what the system really enforces. */
 export const AWARD_CRITERION = 'Awarded on passing the Final Test.';
 
-/** "6 November 2026" in Dhaka time, so a certificate issued at 1 a.m. never shows yesterday. */
-export function formatIssueDate(date, timeZone = 'Asia/Dhaka') {
+/** "6 November 2026" in Dhaka time, so a certificate completed at 1 a.m. never shows yesterday. */
+export function formatCompletionDate(date, timeZone = 'Asia/Dhaka') {
   return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone }).format(date);
+}
+
+// ── Certificate IDs ───────────────────────────────────────────────────────────
+// LMX-WD-2026-7K3F-9QWM = Lumexa, program code, year, 8 random characters in two groups.
+// The program code makes an ID readable for staff and parents; the random part (32 symbols with
+// no 0/1/I/O look-alikes, 32^8 = about a trillion combinations) makes it unguessable, so a public
+// /verify/<ID> page cannot be walked through one number at a time. Sequential IDs would also
+// reveal how many certificates Lumexa has issued. The verification endpoint must still accept the
+// old format (LMX-YYYY-XXXXXXXX) for certificates that already exist.
+export const PROGRAM_CODES = {
+  'lumexa-odyssey': 'OD',
+  'little-coders-path': 'LC',
+  'game-creator-path': 'GC',
+  'web-developer-path': 'WD',
+  'ai-builder-path': 'AI',
+  'data-scientist-path': 'DS',
+  'digital-independence-path': 'DI',
+};
+const ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+export const CERTIFICATE_ID_PATTERN = /^LMX-[A-Z]{2}-\d{4}-[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/;
+
+export function generateCertificateId(programSlug, year = new Date().getFullYear()) {
+  const code = PROGRAM_CODES[programSlug];
+  if (!code) throw new Error(`No certificate code for program "${programSlug}"`);
+  const group = () => Array.from({ length: 4 }, () => ID_ALPHABET[randomInt(ID_ALPHABET.length)]).join('');
+  return `LMX-${code}-${year}-${group()}-${group()}`;
 }
 
 export const escapeHtml = (v) =>
@@ -82,8 +108,20 @@ function inlineAssets(html, { signaturePath }) {
 }
 
 async function qrSvg(url) {
-  // dark = the brand navy; margin 0 because the template draws a white card (quiet zone) around it
-  return QRCode.toString(url, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#0B1026', light: '#FFFFFF' } });
+  // dark = the brand ink; margin 0 because the template draws a white card (quiet zone) around it
+  return QRCode.toString(url, { type: 'svg', margin: 0, errorCorrectionLevel: 'M', color: { dark: '#0E1233', light: '#FFFFFF' } });
+}
+
+/** A Lucide line icon (ISC licence, the same icon set the Lumexa app uses) as inline SVG. The name
+ *  comes from tools/programs.json, never from a student, and is still validated as a plain file name. */
+function iconSvg(name) {
+  const file = join(TEMPLATE_DIR, 'icons', `${name}.svg`);
+  if (!/^[a-z0-9-]+$/.test(name) || !existsSync(file)) throw new Error(`Unknown program icon "${name}"`);
+  const svg = readFileSync(file, 'utf8').replace(/<!--[\s\S]*?-->\s*/, '');
+  // only the root <svg> tag is touched: child shapes (e.g. <rect width=... height=...>) need their sizes
+  return svg.replace(/<svg[\s\S]*?>/, (open) =>
+    open.replace(/\sclass="[^"]*"/, ' class="picon" aria-hidden="true"').replace(/\s(width|height)="\d+"/g, ''),
+  );
 }
 
 /** Builds the final, self-contained HTML for one certificate. */
@@ -91,13 +129,14 @@ export async function buildHtml(data) {
   const {
     studentName,
     programName,
+    programIcon, // icon file name, e.g. "gamepad-2" (see template/icons)
     programDescriptor,
     awardCriterion = AWARD_CRITERION,
     honors, // optional, e.g. "with Distinction"
     founderName,
     founderTitle,
     founderOrg,
-    issuedAt,
+    completedAt, // the date the Final Test was passed
     certificateId,
     verifyUrl, // full https URL that the QR code opens
     contactLine,
@@ -125,12 +164,12 @@ export async function buildHtml(data) {
     founderName,
     founderTitle,
     founderOrg,
-    issueDate: formatIssueDate(issuedAt),
+    completionDate: formatCompletionDate(completedAt),
     certificateId,
     verifyUrlDisplay,
     contactLine,
   };
-  const raw = { qrSvg: await qrSvg(verifyUrl), honorsBlock, csp };
+  const raw = { qrSvg: await qrSvg(verifyUrl), honorsBlock, programIcon: iconSvg(programIcon), csp };
 
   // {{raw}} keys are inserted as-is, {{text}} keys are always HTML-escaped (student names are user input)
   html = html.replace(/\{\{(\w+)\}\}/g, (m, key) => {
@@ -148,7 +187,8 @@ const lockDown = async (page) =>
   page.route('**/*', (route) => (route.request().url().startsWith('data:') ? route.continue() : route.abort()));
 
 async function withBrowser(fn) {
-  const browser = await chromium.launch({ args: (process.env.CHROMIUM_ARGS || '').split(' ').filter(Boolean) });
+  // CHROMIUM_PATH: use a system / serverless Chromium instead of Playwright's own download
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: (process.env.CHROMIUM_ARGS || '').split(' ').filter(Boolean) });
   try {
     return await fn(browser);
   } finally {
@@ -216,8 +256,8 @@ export async function renderCertificate(data) {
     doc.setKeywords(['Lumexa', 'certificate', 'completion', data.certificateId]);
     doc.setCreator('Lumexa certificate service');
     doc.setProducer('Lumexa (Chromium + pdf-lib)');
-    doc.setCreationDate(data.issuedAt);
-    doc.setModificationDate(data.issuedAt);
+    doc.setCreationDate(data.completedAt);
+    doc.setModificationDate(data.completedAt);
     pdf = Buffer.from(await doc.save());
     ms.meta = Date.now() - t;
 
@@ -263,13 +303,14 @@ async function main() {
     const out = await renderCertificate({
       studentName: s.studentName,
       programName: p.name,
+      programIcon: p.icon,
       programDescriptor: describeProgram(p),
       honors: s.honors,
       ...founder,
-      issuedAt: new Date(s.issuedAt),
+      completedAt: new Date(s.completedAt),
       certificateId: s.certificateId,
       verifyUrl: `https://lumexa.school/verify/${s.certificateId}`,
-      contactLine: 'Lumexa AI School  ·  lumexa.school  ·  lumexa.school@gmail.com',
+      contactLine: 'lumexa.school@gmail.com',
       signaturePath,
     });
     const base = join(outDir, `certificate-${s.key}`);

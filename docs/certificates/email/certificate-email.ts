@@ -25,7 +25,7 @@ export interface CertificateEmailParams {
   programName: string;
   certificateId: string;
   /** "6 November 2026" (Asia/Dhaka) */
-  issuedOn: string;
+  completedOn: string;
   lessonsCompleted: number;
   totalLessons: number;
   finalTestPct: number | null;
@@ -119,7 +119,7 @@ export function certificateIssuedEmail(p: CertificateEmailParams) {
             ${summaryRow('Program', program)}
             ${summaryRow('Lessons completed', `${p.lessonsCompleted} / ${p.totalLessons}`)}
             ${p.finalTestPct !== null ? summaryRow('Final Test', `${Math.round(p.finalTestPct)}%`) : ''}
-            ${summaryRow('Awarded on', escapeHtml(p.issuedOn))}
+            ${summaryRow('Completed on', escapeHtml(p.completedOn))}
             ${summaryRow('Certificate ID', escapeHtml(p.certificateId))}
           </table>
         </div>

@@ -17,7 +17,7 @@ const { chromium } = require('playwright');
 const here = dirname(fileURLToPath(import.meta.url));
 const samples = join(here, '..', 'samples');
 
-const verifyUrl = 'https://lumexa.school/verify/LMX-2026-7K3F-9QWM';
+const verifyUrl = 'https://lumexa.school/verify/LMX-WD-2026-7K3F-9QWM';
 const jpg = readFileSync(join(samples, 'lumexa-certificate-sample.preview.jpg'));
 
 // what the CURRENT rule would send for this student (see the README: it ignores age)
@@ -38,8 +38,8 @@ const after = (imageSrc: string) =>
     studentName: 'Ayaan Rahman',
     studentFirstName: 'Ayaan',
     programName: 'Web Developer Path',
-    certificateId: 'LMX-2026-7K3F-9QWM',
-    issuedOn: '6 November 2026',
+    certificateId: 'LMX-WD-2026-7K3F-9QWM',
+    completedOn: '6 November 2026',
     lessonsCompleted: 24,
     totalLessons: 24,
     finalTestPct: 86,

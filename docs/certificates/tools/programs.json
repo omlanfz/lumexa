@@ -1,10 +1,52 @@
 {
-  "_note": "Sample facts for the preview renderer only. In production these counts are read from the database at issue time (modules = courses, lessons of type LESSON, projects), so they can never drift from what the student actually did. Values below match server/prisma/curriculum-data/*.json.",
-  "lumexa-odyssey": { "name": "Lumexa Odyssey", "lessons": 72, "courses": 9, "projects": 24 },
-  "little-coders-path": { "name": "Little Coders Path", "lessons": 24, "courses": 3, "projects": 9 },
-  "game-creator-path": { "name": "Game Creator Path", "lessons": 24, "courses": 3, "projects": 9 },
-  "web-developer-path": { "name": "Web Developer Path", "lessons": 24, "courses": 3, "projects": 9 },
-  "ai-builder-path": { "name": "AI Builder Path", "lessons": 24, "courses": 3, "projects": 9 },
-  "data-scientist-path": { "name": "Data Scientist Path", "lessons": 24, "courses": 3, "projects": 9 },
-  "digital-independence-path": { "name": "Digital Independence Path", "lessons": 24, "courses": 3, "projects": 0 }
+  "_note": "Sample facts for the preview renderer only. In production these counts are read from the database at issue time (modules = courses, lessons of type LESSON, projects), so they can never drift from what the student actually did. Values below match server/prisma/curriculum-data/*.json. 'icon' is a Lucide icon file name in template/icons (the same icon set the Lumexa app uses).",
+  "lumexa-odyssey": {
+    "name": "Lumexa Odyssey",
+    "lessons": 72,
+    "courses": 9,
+    "projects": 24,
+    "icon": "rocket"
+  },
+  "little-coders-path": {
+    "name": "Little Coders Path",
+    "lessons": 24,
+    "courses": 3,
+    "projects": 9,
+    "icon": "sparkles"
+  },
+  "game-creator-path": {
+    "name": "Game Creator Path",
+    "lessons": 24,
+    "courses": 3,
+    "projects": 9,
+    "icon": "gamepad-2"
+  },
+  "web-developer-path": {
+    "name": "Web Developer Path",
+    "lessons": 24,
+    "courses": 3,
+    "projects": 9,
+    "icon": "globe"
+  },
+  "ai-builder-path": {
+    "name": "AI Builder Path",
+    "lessons": 24,
+    "courses": 3,
+    "projects": 9,
+    "icon": "bot"
+  },
+  "data-scientist-path": {
+    "name": "Data Scientist Path",
+    "lessons": 24,
+    "courses": 3,
+    "projects": 9,
+    "icon": "chart-column"
+  },
+  "digital-independence-path": {
+    "name": "Digital Independence Path",
+    "lessons": 24,
+    "courses": 3,
+    "projects": 0,
+    "icon": "briefcase-business"
+  }
 }

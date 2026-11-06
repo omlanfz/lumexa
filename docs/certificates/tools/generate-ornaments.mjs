@@ -1,10 +1,10 @@
 // Generates the three decorative SVG assets the certificate template uses:
 //
-//   template/ornaments/frame.svg    page frame: double rule, woven guilloche band,
-//                                   corner rosettes and four lines of microtext
+//   template/ornaments/frame.svg    page frame: double rule with a slim woven guilloche band between
+//                                   the rules, four sparkle corners and two lines of microtext
 //   template/ornaments/rosette.svg  large, very faint guilloche rosette (the watermark)
-//   template/ornaments/seal.svg     the round "official certificate" seal (the template
-//                                   overlays the logo mark in its centre)
+//   template/ornaments/seal.svg     the round "official certificate" seal with ribbon tails (the
+//                                   template overlays the logo mark in its centre)
 //
 // They are plain static files committed next to the template, so nothing here runs
 // at render time. Re-run this script only if you want to change the ornaments:
@@ -24,8 +24,8 @@ const out = join(here, '..', 'template', 'ornaments');
 mkdirSync(out, { recursive: true });
 
 // ── Palette (matches the logo + the site's teal/blue/violet accents) ────────────
-const NAVY = '#0B1026';
-const PAPER = '#FCFAF6';
+const NAVY = '#14124A';
+const PAPER = '#FCFCFF';
 const GOLD = '#E3CE95';
 const GRAD = [
   ['0', '#14B8A6'], // teal
@@ -35,9 +35,14 @@ const GRAD = [
 const stops = GRAD.map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('');
 
 const n = (v, d = 2) => Number(v.toFixed(d));
-const pts = (arr) => arr.map(([x, y]) => `${n(x)},${n(y)}`).join(' ');
 const poly = (arr) => 'M' + arr.map(([x, y]) => `${n(x)} ${n(y)}`).join('L');
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+
+/** Four-point sparkle (the star motif of the Lumexa logo) centred on cx,cy. */
+function sparkle(cx, cy, R, fill) {
+  const k = 0.2 * R;
+  return `<path d="M${n(cx)} ${n(cy - R)}Q${n(cx + k)} ${n(cy - k)} ${n(cx + R)} ${n(cy)}Q${n(cx + k)} ${n(cy + k)} ${n(cx)} ${n(cy + R)}Q${n(cx - k)} ${n(cy + k)} ${n(cx - R)} ${n(cy)}Q${n(cx - k)} ${n(cy - k)} ${n(cx)} ${n(cy - R)}Z" fill="${fill}"/>`;
+}
 
 /** Hypotrochoid scaled so its farthest point sits exactly at `radius`. */
 function hypotrochoid({ R, r, d, radius, rotate = 0, steps = 720 }) {
@@ -61,22 +66,20 @@ function hypotrochoid({ R, r, d, radius, rotate = 0, steps = 720 }) {
 function frame() {
   const W = 297;
   const H = 210;
-  const OUTER = 6; // outer rule inset (mm)
-  const INNER = 15; // inner rule inset (mm)
-  const MID = (OUTER + INNER) / 2; // centre line of the band
-  const AMP = 2.35;
-  const WAVE = 16; // wavelength (mm)
-  const STRANDS = 8;
-  const STEP = 1.1;
+  const OUTER = 6.5; // outer rule inset (mm)
+  const INNER = 12.5; // inner rule inset (mm)
+  const CENTRE = 9.5; // centre line of the woven band
+  const AMP = 1.0;
+  const WAVE = 11; // wavelength (mm)
+  const STRANDS = 6;
+  const STEP = 1;
   const strands = [];
 
   const horizontal = (cy) => {
     for (let k = 0; k < STRANDS; k++) {
       const phase = (k / STRANDS) * Math.PI;
       const p = [];
-      for (let x = OUTER; x <= W - OUTER + 0.001; x += STEP) {
-        p.push([x, cy + AMP * Math.sin(((x - INNER) / WAVE) * Math.PI * 2 + phase)]);
-      }
+      for (let x = OUTER; x <= W - OUTER + 0.001; x += STEP) p.push([x, cy + AMP * Math.sin(((x - INNER) / WAVE) * Math.PI * 2 + phase)]);
       strands.push(poly(p));
     }
   };
@@ -84,64 +87,56 @@ function frame() {
     for (let k = 0; k < STRANDS; k++) {
       const phase = (k / STRANDS) * Math.PI;
       const p = [];
-      for (let y = OUTER; y <= H - OUTER + 0.001; y += STEP) {
-        p.push([cx + AMP * Math.sin(((y - INNER) / WAVE) * Math.PI * 2 + phase), y]);
-      }
+      for (let y = OUTER; y <= H - OUTER + 0.001; y += STEP) p.push([cx + AMP * Math.sin(((y - INNER) / WAVE) * Math.PI * 2 + phase), y]);
       strands.push(poly(p));
     }
   };
-  horizontal(MID);
-  horizontal(H - MID);
-  vertical(MID);
-  vertical(W - MID);
+  horizontal(CENTRE);
+  horizontal(H - CENTRE);
+  vertical(CENTRE);
+  vertical(W - CENTRE);
 
-  // corner squares hide the strand crossings and carry a small rosette each
+  // sparkle corners: a small ring with the logo's four-point star, drawn over the band
   const corners = [
-    [OUTER, OUTER],
-    [W - INNER, OUTER],
-    [OUTER, H - INNER],
-    [W - INNER, H - INNER],
-  ].map(([x, y]) => {
-    const cx = x + (INNER - OUTER) / 2;
-    const cy = y + (INNER - OUTER) / 2;
-    const rose = hypotrochoid({ R: 40, r: 5, d: 7, radius: 3.5, steps: 360 }).map(([a, b]) => [a + cx, b + cy]);
-    return `
-    <g>
-      <rect x="${x}" y="${y}" width="${INNER - OUTER}" height="${INNER - OUTER}" fill="${PAPER}" stroke="${NAVY}" stroke-width="0.3"/>
-      <circle cx="${cx}" cy="${cy}" r="3.9" fill="none" stroke="${NAVY}" stroke-width="0.18"/>
-      <path d="${poly(rose)}" fill="none" stroke="url(#frame-g)" stroke-width="0.16"/>
-      <circle cx="${cx}" cy="${cy}" r="0.55" fill="${NAVY}"/>
-    </g>`;
-  });
+    [CENTRE, CENTRE],
+    [W - CENTRE, CENTRE],
+    [CENTRE, H - CENTRE],
+    [W - CENTRE, H - CENTRE],
+  ]
+    .map(
+      ([cx, cy]) => `
+  <g>
+    <circle cx="${cx}" cy="${cy}" r="4.7" fill="${PAPER}"/>
+    <circle cx="${cx}" cy="${cy}" r="4.2" fill="none" stroke="${NAVY}" stroke-width="0.28"/>
+    ${sparkle(cx, cy, 3.3, '#3B3FC8')}
+    <circle cx="${cx}" cy="${cy}" r="0.5" fill="${PAPER}"/>
+  </g>`,
+    )
+    .join('');
 
-  // microtext: tiny repeating text that blurs into a fine line when photocopied
+  // microtext: tiny repeating text that blurs into a fine line when photocopied (top and bottom only)
   const phrase = 'LUMEXA AI SCHOOL · VERIFIED CERTIFICATE · ';
   const line = phrase.repeat(9);
-  const micro = (attrs, len) =>
-    `<text ${attrs} textLength="${len}" lengthAdjust="spacing" font-family="Inter, Arial, sans-serif" font-size="1.12" font-weight="600" fill="${NAVY}" fill-opacity="0.62">${line}</text>`;
-  const microtext = [
-    micro(`x="21" y="17.45"`, 255),
-    micro(`x="21" y="193.65"`, 255),
-    micro(`transform="translate(17.35 189) rotate(-90)"`, 168),
-    micro(`transform="translate(279.65 21) rotate(90)"`, 168),
-  ].join('\n    ');
+  const micro = (y) =>
+    `<text x="24" y="${y}" textLength="249" lengthAdjust="spacing" font-family="Inter, Arial, sans-serif" font-size="1.05" font-weight="600" fill="${NAVY}" fill-opacity="0.55">${line}</text>`;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}mm" height="${H}mm" aria-hidden="true">
   <defs>
     <linearGradient id="frame-g" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="${W}" y2="0">${stops}</linearGradient>
     <clipPath id="frame-band">
-      <path clip-rule="evenodd" d="M${OUTER} ${OUTER}H${W - OUTER}V${H - OUTER}H${OUTER}Z M${INNER} ${INNER}V${H - INNER}H${W - INNER}V${INNER}Z"/>
+      <path clip-rule="evenodd" d="M${OUTER + 1.3} ${OUTER + 1.3}H${W - OUTER - 1.3}V${H - OUTER - 1.3}H${OUTER + 1.3}Z M${INNER - 1.3} ${INNER - 1.3}V${H - INNER + 1.3}H${W - INNER + 1.3}V${INNER - 1.3}Z"/>
     </clipPath>
   </defs>
-  <rect x="${OUTER}" y="${OUTER}" width="${W - 2 * OUTER}" height="${H - 2 * OUTER}" fill="none" stroke="${NAVY}" stroke-width="0.55"/>
-  <g clip-path="url(#frame-band)" fill="none" stroke="url(#frame-g)" stroke-width="0.14" stroke-opacity="0.68">
+  <rect x="${OUTER}" y="${OUTER}" width="${W - 2 * OUTER}" height="${H - 2 * OUTER}" fill="none" stroke="${NAVY}" stroke-width="0.5"/>
+  <g clip-path="url(#frame-band)" fill="none" stroke="url(#frame-g)" stroke-width="0.14" stroke-opacity="0.6">
     ${strands.map((d) => `<path d="${d}"/>`).join('\n    ')}
   </g>
-  <rect x="${INNER}" y="${INNER}" width="${W - 2 * INNER}" height="${H - 2 * INNER}" fill="none" stroke="${NAVY}" stroke-width="0.24"/>
-  ${corners.join('')}
+  <rect x="${INNER}" y="${INNER}" width="${W - 2 * INNER}" height="${H - 2 * INNER}" fill="none" stroke="url(#frame-g)" stroke-width="0.5"/>
+  ${corners}
   <g>
-    ${microtext}
+    ${micro(14.75)}
+    ${micro(195.3)}
   </g>
 </svg>
 `;
@@ -174,6 +169,8 @@ function rosette() {
 }
 
 // ── 3. seal.svg ────────────────────────────────────────────────────────────────
+// The seal's circle is centred on (0,0); the two ribbon tails hang below it. The viewBox is
+// 120 x 142 units, so the circle's centre sits 60/142 = 42.25% of the way down the image.
 function seal() {
   const BUMPS = 44;
   const edge = [];
@@ -189,15 +186,21 @@ function seal() {
       const rad = i % 2 ? r : R;
       p.push([cx + rad * Math.cos(a), cy + rad * Math.sin(a)]);
     }
-    return `<polygon points="${pts(p)}" fill="${GOLD}"/>`;
+    return `<polygon points="${p.map(([x, y]) => `${n(x)},${n(y)}`).join(' ')}" fill="${GOLD}"/>`;
   };
+  // ribbon tails: notched ends, drawn behind the scalloped medal
+  const tail = (s) =>
+    `<path d="M${s * 14} 34 L${s * 38} 34 L${s * 31} 58 L${s * 41} 80 L${s * 25} 72 L${s * 11} 82 L${s * 17} 52 Z" fill="url(#seal-tail)"/>`;
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 120" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 142" aria-hidden="true">
   <defs>
     <linearGradient id="seal-g" x1="0" y1="0" x2="1" y2="1">${stops}</linearGradient>
+    <linearGradient id="seal-tail" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3B2FB5"/><stop offset="1" stop-color="#7C3AED"/></linearGradient>
     <path id="seal-top" d="M-37.4 0A37.4 37.4 0 0 1 37.4 0"/>
     <path id="seal-bottom" d="M-43.4 0A43.4 43.4 0 0 0 43.4 0"/>
   </defs>
+  ${tail(-1)}
+  ${tail(1)}
   <path d="${poly(edge)}Z" fill="url(#seal-g)"/>
   <circle r="50.4" fill="${NAVY}"/>
   <circle r="48.6" fill="none" stroke="${GOLD}" stroke-width="0.55"/>

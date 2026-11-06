@@ -1,42 +1,44 @@
 <!doctype html>
 <!--
-  LUMEXA CERTIFICATE OF COMPLETION: template v1.0.0
+  LUMEXA CERTIFICATE OF COMPLETION: template v2.0.0
 
   One HTML page = one certificate (A4 landscape, 297 x 210 mm). The renderer
-  (tools/render.mjs) fills every {{placeholder}} below, embeds the fonts and images
-  as data URIs, and prints the page to PDF and PNG with headless Chromium.
+  (tools/render.mjs) fills every placeholder below, embeds the fonts, icons and images as
+  data URIs, and prints the page to PDF and PNG with headless Chromium.
 
-  Opened directly in a browser it shows the design with the raw {{placeholders}},
-  which is handy for tweaking the CSS. Never edit the printed output; edit this file.
+  Opened directly in a browser it shows the design with the raw placeholders, which is handy
+  for tweaking the CSS. Never edit the printed output; edit this file.
 
-  Placeholders (all text is HTML-escaped by the renderer before it is inserted):
+  Placeholders (text values are HTML-escaped by the renderer before they are inserted):
     {{documentTitle}}      <title>, also the PDF title
     {{studentName}}        the learner's name exactly as it must read on the certificate
     {{programName}}        e.g. "Web Developer Path"
-    {{programDescriptor}}  one factual sentence about the program (see tools/programs.json)
-    {{awardCriterion}}     what the certificate was awarded for, e.g. "Awarded on passing the Final Test." 
+    {{programIcon}}        inline <svg> line icon for the program (renderer picks it from tools/programs.json)
+    {{programDescriptor}}  one factual sentence about the program
+    {{awardCriterion}}     what it was awarded for, e.g. "Awarded on passing the Final Test."
     {{honorsBlock}}        empty, or the "with Distinction" line (renderer builds the HTML)
     {{founderName}} {{founderTitle}} {{founderOrg}}
-    {{issueDate}}          "6 November 2026" (Asia/Dhaka)
-    {{certificateId}}      "LMX-2026-7K3F-9QWM"
+    {{completionDate}}     "6 November 2026" (Asia/Dhaka)
+    {{certificateId}}      "LMX-WD-2026-7K3F-9QWM"
     {{verifyUrlDisplay}}   the short human-readable verification URL
     {{qrSvg}}              inline <svg> QR code of the full verification URL
-    {{contactLine}}        website and e-mail shown in the footer
+    {{contactLine}}        e-mail shown in the footer line
     {{csp}}                Content-Security-Policy (blocks all network access while printing)
 -->
-<html lang="en" data-template-version="1.0.0">
+<html lang="en" data-template-version="2.0.0">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="generator" content="Lumexa certificate template v1.0.0">
+<meta name="generator" content="Lumexa certificate template v2.0.0">
 <meta http-equiv="Content-Security-Policy" content="{{csp}}">
 <title>{{documentTitle}}</title>
 <style>
   /* Fonts are bundled (never fetched from Google at render time). The renderer swaps these
      relative urls for data: URIs so the page is fully self-contained. */
-  @font-face { font-family: "Cormorant Garamond"; font-weight: 600; font-style: normal; src: url("fonts/cormorant-garamond-latin-600-normal.woff2") format("woff2"); }
-  @font-face { font-family: "Cormorant Garamond"; font-weight: 700; font-style: normal; src: url("fonts/cormorant-garamond-latin-700-normal.woff2") format("woff2"); }
-  @font-face { font-family: "Cormorant Garamond"; font-weight: 500; font-style: italic; src: url("fonts/cormorant-garamond-latin-500-italic.woff2") format("woff2"); }
+  @font-face { font-family: "Source Serif 4"; font-weight: 400; font-style: italic; src: url("fonts/source-serif-4-latin-400-italic.woff2") format("woff2"); }
+  @font-face { font-family: "Source Serif 4"; font-weight: 600; font-style: normal; src: url("fonts/source-serif-4-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Source Serif 4"; font-weight: 700; font-style: normal; src: url("fonts/source-serif-4-latin-700-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Outfit"; font-weight: 800; font-style: normal; src: url("fonts/outfit-latin-800-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-weight: 400; font-style: normal; src: url("fonts/inter-latin-400-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-weight: 500; font-style: normal; src: url("fonts/inter-latin-500-normal.woff2") format("woff2"); }
   @font-face { font-family: "Inter"; font-weight: 600; font-style: normal; src: url("fonts/inter-latin-600-normal.woff2") format("woff2"); }
@@ -48,15 +50,17 @@
   @page { size: 297mm 210mm; margin: 0; }
 
   :root {
-    --paper: #FCFAF6;
-    --ink: #0B1026;
-    --ink-soft: #2A3454;
+    --paper: #FCFCFF;
+    --ink: #0E1233;
+    --title: #14124A;
+    --ink-soft: #2B3356;
     --muted: #55617E;
-    --indigo: #34299B;
-    --gold: #8F7330;        /* decorative shapes */
-    --gold-text: #7A6024;   /* gold for small text: 5.7:1 on the paper colour (WCAG AA needs 4.5) */
+    --indigo: #2D2796;
+    --label: #4B43C2;
+    --gold: #B08D3C;        /* decorative shapes */
+    --gold-text: #7A6024;   /* gold for small text (WCAG AA on the paper colour) */
     --g1: #14B8A6; --g2: #3B82F6; --g3: #7C3AED;
-    --serif: "Cormorant Garamond", "Noto Serif Bengali", Georgia, "Times New Roman", serif;
+    --serif: "Source Serif 4", "Noto Serif Bengali", Georgia, "Times New Roman", serif;
     --sans: "Inter", "Noto Sans Bengali", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
   }
 
@@ -73,79 +77,87 @@
 
   .page { position: relative; width: 297mm; height: 210mm; overflow: hidden; background: var(--paper); break-inside: avoid; page-break-after: avoid; }
 
-  /* ── Security-print background ─────────────────────────────────────────── */
-  .rosette { position: absolute; z-index: 0; left: 50%; top: 104mm; width: 168mm; height: 168mm; transform: translate(-50%, -50%); opacity: 0.13; }
+  /* ── Security-print background (decorative, last in the DOM) ───────────── */
+  .rosette { position: absolute; z-index: 0; left: 50%; top: 104mm; width: 168mm; height: 168mm; transform: translate(-50%, -50%); opacity: 0.11; }
   .frame { position: absolute; z-index: 0; left: 0; top: 0; width: 297mm; height: 210mm; }
   .content, .signoff, .verify { z-index: 1; }
 
-  /* ── Top: brand + title + recipient ────────────────────────────────────── */
-  .content { position: absolute; left: 26mm; right: 26mm; top: 19.5mm; height: 124mm; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .spark { width: 3.4mm; height: 3.4mm; fill: var(--gold); flex: none; display: block; }
+  .rule { height: 0.28mm; flex: none; }
+  .rule.l { background: linear-gradient(90deg, rgba(20,184,166,0), var(--g2)); }
+  .rule.r { background: linear-gradient(90deg, var(--g2), rgba(124,58,237,0)); }
 
-  .brand { display: flex; flex-direction: column; align-items: center; }
-  .brand .logo { width: 16.5mm; height: 16.5mm; display: block; }
-  .brand .wordmark { margin-top: 1.6mm; font-family: var(--sans); font-weight: 700; font-size: 8.6pt; letter-spacing: 0.46em; padding-left: 0.46em; color: var(--ink); }
-  .brand .wordmark span { font-weight: 500; color: var(--muted); letter-spacing: 0.4em; }
+  /* ── Top: brand lockup, title, recipient ───────────────────────────────── */
+  .content { position: absolute; left: 24mm; right: 24mm; top: 16.5mm; height: 122mm; display: flex; flex-direction: column; align-items: center; text-align: center; }
 
-  .title { margin-top: 5.2mm; display: flex; align-items: center; gap: 4.2mm; }
-  .title h1 { font-family: var(--sans); font-weight: 600; font-size: 12.2pt; letter-spacing: 0.36em; padding-left: 0.36em; color: var(--ink); white-space: nowrap; }
-  .title .rule { width: 38mm; height: 0.28mm; }
-  .title .rule.l { background: linear-gradient(90deg, rgba(20,184,166,0), var(--g2)); }
-  .title .rule.r { background: linear-gradient(90deg, var(--g2), rgba(124,58,237,0)); }
-  .title .gem { width: 1.9mm; height: 1.9mm; transform: rotate(45deg); background: var(--gold); flex: none; }
+  .brand { display: flex; align-items: center; justify-content: center; gap: 4.2mm; }
+  .brand .logo { width: 19.5mm; height: 19.5mm; display: block; }
+  .brand .wm { text-align: left; }
+  .brand .wm-name { font-family: "Outfit", var(--sans); font-weight: 800; font-size: 38pt; line-height: 1; color: #1B1460; letter-spacing: -0.005em; }
+  .brand .wm-sub { margin-top: 1.3mm; font-family: var(--sans); font-weight: 600; font-size: 9.4pt; letter-spacing: 0.5em; color: var(--label); }
+
+  .title { margin-top: 4.6mm; font-family: var(--serif); font-weight: 700; font-size: 34pt; line-height: 1.1; color: var(--title); letter-spacing: -0.005em; white-space: nowrap; }
+  .divider { margin-top: 2.2mm; display: flex; align-items: center; gap: 3mm; }
+  .divider .rule { width: 36mm; }
 
   .recipient { margin: auto 0; display: flex; flex-direction: column; align-items: center; width: 100%; }
-  .lead { font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 14.2pt; color: var(--muted); letter-spacing: 0.01em; }
+  .lead { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 13.5pt; color: var(--muted); }
 
   #student-name {
-    margin-top: 1.4mm;
-    font-family: var(--serif); font-weight: 600; font-size: 54pt; line-height: 1.12; letter-spacing: 0.005em;
+    margin-top: 1.2mm;
+    font-family: var(--serif); font-weight: 600; font-size: 50pt; line-height: 1.12;
     color: var(--ink); white-space: nowrap; overflow-wrap: anywhere;
   }
-  .name-rule { margin-top: 1.2mm; width: 128mm; height: 0.4mm; background: linear-gradient(90deg, rgba(20,184,166,0), var(--g1) 14%, var(--g2) 50%, var(--g3) 86%, rgba(124,58,237,0)); }
+  .name-rule { margin-top: 1.9mm; width: 128mm; height: 0.4mm; background: linear-gradient(90deg, rgba(20,184,166,0), var(--g1) 14%, var(--g2) 50%, var(--g3) 86%, rgba(124,58,237,0)); }
 
-  .lead.second { margin-top: 5mm; }
-  #program-name {
-    margin-top: 0.8mm;
-    font-family: var(--serif); font-weight: 700; font-size: 30pt; line-height: 1.12; letter-spacing: 0.005em;
-    color: var(--indigo); white-space: nowrap; overflow-wrap: anywhere;
+  .lead.second { margin-top: 4.6mm; }
+  .pill {
+    margin-top: 2.4mm; display: inline-flex; align-items: center; gap: 3.2mm;
+    padding: 2.3mm 9.5mm 2.3mm 6mm; border-radius: 99mm;
+    background: #EEF0FF; border: 0.35mm solid #B4BBF2;
   }
-  .honors { margin-top: 2.2mm; display: flex; align-items: center; gap: 3mm; font-family: var(--sans); font-weight: 700; font-size: 7.6pt; letter-spacing: 0.3em; color: var(--gold-text); }
+  .pill svg { width: 8.8mm; height: 8.8mm; display: block; flex: none; color: var(--indigo); stroke-width: 1.9; }
+  #program-name { font-family: var(--sans); font-weight: 700; font-size: 24pt; line-height: 1.15; color: var(--indigo); white-space: nowrap; overflow-wrap: anywhere; }
+
+  .honors { margin-top: 2.4mm; display: flex; align-items: center; gap: 3mm; font-family: var(--sans); font-weight: 700; font-size: 7.6pt; letter-spacing: 0.3em; color: var(--gold-text); }
   .honors i { width: 1.5mm; height: 1.5mm; transform: rotate(45deg); background: var(--gold); display: block; }
-  .descriptor { margin-top: 3.6mm; max-width: 186mm; font-family: var(--sans); font-weight: 400; font-size: 9.6pt; line-height: 1.6; color: var(--ink-soft); text-wrap: balance; }
-  .descriptor .criterion { display: block; margin-top: 0.6mm; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 12pt; line-height: 1.3; color: var(--muted); }
+  .descriptor { margin-top: 3.4mm; max-width: 186mm; font-family: var(--sans); font-weight: 400; font-size: 9.6pt; line-height: 1.6; color: var(--ink-soft); text-wrap: balance; }
+  .descriptor .criterion { display: block; margin-top: 0.6mm; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 12pt; line-height: 1.3; color: var(--muted); }
 
   /* ── Bottom: signature, seal, date + ID, QR ────────────────────────────── */
-  .signoff { position: absolute; left: 28mm; right: 28mm; top: 146mm; height: 33mm; display: grid; grid-template-columns: 1fr 40mm 1fr; align-items: end; }
+  .signoff { position: absolute; left: 27mm; right: 27mm; top: 141mm; height: 38mm; display: grid; grid-template-columns: 1fr 34mm 1fr; align-items: end; }
 
   .sig { width: 74mm; position: relative; }
   .sig .signature { position: absolute; left: 2mm; bottom: 15.2mm; height: 16.5mm; width: auto; display: block; }
   .sig .line { height: 0.3mm; background: var(--ink); margin-bottom: 2mm; }
-  .sig .name { font-family: var(--serif); font-weight: 700; font-size: 15.5pt; line-height: 1.1; color: var(--ink); }
+  .sig .name { font-family: var(--serif); font-weight: 700; font-size: 14.5pt; line-height: 1.1; color: var(--ink); }
   .sig .role { margin-top: 0.8mm; font-family: var(--sans); font-weight: 600; font-size: 6.6pt; letter-spacing: 0.2em; color: var(--ink-soft); text-transform: uppercase; }
   .sig .org { margin-top: 0.6mm; font-family: var(--sans); font-weight: 500; font-size: 6.6pt; letter-spacing: 0.2em; color: var(--muted); text-transform: uppercase; }
 
-  .seal { position: relative; width: 36mm; height: 36mm; justify-self: center; align-self: end; margin-bottom: -1.5mm; }
-  .seal svg, .seal .seal-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .seal .seal-logo { position: absolute; left: 50%; top: 50%; width: 15.6mm; height: 15.6mm; transform: translate(-50%, -50%); display: block; }
+  /* the seal image is 120 x 142 units: the medal's centre sits 42.25% of the way down */
+  .seal { position: relative; width: 33mm; height: 39mm; justify-self: center; align-self: end; margin-bottom: -1mm; }
+  .seal .seal-art { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .seal .seal-logo { position: absolute; left: 50%; top: 42.25%; width: 14.6mm; height: 14.6mm; transform: translate(-50%, -50%); display: block; }
 
   .right { justify-self: end; display: flex; align-items: flex-end; gap: 6mm; }
   .meta { text-align: right; }
-  .meta .item + .item { margin-top: 3.6mm; }
-  .meta .label { font-family: var(--sans); font-weight: 600; font-size: 6.2pt; letter-spacing: 0.22em; color: var(--gold-text); text-transform: uppercase; }
+  .meta .item + .item { margin-top: 3.4mm; }
+  .meta .label { font-family: var(--sans); font-weight: 600; font-size: 6.2pt; letter-spacing: 0.2em; color: var(--label); text-transform: uppercase; }
   .meta .value { margin-top: 0.9mm; font-family: var(--sans); font-weight: 600; font-size: 10.4pt; color: var(--ink); font-variant-numeric: tabular-nums; }
-  .meta .value.id { letter-spacing: 0.05em; font-size: 9.8pt; }
+  .meta .value.id { letter-spacing: 0.04em; font-size: 9.6pt; }
 
   .qr { flex: none; text-align: center; }
-  .qr .box { width: 22mm; height: 22mm; padding: 1.7mm; background: #fff; border: 0.25mm solid rgba(11, 16, 38, 0.22); border-radius: 1.2mm; }
+  .qr .box { width: 24mm; height: 24mm; padding: 1.8mm; background: #fff; border: 0.25mm solid rgba(20, 18, 74, 0.22); border-radius: 1.4mm; }
   .qr .box svg { width: 100%; height: 100%; display: block; }
   .qr .cap { margin-top: 1.1mm; font-family: var(--sans); font-weight: 600; font-size: 5.4pt; letter-spacing: 0.22em; padding-left: 0.22em; color: var(--muted); }
 
-  /* ── Verification line ─────────────────────────────────────────────────── */
-  .verify { position: absolute; left: 26mm; right: 26mm; top: 181.4mm; text-align: center; }
-  .verify .hair { height: 0.2mm; margin: 0 auto 2mm; width: 100%; background: linear-gradient(90deg, rgba(11,16,38,0), rgba(11,16,38,0.35) 18%, rgba(11,16,38,0.35) 82%, rgba(11,16,38,0)); }
-  .verify p { font-family: var(--sans); font-size: 7.1pt; line-height: 1.5; color: var(--muted); }
+  /* ── Verification strip ────────────────────────────────────────────────── */
+  .verify { position: absolute; left: 30mm; right: 30mm; top: 183.2mm; text-align: center; }
+  .verify .badge-line { display: flex; align-items: center; justify-content: center; gap: 3mm; font-family: var(--sans); font-weight: 600; font-size: 6.6pt; letter-spacing: 0.26em; color: var(--label); white-space: nowrap; }
+  .verify .badge-line .rule { width: 42mm; }
+  .verify .spark { width: 2.6mm; height: 2.6mm; }
+  .verify p { margin-top: 1.8mm; font-family: var(--sans); font-size: 7pt; line-height: 1.5; color: var(--muted); }
   .verify p strong { font-weight: 600; color: var(--ink); }
-  .verify .contact { font-size: 6.5pt; letter-spacing: 0.04em; }
 </style>
 </head>
 <body>
@@ -154,13 +166,14 @@
   <div class="content">
     <header class="brand">
       <img class="logo" src="images/logo-mark.png" alt="Lumexa logo">
-      <div class="wordmark">LUMEXA <span>AI SCHOOL</span></div>
+      <div class="wm"><div class="wm-name">Lumexa</div><div class="wm-sub">AI SCHOOL</div></div>
     </header>
 
-    <div class="title">
-      <span class="rule l"></span><span class="gem"></span>
-      <h1>CERTIFICATE OF COMPLETION</h1>
-      <span class="gem"></span><span class="rule r"></span>
+    <h1 class="title">Certificate of Completion</h1>
+    <div class="divider">
+      <span class="rule l"></span>
+      <svg class="spark" viewBox="-10 -10 20 20" aria-hidden="true"><path d="M0 -10Q2 -2 10 0Q2 2 0 10Q-2 2 -10 0Q-2 -2 0 -10Z"/></svg>
+      <span class="rule r"></span>
     </div>
 
     <section class="recipient">
@@ -169,7 +182,7 @@
       <div class="name-rule"></div>
 
       <p class="lead second">for successfully completing the</p>
-      <h3 id="program-name">{{programName}}</h3>
+      <div class="pill">{{programIcon}}<h3 id="program-name">{{programName}}</h3></div>
       {{honorsBlock}}
       <p class="descriptor">{{programDescriptor}}<span class="criterion">{{awardCriterion}}</span></p>
     </section>
@@ -192,7 +205,7 @@
 
     <div class="right">
       <div class="meta">
-        <div class="item"><div class="label">Date of issue</div><div class="value">{{issueDate}}</div></div>
+        <div class="item"><div class="label">Date of completion</div><div class="value">{{completionDate}}</div></div>
         <div class="item"><div class="label">Certificate ID</div><div class="value id">{{certificateId}}</div></div>
       </div>
       <div class="qr">
@@ -203,9 +216,14 @@
   </section>
 
   <footer class="verify">
-    <div class="hair"></div>
-    <p>Scan the QR code, or visit <strong>{{verifyUrlDisplay}}</strong>, to confirm that this certificate is genuine.</p>
-    <p class="contact">{{contactLine}}</p>
+    <div class="badge-line">
+      <span class="rule l"></span>
+      <svg class="spark" viewBox="-10 -10 20 20" aria-hidden="true"><path d="M0 -10Q2 -2 10 0Q2 2 0 10Q-2 2 -10 0Q-2 -2 0 -10Z"/></svg>
+      <span>VERIFIED CERTIFICATE · ISSUED BY LUMEXA AI SCHOOL</span>
+      <svg class="spark" viewBox="-10 -10 20 20" aria-hidden="true"><path d="M0 -10Q2 -2 10 0Q2 2 0 10Q-2 2 -10 0Q-2 -2 0 -10Z"/></svg>
+      <span class="rule r"></span>
+    </div>
+    <p>Verify at <strong>{{verifyUrlDisplay}}</strong> &nbsp;·&nbsp; {{contactLine}}</p>
   </footer>
 
   <!-- Decorative layers: last in the DOM so screen readers and text extraction meet the real
@@ -226,11 +244,23 @@
       while (width(el) > max && pt > minPt) { pt -= 0.5; el.style.fontSize = pt + 'pt'; }
       if (width(el) > max) { el.style.whiteSpace = 'normal'; el.style.maxWidth = max + 'px'; el.style.lineHeight = '1.06'; }
     }
+    function lineCount(el) { return Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)); }
+    /* The name is the hero: shrink on one line only down to a dignified size (36pt); a longer name
+       goes onto two balanced lines at a larger size instead of one tiny line. */
+    function fitName(el, maxWidthMm) {
+      var max = maxWidthMm * MM, pt = 50;
+      el.style.whiteSpace = 'nowrap';
+      el.style.fontSize = pt + 'pt';
+      while (width(el) > max && pt > 36) { pt -= 0.5; el.style.fontSize = pt + 'pt'; }
+      if (width(el) <= max) return;
+      el.style.whiteSpace = 'normal'; el.style.maxWidth = max + 'px'; el.style.lineHeight = '1.06'; el.style.textWrap = 'balance';
+      pt = 44; el.style.fontSize = pt + 'pt';
+      while (lineCount(el) > 2 && pt > 22) { pt -= 1; el.style.fontSize = pt + 'pt'; }
+    }
     function layout() {
-      fit(document.getElementById('student-name'), 232, 54, 30);
-      fit(document.getElementById('program-name'), 236, 30, 20);
+      fitName(document.getElementById('student-name'), 232);
+      fit(document.getElementById('program-name'), 195, 24, 14);
       /* the recipient block must never run into the signature row */
-      var content = document.querySelector('.content');
       var recipient = document.querySelector('.recipient');
       var limit = document.querySelector('.signoff').getBoundingClientRect().top - 3 * MM;
       var tries = 0;
