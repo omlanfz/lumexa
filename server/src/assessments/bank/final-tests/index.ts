@@ -13,11 +13,11 @@ import { odysseyFinal } from './lumexa-odyssey';
 import { webDeveloperFinal } from './web-developer-path';
 
 export const finalTestBanks: Record<string, TestBank> = {
-  'ai-builder-path': aiBuilderFinal,
-  'data-scientist-path': dataScientistFinal,
-  'digital-independence-path': digitalIndependenceFinal,
-  'game-creator-path': gameCreatorFinal,
-  'little-coders-path': littleCodersFinal,
+  'ai-builder': aiBuilderFinal,
+  'data-scientist': dataScientistFinal,
+  'digital-independence': digitalIndependenceFinal,
+  'game-creator': gameCreatorFinal,
+  'little-coders': littleCodersFinal,
   'lumexa-odyssey': odysseyFinal,
-  'web-developer-path': webDeveloperFinal,
+  'web-developer': webDeveloperFinal,
 };

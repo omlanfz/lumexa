@@ -23,7 +23,7 @@ import { COUNTS_AS_COMPLETED } from '../scheduling/lesson-state.util';
 import { NotificationsService } from '../notifications/notifications.service';
 import { cloudinary, signedDocumentUrl } from '../lib/cloudinary';
 import {
-  CURRICULUM_CATALOG,
+  findCurriculumInfo,
   getNextRecommendedCurriculum,
 } from './curriculum-progression';
 
@@ -63,7 +63,7 @@ export class CertificatesService {
       where: { id: courseId },
       select: { id: true, slug: true, title: true, sessions: true },
     });
-    if (!course || !CURRICULUM_CATALOG[course.slug]) return; // custom/one-off course — no certificate template for it
+    if (!course || !findCurriculumInfo(course.slug)) return; // custom/one-off course — no certificate template for it
 
     const finalTestLesson = await this.prisma.lesson.findFirst({
       where: { courseId, type: 'FINAL_TEST' },

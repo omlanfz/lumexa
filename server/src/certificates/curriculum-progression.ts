@@ -16,6 +16,8 @@
 // performance-based recommendation) without touching how certificates are
 // issued or how the email is sent.
 
+import { canonicalCourseSlug } from '../courses/course-slug';
+
 export interface CurriculumInfo {
   slug: string;
   title: string;
@@ -31,43 +33,43 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
       'The flagship broad-exposure journey across games, websites, apps, data, and AI.',
     pdfFile: 'lumexa-odyssey-curriculum.pdf',
   },
-  'little-coders-path': {
-    slug: 'little-coders-path',
-    title: 'Little Coders Path',
+  'little-coders': {
+    slug: 'little-coders',
+    title: 'Little Coders',
     blurb:
       'A gentle, project-driven introduction to computing and a first taste of AI.',
     pdfFile: 'little-coders-path-curriculum.pdf',
   },
-  'game-creator-path': {
-    slug: 'game-creator-path',
-    title: 'Game Creator Path',
+  'game-creator': {
+    slug: 'game-creator',
+    title: 'Game Creator',
     blurb: 'Design, script, and ship three real, playable games.',
     pdfFile: 'game-creator-path-curriculum.pdf',
   },
-  'web-developer-path': {
-    slug: 'web-developer-path',
-    title: 'Web Developer Path',
+  'web-developer': {
+    slug: 'web-developer',
+    title: 'Web Developer',
     blurb:
       'Go from a first HTML page to a deployed, full-stack React application.',
     pdfFile: 'web-developer-path-curriculum.pdf',
   },
-  'digital-independence-path': {
-    slug: 'digital-independence-path',
-    title: 'Digital Independence Path',
+  'digital-independence': {
+    slug: 'digital-independence',
+    title: 'Digital Independence',
     blurb:
       'Build the portfolio, professional skills, and business knowledge to turn ability into real opportunity.',
     pdfFile: 'digital-independence-path-curriculum.pdf',
   },
-  'data-scientist-path': {
-    slug: 'data-scientist-path',
-    title: 'Data Scientist Path',
+  'data-scientist': {
+    slug: 'data-scientist',
+    title: 'Data Scientist',
     blurb:
       'Clean real datasets, build visualizations, and train models that make real decisions.',
     pdfFile: 'data-scientist-path-curriculum.pdf',
   },
-  'ai-builder-path': {
-    slug: 'ai-builder-path',
-    title: 'AI Builder Path',
+  'ai-builder': {
+    slug: 'ai-builder',
+    title: 'AI Builder',
     blurb:
       'Go from a first line of Python to real machine learning, computer vision, and LLM applications.',
     pdfFile: 'ai-builder-path-curriculum.pdf',
@@ -77,13 +79,18 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
 // The 6 specialized pathways in Odyssey's own Stage 1→2→3 order. Odyssey
 // itself is intentionally excluded — it is the entry point, never a "next
 // step" recommendation.
+/** Looks a curriculum up by course slug, tolerating the old "-path" spelling. */
+export function findCurriculumInfo(slug: string): CurriculumInfo | undefined {
+  return CURRICULUM_CATALOG[canonicalCourseSlug(slug)];
+}
+
 export const PATHWAY_ORDER: string[] = [
-  'little-coders-path',
-  'game-creator-path',
-  'web-developer-path',
-  'digital-independence-path',
-  'data-scientist-path',
-  'ai-builder-path',
+  'little-coders',
+  'game-creator',
+  'web-developer',
+  'digital-independence',
+  'data-scientist',
+  'ai-builder',
 ];
 
 /** Given the slug of a curriculum a student just completed and the set of
@@ -97,12 +104,13 @@ export function getNextRecommendedCurriculum(
   completedSlug: string,
   allCompletedSlugs: string[],
 ): CurriculumInfo | null {
-  const completed = new Set(allCompletedSlugs);
+  const completed = new Set(allCompletedSlugs.map(canonicalCourseSlug));
+  const completedCanonical = canonicalCourseSlug(completedSlug);
 
   const startIndex =
-    completedSlug === 'lumexa-odyssey'
+    completedCanonical === 'lumexa-odyssey'
       ? 0
-      : Math.max(0, PATHWAY_ORDER.indexOf(completedSlug) + 1);
+      : Math.max(0, PATHWAY_ORDER.indexOf(completedCanonical) + 1);
 
   for (let i = startIndex; i < PATHWAY_ORDER.length; i++) {
     const slug = PATHWAY_ORDER[i];

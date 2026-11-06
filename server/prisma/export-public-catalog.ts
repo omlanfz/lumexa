@@ -18,6 +18,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { COURSE_CATALOG } from '../src/courses/course-catalog.seed';
+import { PATHWAY_SLUGS } from '../src/courses/curriculum-source';
 import { ODYSSEY_STAGES } from '../src/courses/curriculum-catalog.seed';
 import {
   buildPublicCatalog,
@@ -136,23 +137,54 @@ for (const course of COURSE_CATALOG) {
       type: 'FINAL_TEST',
     });
   } else {
-    loadPathway(course.slug).modules.forEach((mod, i) => {
+    loadPathway(PATHWAY_SLUGS[course.slug]).modules.forEach((mod, i) => {
       order = addModule(course.slug, mod, i + 1, order, null);
     });
     lessons.push({
       id: `${course.slug}:final`,
       courseId: course.slug,
       moduleId: null,
-      title: `${course.slug} — Final Test`,
+      title: `${course.title} — Final Test`,
       order,
       type: 'FINAL_TEST',
     });
   }
 }
 
+// Programs an admin built lesson by lesson have no source JSON and no modules;
+// their outline lives in prisma/public-catalog-outlines and is read as flat
+// lessons, exactly as the live database holds them.
+interface Outline {
+  slug: string;
+  title: string;
+  emoji: string | null;
+  category: string;
+  ageMin: number;
+  ageMax: number;
+  lessons: { type: CatalogLessonRow['type']; title: string }[];
+}
+const OUTLINE_DIR = path.join(__dirname, 'public-catalog-outlines');
+const outlines: Outline[] = fs
+  .readdirSync(OUTLINE_DIR)
+  .filter((f) => f.endsWith('.json'))
+  .sort()
+  .map((f) => JSON.parse(fs.readFileSync(path.join(OUTLINE_DIR, f), 'utf8')) as Outline);
+for (const outline of outlines) {
+  outline.lessons.forEach((l, i) => {
+    lessons.push({
+      id: `${outline.slug}:${i + 1}`,
+      courseId: outline.slug,
+      moduleId: null,
+      title: l.title,
+      order: i + 1,
+      type: l.type,
+    });
+  });
+}
+
 const needHeading = new Set(lessonIdsNeedingHeading(modules, lessons));
 const catalog = buildPublicCatalog({
-  courses: COURSE_CATALOG.map((c) => ({
+  courses: [...COURSE_CATALOG, ...outlines].map((c) => ({
     id: c.slug,
     slug: c.slug,
     title: c.title,

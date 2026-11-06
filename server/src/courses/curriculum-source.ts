@@ -101,13 +101,15 @@ export function loadPathway(slug: string): RawPathway {
 
 // ── Index by lineage key ("<module-slug>/<position>") ──────────────────────
 
+/** Course slug -> source file (curriculum-data/<file>.json). Keys are the
+ *  canonical slugs; the file names keep their historical "-path" spelling. */
 export const PATHWAY_SLUGS: Record<string, string> = {
-  'ai-builder-path': 'ai-builder-path',
-  'data-scientist-path': 'data-scientist-path',
-  'game-creator-path': 'game-creator-path',
-  'little-coders-path': 'little-coders-path',
-  'digital-independence-path': 'digital-independence-path',
-  'web-developer-path': 'web-developer-path',
+  'ai-builder': 'ai-builder-path',
+  'data-scientist': 'data-scientist-path',
+  'game-creator': 'game-creator-path',
+  'little-coders': 'little-coders-path',
+  'digital-independence': 'digital-independence-path',
+  'web-developer': 'web-developer-path',
 };
 
 export interface SourceLesson {

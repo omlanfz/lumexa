@@ -286,3 +286,150 @@ describe('buildPublicCatalog', () => {
     expect(out.courses[0].modules[0].lessons[8].type).toBe('COURSE_TEST');
   });
 });
+
+describe('buildPublicCatalog: programs built lesson by lesson (no modules)', () => {
+  const row = (
+    order: number,
+    type: CatalogLessonRow['type'],
+    title: string,
+  ): CatalogLessonRow => ({
+    id: `ads:${order}`,
+    courseId: 'ads',
+    moduleId: null,
+    title,
+    order,
+    type,
+  });
+
+  // Two courses of 2 lessons + a Course Test each, then a Final Test.
+  const lessons: CatalogLessonRow[] = [
+    row(1, 'LEARNING', 'Hello, Python!'),
+    row(2, 'LEARNING', 'Variables'),
+    row(3, 'COURSE_TEST', 'Python for Young Builders — Course Test'),
+    row(4, 'LEARNING', 'Game Loop'),
+    row(5, 'LEARNING', 'Sprites'),
+    row(6, 'COURSE_TEST', 'Python Arcade Games — Course Test'),
+    row(7, 'FINAL_TEST', 'Data Scientist Path — Final Test'),
+  ];
+  const catalog = buildPublicCatalog({
+    courses: [
+      {
+        id: 'ads',
+        slug: 'advanced-data-science',
+        title: 'Advanced Data Science',
+        emoji: null,
+        category: 'Advanced Data Science',
+        ageMin: 12,
+        ageMax: 18,
+      },
+    ],
+    modules: [],
+    lessons,
+  });
+  const ads = catalog.courses[0];
+
+  it('turns each run of lessons ending in a Course Test into one course', () => {
+    expect(ads.kind).toBe('specialized');
+    expect(ads.modules.map((m) => m.title)).toEqual([
+      'Python for Young Builders',
+      'Python Arcade Games',
+    ]);
+    expect(ads.modules.map((m) => [m.lessonCount, m.learningCount])).toEqual([
+      [3, 2],
+      [3, 2],
+    ]);
+    expect(ads.modules.map((m) => m.slug)).toEqual(['course-1', 'course-2']);
+  });
+
+  it('keeps the totals and leaves only the final test as a closing assessment', () => {
+    expect(ads.totalLessons).toBe(7);
+    expect(ads.learningLessons).toBe(4);
+    expect(ads.assessmentLessons).toBe(3);
+    expect(ads.closingAssessments).toEqual([
+      { order: 7, type: 'FINAL_TEST', title: 'Data Scientist — Final Test' },
+    ]);
+    expect(catalog.totals).toEqual({ programs: 1, courses: 2 });
+  });
+
+  it('puts untested trailing lessons in a last course', () => {
+    const open = buildPublicCatalog({
+      courses: [
+        {
+          id: 'ads',
+          slug: 'custom-program',
+          title: 'Custom Program',
+          emoji: null,
+          category: 'x',
+          ageMin: 6,
+          ageMax: 18,
+        },
+      ],
+      modules: [],
+      lessons: lessons.slice(0, 5),
+    }).courses[0];
+    expect(open.modules.map((m) => m.title)).toEqual([
+      'Python for Young Builders',
+      'Course 2',
+    ]);
+    expect(open.closingAssessments).toEqual([]);
+  });
+
+  it('never derives courses for a program that has real modules', () => {
+    const real = buildPublicCatalog({
+      courses: [
+        {
+          id: 'ads',
+          slug: 'game-creator',
+          title: 'Game Creator',
+          emoji: null,
+          category: 'x',
+          ageMin: 10,
+          ageMax: 18,
+        },
+      ],
+      modules: [
+        {
+          id: 'm1',
+          courseId: 'ads',
+          slug: 'real-module',
+          title: 'Real Module',
+          order: 1,
+          stageNumber: null,
+        },
+      ],
+      lessons: [
+        { ...row(1, 'LEARNING', 'One'), moduleId: 'm1' },
+        { ...row(2, 'FINAL_TEST', 'Final Test') },
+      ],
+    }).courses[0];
+    expect(real.modules.map((m) => m.slug)).toEqual(['real-module']);
+  });
+
+  it('drops the retired "Path" from a Final Test title', () => {
+    const c = buildPublicCatalog({
+      courses: [
+        {
+          id: 'x',
+          slug: 'ai-builder',
+          title: 'AI Builder',
+          emoji: null,
+          category: 'AI',
+          ageMin: 12,
+          ageMax: 18,
+        },
+      ],
+      modules: [],
+      lessons: [
+        {
+          id: 'x:1',
+          courseId: 'x',
+          moduleId: null,
+          title: 'AI Builder Path — Final Test',
+          order: 1,
+          type: 'FINAL_TEST',
+        },
+      ],
+    }).courses[0];
+    expect(c.closingAssessments[0].title).toBe('AI Builder — Final Test');
+  });
+});

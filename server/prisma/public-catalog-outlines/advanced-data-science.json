@@ -1,0 +1,195 @@
+{
+  "_comment": "Lesson outline of the admin-built Advanced Data Science program (no CourseModule rows), used only to regenerate client/lib/catalog-snapshot.json. The live catalog is the source of truth.",
+  "slug": "advanced-data-science",
+  "title": "Advanced Data Science",
+  "emoji": null,
+  "category": "Advanced Data Science",
+  "ageMin": 12,
+  "ageMax": 18,
+  "lessons": [
+    {
+      "type": "LEARNING",
+      "title": "From Blocks to Words — Hello, Python!"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Variables and User Input"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Printing and String Formatting"
+    },
+    {
+      "type": "LEARNING",
+      "title": "If/Else Decisions"
+    },
+    {
+      "type": "LEARNING",
+      "title": "While Loops and For Loops"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Lists and Simple Data"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Randomness and Finishing Your Game"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Your Python Portfolio — Polish and Present"
+    },
+    {
+      "type": "COURSE_TEST",
+      "title": "Python for Young Builders — Course Test"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Python Basics for Game Development"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cosmic Defender — Part 1: Player & Game Window"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cosmic Defender — Part 2: Enemy Fleet"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cosmic Defender — Part 3: Lasers & Shooting"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cosmic Defender — Part 4: Combat & Scoring"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cosmic Defender — Part 5: Health & Survival"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cosmic Defender — Part 6: Menus & Game States"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Polish & Showcase Your Projects"
+    },
+    {
+      "type": "COURSE_TEST",
+      "title": "Python Arcade Games — Course Test"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Why Data Science Matters (Real Examples)"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Python Refresher and Jupyter Setup"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Loading Data from CSV and Excel"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Pandas — Selecting, Filtering, Sorting"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Cleaning Data — Nulls, Duplicates, Types"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Aggregations — Group By, Pivot Tables"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Statistical Summaries and Correlation"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Full Analysis Project with a Real Dataset"
+    },
+    {
+      "type": "COURSE_TEST",
+      "title": "Python for Data — Course Test"
+    },
+    {
+      "type": "LEARNING",
+      "title": "The Science of Good Data Visualisation"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Matplotlib: Line, Bar, Scatter Plots"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Seaborn: Statistical Visualisations"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Choosing The Right Chart for Your Data"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Color, Labels, and Storytelling"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Interactive Charts with Plotly"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Building A Dash Dashboard"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Your Own Interactive Dashboard"
+    },
+    {
+      "type": "COURSE_TEST",
+      "title": "Data Visualisation — Course Test"
+    },
+    {
+      "type": "LEARNING",
+      "title": "How Machine Learning Works (No Maths Jargon)"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Types of ML — Regression vs Classification"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Train/Test Splits and Model Evaluation"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Linear Regression From Scratch"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Decision Trees and Random Forests"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Feature Engineering and Selection"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Model Tuning and Improving Accuracy"
+    },
+    {
+      "type": "LEARNING",
+      "title": "Deploying a Prediction Model as an API"
+    },
+    {
+      "type": "COURSE_TEST",
+      "title": "Machine Learning Projects — Course Test"
+    },
+    {
+      "type": "FINAL_TEST",
+      "title": "Advanced Data Science — Final Test"
+    }
+  ]
+}

@@ -24,9 +24,10 @@
 //
 // Idempotent — safe to call on every server boot (see CoursesService
 // onModuleInit) and from the standalone `npm run seed:courses` script:
-//   - Courses are upserted by `slug`, never duplicated. `sessions` is kept
-//     in sync; `priceCents` is deliberately NEVER set here (existing
-//     pricing is admin-owned and must never be overwritten by a reseed).
+//   - Courses are matched by slug (current or the retired "-path" spelling) or
+//     title and never duplicated. Only `sessions` is kept in sync, plus a
+//     one-time move off the old "-path" names; everything else on
+//     /admin/courses is admin-owned and never overwritten by a reseed.
 //   - Module/lesson/project/assessment content is only (re)built when a
 //     course doesn't already have it — see seedCurriculumContent.
 //   - Test questions are applied by syncAssessmentBanks (server/src/
@@ -35,6 +36,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { seedCurriculumContent } from './curriculum-catalog.seed';
+import { legacyCourseSlug } from './course-slug';
 import { syncAssessmentBanks } from '../assessments/bank/bank.sync';
 
 interface CourseSeed {
@@ -63,8 +65,8 @@ export const COURSE_CATALOG: CourseSeed[] = [
     sessions: 85,
   },
   {
-    slug: 'little-coders-path',
-    title: 'Little Coders Path',
+    slug: 'little-coders',
+    title: 'Little Coders',
     description:
       'A gentle, hands-on introduction to computing for young learners. Students move from colorful visual blocks to real Python code and even a first taste of AI — building genuine, shareable projects the whole way, at a pace made for ages 6–11. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.',
     emoji: '✦',
@@ -75,8 +77,8 @@ export const COURSE_CATALOG: CourseSeed[] = [
     sessions: 28,
   },
   {
-    slug: 'game-creator-path',
-    title: 'Game Creator Path',
+    slug: 'game-creator',
+    title: 'Game Creator',
     description:
       "A complete, project-driven journey from a first Roblox build to a polished, published game. Students don't just play games — they design them, script them, and ship three real, playable games friends can actually try. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '🎮',
@@ -87,8 +89,8 @@ export const COURSE_CATALOG: CourseSeed[] = [
     sessions: 28,
   },
   {
-    slug: 'web-developer-path',
-    title: 'Web Developer Path',
+    slug: 'web-developer',
+    title: 'Web Developer',
     description:
       "A complete, project-driven journey from a first HTML page to a deployed, full-stack React application. Students don't just learn about the web — they write the code, style real interfaces, and ship three live, working websites anyone can visit. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '🌐',
@@ -99,8 +101,8 @@ export const COURSE_CATALOG: CourseSeed[] = [
     sessions: 28,
   },
   {
-    slug: 'ai-builder-path',
-    title: 'AI Builder Path',
+    slug: 'ai-builder',
+    title: 'AI Builder',
     description:
       "A complete, project-driven journey from first line of Python to real machine learning, computer vision, and large language model applications. Students don't just learn about AI — they write the code, train the models, and ship three working portfolio projects. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '🤖',
@@ -111,8 +113,8 @@ export const COURSE_CATALOG: CourseSeed[] = [
     sessions: 28,
   },
   {
-    slug: 'data-scientist-path',
-    title: 'Data Scientist Path',
+    slug: 'data-scientist',
+    title: 'Data Scientist',
     description:
       "A complete, project-driven journey from messy raw data to real, working predictive models. Students don't just learn about data science — they clean real datasets, build compelling visualizations, and train machine learning models that make real decisions. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '📊',
@@ -123,8 +125,8 @@ export const COURSE_CATALOG: CourseSeed[] = [
     sessions: 28,
   },
   {
-    slug: 'digital-independence-path',
-    title: 'Digital Independence Path',
+    slug: 'digital-independence',
+    title: 'Digital Independence',
     description:
       'Build the portfolio, professional skills, digital reputation and business knowledge needed to turn your abilities into legitimate opportunities. The progression is Identity → Services → Clients → Professional Presence → Opportunities. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.',
     emoji: '💼',
@@ -148,38 +150,59 @@ export async function seedCourseCatalog(
   const results: { slug: string; title: string; created: boolean }[] = [];
 
   for (const seed of COURSE_CATALOG) {
-    const existing = await prisma.course.findUnique({
-      where: { slug: seed.slug },
-      select: { id: true },
+    // A default program is "already there" under its current slug, the old
+    // "-path" spelling, or (if an admin has re-slugged it) its title. Never
+    // create a second copy of a program Operations already manages.
+    const existing = await prisma.course.findFirst({
+      where: {
+        isCustom: false,
+        OR: [
+          { slug: { in: [seed.slug, legacyCourseSlug(seed.slug)] } },
+          { title: { equals: seed.title, mode: 'insensitive' } },
+          { title: { equals: `${seed.title} Path`, mode: 'insensitive' } },
+        ],
+      },
+      // Prefer the canonical slug when both spellings somehow exist.
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, slug: true, title: true },
     });
 
-    await prisma.course.upsert({
-      where: { slug: seed.slug },
-      update: {
-        title: seed.title,
-        description: seed.description,
-        emoji: seed.emoji,
-        category: seed.category,
-        level: seed.level,
-        ageMin: seed.ageMin,
-        ageMax: seed.ageMax,
-        sessions: seed.sessions,
-        // priceCents intentionally omitted — never overwrite admin-set pricing.
-      },
-      create: {
-        slug: seed.slug,
-        title: seed.title,
-        description: seed.description,
-        emoji: seed.emoji,
-        category: seed.category,
-        level: seed.level,
-        ageMin: seed.ageMin,
-        ageMax: seed.ageMax,
-        sessions: seed.sessions,
-      },
-    });
+    if (!existing) {
+      await prisma.course.create({
+        data: {
+          slug: seed.slug,
+          title: seed.title,
+          description: seed.description,
+          emoji: seed.emoji,
+          category: seed.category,
+          level: seed.level,
+          ageMin: seed.ageMin,
+          ageMax: seed.ageMax,
+          sessions: seed.sessions,
+        },
+      });
+      results.push({ slug: seed.slug, title: seed.title, created: true });
+      continue;
+    }
 
-    results.push({ slug: seed.slug, title: seed.title, created: !existing });
+    // Everything on /admin/courses (title, slug, emoji, ages, description,
+    // price) is admin-owned and is never overwritten by a reseed; the public
+    // site follows whatever Operations sets. Two exceptions keep the catalog
+    // sound: the session count tracks the curriculum, and a row still on the
+    // retired "-path" naming is moved to the new names once.
+    const data: { sessions: number; slug?: string; title?: string } = {
+      sessions: seed.sessions,
+    };
+    if (existing.slug === legacyCourseSlug(seed.slug)) {
+      const taken = await prisma.course.findUnique({
+        where: { slug: seed.slug },
+        select: { id: true },
+      });
+      if (!taken) data.slug = seed.slug;
+    }
+    if (existing.title === `${seed.title} Path`) data.title = seed.title;
+    await prisma.course.update({ where: { id: existing.id }, data });
+    results.push({ slug: data.slug ?? existing.slug, title: seed.title, created: false });
   }
 
   await seedCurriculumContent(prisma, logger, reconcile);

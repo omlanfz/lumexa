@@ -1032,8 +1032,8 @@
       ]
     },
     {
-      "slug": "little-coders-path",
-      "title": "Little Coders Path",
+      "slug": "little-coders",
+      "title": "Little Coders",
       "emoji": "✦",
       "category": "Little Coders",
       "ageMin": 6,
@@ -1211,13 +1211,13 @@
         {
           "order": 28,
           "type": "FINAL_TEST",
-          "title": "Final Test"
+          "title": "Little Coders — Final Test"
         }
       ]
     },
     {
-      "slug": "game-creator-path",
-      "title": "Game Creator Path",
+      "slug": "game-creator",
+      "title": "Game Creator",
       "emoji": "🎮",
       "category": "Game Creator",
       "ageMin": 10,
@@ -1395,13 +1395,13 @@
         {
           "order": 28,
           "type": "FINAL_TEST",
-          "title": "Final Test"
+          "title": "Game Creator — Final Test"
         }
       ]
     },
     {
-      "slug": "web-developer-path",
-      "title": "Web Developer Path",
+      "slug": "web-developer",
+      "title": "Web Developer",
       "emoji": "🌐",
       "category": "Web Developer",
       "ageMin": 12,
@@ -1579,13 +1579,13 @@
         {
           "order": 28,
           "type": "FINAL_TEST",
-          "title": "Final Test"
+          "title": "Web Developer — Final Test"
         }
       ]
     },
     {
-      "slug": "ai-builder-path",
-      "title": "AI Builder Path",
+      "slug": "ai-builder",
+      "title": "AI Builder",
       "emoji": "🤖",
       "category": "AI Builder",
       "ageMin": 12,
@@ -1763,13 +1763,13 @@
         {
           "order": 28,
           "type": "FINAL_TEST",
-          "title": "Final Test"
+          "title": "AI Builder — Final Test"
         }
       ]
     },
     {
-      "slug": "data-scientist-path",
-      "title": "Data Scientist Path",
+      "slug": "data-scientist",
+      "title": "Data Scientist",
       "emoji": "📊",
       "category": "Data Scientist",
       "ageMin": 13,
@@ -1947,13 +1947,13 @@
         {
           "order": 28,
           "type": "FINAL_TEST",
-          "title": "Final Test"
+          "title": "Data Scientist — Final Test"
         }
       ]
     },
     {
-      "slug": "digital-independence-path",
-      "title": "Digital Independence Path",
+      "slug": "digital-independence",
+      "title": "Digital Independence",
       "emoji": "💼",
       "category": "Digital Independence",
       "ageMin": 15,
@@ -2131,13 +2131,305 @@
         {
           "order": 28,
           "type": "FINAL_TEST",
-          "title": "Final Test"
+          "title": "Digital Independence — Final Test"
+        }
+      ]
+    },
+    {
+      "slug": "advanced-data-science",
+      "title": "Advanced Data Science",
+      "emoji": null,
+      "category": "Advanced Data Science",
+      "ageMin": 12,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 46,
+      "learningLessons": 40,
+      "assessmentLessons": 6,
+      "modules": [
+        {
+          "slug": "course-1",
+          "title": "Python for Young Builders",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "From Blocks to Words — Hello, Python!"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Variables and User Input"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "Printing and String Formatting"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "If/Else Decisions"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "While Loops and For Loops"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "Lists and Simple Data"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Randomness and Finishing Your Game"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Your Python Portfolio — Polish and Present"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Python for Young Builders — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "course-2",
+          "title": "Python Arcade Games",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "Python Basics for Game Development"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Cosmic Defender — Part 1: Player & Game Window"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Cosmic Defender — Part 2: Enemy Fleet"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Cosmic Defender — Part 3: Lasers & Shooting"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Cosmic Defender — Part 4: Combat & Scoring"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Cosmic Defender — Part 5: Health & Survival"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Cosmic Defender — Part 6: Menus & Game States"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Polish & Showcase Your Projects"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Python Arcade Games — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "course-3",
+          "title": "Python for Data",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "Why Data Science Matters (Real Examples)"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Python Refresher and Jupyter Setup"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Loading Data from CSV and Excel"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Pandas — Selecting, Filtering, Sorting"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Cleaning Data — Nulls, Duplicates, Types"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Aggregations — Group By, Pivot Tables"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Statistical Summaries and Correlation"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Full Analysis Project with a Real Dataset"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Python for Data — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "course-4",
+          "title": "Data Visualisation",
+          "order": 4,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 28,
+              "type": "LEARNING",
+              "title": "The Science of Good Data Visualisation"
+            },
+            {
+              "order": 29,
+              "type": "LEARNING",
+              "title": "Matplotlib: Line, Bar, Scatter Plots"
+            },
+            {
+              "order": 30,
+              "type": "LEARNING",
+              "title": "Seaborn: Statistical Visualisations"
+            },
+            {
+              "order": 31,
+              "type": "LEARNING",
+              "title": "Choosing The Right Chart for Your Data"
+            },
+            {
+              "order": 32,
+              "type": "LEARNING",
+              "title": "Color, Labels, and Storytelling"
+            },
+            {
+              "order": 33,
+              "type": "LEARNING",
+              "title": "Interactive Charts with Plotly"
+            },
+            {
+              "order": 34,
+              "type": "LEARNING",
+              "title": "Building A Dash Dashboard"
+            },
+            {
+              "order": 35,
+              "type": "LEARNING",
+              "title": "Your Own Interactive Dashboard"
+            },
+            {
+              "order": 36,
+              "type": "COURSE_TEST",
+              "title": "Data Visualisation — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "course-5",
+          "title": "Machine Learning Projects",
+          "order": 5,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 37,
+              "type": "LEARNING",
+              "title": "How Machine Learning Works (No Maths Jargon)"
+            },
+            {
+              "order": 38,
+              "type": "LEARNING",
+              "title": "Types of ML — Regression vs Classification"
+            },
+            {
+              "order": 39,
+              "type": "LEARNING",
+              "title": "Train/Test Splits and Model Evaluation"
+            },
+            {
+              "order": 40,
+              "type": "LEARNING",
+              "title": "Linear Regression From Scratch"
+            },
+            {
+              "order": 41,
+              "type": "LEARNING",
+              "title": "Decision Trees and Random Forests"
+            },
+            {
+              "order": 42,
+              "type": "LEARNING",
+              "title": "Feature Engineering and Selection"
+            },
+            {
+              "order": 43,
+              "type": "LEARNING",
+              "title": "Model Tuning and Improving Accuracy"
+            },
+            {
+              "order": 44,
+              "type": "LEARNING",
+              "title": "Deploying a Prediction Model as an API"
+            },
+            {
+              "order": 45,
+              "type": "COURSE_TEST",
+              "title": "Machine Learning Projects — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 46,
+          "type": "FINAL_TEST",
+          "title": "Advanced Data Science — Final Test"
         }
       ]
     }
   ],
   "totals": {
-    "programs": 6,
-    "courses": 18
+    "programs": 7,
+    "courses": 23
   }
 }

@@ -23,12 +23,12 @@ export interface BankRegistry {
 
 export const CATALOG_COURSE_SLUGS = [
   'lumexa-odyssey',
-  'little-coders-path',
-  'game-creator-path',
-  'web-developer-path',
-  'ai-builder-path',
-  'data-scientist-path',
-  'digital-independence-path',
+  'little-coders',
+  'game-creator',
+  'web-developer',
+  'ai-builder',
+  'data-scientist',
+  'digital-independence',
 ];
 
 export const DEFAULT_REGISTRY: BankRegistry = {

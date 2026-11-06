@@ -159,15 +159,16 @@ export function headingFromMarkdown(
   return heading || null;
 }
 
-/** Internal pathway slugs ("ai-builder-path — Final Test") are not for parents. */
+/** Internal pathway slugs ("ai-builder-path — Final Test") are not for parents,
+ *  and the retired "Path" in a program name ("AI Builder Path — Final Test") goes too. */
 function cleanAssessmentTitle(raw: string, type: PublicLessonType): string {
-  if (
-    type === 'FINAL_TEST' &&
-    /^[a-z0-9-]+\s+—\s+final test$/i.test(raw.trim())
-  ) {
-    return 'Final Test';
+  const title = raw.trim();
+  if (type === 'FINAL_TEST') {
+    if (/^[a-z0-9-]+\s+—\s+final test$/i.test(title)) return 'Final Test';
+    const retired = /^(.+?)\s+Path\s+—\s+(Final Test)$/i.exec(title);
+    if (retired) return `${retired[1]} — ${retired[2]}`;
   }
-  return raw.trim();
+  return title;
 }
 
 // ── Builder ─────────────────────────────────────────────────────────────────
@@ -220,6 +221,62 @@ function toPublicLesson(
   return { order: lesson.order, type: lesson.type, title };
 }
 
+/** "Python for Data — Course Test" -> "Python for Data" (null if nothing is left). */
+function courseNameFromTestTitle(title: string): string | null {
+  const name = title.replace(new RegExp(`\\s*${DASH}?\\s*course\\s+test\\s*$`, 'i'), '').trim();
+  return name || null;
+}
+
+/** A program built lesson-by-lesson (an admin-made, "flat" course) has no
+ *  CourseModule rows, so on the public site it would show 0 courses. Its
+ *  lessons are already in order and every course ends with its own Course
+ *  Test, so each run of lessons up to and including a Course Test becomes
+ *  one course. Lessons after the last Course Test that are not a stage/final
+ *  test (a trailing, still-untested course) form a last course; stage and
+ *  final tests stay "closing" assessments. */
+function deriveModulesFromFlatLessons(
+  lessons: CatalogLessonRow[],
+  markdown: Map<string, string | null>,
+): { modules: PublicModule[]; lessonIds: Set<string> } {
+  const modules: PublicModule[] = [];
+  const lessonIds = new Set<string>();
+  let group: CatalogLessonRow[] = [];
+
+  const flush = (title: string | null) => {
+    if (group.length === 0) return;
+    const order = modules.length + 1;
+    const moduleTitle = title ?? `Course ${order}`;
+    const publicLessons = group.map((l) =>
+      toPublicLesson(l, moduleTitle, markdown),
+    );
+    modules.push({
+      slug: `course-${order}`,
+      title: moduleTitle,
+      order,
+      lessonCount: publicLessons.length,
+      learningCount: publicLessons.filter((l) => l.type === 'LEARNING').length,
+      lessons: publicLessons,
+    });
+    group.forEach((l) => lessonIds.add(l.id));
+    group = [];
+  };
+
+  for (const lesson of lessons) {
+    if (lesson.type === 'LEARNING') {
+      group.push(lesson);
+    } else if (lesson.type === 'COURSE_TEST') {
+      group.push(lesson);
+      flush(courseNameFromTestTitle(lesson.title));
+    } else {
+      // A stage/final test closes the program: any untested lessons before it
+      // are still a course of their own.
+      flush(null);
+    }
+  }
+  flush(null);
+  return { modules, lessonIds };
+}
+
 export function buildPublicCatalog(input: BuildCatalogInput): PublicCatalog {
   const markdown = input.markdownByLessonId ?? new Map<string, string | null>();
   const courses: PublicCourse[] = [];
@@ -233,7 +290,14 @@ export function buildPublicCatalog(input: BuildCatalogInput): PublicCatalog {
       .sort((a, b) => a.order - b.order);
     const moduleById = new Map(courseModules.map((m) => [m.id, m]));
 
-    const modules: PublicModule[] = courseModules.map((m) => {
+    const kind: PublicCourse['kind'] =
+      course.slug === ODYSSEY_SLUG ? 'odyssey' : 'specialized';
+    const derived =
+      kind === 'specialized' && courseModules.length === 0
+        ? deriveModulesFromFlatLessons(courseLessons, markdown)
+        : null;
+
+    const modules: PublicModule[] = derived?.modules ?? courseModules.map((m) => {
       const lessons = courseLessons
         .filter((l) => l.moduleId === m.id)
         .map((l) => toPublicLesson(l, m.title, markdown));
@@ -249,8 +313,6 @@ export function buildPublicCatalog(input: BuildCatalogInput): PublicCatalog {
 
     // Stage tests / the final test have no module. Walk the course in order:
     // a stage test closes whichever stage the lessons before it belonged to.
-    const kind: PublicCourse['kind'] =
-      course.slug === ODYSSEY_SLUG ? 'odyssey' : 'specialized';
     const stageByNumber = new Map<number, PublicStage>();
     const closingAssessments: PublicLesson[] = [];
     let currentStage: number | null = null;
@@ -277,6 +339,7 @@ export function buildPublicCatalog(input: BuildCatalogInput): PublicCatalog {
         }
         continue;
       }
+      if (derived?.lessonIds.has(lesson.id)) continue;
       const pub = toPublicLesson(lesson, undefined, markdown);
       if (lesson.type === 'STAGE_TEST' && currentStage != null) {
         stageByNumber.get(currentStage)?.assessments.push(pub);

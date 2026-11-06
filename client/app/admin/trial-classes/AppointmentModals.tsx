@@ -11,13 +11,13 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { Modal, formatDhakaDateTime, formatDhakaTime } from "@/components/admin/AdminUI";
-import { ALL_PROGRAMS, trialSubjectLabel } from "@/lib/programs";
+import { trialSubjectLabel } from "@/lib/programs";
+import { usePrograms } from "@/lib/usePrograms";
 import SlotChooser from "./SlotChooser";
 import { AssignableTeacher, AvailabilityChanges, TrialAppointment, errMessage } from "./types";
 import { dangerBtn, inputCls, labelCls, primaryBtn, secondaryBtn } from "./ui";
 
 const NOT_SURE = "Not sure yet, help me choose";
-const PROGRAM_OPTIONS = [...ALL_PROGRAMS.map(trialSubjectLabel), NOT_SURE];
 
 // ─── Availability change summary ────────────────────────────────────────────
 
@@ -39,6 +39,8 @@ export function AvailabilityChangeSummary({ changes }: { changes: AvailabilityCh
 // ─── Schedule on behalf of a parent ─────────────────────────────────────────
 
 export function ScheduleTrialModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const { all: allPrograms } = usePrograms();
+  const programOptions = [...allPrograms.map(trialSubjectLabel), NOT_SURE];
   const [form, setForm] = useState({
     parentName: "",
     parentEmail: "",
@@ -116,7 +118,7 @@ export function ScheduleTrialModal({ onClose, onCreated }: { onClose: () => void
             <label className={labelCls}>Program interest</label>
             <select className={inputCls} value={form.subject} onChange={set("subject")}>
               <option value="">Select…</option>
-              {PROGRAM_OPTIONS.map((p) => (
+              {programOptions.map((p) => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>

@@ -6,7 +6,7 @@
 // (block price / 8), which is also the rate used if a full-program payment is
 // later refunded (see the Refund Policy).
 
-import type { ProgramKey } from "./programs";
+import type { ProgramMeta } from "./programs";
 
 export type LearningFormat = "private" | "batch";
 
@@ -18,17 +18,6 @@ export const FULL_PAYMENT_DISCOUNT_PERCENT = {
   odyssey: 15,
   specialized: 10,
 } as const;
-
-/** Private 1:1 price for every 8 lessons, in BDT. */
-const PRIVATE_PRICE_PER_BLOCK: Record<ProgramKey, number> = {
-  little: 5000,
-  game: 6000,
-  digital: 6000,
-  web: 7000,
-  ai: 7500,
-  data: 7500,
-  odyssey: 6500,
-};
 
 export interface FormatInfo {
   id: LearningFormat;
@@ -60,9 +49,10 @@ export function resolveFormat(value: string | null | undefined): LearningFormat 
   return value === "private" || value === "batch" ? value : null;
 }
 
-/** Price of one block of 8 lessons. */
-export function pricePerBlock(program: ProgramKey, format: LearningFormat): number {
-  const base = PRIVATE_PRICE_PER_BLOCK[program];
+/** Price of one block of 8 lessons. The Private 1:1 rate belongs to the
+ *  program (see programs.ts); a Small Learning Batch is a fixed share of it. */
+export function pricePerBlock(program: Pick<ProgramMeta, "blockPrice">, format: LearningFormat): number {
+  const base = program.blockPrice;
   return format === "private" ? base : Math.round(base * BATCH_PRICE_RATIO);
 }
 
@@ -79,12 +69,12 @@ export interface FullPayment {
 /** Whole-program price for `lessons` lessons. Figures are rounded to whole
  *  taka at each step so regular - discounted === savings always holds on screen. */
 export function fullPayment(
-  program: ProgramKey,
+  program: Pick<ProgramMeta, "id" | "blockPrice">,
   format: LearningFormat,
   lessons: number,
 ): FullPayment {
   const percent =
-    program === "odyssey"
+    program.id === "odyssey"
       ? FULL_PAYMENT_DISCOUNT_PERCENT.odyssey
       : FULL_PAYMENT_DISCOUNT_PERCENT.specialized;
   const perLesson = pricePerBlock(program, format) / LESSONS_PER_BLOCK;

@@ -35,6 +35,7 @@ import { LessonStatus, PrismaClient, SessionType } from '@prisma/client';
 import { standardInstructions } from '../assessments/bank/bank.constants';
 import type { BankTestType } from '../assessments/bank/bank.types';
 import { ADVANCED_DATA_SCIENCE_FIXES } from './advanced-data-science.content';
+import { canonicalCourseSlug, legacyCourseSlug } from './course-slug';
 import { CONTENT_VERSION, upgradeLesson } from '../curriculum/lesson-content';
 import { backfillLessonContent, upgradeAdvancedDataScienceFix } from './lesson-content.backfill';
 import {
@@ -405,7 +406,7 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
 
 async function buildFreshStructure(prisma: PrismaClient, course: { id: string; slug: string }) {
   if (course.slug === 'lumexa-odyssey') return seedOdysseyCurriculum(prisma, course.id);
-  return seedPathwayCurriculum(prisma, course.id, PATHWAY_SLUGS[course.slug]);
+  return seedPathwayCurriculum(prisma, course.id, PATHWAY_SLUGS[canonicalCourseSlug(course.slug)]);
 }
 
 // One-time upgrade for a course that already has real enrollment data on
@@ -535,7 +536,16 @@ export async function seedCurriculumContent(
   reconcile?: (courseId: string, actorId: string) => Promise<unknown>,
 ) {
   const courses = await prisma.course.findMany({
-    where: { slug: { in: [...Object.keys(PATHWAY_SLUGS), 'lumexa-odyssey'] } },
+    where: {
+      slug: {
+        in: [
+          ...Object.keys(PATHWAY_SLUGS),
+          // Databases that have not been renamed yet still carry the old spelling.
+          ...Object.keys(PATHWAY_SLUGS).map(legacyCourseSlug),
+          'lumexa-odyssey',
+        ],
+      },
+    },
     select: { id: true, slug: true, sessions: true },
   });
 
@@ -575,11 +585,13 @@ export async function seedCurriculumContent(
     logger.log(`[curriculum-seed] ${course.slug} seeded: ${total} sessions.`);
   }
 
-  await backfillProjectLinks(prisma, logger, 'ai-builder-path');
-  await backfillProjectLinks(prisma, logger, 'data-scientist-path');
+  await backfillProjectLinks(prisma, logger, 'ai-builder');
+  await backfillProjectLinks(prisma, logger, 'data-scientist');
   await backfillDataScientistKeyTerminologyTables(prisma, logger);
   await backfillWebDeveloperLessonContent(prisma, logger);
   await backfillAdvancedDataScience(prisma, logger);
+  await backfillAdvancedDataScienceProgramDetails(prisma, logger);
+  await dropPathFromFinalTestTitles(prisma, logger);
   // Last: every learning lesson — pathway, Odyssey copy, custom course, imported —
   // is brought up to the structured content model (cleanup, quiz, notes, visuals).
   // Isolated on purpose: whatever happens while tidying lesson text must never stop the
@@ -734,8 +746,8 @@ const DATA_SCIENTIST_PROJECT_LINKS: Record<number, { title: string; url: string 
 };
 
 const PROJECT_LINKS_BY_COURSE_SLUG: Record<string, Record<number, { title: string; url: string }[]>> = {
-  'ai-builder-path': AI_BUILDER_PROJECT_LINKS,
-  'data-scientist-path': DATA_SCIENTIST_PROJECT_LINKS,
+  'ai-builder': AI_BUILDER_PROJECT_LINKS,
+  'data-scientist': DATA_SCIENTIST_PROJECT_LINKS,
 };
 
 /** Read-time fallback for a pathway's project links, used by
@@ -750,7 +762,7 @@ const PROJECT_LINKS_BY_COURSE_SLUG: Record<string, Record<number, { title: strin
  * for any course slug with no known mapping (every course besides the ones
  * explicitly listed above). */
 export function getProjectLinksFallback(courseSlug: string, order: number): { title: string; url: string }[] | null {
-  return PROJECT_LINKS_BY_COURSE_SLUG[courseSlug]?.[order] ?? null;
+  return PROJECT_LINKS_BY_COURSE_SLUG[canonicalCourseSlug(courseSlug)]?.[order] ?? null;
 }
 
 /** Idempotent, admin-safe: only ever fills in a lesson whose projectLinks is
@@ -763,11 +775,11 @@ async function backfillProjectLinks(
   logger: { log: (msg: string) => void; warn: (msg: string) => void },
   courseSlug: string,
 ) {
-  const map = PROJECT_LINKS_BY_COURSE_SLUG[courseSlug];
+  const map = PROJECT_LINKS_BY_COURSE_SLUG[canonicalCourseSlug(courseSlug)];
   if (!map) return;
 
-  const course = await prisma.course.findUnique({
-    where: { slug: courseSlug },
+  const course = await prisma.course.findFirst({
+    where: { slug: { in: [canonicalCourseSlug(courseSlug), legacyCourseSlug(courseSlug)] } },
     select: { id: true },
   });
   if (!course) return;
@@ -868,8 +880,8 @@ async function backfillDataScientistKeyTerminologyTables(
   prisma: PrismaClient,
   logger: { log: (msg: string) => void; warn: (msg: string) => void },
 ) {
-  const course = await prisma.course.findUnique({
-    where: { slug: 'data-scientist-path' },
+  const course = await prisma.course.findFirst({
+    where: { slug: { in: ['data-scientist', 'data-scientist-path'] } },
     select: { id: true },
   });
   if (!course) return;
@@ -927,7 +939,7 @@ async function backfillWebDeveloperLessonContent(
   }
 
   const courses = await prisma.course.findMany({
-    where: { slug: { in: ['web-developer-path', 'lumexa-odyssey'] } },
+    where: { slug: { in: ['web-developer', 'web-developer-path', 'lumexa-odyssey'] } },
     select: { id: true, slug: true },
   });
 
@@ -959,6 +971,97 @@ async function backfillWebDeveloperLessonContent(
     if (updated > 0) {
       logger.log(`[curriculum-seed] ${course.slug}: backfilled full lesson material on ${updated} lesson(s).`);
     }
+  }
+}
+
+// ── Retired "Path" naming on the default programs' Final Tests ─────────────
+//
+// Final Test lessons were seeded as "<Course title> — Final Test" while the
+// course titles still ended in "Path" ("AI Builder Path — Final Test"). Lumexa
+// has dropped that word from program names, so each default program's Final
+// Test follows its course's current title. Exact-match only: a title an admin
+// has since changed is left alone, and re-running is a no-op.
+async function dropPathFromFinalTestTitles(
+  prisma: PrismaClient,
+  logger: { log: (msg: string) => void; warn: (msg: string) => void },
+) {
+  const courses = await prisma.course.findMany({
+    where: {
+      slug: {
+        in: [
+          ...Object.keys(PATHWAY_SLUGS),
+          ...Object.keys(PATHWAY_SLUGS).map(legacyCourseSlug),
+        ],
+      },
+    },
+    select: { id: true, title: true },
+  });
+  let fixed = 0;
+  for (const c of courses) {
+    const result = await prisma.lesson.updateMany({
+      where: {
+        courseId: c.id,
+        type: SessionType.FINAL_TEST,
+        title: `${c.title} Path — Final Test`,
+      },
+      data: { title: `${c.title} — Final Test` },
+    });
+    fixed += result.count;
+  }
+  if (fixed > 0) {
+    logger.log(`[curriculum-seed] dropped "Path" from ${fixed} Final Test title(s).`);
+  }
+}
+
+// ── Advanced Data Science: public program details ──────────────────────────
+//
+// The public site shows Advanced Data Science as a beginner program for ages
+// 12–18 with five courses, as in lumexa-advanced-data-science-curriculum.pdf.
+// The course was built by hand, so three details differ from that document:
+// the age range is still the creation default (6–18), the first Course Test
+// carries an older working name, and the Final Test was copied from another
+// program. Each fix applies only while the value is still exactly the old one,
+// so an admin's own later edit is never overwritten and re-running is a no-op.
+async function backfillAdvancedDataScienceProgramDetails(
+  prisma: PrismaClient,
+  logger: { log: (msg: string) => void; warn: (msg: string) => void },
+) {
+  const course = await prisma.course.findUnique({
+    where: { slug: 'advanced-data-science' },
+    select: { id: true, ageMin: true, ageMax: true },
+  });
+  if (!course) return;
+
+  let fixed = 0;
+  if (course.ageMin === 6 && course.ageMax === 18) {
+    await prisma.course.update({
+      where: { id: course.id },
+      data: { ageMin: 12, ageMax: 18 },
+    });
+    fixed++;
+  }
+
+  const renames: { type: SessionType; from: string; to: string }[] = [
+    {
+      type: SessionType.COURSE_TEST,
+      from: 'Python Fundamentals — Course Test',
+      to: 'Python for Young Builders — Course Test',
+    },
+    {
+      type: SessionType.FINAL_TEST,
+      from: 'Data Scientist Path — Final Test',
+      to: 'Advanced Data Science — Final Test',
+    },
+  ];
+  for (const r of renames) {
+    const result = await prisma.lesson.updateMany({
+      where: { courseId: course.id, type: r.type, title: r.from },
+      data: { title: r.to },
+    });
+    fixed += result.count;
+  }
+  if (fixed > 0) {
+    logger.log(`[curriculum-seed] advanced-data-science: updated ${fixed} program detail(s).`);
   }
 }
 
