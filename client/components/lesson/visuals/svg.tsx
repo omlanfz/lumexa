@@ -105,7 +105,7 @@ export function edgePoint(b: Box, tx: number, ty: number): { x: number; y: numbe
 
 export function Svg({ w, h, y0 = 0, children }: { w: number; h: number; y0?: number; children: ReactNode }) {
   return (
-    <svg viewBox={`0 ${y0} ${w} ${h}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">
+    <svg viewBox={`0 ${y0} ${w} ${h}`} preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false" style={{ ['--natural' as string]: `${w}px` }}>
       {children}
     </svg>
   );

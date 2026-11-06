@@ -43,7 +43,8 @@ import PresentationShell from './PresentationShell';
 import ProgressPanel from './ProgressPanel';
 import TableOfContents, { type TocItem } from './TableOfContents';
 import TeacherPrepPanel from './TeacherPrepPanel';
-import { useActiveHeading, useReadTracking, useScrollProgress } from './hooks';
+import { useActiveHeading, useLessonSidebar, useReadTracking, useScrollProgress } from './hooks';
+import SidebarToggle from './SidebarToggle';
 import { VISUAL_RENDERERS } from './visuals';
 
 const CARD = 'bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-5';
@@ -102,6 +103,8 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
   const canPresent = !isClassroom && viewer !== 'student';
   const trackable = viewer === 'student' && !isClassroom && !!scheduledLessonId;
   const [presenting, setPresenting] = useState(!!initialPresenting && mode !== 'classroom' && (data.viewer ?? (isStudent ? 'student' : 'teacher')) !== 'student');
+  // The contents sidebar: open or hidden, remembered across lessons (page mode only).
+  const [sidebarOpen, setSidebarOpen] = useLessonSidebar();
   const contentRef = useRef<HTMLDivElement>(null);
 
   // ── The text, tidied for display ──────────────────────────────────────────
@@ -261,6 +264,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
   const homework = lesson.homework ? normalizeHeadingsFrom(stripLeadingH1(lesson.homework), 3) : null;
 
   const quizNode = lesson.quiz ? (
+    <div className="lesson-quiz">
     <MiniQuiz
       lessonId={lesson.id}
       quiz={lesson.quiz}
@@ -270,6 +274,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
       previous={server?.quiz ?? null}
       onAnswered={refresh}
     />
+    </div>
   ) : null;
 
   const renderBody = (presentation: boolean): ReactNode => (
@@ -412,6 +417,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
 
   // ── The standalone lesson page ────────────────────────────────────────────
   const nav = data.navigation;
+  const hasSidebar = toc.length > 1;
   return (
     <div ref={contentRef}>
       <div className="fixed left-0 right-0 top-0 z-[60] h-1 bg-transparent" role="progressbar" aria-label="Reading progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(barProgress * 100)}>
@@ -433,24 +439,30 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
         }
       />
 
-      <div className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-8">
-        {toc.length > 1 && (
+      <div className="lesson-layout" data-sidebar={hasSidebar && !sidebarOpen ? 'hidden' : 'open'}>
+        {hasSidebar && (
           <>
-            <aside className="mb-4 hidden lg:block">
-              <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto pr-2">
-                <TableOfContents items={toc} activeId={activeId} readIds={readIds} onNavigate={reveal} />
+            <aside className="lesson-sidebar mb-4 hidden lg:block" aria-label="Lesson contents">
+              <div className="lesson-sidebar-sticky">
+                <div className="lesson-sidebar-head">
+                  <SidebarToggle open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} controls="lesson-toc" />
+                  <span className="lesson-sidebar-title">On this page</span>
+                </div>
+                <div id="lesson-toc" className="lesson-sidebar-body" inert={!sidebarOpen} aria-hidden={sidebarOpen ? undefined : true}>
+                  <TableOfContents items={toc} activeId={activeId} readIds={readIds} onNavigate={reveal} showHeading={false} />
+                </div>
               </div>
             </aside>
             <details className="mb-4 rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-800/50 lg:hidden">
               <summary className="cursor-pointer select-none text-sm font-semibold text-gray-800 dark:text-gray-100">On this page</summary>
               <div className="mt-3">
-                <TableOfContents items={toc} activeId={activeId} readIds={readIds} onNavigate={reveal} />
+                <TableOfContents items={toc} activeId={activeId} readIds={readIds} onNavigate={reveal} showHeading={false} />
               </div>
             </details>
           </>
         )}
 
-        <div className="min-w-0 max-w-4xl">
+        <div className="lesson-content min-w-0">
           {trackable && (
             <div className="mb-5">
               <ProgressPanel completion={completion} quizScore={server?.quiz ? { score: server.quiz.score, total: server.quiz.gradedTotal } : null} />

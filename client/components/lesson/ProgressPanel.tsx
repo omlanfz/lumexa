@@ -44,7 +44,7 @@ export default function ProgressPanel({ completion, quizScore }: { completion: C
           </div>
         </div>
       </div>
-      <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+      <ul className="lesson-progress-grid mt-3">
         <Chip label="Read" detail={read.total ? `${read.done} of ${read.total} sections` : 'Nothing to read'} done={read.total > 0 && read.done === read.total} partial={read.done > 0} />
         {activities && <Chip label="Activities" detail={`${activities.done} of ${activities.total} tried`} done={activities.done === activities.total} partial={activities.done > 0} />}
         {quiz && (

@@ -17,17 +17,20 @@ export default function TableOfContents({
   activeId,
   readIds,
   onNavigate,
+  showHeading = true,
 }: {
   items: TocItem[];
   activeId: string | null;
   /** Only passed for a student; teachers see no read marks. */
   readIds: Set<string> | null;
   onNavigate: (id: string) => void;
+  /** The "On this page" label above the list (the sidebar and the mobile drawer draw their own). */
+  showHeading?: boolean;
 }) {
   if (items.length < 2) return null;
   return (
     <nav aria-label="On this page" className="text-sm">
-      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">On this page</div>
+      {showHeading && <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">On this page</div>}
       <ol className="space-y-0.5 border-l border-gray-200 dark:border-gray-700">
         {items.map((it) => {
           const active = it.id === activeId;
