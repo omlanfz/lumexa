@@ -58,6 +58,11 @@ function build(row: Row | null, admission: Row | null = null) {
     scheduledLesson: {
       findUnique: jest.fn().mockResolvedValue(row),
       findFirst: jest.fn().mockResolvedValue(null), // no completed sibling row
+      findMany: jest.fn().mockResolvedValue([]), // lessons the student has already had (lesson links)
+    },
+    // The lesson's course (numbering, previous/next, "Lesson N" links).
+    lesson: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
     classroomAdmission: {
       findFirst: jest.fn().mockResolvedValue(admission),

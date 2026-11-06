@@ -8,6 +8,8 @@ import {
   Param,
   Patch,
   Post,
+  Put,
+  Query,
   Req,
   Response,
   UseGuards,
@@ -24,6 +26,9 @@ import {
   CreateProjectDto,
   ImportLessonDto,
   ImportLessonsDto,
+  PreviewLessonDto,
+  QuizCheckDto,
+  SaveProgressDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -68,6 +73,49 @@ export class CurriculumController {
   @Get('lessons/:id/details')
   getCatalogLessonDetails(@Param('id') id: string, @Req() req: any) {
     return this.curriculum.getCatalogLessonDetails(id, req.user);
+  }
+
+  // ── Teacher-only preparation ────────────────────────────────────────────────
+
+  /** Teacher notes, review notes and the full quiz answer key. Served ONLY to the
+   * teacher assigned to the course (or an admin) — never part of a lesson payload that
+   * a student, the classroom or a shared screen receives. */
+  @Get('lessons/:id/teacher-prep')
+  getTeacherPrep(@Param('id') id: string, @Req() req: any) {
+    return this.curriculum.getTeacherPrep(id, req.user);
+  }
+
+  // ── Mini Quiz (learning lessons only; separate from the assessment system) ──
+
+  /** Grades one answer and returns the immediate feedback + explanation. The answer key
+   * is never sent ahead of time; it is revealed only in response to an answer. */
+  @Post('lessons/:id/quiz/check')
+  checkQuizAnswer(
+    @Param('id') id: string,
+    @Body() dto: QuizCheckDto,
+    @Req() req: any,
+  ) {
+    return this.curriculum.checkQuizAnswer(id, dto, req.user);
+  }
+
+  // ── Study progress (a student's own) ────────────────────────────────────────
+
+  @Get('scheduled-lessons/:id/progress')
+  getProgress(
+    @Param('id') id: string,
+    @Query('inClassroom') inClassroom: string | undefined,
+    @Req() req: any,
+  ) {
+    return this.curriculum.getProgress(id, req.user, inClassroom === '1' || inClassroom === 'true');
+  }
+
+  @Put('scheduled-lessons/:id/progress')
+  saveProgress(
+    @Param('id') id: string,
+    @Body() dto: SaveProgressDto,
+    @Req() req: any,
+  ) {
+    return this.curriculum.saveProgress(id, dto, req.user);
   }
 
   // ── Admin/teacher: full course structure ──────────────────────────────────
@@ -201,6 +249,31 @@ export class CurriculumController {
   }
 
   // ── Admin: rich lesson content ─────────────────────────────────────────────
+
+  /** The lesson exactly as stored — teacher notes and answer key included — for the editor. */
+  @Get('lessons/:id/editor')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getLessonForEditor(@Param('id') id: string) {
+    return this.curriculum.getLessonForEditor(id);
+  }
+
+  /** A draft rendered the way learners and the teacher's presentation will see it, plus
+   * every validation problem — before anything is saved. */
+  @Post('lessons/preview')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  previewLesson(@Body() dto: PreviewLessonDto) {
+    return this.curriculum.previewLesson(dto);
+  }
+
+  /** The visual kinds a lesson can use. */
+  @Get('visual-types')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getVisualTypes() {
+    return this.curriculum.getVisualTypes();
+  }
 
   @Patch('lessons/:id/content')
   @UseGuards(RolesGuard)

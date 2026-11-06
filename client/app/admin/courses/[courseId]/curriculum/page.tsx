@@ -21,6 +21,10 @@ interface LessonRow {
   homework: string | null;
   checkpoint: string | null;
   codeSnippets: CodeSnippet[];
+  // Structured content (see the lesson editor): present on the full structure payload.
+  miniQuiz?: unknown[] | null;
+  visuals?: unknown[] | null;
+  teacherNotes?: string | null;
   project: { id: string; title: string } | null;
   assessment: { id: string; type: string; title: string; isPublished: boolean } | null;
 }
@@ -142,6 +146,9 @@ export default function AdminCurriculumPage() {
 function LessonRowView({ lesson, onChanged }: { lesson: LessonRow; onChanged: () => void }) {
   const [settingUp, setSettingUp] = useState(false);
   const isTest = lesson.type !== 'LEARNING';
+  const quizCount = Array.isArray(lesson.miniQuiz) ? lesson.miniQuiz.length : 0;
+  const visualCount = Array.isArray(lesson.visuals) ? lesson.visuals.length : 0;
+  const hasNotes = !!lesson.teacherNotes?.trim();
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <div className="min-w-0">
@@ -157,6 +164,9 @@ function LessonRowView({ lesson, onChanged }: { lesson: LessonRow; onChanged: ()
               No question bank
             </span>
           )}
+          {!isTest && quizCount > 0 && <ContentBadge title={`${quizCount} quiz question${quizCount === 1 ? '' : 's'}`}>❓ {quizCount}</ContentBadge>}
+          {!isTest && visualCount > 0 && <ContentBadge title={`${visualCount} visual${visualCount === 1 ? '' : 's'} / interactive block${visualCount === 1 ? '' : 's'}`}>📊 {visualCount}</ContentBadge>}
+          {!isTest && hasNotes && <ContentBadge title="Has teacher-only notes">🔒 notes</ContentBadge>}
         </div>
         {lesson.checkpoint && <p className="text-xs text-[var(--a-text-faint)] truncate">{lesson.checkpoint}</p>}
       </div>
@@ -189,6 +199,14 @@ function LessonRowView({ lesson, onChanged }: { lesson: LessonRow; onChanged: ()
         />
       )}
     </div>
+  );
+}
+
+function ContentBadge({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <span title={title} className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-[var(--a-surface-2)] text-[var(--a-text-muted)] whitespace-nowrap">
+      {children}
+    </span>
   );
 }
 

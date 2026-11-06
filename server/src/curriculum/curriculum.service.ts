@@ -16,6 +16,7 @@
 //   - Admin                       -> full access, same as teacher.
 
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -24,6 +25,7 @@ import {
   ClassroomAdmissionStatus,
   Lesson,
   LessonStatus,
+  Prisma,
   Role,
   SessionType,
 } from '@prisma/client';
@@ -56,10 +58,35 @@ import {
   CreateProjectDto,
   ImportLessonDto,
   ImportLessonsDto,
+  PreviewLessonDto,
+  QuizCheckDto,
+  SaveProgressDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
 } from './dto/curriculum.dto';
+import {
+  CONTENT_VERSION,
+  QuizAnswerError,
+  VISUAL_TYPES,
+  buildNavigation,
+  buildSharedLesson,
+  buildTeacherPrep,
+  gradeAnswer,
+  hasTeacherPrep,
+  indexCourseLessons,
+  lineageKey,
+  numberingFor,
+  persistedLineage,
+  readQuiz,
+  readVisuals,
+  resolveLessonRefs,
+  validateLessonContent,
+  type LessonRow,
+  type LinkFor,
+  type QuizAnswer,
+  type Viewer,
+} from './lesson-content';
 
 interface Requester {
   userId: string;
@@ -78,6 +105,19 @@ function presentSubmission<
   const { homeworkFiles, ...rest } = submission;
   return { ...rest, files: presentFiles(submission.files, homeworkFiles) };
 }
+
+/** What the Custom Curriculum Builder's lesson picker needs about each lesson. */
+const PICKER_LESSON_SELECT = {
+  id: true,
+  title: true,
+  order: true,
+  duration: true,
+  type: true,
+  homework: true,
+  miniQuiz: true,
+  visuals: true,
+  teacherNotes: true,
+} satisfies Prisma.LessonSelect;
 
 function dhakaDateStrOf(date: Date): string {
   return utcToDhakaParts(date).dateStr;
@@ -144,50 +184,122 @@ export class CurriculumService {
       };
     }
 
+    const isTest = lesson.type !== SessionType.LEARNING;
     return {
       available: true,
-      isTest: lesson.type !== SessionType.LEARNING,
+      isTest,
       session: {
         ...emptySession,
         lessonNumber: lesson.order,
         courseId: course.id,
         courseTitle: course.title,
       },
-      lesson: {
-        id: lesson.id,
-        title: lesson.title,
-        type: lesson.type,
-        objectives: lesson.objectives,
-        contentMarkdown: lesson.contentMarkdown,
-        reviewNotes: lesson.reviewNotes,
-        homework: lesson.homework,
-        checkpoint: lesson.checkpoint,
-        codeSnippets: lesson.codeSnippets,
+      lesson: buildSharedLesson(lesson as unknown as LessonRow, {
         projectLinks: this.resolveProjectLinks(
           'ai-builder-path',
           lesson.order,
           lesson.projectLinks,
         ),
-        module: lesson.module
-          ? {
-              id: lesson.module.id,
-              title: lesson.module.title,
-              stageNumber: lesson.module.stageNumber,
-            }
-          : null,
-        project: lesson.project
-          ? {
-              id: lesson.project.id,
-              title: lesson.project.title,
-              description: lesson.project.description,
-            }
-          : null,
-      },
+      }),
       assessment: await this.describeAssessment(lesson.assessment),
+      viewer: 'student' as Viewer,
+      canPrepare: false,
+      ...(isTest
+        ? {}
+        : await this.enrich({
+            courseId: course.id,
+            lessonId: lesson.id,
+            markdowns: [lesson.contentMarkdown, lesson.homework],
+            viewer: 'student',
+            inClassroom: true,
+            withNavigation: false,
+          })),
     };
   }
 
   // ── Lesson Details (student/teacher read path) ───────────────────────────
+
+  /** A teacher must teach the course; an admin always may. Anyone else may not. */
+  private async assertTeachesOrAdmin(
+    courseId: string,
+    requester: Requester,
+    forbidden = 'You do not have access to this lesson.',
+  ) {
+    if (requester.role === Role.TEACHER) {
+      const teaches = await this.prisma.scheduledLesson.findFirst({
+        where: { courseId, teacher: { userId: requester.userId } },
+        select: { id: true },
+      });
+      if (!teaches)
+        throw new ForbiddenException(
+          'You are not assigned to teach this curriculum.',
+        );
+    } else if (requester.role !== Role.ADMIN) {
+      throw new ForbiddenException(forbidden);
+    }
+  }
+
+  /**
+   * Where a viewer may follow a link to another lesson, from this course:
+   *   - inside the classroom: nowhere (a link would navigate away from the live class);
+   *   - teacher / admin: the always-unlocked catalog page;
+   *   - student: only the lessons they have already had, through their own class —
+   *     every other lesson is reported as locked, never linked.
+   */
+  private async linkFor(
+    viewer: Viewer,
+    courseId: string,
+    studentUserId: string | undefined,
+    inClassroom: boolean,
+  ): Promise<LinkFor> {
+    if (inClassroom) return () => ({ href: null, locked: false });
+    if (viewer !== 'student' || !studentUserId) {
+      return (t) => ({ href: `/curriculum-lesson/${t.id}`, locked: false });
+    }
+    const done = await this.prisma.scheduledLesson.findMany({
+      where: { studentUserId, courseId, status: { in: COUNTS_AS_COMPLETED } },
+      orderBy: { start: 'asc' },
+      select: { id: true, lessonNumber: true },
+    });
+    const byNumber = new Map<number, string>();
+    for (const d of done) if (!byNumber.has(d.lessonNumber)) byNumber.set(d.lessonNumber, d.id);
+    return (t) => {
+      const id = byNumber.get(t.order);
+      return id ? { href: `/lesson/${id}`, locked: false } : { href: null, locked: true };
+    };
+  }
+
+  /** Session / lesson numbering, previous-next navigation and resolved "Lesson N" links. */
+  private async enrich(args: {
+    courseId: string;
+    lessonId: string;
+    markdowns: (string | null | undefined)[];
+    viewer: Viewer;
+    studentUserId?: string;
+    inClassroom?: boolean;
+    withNavigation: boolean;
+  }) {
+    const rows = await this.prisma.lesson.findMany({
+      where: { courseId: args.courseId },
+      orderBy: { order: 'asc' },
+      select: {
+        id: true,
+        order: true,
+        type: true,
+        title: true,
+        moduleId: true,
+        sourceRefs: true,
+        module: { select: { id: true, slug: true, title: true, stageNumber: true } },
+      },
+    });
+    const index = indexCourseLessons(rows);
+    const linkFor = await this.linkFor(args.viewer, args.courseId, args.studentUserId, !!args.inClassroom);
+    return {
+      numbering: numberingFor(index, args.lessonId),
+      navigation: args.withNavigation ? buildNavigation(index, args.lessonId, linkFor) : null,
+      refs: resolveLessonRefs(args.markdowns, index, args.lessonId, linkFor),
+    };
+  }
 
   // Catalog-based lesson details — for a teacher/admin browsing the
   // curriculum itself rather than one specific scheduled occurrence (e.g.
@@ -214,24 +326,12 @@ export class CurriculumService {
       },
     });
     if (!lesson) throw new NotFoundException('Lesson not found');
-
-    if (requester.role === Role.TEACHER) {
-      const teaches = await this.prisma.scheduledLesson.findFirst({
-        where: {
-          courseId: lesson.courseId,
-          teacher: { userId: requester.userId },
-        },
-        select: { id: true },
-      });
-      if (!teaches)
-        throw new ForbiddenException(
-          'You are not assigned to teach this curriculum.',
-        );
-    } else if (requester.role !== Role.ADMIN) {
-      throw new ForbiddenException('You do not have access to this lesson.');
-    }
+    await this.assertTeachesOrAdmin(lesson.courseId, requester);
 
     const isTest = lesson.type !== SessionType.LEARNING;
+    const viewer: Viewer = requester.role === Role.ADMIN ? 'admin' : 'teacher';
+    const row = lesson as unknown as LessonRow;
+    const markdown = this.tableizeContent(lesson.course.slug, lesson.contentMarkdown);
     return {
       available: true,
       isTest,
@@ -244,41 +344,105 @@ export class CurriculumService {
         courseId: lesson.course.id,
         courseTitle: lesson.course.title,
       },
-      lesson: {
-        id: lesson.id,
-        title: lesson.title,
-        type: lesson.type,
-        objectives: lesson.objectives,
-        contentMarkdown: this.tableizeContent(
-          lesson.course.slug,
-          lesson.contentMarkdown,
-        ),
-        reviewNotes: lesson.reviewNotes,
-        homework: lesson.homework,
-        checkpoint: lesson.checkpoint,
-        codeSnippets: lesson.codeSnippets,
-        projectLinks: this.resolveProjectLinks(
-          lesson.course.slug,
-          lesson.order,
-          lesson.projectLinks,
-        ),
-        module: lesson.module
-          ? {
-              id: lesson.module.id,
-              title: lesson.module.title,
-              stageNumber: lesson.module.stageNumber,
-            }
-          : null,
-        project: lesson.project
-          ? {
-              id: lesson.project.id,
-              title: lesson.project.title,
-              description: lesson.project.description,
-            }
-          : null,
-      },
+      lesson: buildSharedLesson(row, {
+        contentMarkdown: markdown,
+        projectLinks: this.resolveProjectLinks(lesson.course.slug, lesson.order, lesson.projectLinks),
+      }),
       assessment: await this.describeAssessment(lesson.assessment),
+      viewer,
+      canPrepare: !isTest && hasTeacherPrep(row),
+      ...(isTest
+        ? {}
+        : await this.enrich({
+            courseId: lesson.courseId,
+            lessonId: lesson.id,
+            markdowns: [markdown, lesson.homework],
+            viewer,
+            withNavigation: true,
+          })),
     };
+  }
+
+  /** The decision "may this person read this class's lesson, and if not, why?" — shared by
+   * the lesson read, the Mini Quiz check and the progress endpoints so they can never disagree. */
+  private async decideAccess(
+    sl: {
+      id: string;
+      status: LessonStatus;
+      start: Date;
+      end: Date;
+      classType: 'ONE_TO_ONE' | 'BATCH';
+      teacherId: string;
+      studentUserId: string;
+      studentJoinedAt: Date | null;
+      batchSessionId: string | null;
+      batchSession: { status: LessonStatus; start: Date; end: Date } | null;
+      courseId: string;
+      lessonNumber: number;
+      teacher: { userId: string };
+      lesson: { type: SessionType } | null;
+    },
+    requester: Requester,
+    opts: { inClassroom?: boolean },
+  ) {
+    const isOwner = sl.studentUserId === requester.userId;
+    const isAssignedTeacher =
+      requester.role === Role.TEACHER && sl.teacher.userId === requester.userId;
+    const isAdmin = requester.role === Role.ADMIN;
+
+    if (!isOwner && !isAssignedTeacher && !isAdmin) {
+      throw new ForbiddenException('You do not have access to this class.');
+    }
+    const teacherOrAdmin = isAssignedTeacher || isAdmin;
+    if (!sl.lesson) {
+      return { isOwner, teacherOrAdmin, isTest: false, canonical: null, available: false, reason: 'NO_CATALOG_LESSON' as string | null, noLesson: true };
+    }
+
+    const isTest = sl.lesson.type !== SessionType.LEARNING;
+
+    // A lesson the student has already had (COMPLETED, or PARTIALLY_COMPLETED —
+    // which unlocks it even though one extra class is still scheduled) is open
+    // for them regardless of which of its classes this id points at. The
+    // canonical row is the earliest such class; it also owns the homework
+    // submission, so the extra class shows the same submission, not a blank.
+    const canonical = await findCanonicalCompletedRow(this.prisma, {
+      studentUserId: sl.studentUserId,
+      courseId: sl.courseId,
+      lessonNumber: sl.lessonNumber,
+    });
+    const lessonUnlocked =
+      COUNTS_AS_COMPLETED.includes(sl.status) || !!canonical;
+    const attendingNow =
+      !!opts.inClassroom && isOwner && (await this.isAttendingNow(sl));
+
+    let available = false;
+    let reason: string | null = null;
+
+    if (teacherOrAdmin) {
+      available = true;
+    } else if (isTest) {
+      if (lessonUnlocked || attendingNow) {
+        available = true;
+      } else if (
+        sl.status === LessonStatus.UPCOMING &&
+        dhakaDateStrOf(sl.start) === todayDhakaDateStr()
+      ) {
+        available = true;
+      } else if (sl.status === LessonStatus.UPCOMING) {
+        reason = 'TEST_NOT_YET_TODAY';
+      } else {
+        reason = 'CANCELLED';
+      }
+    } else {
+      if (lessonUnlocked || attendingNow) {
+        available = true;
+      } else if (sl.status === LessonStatus.UPCOMING) {
+        reason = 'UPCOMING_LOCKED';
+      } else {
+        reason = 'CANCELLED';
+      }
+    }
+    return { isOwner, teacherOrAdmin, isTest, canonical, available, reason, noLesson: false };
   }
 
   /**
@@ -336,122 +500,342 @@ export class CurriculumService {
     });
     if (!sl) throw new NotFoundException('Scheduled lesson not found');
 
-    const isOwner = sl.studentUserId === requester.userId;
-    const isAssignedTeacher =
-      requester.role === Role.TEACHER && sl.teacher.userId === requester.userId;
-    const isAdmin = requester.role === Role.ADMIN;
-
-    if (!isOwner && !isAssignedTeacher && !isAdmin) {
-      throw new ForbiddenException('You do not have access to this class.');
-    }
-    if (!sl.lesson) {
+    const access = await this.decideAccess(sl, requester, opts);
+    if (access.noLesson) {
       return {
         available: false,
         reason: 'NO_CATALOG_LESSON',
         session: this.baseSessionInfo(sl),
       };
     }
-
-    const isTest = sl.lesson.type !== SessionType.LEARNING;
-    const teacherOrAdmin = isAssignedTeacher || isAdmin;
-
-    // A lesson the student has already had (COMPLETED, or PARTIALLY_COMPLETED —
-    // which unlocks it even though one extra class is still scheduled) is open
-    // for them regardless of which of its classes this id points at. The
-    // canonical row is the earliest such class; it also owns the homework
-    // submission, so the extra class shows the same submission, not a blank.
-    const canonical = await findCanonicalCompletedRow(this.prisma, {
-      studentUserId: sl.studentUserId,
-      courseId: sl.courseId,
-      lessonNumber: sl.lessonNumber,
-    });
-    const lessonUnlocked =
-      COUNTS_AS_COMPLETED.includes(sl.status) || !!canonical;
-    const attendingNow =
-      !!opts.inClassroom && isOwner && (await this.isAttendingNow(sl));
-
-    let available = false;
-    let reason: string | null = null;
-
-    if (teacherOrAdmin) {
-      available = true;
-    } else if (isTest) {
-      if (lessonUnlocked || attendingNow) {
-        available = true;
-      } else if (
-        sl.status === LessonStatus.UPCOMING &&
-        dhakaDateStrOf(sl.start) === todayDhakaDateStr()
-      ) {
-        available = true;
-      } else if (sl.status === LessonStatus.UPCOMING) {
-        reason = 'TEST_NOT_YET_TODAY';
-      } else {
-        reason = 'CANCELLED';
-      }
-    } else {
-      if (lessonUnlocked || attendingNow) {
-        available = true;
-      } else if (sl.status === LessonStatus.UPCOMING) {
-        reason = 'UPCOMING_LOCKED';
-      } else {
-        reason = 'CANCELLED';
-      }
+    if (!access.available) {
+      return { available: false, reason: access.reason, session: this.baseSessionInfo(sl) };
     }
-
-    if (!available) {
-      return { available: false, reason, session: this.baseSessionInfo(sl) };
-    }
+    const lesson = sl.lesson!;
+    const { isOwner, teacherOrAdmin, isTest, canonical } = access;
+    const viewer: Viewer = requester.role === Role.ADMIN ? 'admin' : requester.role === Role.TEACHER ? 'teacher' : 'student';
+    const row = lesson as unknown as LessonRow;
+    const markdown = this.tableizeContent(sl.course.slug, lesson.contentMarkdown);
 
     return {
       available: true,
       session: this.baseSessionInfo(sl),
       isTest,
-      lesson: {
-        id: sl.lesson.id,
-        title: sl.lesson.title,
-        type: sl.lesson.type,
-        objectives: sl.lesson.objectives,
-        contentMarkdown: this.tableizeContent(
-          sl.course.slug,
-          sl.lesson.contentMarkdown,
-        ),
-        reviewNotes: sl.lesson.reviewNotes,
-        homework: sl.lesson.homework,
-        checkpoint: sl.lesson.checkpoint,
-        codeSnippets: sl.lesson.codeSnippets,
-        projectLinks: this.resolveProjectLinks(
-          sl.course.slug,
-          sl.lesson.order,
-          sl.lesson.projectLinks,
-        ),
-        module: sl.lesson.module
-          ? {
-              id: sl.lesson.module.id,
-              title: sl.lesson.module.title,
-              stageNumber: sl.lesson.module.stageNumber,
-            }
-          : null,
-        project: sl.lesson.project
-          ? {
-              id: sl.lesson.project.id,
-              title: sl.lesson.project.title,
-              description: sl.lesson.project.description,
-            }
-          : null,
-      },
-      assessment: await this.describeAssessment(sl.lesson.assessment),
+      lesson: buildSharedLesson(row, {
+        contentMarkdown: markdown,
+        projectLinks: this.resolveProjectLinks(sl.course.slug, lesson.order, lesson.projectLinks),
+      }),
+      assessment: await this.describeAssessment(lesson.assessment),
       // Homework hand-ins are each student's own. A batch class's lesson page
       // is shared, so what the teacher or an admin opens through one student's
       // row must not show that one student's work as if it were the class's —
       // they review each student's work on that student's own homework.
       submission: presentSubmission(
-        sl.lesson.homework && !(sl.batchId && !isOwner)
+        lesson.homework && !(sl.batchId && !isOwner)
           ? canonical && canonical.id !== sl.id
             ? await this.findSubmission(canonical.id)
             : sl.submission
           : null,
       ),
+      viewer,
+      // Teacher preparation is offered on the teacher's own lesson page only — never
+      // in the classroom stage, which is shown to the whole class.
+      canPrepare: !isTest && teacherOrAdmin && !opts.inClassroom && hasTeacherPrep(row),
+      ...(isTest
+        ? {}
+        : await this.enrich({
+            courseId: sl.courseId,
+            lessonId: lesson.id,
+            markdowns: [markdown, lesson.homework],
+            viewer,
+            studentUserId: sl.studentUserId,
+            inClassroom: !!opts.inClassroom,
+            withNavigation: !opts.inClassroom,
+          })),
     };
+  }
+
+  // ── Teacher-only preparation ─────────────────────────────────────────────
+
+  /** Teacher notes, review notes and the full quiz answer key. Assigned teacher or admin only —
+   * deliberately not part of any lesson payload a student (or the shared screen) receives. */
+  async getTeacherPrep(lessonId: string, requester: Requester) {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: { id: true, courseId: true, type: true, teacherNotes: true, reviewNotes: true, miniQuiz: true },
+    });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    await this.assertTeachesOrAdmin(lesson.courseId, requester, 'Teacher preparation notes are for teachers.');
+    const prep = buildTeacherPrep(lesson as unknown as LessonRow);
+    // The notes mention other lessons too ("Lesson 2 …"): resolve those links like the lesson's own.
+    const { refs } = await this.enrich({
+      courseId: lesson.courseId,
+      lessonId: lesson.id,
+      markdowns: [prep.teacherNotes, prep.reviewNotes],
+      viewer: requester.role === Role.ADMIN ? 'admin' : 'teacher',
+      withNavigation: false,
+    });
+    return { ...prep, refs };
+  }
+
+  // ── Mini Quiz (learning lessons only — separate from the assessment system) ──
+
+  private async loadScheduledForAccess(scheduledLessonId: string) {
+    const sl = await this.prisma.scheduledLesson.findUnique({
+      where: { id: scheduledLessonId },
+      include: {
+        batchSession: { select: { id: true, status: true, start: true, end: true } },
+        lesson: { select: { id: true, type: true } },
+        teacher: { select: { userId: true } },
+      },
+    });
+    if (!sl) throw new NotFoundException('Scheduled lesson not found');
+    return sl;
+  }
+
+  /** A student may use a lesson's quiz / progress only through their own, unlocked class. */
+  private async assertStudentMayUse(
+    lessonId: string,
+    scheduledLessonId: string | undefined,
+    requester: Requester,
+    inClassroom?: boolean,
+  ) {
+    if (!scheduledLessonId) throw new ForbiddenException('Open the lesson from your class first.');
+    const sl = await this.loadScheduledForAccess(scheduledLessonId);
+    if (sl.lessonId !== lessonId) throw new ForbiddenException('That class is not for this lesson.');
+    const access = await this.decideAccess(sl, requester, { inClassroom });
+    if (!access.available || access.noLesson) throw new ForbiddenException('This lesson is not unlocked yet.');
+    return sl;
+  }
+
+  /**
+   * Grades one answer. Students are checked through their own unlocked class and the
+   * result is remembered on their progress; a teacher or admin can try every question
+   * (to preview the quiz) without anything being stored.
+   */
+  async checkQuizAnswer(lessonId: string, dto: QuizCheckDto, requester: Requester) {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: { id: true, courseId: true, type: true, miniQuiz: true },
+    });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    if (lesson.type !== SessionType.LEARNING) {
+      throw new BadRequestException('Mini quizzes belong to learning lessons.');
+    }
+    if (requester.role === Role.STUDENT) {
+      await this.assertStudentMayUse(lesson.id, dto.scheduledLessonId, requester, dto.inClassroom);
+    } else {
+      await this.assertTeachesOrAdmin(lesson.courseId, requester);
+    }
+
+    const questions = readQuiz(lesson.miniQuiz);
+    const question = questions.find((q) => q.id === dto.questionId);
+    if (!question) throw new NotFoundException('That question is not in this lesson.');
+    let result;
+    try {
+      result = gradeAnswer(question, dto.answer as unknown as QuizAnswer);
+    } catch (err) {
+      if (err instanceof QuizAnswerError) throw new BadRequestException(err.message);
+      throw err;
+    }
+    if (requester.role === Role.STUDENT) {
+      await this.recordQuizResult(requester.userId, lesson.id, questions, question.id, result.correct);
+    }
+    return result;
+  }
+
+  // ── Study progress ───────────────────────────────────────────────────────
+
+  private async recordQuizResult(
+    studentUserId: string,
+    lessonId: string,
+    questions: ReturnType<typeof readQuiz>,
+    questionId: string,
+    correct: boolean | null,
+  ) {
+    const key = { studentUserId_lessonId: { studentUserId, lessonId } };
+    const prev = await this.prisma.lessonProgress.findUnique({ where: key });
+    const results = { ...((prev?.quizResults as Record<string, { correct: boolean | null; attempts: number; at: string }> | null) ?? {}) };
+    results[questionId] = { correct, attempts: (results[questionId]?.attempts ?? 0) + 1, at: new Date().toISOString() };
+    const graded = questions.filter((q) => q.type !== 'self_check' && q.type !== 'reflection');
+    const allAnswered = questions.length > 0 && questions.every((q) => results[q.id]);
+    const score = graded.filter((q) => results[q.id]?.correct === true).length;
+    const now = new Date();
+    const data = {
+      quizResults: results as unknown as Prisma.InputJsonValue,
+      quizTotal: graded.length,
+      ...(allAnswered ? { quizScore: score, quizCompletedAt: prev?.quizCompletedAt ?? now } : {}),
+      lastOpenedAt: now,
+    };
+    await this.prisma.lessonProgress.upsert({
+      where: key,
+      create: { studentUserId, lessonId, ...data },
+      update: data,
+    });
+  }
+
+  private async progressView(studentUserId: string, lessonId: string, miniQuiz: unknown) {
+    const row = await this.prisma.lessonProgress.findUnique({
+      where: { studentUserId_lessonId: { studentUserId, lessonId } },
+    });
+    const questions = readQuiz(miniQuiz);
+    const results = (row?.quizResults as Record<string, { correct: boolean | null; attempts: number }> | null) ?? {};
+    const graded = questions.filter((q) => q.type !== 'self_check' && q.type !== 'reflection');
+    const submission = await this.prisma.submission.findFirst({
+      where: { studentUserId, lessonId },
+      select: { id: true },
+    });
+    return {
+      sectionsRead: row?.sectionsRead ?? [],
+      activitiesDone: row?.activitiesDone ?? [],
+      quiz:
+        questions.length > 0
+          ? {
+              total: questions.length,
+              answered: questions.filter((q) => results[q.id]).length,
+              gradedTotal: graded.length,
+              score: graded.filter((q) => results[q.id]?.correct === true).length,
+              completed: !!row?.quizCompletedAt,
+              results: Object.fromEntries(
+                questions.filter((q) => results[q.id]).map((q) => [q.id, { correct: results[q.id].correct, attempts: results[q.id].attempts }]),
+              ),
+            }
+          : null,
+      // Always read from the real homework record — never stored twice.
+      homeworkSubmitted: !!submission,
+      lastOpenedAt: row?.lastOpenedAt ?? null,
+    };
+  }
+
+  /** A student's own progress through this class's lesson (null for a teacher / admin). */
+  async getProgress(scheduledLessonId: string, requester: Requester, inClassroom?: boolean) {
+    if (requester.role !== Role.STUDENT) return { progress: null };
+    const sl = await this.loadScheduledForAccess(scheduledLessonId);
+    if (!sl.lesson) return { progress: null };
+    await this.assertStudentMayUse(sl.lesson.id, scheduledLessonId, requester, inClassroom);
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: sl.lesson.id }, select: { miniQuiz: true } });
+    return { progress: await this.progressView(requester.userId, sl.lesson.id, lesson?.miniQuiz) };
+  }
+
+  /** Records what the student has actually read / done. Opening a lesson records nothing. */
+  async saveProgress(scheduledLessonId: string, dto: SaveProgressDto, requester: Requester) {
+    if (requester.role !== Role.STUDENT) return { progress: null };
+    const sl = await this.loadScheduledForAccess(scheduledLessonId);
+    if (!sl.lesson) throw new NotFoundException('This class has no lesson.');
+    await this.assertStudentMayUse(sl.lesson.id, scheduledLessonId, requester, dto.inClassroom);
+    const clean = (list: string[] | undefined) =>
+      (list ?? []).filter((id) => /^[a-z0-9][a-z0-9-]{0,59}$/.test(id));
+    const key = { studentUserId_lessonId: { studentUserId: requester.userId, lessonId: sl.lesson.id } };
+    const prev = await this.prisma.lessonProgress.findUnique({ where: key });
+    const union = (a: string[], b: string[]) => [...new Set([...a, ...b])].slice(0, 80);
+    const data = {
+      sectionsRead: union(prev?.sectionsRead ?? [], clean(dto.sectionsRead)),
+      activitiesDone: union(prev?.activitiesDone ?? [], clean(dto.activitiesDone)),
+      lastOpenedAt: new Date(),
+    };
+    await this.prisma.lessonProgress.upsert({
+      where: key,
+      create: { studentUserId: requester.userId, lessonId: sl.lesson.id, ...data },
+      update: data,
+    });
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: sl.lesson.id }, select: { miniQuiz: true } });
+    return { progress: await this.progressView(requester.userId, sl.lesson.id, lesson?.miniQuiz) };
+  }
+
+  // ── Admin: the editor and its preview ────────────────────────────────────
+
+  /** The lesson exactly as stored (teacher notes, answer key and all) — for the admin editor only. */
+  async getLessonForEditor(lessonId: string) {
+    const lesson = await this.prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: { module: true, project: true, course: { select: { id: true, title: true, slug: true } } },
+    });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    const refs = lesson.sourceRefs as { contentReview?: unknown } | null;
+    return {
+      session: { courseId: lesson.course.id, courseTitle: lesson.course.title },
+      lesson: {
+        id: lesson.id,
+        title: lesson.title,
+        type: lesson.type,
+        order: lesson.order,
+        duration: lesson.duration,
+        objectives: lesson.objectives,
+        contentMarkdown: this.tableizeContent(lesson.course.slug, lesson.contentMarkdown),
+        homework: lesson.homework,
+        checkpoint: lesson.checkpoint,
+        teacherNotes: lesson.teacherNotes ?? '',
+        reviewNotes: lesson.reviewNotes ?? '',
+        miniQuiz: readQuiz(lesson.miniQuiz),
+        visuals: readVisuals(lesson.visuals),
+        codeSnippets: lesson.codeSnippets,
+        projectLinks: this.resolveProjectLinks(lesson.course.slug, lesson.order, lesson.projectLinks),
+        contentReview: Array.isArray(refs?.contentReview) ? refs.contentReview : [],
+        module: lesson.module ? { id: lesson.module.id, title: lesson.module.title, stageNumber: lesson.module.stageNumber } : null,
+        project: lesson.project ? { id: lesson.project.id, title: lesson.project.title, description: lesson.project.description } : null,
+      },
+    };
+  }
+
+  /** What learners and the teacher's presentation would see for a DRAFT, plus everything wrong with it. */
+  async previewLesson(dto: PreviewLessonDto) {
+    const existing = dto.lessonId
+      ? await this.prisma.lesson.findUnique({
+          where: { id: dto.lessonId },
+          include: { module: true, project: true },
+        })
+      : null;
+    if (dto.lessonId && !existing) throw new NotFoundException('Lesson not found');
+    const check = validateLessonContent({
+      title: dto.title,
+      objectives: dto.objectives,
+      contentMarkdown: dto.contentMarkdown,
+      homework: dto.homework,
+      teacherNotes: dto.teacherNotes,
+      miniQuiz: dto.miniQuiz,
+      visuals: dto.visuals,
+      projectLinks: dto.projectLinks,
+      codeSnippets: dto.codeSnippets,
+    });
+    const draft: LessonRow = {
+      id: existing?.id ?? 'draft',
+      title: dto.title ?? existing?.title ?? 'Untitled lesson',
+      type: 'LEARNING',
+      order: existing?.order ?? 1,
+      duration: existing?.duration ?? null,
+      objectives: dto.objectives ?? existing?.objectives ?? [],
+      contentMarkdown: dto.contentMarkdown ?? existing?.contentMarkdown ?? null,
+      homework: dto.homework ?? existing?.homework ?? null,
+      checkpoint: dto.checkpoint ?? existing?.checkpoint ?? null,
+      teacherNotes: dto.teacherNotes ?? existing?.teacherNotes ?? null,
+      reviewNotes: existing?.reviewNotes ?? null,
+      miniQuiz: check.quiz ?? existing?.miniQuiz ?? null,
+      visuals: check.visuals ?? existing?.visuals ?? null,
+      codeSnippets: dto.codeSnippets ?? existing?.codeSnippets ?? [],
+      projectLinks: dto.projectLinks ?? existing?.projectLinks ?? null,
+      module: existing?.module ? { id: existing.module.id, title: existing.module.title, stageNumber: existing.module.stageNumber } : null,
+      project: existing?.project ? { id: existing.project.id, title: existing.project.title, description: existing.project.description } : null,
+    };
+    const context = existing
+      ? await this.enrich({
+          courseId: existing.courseId,
+          lessonId: existing.id,
+          markdowns: [draft.contentMarkdown, draft.homework],
+          viewer: 'admin',
+          withNavigation: false,
+        })
+      : { numbering: null, navigation: null, refs: {} };
+    return {
+      lesson: buildSharedLesson(draft, {}),
+      teacherPrep: buildTeacherPrep(draft),
+      ...context,
+      validation: { errors: check.errors, warnings: check.warnings },
+    };
+  }
+
+  /** The visual kinds the editor can offer (and the server accepts). */
+  getVisualTypes() {
+    return VISUAL_TYPES;
   }
 
   /**
@@ -682,31 +1066,29 @@ export class CurriculumService {
             stageNumber: true,
             lessons: {
               orderBy: { order: 'asc' },
-              select: {
-                id: true,
-                title: true,
-                order: true,
-                duration: true,
-                type: true,
-                homework: true,
-              },
+              select: PICKER_LESSON_SELECT,
             },
           },
         },
         lessons: {
           where: { moduleId: null },
           orderBy: { order: 'asc' },
-          select: {
-            id: true,
-            title: true,
-            order: true,
-            duration: true,
-            type: true,
-            homework: true,
-          },
+          select: PICKER_LESSON_SELECT,
         },
       },
     });
+    // What each lesson brings with it when imported, so the builder can say so.
+    const badge = (l: (typeof courses)[number]['lessons'][number]) => {
+      const { miniQuiz, visuals, teacherNotes, ...rest } = l;
+      return {
+        ...rest,
+        content: {
+          quizQuestions: readQuiz(miniQuiz).length,
+          visuals: readVisuals(visuals).length,
+          teacherNotes: !!teacherNotes && teacherNotes.trim() !== '',
+        },
+      };
+    };
     return courses
       .map((c) => ({
         courseId: c.id,
@@ -718,7 +1100,7 @@ export class CurriculumService {
             moduleId: m.id,
             moduleTitle: m.title,
             stageNumber: m.stageNumber,
-            lessons: m.lessons,
+            lessons: m.lessons.map(badge),
           })),
           // Loose (non-module) sessions — Stage/Final Tests — appended as
           // their own pseudo-section so they still appear in sequence.
@@ -728,7 +1110,7 @@ export class CurriculumService {
                   moduleId: null,
                   moduleTitle: 'Stage / Final Tests',
                   stageNumber: null,
-                  lessons: c.lessons,
+                  lessons: c.lessons.map(badge),
                 },
               ]
             : []),
@@ -753,14 +1135,16 @@ export class CurriculumService {
       where: { id: dto.sourceLessonId },
       include: {
         course: { select: { slug: true } },
+        module: { select: { slug: true } },
         assessment: { select: BANK_OWNER_SELECT },
       },
     });
     if (!source) throw new NotFoundException('Source lesson not found');
+    const lineage = await this.lineageOf(source);
 
     return this.prisma.$transaction(async (tx) => {
       const lesson = await tx.lesson.create({
-        data: this.lessonImportData(target.id, dto.order, source),
+        data: this.lessonImportData(target.id, dto.order, source, lineage),
       });
       if (source.assessment) {
         await ensureLinkedAssessment(
@@ -785,6 +1169,7 @@ export class CurriculumService {
       where: { id: { in: dto.sourceLessonIds } },
       include: {
         course: { select: { slug: true } },
+        module: { select: { slug: true } },
         assessment: { select: BANK_OWNER_SELECT },
       },
     });
@@ -792,6 +1177,8 @@ export class CurriculumService {
       throw new NotFoundException('No matching source lessons found');
     }
     const byId = new Map(sources.map((s) => [s.id, s]));
+    const lineages = new Map<string, string | null>();
+    for (const src of sources) lineages.set(src.id, await this.lineageOf(src));
 
     const currentMax = await this.prisma.lesson.aggregate({
       where: { courseId: target.id },
@@ -807,7 +1194,7 @@ export class CurriculumService {
         const created: Lesson[] = [];
         for (const source of ordered) {
           const lesson = await tx.lesson.create({
-            data: this.lessonImportData(target.id, nextOrder++, source),
+            data: this.lessonImportData(target.id, nextOrder++, source, lineages.get(source.id) ?? null),
           });
           // Test sessions come with their (linked) question bank.
           if (source.assessment) {
@@ -840,6 +1227,27 @@ export class CurriculumService {
     return course;
   }
 
+  /** Where the source lesson's content originated (see lesson-content/refs.ts) — what lets
+   * "Lesson 4" links in the copy resolve to the right lesson of the course it lands in. */
+  private async lineageOf(source: {
+    id: string;
+    moduleId: string | null;
+    type: SessionType;
+    sourceRefs: unknown;
+    module?: { slug: string } | null;
+  }): Promise<string | null> {
+    const stored = persistedLineage(source.sourceRefs);
+    if (stored) return stored;
+    if (source.type !== SessionType.LEARNING || !source.moduleId || !source.module) return null;
+    const siblings = await this.prisma.lesson.findMany({
+      where: { moduleId: source.moduleId, type: SessionType.LEARNING },
+      orderBy: { order: 'asc' },
+      select: { id: true },
+    });
+    const position = siblings.findIndex((x) => x.id === source.id) + 1;
+    return position > 0 ? lineageKey(source.module.slug, position) : null;
+  }
+
   private lessonImportData(
     targetCourseId: string,
     order: number,
@@ -852,12 +1260,18 @@ export class CurriculumService {
       objectives: string[];
       contentMarkdown: string | null;
       reviewNotes: string | null;
+      teacherNotes: string | null;
+      miniQuiz: unknown;
+      visuals: unknown;
+      contentVersion: number;
+      sourceRefs: unknown;
       checkpoint: string | null;
       codeSnippets: unknown;
       projectLinks: unknown;
       homework: string | null;
       course: { slug: string };
     },
+    lineage: string | null = null,
   ) {
     // Resolve the same read-time fallbacks the lesson-details endpoints
     // apply (see resolveProjectLinks/tableizeContent) before copying, so an
@@ -867,6 +1281,16 @@ export class CurriculumService {
     // rebooted since those features shipped) — otherwise a custom
     // curriculum would freeze in a stale copy forever, since importing
     // never re-reads the default lesson afterwards.
+    //
+    // Everything the lesson owns comes along — body (with its visual and quiz
+    // placeholders and "Lesson N" links), teacher notes, quiz with explanations,
+    // visuals. JSON is copied by value, so the copy is fully independent: editing
+    // it never touches the original. Lineage + the source id are kept in sourceRefs
+    // (traceability) and "Lesson N" links resolve by lineage inside the new course.
+    const refs = source.sourceRefs && typeof source.sourceRefs === 'object' && !Array.isArray(source.sourceRefs)
+      ? (source.sourceRefs as { contentReview?: unknown })
+      : null;
+    const copyJson = (v: unknown) => (v === null || v === undefined ? undefined : (JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue));
     return {
       courseId: targetCourseId,
       title: source.title,
@@ -879,6 +1303,12 @@ export class CurriculumService {
         source.contentMarkdown,
       ),
       reviewNotes: source.reviewNotes,
+      teacherNotes: source.teacherNotes,
+      miniQuiz: copyJson(source.miniQuiz),
+      visuals: copyJson(source.visuals),
+      // The copy is as upgraded as its source: an already-upgraded source is never
+      // re-processed; a not-yet-upgraded one is picked up by the backfill later.
+      contentVersion: source.contentVersion,
       checkpoint: source.checkpoint,
       codeSnippets: source.codeSnippets as object | undefined,
       projectLinks: this.resolveProjectLinks(
@@ -887,7 +1317,11 @@ export class CurriculumService {
         source.projectLinks,
       ) as object | undefined,
       homework: source.homework,
-      sourceRefs: { importedFromLessonId: source.id } as object,
+      sourceRefs: {
+        importedFromLessonId: source.id,
+        ...(lineage ? { lineageKey: lineage } : {}),
+        ...(Array.isArray(refs?.contentReview) && refs.contentReview.length > 0 ? { contentReview: refs.contentReview } : {}),
+      } as object,
     };
   }
 
@@ -931,10 +1365,36 @@ export class CurriculumService {
 
   // ── Admin: rich lesson content (extends the plain title/order editor) ────
 
+  /**
+   * Saves lesson content. Everything is validated first (required fields, quiz
+   * structure, visual alt text/captions, media addresses, links, references between
+   * the Markdown and the structured parts); a save with errors is rejected with the
+   * full list so the editor can show every problem at once.
+   */
   async updateLessonContent(lessonId: string, dto: UpdateLessonContentDto) {
     await this.ensure(this.prisma.lesson, lessonId, 'Lesson');
-    const { codeSnippets, projectLinks, type, ...rest } = dto;
-    return this.prisma.lesson.update({
+    const check = validateLessonContent({
+      title: dto.title,
+      objectives: dto.objectives,
+      contentMarkdown: dto.contentMarkdown,
+      homework: dto.homework,
+      teacherNotes: dto.teacherNotes,
+      miniQuiz: dto.miniQuiz,
+      visuals: dto.visuals,
+      projectLinks: dto.projectLinks,
+      codeSnippets: dto.codeSnippets,
+    });
+    if (check.errors.length > 0) {
+      throw new BadRequestException({
+        message: `The lesson cannot be saved yet: ${check.errors.slice(0, 3).join(' ')}${check.errors.length > 3 ? ` (and ${check.errors.length - 3} more)` : ''}`,
+        errors: check.errors,
+        warnings: check.warnings,
+      });
+    }
+    const { codeSnippets, projectLinks, type, miniQuiz: _quiz, visuals: _visuals, ...rest } = dto;
+    void _quiz;
+    void _visuals;
+    const updated = await this.prisma.lesson.update({
       where: { id: lessonId },
       data: {
         ...rest,
@@ -945,8 +1405,13 @@ export class CurriculumService {
         ...(projectLinks
           ? { projectLinks: projectLinks as unknown as object }
           : {}),
+        ...(check.quiz ? { miniQuiz: check.quiz as unknown as Prisma.InputJsonValue } : {}),
+        ...(check.visuals ? { visuals: check.visuals as unknown as Prisma.InputJsonValue } : {}),
+        // An admin's own edit is final: the structured-content backfill never rewrites it.
+        contentVersion: CONTENT_VERSION,
       },
     });
+    return { ...updated, warnings: check.warnings };
   }
 
   private async ensure(

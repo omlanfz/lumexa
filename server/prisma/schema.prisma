@@ -96,6 +96,11 @@ model User {
   // Batch placements over time (see BatchMember) — at most one is active.
   batchMemberships BatchMember[] @relation("StudentBatchMemberships")
 
+  // A student's own study progress through each learning lesson (see
+  // LessonProgress). Recognition-free: it is not part of the rank / streak /
+  // badge / gem systems and never feeds them.
+  lessonProgress LessonProgress[] @relation("StudentLessonProgress")
+
   @@index([assignedTeacherId])
   @@index([assignedCourseId])
 }
@@ -1044,6 +1049,27 @@ model Lesson {
   objectives      String[] @default([]) // learning objectives for this session
   contentMarkdown String? // the "Learn" material — concept explanation, screenshare-able
   reviewNotes     String? // 5-minute review/recap bullets (previous class + homework check)
+  // ─── Structured lesson content (see server/src/curriculum/lesson-content) ──
+  // Every field below belongs to the LESSON, never to a course slug, so a copy
+  // imported into another course carries it unchanged and stays independent.
+  //
+  // TEACHER-ONLY preparation notes (Markdown): the instructor guide, live-coding
+  // walkthroughs, anything addressed to the teacher. Never part of the shared
+  // lesson payload — served only to an assigned teacher / admin (buildTeacherPrep).
+  teacherNotes    String?
+  // Mini Quiz for this learning lesson: [{ id, type, prompt, options, correctIndex,
+  // explanation, … }] with the ANSWERS in it. Learners receive it only in a form
+  // with answers stripped (toPublicQuiz) and are graded by a separate endpoint.
+  // Separate from the Assessment / question-bank / test system. null = never set,
+  // [] = deliberately empty.
+  miniQuiz        Json?
+  // Visuals and interactive blocks: [{ id, type, alt, caption, config }], placed
+  // in the Markdown with ```lumexa-visual blocks. Plain validated data — never HTML.
+  visuals         Json?
+  // Which version of the structured-content backfill has been applied to this row.
+  // A row at the current version is never rewritten by a later boot, so an admin's
+  // edits are safe (see upgradeLesson).
+  contentVersion  Int      @default(0)
   projectId       String?
   project         Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   checkpoint      String? // exact project checkpoint due THIS session, e.g. "Finish sections 1-2"
@@ -1061,10 +1087,48 @@ model Lesson {
   batchSessions    BatchSession[]
   assessment       Assessment?
   submissions      Submission[]
+  progress         LessonProgress[]
 
   @@index([courseId])
   @@index([moduleId])
   @@index([projectId])
+}
+
+// ─── Student study progress through a learning lesson ───────────────────────
+//
+// One row per (student, lesson): which sections the student has actually read,
+// which interactive activities they finished and how the lesson's Mini Quiz went.
+// Homework is NOT stored here — "homework submitted" is always read from the
+// Submission table, so the two can never disagree. Opening a lesson creates
+// nothing and completes nothing: a section counts as read only when the client
+// reports it was read (not just opened), and the lesson is never "complete" from
+// a single field.
+//
+// Deliberately separate from the gamification systems: it awards no XP, gems,
+// streaks, ranks or badges, and the rank/streak/badge derivation never reads it.
+model LessonProgress {
+  id             String   @id @default(uuid())
+  studentUserId  String
+  student        User     @relation("StudentLessonProgress", fields: [studentUserId], references: [id], onDelete: Cascade)
+  lessonId       String
+  lesson         Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  // Section ids (heading slugs) the student has read, and the interactive
+  // activities (visual ids) they have completed.
+  sectionsRead   String[] @default([])
+  activitiesDone String[] @default([])
+  // { [questionId]: { correct: boolean | null, attempts: number, at: ISO date } }
+  quizResults    Json?
+  quizCompletedAt DateTime?
+  // Machine-graded questions answered correctly / total graded (self-checks and
+  // reflections are never counted).
+  quizScore      Int?
+  quizTotal      Int?
+  firstOpenedAt  DateTime @default(now())
+  lastOpenedAt   DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([studentUserId, lessonId])
+  @@index([lessonId])
 }
 
 // ─── Student homework submissions ────────────────────────────────────────────
