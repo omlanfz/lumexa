@@ -1,26 +1,15 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  buildAnswer,
-  initialOrder,
-  initialQuizState,
-  isAnswerReady,
-  moveItem,
-  quizReducer,
-  scoreMessage,
-  summarize,
-} from './quizFlow';
-import type { PublicQuizQuestion, QuizCheckResult } from './types';
+import { buildAnswer, initialQuizState, isAnswerReady, moveItem, quizReducer, scoreMessage, summarize } from './quizFlow';
+import { MCQ_OPTION_COUNT, type PublicQuizQuestion, type QuizCheckResult } from './types';
 
-const mc: PublicQuizQuestion = { id: 'q1', type: 'multiple_choice', prompt: 'Pick', options: [{ id: 'oa', text: 'A' }, { id: 'ob', text: 'B' }] };
-const tf: PublicQuizQuestion = { id: 'q2', type: 'true_false', prompt: 'T/F', options: [{ id: 'ot', text: 'True' }, { id: 'of', text: 'False' }] };
-const ord: PublicQuizQuestion = { id: 'q3', type: 'ordering', prompt: 'Order', items: [{ id: 'i2', text: 'two' }, { id: 'i1', text: 'one' }, { id: 'i3', text: 'three' }] };
-const mat: PublicQuizQuestion = { id: 'q4', type: 'matching', prompt: 'Match', left: [{ id: 'l1', text: 'a' }, { id: 'l2', text: 'b' }], right: [{ id: 'r2', text: 'B' }, { id: 'r1', text: 'A' }] };
-const sc: PublicQuizQuestion = { id: 'q5', type: 'self_check', prompt: 'Explain', hasSampleAnswer: true };
-const refl: PublicQuizQuestion = { id: 'q6', type: 'reflection', prompt: 'Think' };
-const all = [mc, tf, ord, mat, sc, refl];
+const opts = (id: string) => ['a', 'b', 'c', 'd'].map((t) => ({ id: `${id}-${t}`, text: t.toUpperCase() }));
+const q1: PublicQuizQuestion = { id: 'q1', type: 'multiple_choice', prompt: 'Pick', options: opts('q1') };
+const q2: PublicQuizQuestion = { id: 'q2', type: 'multiple_choice', prompt: 'Pick again', options: opts('q2'), code: { language: 'python', code: 'print(1)' } };
+const q3: PublicQuizQuestion = { id: 'q3', type: 'multiple_choice', prompt: 'And again', options: opts('q3') };
+const all = [q1, q2, q3];
 
-const res = (id: string, correct: boolean | null): QuizCheckResult => ({ questionId: id, graded: correct !== null, correct });
+const res = (id: string, correct: boolean): QuizCheckResult => ({ questionId: id, graded: true, correct, reveal: { optionId: `${id}-b` } });
 
 describe('quizReducer', () => {
   it('walks intro → question → feedback → next → summary', () => {
@@ -37,13 +26,20 @@ describe('quizReducer', () => {
     assert.equal(s.phase, 'summary');
   });
 
-  it('ignores a draft change or a second check once a question is checked', () => {
+  it('ignores a change of choice or a second check once a question is checked', () => {
     let s = quizReducer(initialQuizState(), { type: 'start' });
-    s = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'oa' } });
+    s = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'q1-a' } });
     s = quizReducer(s, { type: 'checked', result: res('q1', true) });
-    const after = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'ob' } });
-    assert.equal(after.drafts.q1.optionId, 'oa');
+    const after = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'q1-b' } });
+    assert.equal(after.drafts.q1.optionId, 'q1-a');
     assert.equal(quizReducer(s, { type: 'checked', result: res('q1', false) }), s);
+  });
+
+  it('lets the learner change their mind before checking', () => {
+    let s = quizReducer(initialQuizState(), { type: 'start' });
+    s = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'q1-a' } });
+    s = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'q1-c' } });
+    assert.equal(s.drafts.q1.optionId, 'q1-c');
   });
 
   it('cannot advance before the question has been checked', () => {
@@ -53,7 +49,7 @@ describe('quizReducer', () => {
 
   it('retry starts again from question 1, forgets answers and counts the attempt', () => {
     let s = quizReducer(initialQuizState(), { type: 'start' });
-    s = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'oa' } });
+    s = quizReducer(s, { type: 'draft', id: 'q1', draft: { optionId: 'q1-a' } });
     s = quizReducer(s, { type: 'checked', result: res('q1', false) });
     s = quizReducer(s, { type: 'retry' });
     assert.deepEqual([s.phase, s.index, s.attempt], ['question', 0, 2]);
@@ -63,37 +59,18 @@ describe('quizReducer', () => {
 });
 
 describe('isAnswerReady / buildAnswer', () => {
-  it('multiple choice and true/false need a real option of that question', () => {
-    assert.equal(isAnswerReady(mc, undefined), false);
-    assert.equal(isAnswerReady(mc, { optionId: 'zzz' }), false);
-    assert.equal(isAnswerReady(mc, { optionId: 'ob' }), true);
-    assert.deepEqual(buildAnswer(tf, { optionId: 'of' }), { optionId: 'of' });
+  it('is ready only when the learner has chosen one of this question’s four options', () => {
+    assert.equal(q1.options.length, MCQ_OPTION_COUNT);
+    assert.equal(isAnswerReady(q1, undefined), false);
+    assert.equal(isAnswerReady(q1, {}), false);
+    assert.equal(isAnswerReady(q1, { optionId: 'zzz' }), false);
+    assert.equal(isAnswerReady(q1, { optionId: 'q2-a' }), false); // an option of another question
+    assert.equal(isAnswerReady(q1, { optionId: 'q1-d' }), true);
   });
 
-  it('ordering is always ready and submits the current order (initially the server order)', () => {
-    assert.equal(isAnswerReady(ord, undefined), true);
-    assert.deepEqual(buildAnswer(ord, undefined), { order: ['i2', 'i1', 'i3'] });
-    assert.deepEqual(buildAnswer(ord, { order: ['i1', 'i2', 'i3'] }), { order: ['i1', 'i2', 'i3'] });
-    assert.deepEqual(initialOrder(ord as Extract<PublicQuizQuestion, { type: 'ordering' }>), ['i2', 'i1', 'i3']);
-  });
-
-  it('matching needs every term matched', () => {
-    assert.equal(isAnswerReady(mat, { pairs: { l1: 'r1' } }), false);
-    assert.equal(isAnswerReady(mat, { pairs: { l1: 'r1', l2: 'r2' } }), true);
-    assert.deepEqual(buildAnswer(mat, { pairs: { l1: 'r1', l2: 'r2' } }), { pairs: [{ leftId: 'l1', rightId: 'r1' }, { leftId: 'l2', rightId: 'r2' }] });
-  });
-
-  it('self-check needs the learner to write something — and never sends it', () => {
-    assert.equal(isAnswerReady(sc, { text: '   ' }), false);
-    assert.equal(isAnswerReady(sc, { text: 'my idea' }), true);
-    const body = buildAnswer(sc, { text: 'private words' });
-    assert.deepEqual(body, { answered: true });
-    assert.ok(!JSON.stringify(body).includes('private'));
-  });
-
-  it('reflection is optional and equally private', () => {
-    assert.equal(isAnswerReady(refl, undefined), true);
-    assert.deepEqual(buildAnswer(refl, { text: 'secret' }), { answered: true });
+  it('submits the id of the chosen option and nothing else', () => {
+    assert.deepEqual(buildAnswer(q1, { optionId: 'q1-c' }), { optionId: 'q1-c' });
+    assert.deepEqual(buildAnswer(q1, undefined), { optionId: '' });
   });
 });
 
@@ -109,25 +86,21 @@ describe('moveItem', () => {
 });
 
 describe('summarize', () => {
-  it('scores only machine-graded questions and lists what to revisit', () => {
-    const s = summarize(all, {
-      results: { q1: res('q1', true), q2: res('q2', false), q3: res('q3', true), q4: res('q4', false), q5: res('q5', null), q6: res('q6', null) },
-      ratings: { q5: 'review' },
-    });
-    assert.equal(s.gradedTotal, 4);
-    assert.equal(s.score, 2);
-    assert.deepEqual(s.revisit, ['q2', 'q4', 'q5']);
-    assert.equal(s.answered, 6);
+  it('scores every question and lists the wrong ones to revisit', () => {
+    const s = summarize(all, { results: { q1: res('q1', true), q2: res('q2', false), q3: res('q3', true) } });
+    assert.deepEqual(s, { score: 2, total: 3, revisit: ['q2'], answered: 3 });
   });
 
-  it('a quiz of only reflections has no score and says so honestly', () => {
-    const s = summarize([sc, refl], { results: {}, ratings: {} });
-    assert.equal(s.gradedTotal, 0);
-    assert.match(scoreMessage(0, 0), /no score/i);
+  it('counts a question that has not been answered as neither right nor wrong', () => {
+    const s = summarize(all, { results: { q1: res('q1', true) } });
+    assert.deepEqual(s, { score: 1, total: 3, revisit: [], answered: 1 });
   });
 
   it('messages never overstate', () => {
     assert.match(scoreMessage(5, 5), /Perfect/);
     assert.doesNotMatch(scoreMessage(1, 5), /Perfect|Great/);
+    assert.match(scoreMessage(0, 0), /no questions/i);
+    assert.match(scoreMessage(4, 5), /Great/);
+    assert.match(scoreMessage(2, 5), /Good effort/);
   });
 });
