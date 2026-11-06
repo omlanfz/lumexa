@@ -58,7 +58,7 @@ export default function LessonPanel({ data }: LessonPanelProps) {
   return (
     <div className="w-full h-full overflow-y-auto cr-scroll bg-[var(--cr-surface)] rounded-2xl">
       <div className="max-w-3xl mx-auto p-5 sm:p-8 [&_h1]:text-[var(--cr-text)] [&_h2]:text-[var(--cr-text)] [&_p]:text-[var(--cr-text-muted)] [&_li]:text-[var(--cr-text-muted)] [&_section]:bg-[var(--cr-surface-2)] [&_section]:border-[var(--cr-border)] [&_pre]:bg-black/40 dark">
-        <LessonDetailsView data={data} />
+        <LessonDetailsView data={data} mode="classroom" />
       </div>
     </div>
   );

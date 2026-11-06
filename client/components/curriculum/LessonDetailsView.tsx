@@ -1,76 +1,22 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import api from '@/lib/axios';
-import { errorMessage, openHomeworkFile, type HomeworkFileRef } from '@/lib/homeworkFiles';
-import CopyCodeButton from '@/components/curriculum/CopyCodeButton';
-import SimpleMarkdown from '@/components/curriculum/SimpleMarkdown';
-import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/ProjectLinksSection';
+// FILE PATH: client/components/curriculum/LessonDetailsView.tsx
+//
+// Shared lesson rendering, reused by:
+//   - /lesson/[scheduledLessonId]  (a specific scheduled class — student/teacher)
+//   - /curriculum-lesson/[lessonId] (catalog browsing — teacher/admin only,
+//     always unlocked, no specific date since it isn't tied to one class)
+//   - the live classroom stage (LessonPanel), with `mode="classroom"`.
+//
+// A LEARNING lesson is shown by LessonStudyView (components/lesson). Everything else
+// is deliberately unchanged: the lock notice and the test/assessment card below are
+// exactly what they were — assessment sessions are a separate experience and are not
+// part of the lesson redesign.
 
-interface CodeSnippet {
-  label: string;
-  language: string;
-  code: string;
-  part?: string;
-}
+import LessonStudyView from '@/components/lesson/LessonStudyView';
+import type { LessonDetailsResponse, LessonMode, SubmissionFile, SubmissionInfo } from '@/lib/lesson/types';
 
-export type SubmissionFile = HomeworkFileRef;
-
-export interface SubmissionInfo {
-  id: string;
-  status: 'PENDING' | 'APPROVED' | 'NEEDS_CHANGES';
-  files: SubmissionFile[];
-  links: string[];
-  note: string | null;
-  rating: number | null;
-  feedbackTags: string[];
-  resubmissionCount: number;
-  submittedAt: string;
-  reviewedAt: string | null;
-  feedback: string | null;
-}
-
-export interface LessonDetailsResponse {
-  available: boolean;
-  reason?: string;
-  isTest?: boolean;
-  session: {
-    scheduledLessonId: string | null;
-    lessonNumber: number;
-    start: string | null;
-    end: string | null;
-    status: string | null;
-    courseId: string;
-    courseTitle: string;
-    /** The batch this class is taught to (null for a 1-to-1 class). */
-    batchName?: string | null;
-  };
-  lesson?: {
-    id: string;
-    title: string;
-    type: string;
-    objectives: string[];
-    contentMarkdown: string | null;
-    reviewNotes: string | null;
-    homework: string | null;
-    checkpoint: string | null;
-    codeSnippets: CodeSnippet[];
-    projectLinks: ProjectLink[] | null;
-    module: { id: string; title: string; stageNumber: number | null } | null;
-    project: { id: string; title: string; description: string | null } | null;
-  };
-  assessment?: {
-    id: string;
-    type: string;
-    title: string;
-    isPublished: boolean;
-    /** Published questions on the test's (possibly shared) question bank. */
-    counts?: { mcq: number; trueFalse: number; practical: number };
-    totalMarks?: number;
-    meetsStandard?: boolean;
-  } | null;
-  submission?: SubmissionInfo | null;
-}
+export type { LessonDetailsResponse, SubmissionFile, SubmissionInfo };
 
 const LOCK_MESSAGES: Record<string, string> = {
   UPCOMING_LOCKED: "This lesson's materials unlock once the class is completed.",
@@ -79,18 +25,13 @@ const LOCK_MESSAGES: Record<string, string> = {
   NO_CATALOG_LESSON: 'No curriculum content is linked to this session yet.',
 };
 
-// Shared lesson-content rendering, reused by:
-//   - /lesson/[scheduledLessonId]  (a specific scheduled class — student/teacher)
-//   - /curriculum-lesson/[lessonId] (catalog browsing — teacher/admin only,
-//     always unlocked, no specific date since it isn't tied to one class)
-const SECTION = 'bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-5';
-
 export default function LessonDetailsView({
   data,
   onTestAction,
   testButtonLabel,
   isStudent = false,
   onSubmissionChange,
+  mode = 'page',
 }: {
   data: LessonDetailsResponse;
   onTestAction?: () => void;
@@ -99,7 +40,14 @@ export default function LessonDetailsView({
    * homework — teacher/admin and catalog-browsing views never pass this. */
   isStudent?: boolean;
   onSubmissionChange?: (submission: SubmissionInfo) => void;
+  /** 'page' (default) is the standalone lesson page; 'classroom' is the live class's
+   * stage, which keeps its compact layout and none of the page-only navigation. */
+  mode?: LessonMode;
 }) {
+  if (data.available && !data.isTest && data.lesson) {
+    return <LessonStudyView data={data} mode={mode} isStudent={isStudent} onSubmissionChange={onSubmissionChange} />;
+  }
+
   return (
     <>
       <div className="mt-3 mb-6">
@@ -131,7 +79,7 @@ export default function LessonDetailsView({
             {LOCK_MESSAGES[data.reason || ''] || 'This lesson is not available yet.'}
           </p>
         </div>
-      ) : data.isTest ? (
+      ) : (
         <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/40 rounded-xl p-6 text-center space-y-3">
           <div className="text-3xl">📝</div>
           {data.assessment ? (
@@ -164,419 +112,7 @@ export default function LessonDetailsView({
             </button>
           )}
         </div>
-      ) : (
-        <div className="space-y-5">
-          {(() => {
-            const hasObjectives = !!data.lesson?.objectives && data.lesson.objectives.length > 0;
-            const hasProjectOrCheckpoint = !!data.lesson?.project || !!data.lesson?.checkpoint;
-            if (!hasObjectives && !hasProjectOrCheckpoint) return null;
-            // Objectives and project/checkpoint are both short — pairing them
-            // side by side on wider screens uses the width instead of
-            // stacking two half-empty cards, and each still goes full-width
-            // alone (e.g. no project this session) or on mobile.
-            const paired = hasObjectives && hasProjectOrCheckpoint;
-            return (
-              <div className={paired ? 'grid lg:grid-cols-2 gap-4 items-start' : ''}>
-                {hasObjectives && (
-                  <section className={SECTION}>
-                    <h2 className="font-bold text-gray-900 dark:text-white mb-2">🎯 Learning Objectives</h2>
-                    <ul className="list-disc list-inside space-y-1 text-gray-700 dark:text-gray-300 text-sm">
-                      {data.lesson!.objectives.map((o, i) => (
-                        <li key={i}>{o}</li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-                {data.lesson?.project ? (
-                  <section className={SECTION}>
-                    <h2 className="font-bold text-gray-900 dark:text-white mb-1">🛠️ Project: {data.lesson.project.title}</h2>
-                    {data.lesson.project.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{data.lesson.project.description}</p>
-                    )}
-                    {data.lesson.checkpoint && (
-                      <div className="mt-2 inline-block text-sm px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 font-medium">
-                        ✅ This session&apos;s checkpoint: {data.lesson.checkpoint}
-                      </div>
-                    )}
-                  </section>
-                ) : (
-                  data.lesson?.checkpoint && (
-                    <section className={SECTION}>
-                      <div className="inline-block text-sm px-3 py-1.5 rounded-lg bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 font-medium">
-                        ✅ This session&apos;s checkpoint: {data.lesson.checkpoint}
-                      </div>
-                    </section>
-                  )
-                )}
-              </div>
-            );
-          })()}
-
-          {data.lesson?.contentMarkdown && (
-            <section className={SECTION}>
-              <h2 className="font-bold text-gray-900 dark:text-white mb-2">📚 Lesson Material</h2>
-              <SimpleMarkdown content={data.lesson.contentMarkdown} />
-            </section>
-          )}
-
-          {data.lesson?.projectLinks && data.lesson.projectLinks.length > 0 ? (
-            <ProjectLinksSection projectLinks={data.lesson.projectLinks} />
-          ) : (
-            data.lesson?.codeSnippets &&
-            data.lesson.codeSnippets.length > 0 && (
-              <section className={SECTION}>
-                <h2 className="font-bold text-gray-900 dark:text-white mb-3">💻 Code</h2>
-                <div className="space-y-4">
-                  {data.lesson.codeSnippets.map((snip, i) => (
-                    <div key={i}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                          {snip.label} {snip.part ? `· ${snip.part}` : ''}
-                        </span>
-                        <CopyCodeButton code={snip.code} />
-                      </div>
-                      <pre className="rounded-lg bg-gray-900 text-gray-100 p-3 overflow-x-auto text-sm">
-                        <code>{snip.code}</code>
-                      </pre>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )
-          )}
-
-          {data.lesson?.homework && (
-            <section className={SECTION}>
-              <h2 className="font-bold text-gray-900 dark:text-white mb-2">📝 Homework / Practice</h2>
-              <div className="text-sm">
-                <SimpleMarkdown content={data.lesson.homework} />
-              </div>
-              {isStudent && data.session.scheduledLessonId && (
-                <HomeworkSubmission
-                  scheduledLessonId={data.session.scheduledLessonId}
-                  submission={data.submission ?? null}
-                  onSubmitted={(s) => onSubmissionChange?.(s)}
-                />
-              )}
-            </section>
-          )}
-        </div>
       )}
     </>
-  );
-}
-
-function HomeworkSubmission({
-  scheduledLessonId,
-  submission,
-  onSubmitted,
-}: {
-  scheduledLessonId: string;
-  submission: SubmissionInfo | null;
-  onSubmitted: (submission: SubmissionInfo) => void;
-}) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [links, setLinks] = useState<string[]>(['']);
-  const [note, setNote] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [resubmitting, setResubmitting] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
-  // Files that are already safely uploaded. If the submit fails afterwards the
-  // student tries again without sending them all a second time.
-  const uploadedRef = useRef<Map<File, string>>(new Map());
-
-  const openFile = async (f: SubmissionFile) => {
-    setFileError(null);
-    try {
-      await openHomeworkFile(f);
-    } catch (err) {
-      setFileError(errorMessage(err, 'Could not open this file.'));
-    }
-  };
-
-  const addFiles = (newFiles: File[]) => {
-    if (newFiles.length === 0) return;
-    setFiles((prev) => [...prev, ...newFiles]);
-  };
-
-  const removeFile = (index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const setLink = (index: number, value: string) => {
-    setLinks((prev) => prev.map((l, i) => (i === index ? value : l)));
-  };
-
-  const addLinkField = () => setLinks((prev) => [...prev, '']);
-  const removeLink = (index: number) =>
-    setLinks((prev) => prev.filter((_, i) => i !== index));
-
-  const submit = async () => {
-    const cleanLinks = links.map((l) => l.trim()).filter(Boolean);
-    if (files.length === 0 && cleanLinks.length === 0) {
-      setError('Attach at least one file or link.');
-      return;
-    }
-    setUploading(true);
-    setError(null);
-    try {
-      // Each file goes to private storage first; the work is only submitted once
-      // every file has arrived. A file that fails stops here with the reason, and
-      // nothing is submitted.
-      const pending = files.filter((f) => !uploadedRef.current.has(f));
-      if (pending.length > 0) {
-        const form = new FormData();
-        form.append('scheduledLessonId', scheduledLessonId);
-        pending.forEach((f) => form.append('homework', f));
-        const uploadRes = await api.post<{ id: string }[]>('/uploads/homework', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        pending.forEach((f, i) => uploadedRef.current.set(f, uploadRes.data[i].id));
-      }
-      const res = await api.post('/submissions', {
-        scheduledLessonId,
-        files: files.map((f) => ({ id: uploadedRef.current.get(f)! })),
-        links: cleanLinks,
-        note: note.trim() || undefined,
-      });
-      onSubmitted(res.data);
-      uploadedRef.current = new Map();
-      setFiles([]);
-      setLinks(['']);
-      setNote('');
-      setResubmitting(false);
-    } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      setError(
-        errorMessage(
-          err,
-          status === 413
-            ? 'One of your files is too large (15 MB is the most for a single file).'
-            : 'Could not submit your work. Please check your connection and try again.',
-        ),
-      );
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  if (submission && !resubmitting) {
-    const isPending = submission.status === 'PENDING';
-    const isApproved = submission.status === 'APPROVED';
-    const isNeedsChanges = submission.status === 'NEEDS_CHANGES';
-
-    return (
-      <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50">
-        <div
-          className={`flex items-center gap-2 font-semibold text-sm ${
-            isNeedsChanges
-              ? 'text-red-600 dark:text-red-400'
-              : isApproved
-                ? 'text-teal-700 dark:text-teal-400'
-                : 'text-amber-600 dark:text-amber-400'
-          }`}
-        >
-          <span>
-            {isNeedsChanges ? '🔄 Needs Changes' : isApproved ? '✅ Approved' : '✓ Work Submitted'}
-          </span>
-          {isPending && (
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20">
-              Needs Review
-            </span>
-          )}
-        </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {submission.resubmissionCount > 0 ? 'Resubmitted' : 'Submitted'}{' '}
-          {new Date(submission.submittedAt).toLocaleDateString('en-US', { dateStyle: 'medium' } as any)}
-          {submission.files.length > 0
-            ? ` · ${submission.files.length} file${submission.files.length > 1 ? 's' : ''}`
-            : ''}
-          {submission.links.length > 0
-            ? ` · ${submission.links.length} link${submission.links.length > 1 ? 's' : ''}`
-            : ''}
-        </p>
-        {(submission.files.length > 0 || submission.links.length > 0) && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {submission.files.map((f, i) =>
-              f.removed ? (
-                <span
-                  key={`f-${i}`}
-                  title="You finished this program, so the file was deleted from storage. Your grade and feedback are kept."
-                  className="text-xs px-2 py-1 rounded-md border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 truncate max-w-[220px]"
-                >
-                  📎 {f.name || `File ${i + 1}`} · removed (program completed)
-                </span>
-              ) : (
-                <button
-                  key={`f-${i}`}
-                  type="button"
-                  onClick={() => void openFile(f)}
-                  className="text-xs px-2 py-1 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400 hover:bg-teal-500/20 truncate max-w-[180px]"
-                >
-                  📎 {f.name || `File ${i + 1}`}
-                </button>
-              ),
-            )}
-            {submission.links.map((l, i) => (
-              <a
-                key={`l-${i}`}
-                href={l}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs px-2 py-1 rounded-md bg-teal-500/10 text-teal-700 dark:text-teal-400 hover:bg-teal-500/20 truncate max-w-[180px]"
-              >
-                🔗 {l}
-              </a>
-            ))}
-          </div>
-        )}
-
-        {fileError && (
-          <p className="mt-1.5 text-xs text-red-500" role="alert">
-            {fileError}
-          </p>
-        )}
-
-        {isApproved && submission.rating && (
-          <p className="mt-2 text-amber-400 text-sm">
-            {'★'.repeat(submission.rating)}
-            <span className="text-gray-300 dark:text-gray-600">{'★'.repeat(5 - submission.rating)}</span>
-          </p>
-        )}
-
-        {(submission.feedback || submission.feedbackTags.length > 0) && (
-          <div
-            className={`mt-2 text-sm rounded-lg p-3 border ${
-              isNeedsChanges
-                ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/40'
-                : 'bg-teal-50 dark:bg-teal-900/20 border-teal-200 dark:border-teal-800/40'
-            }`}
-          >
-            <p
-              className={`text-xs font-semibold mb-1 ${
-                isNeedsChanges ? 'text-red-700 dark:text-red-400' : 'text-teal-700 dark:text-teal-400'
-              }`}
-            >
-              Teacher feedback
-            </p>
-            {submission.feedbackTags.length > 0 && (
-              <ul className="list-disc list-inside text-gray-700 dark:text-gray-300 mb-1">
-                {submission.feedbackTags.map((t) => (
-                  <li key={t}>{t}</li>
-                ))}
-              </ul>
-            )}
-            {submission.feedback && <p className="text-gray-700 dark:text-gray-300">{submission.feedback}</p>}
-          </div>
-        )}
-
-        {/* Editable any time before the teacher approves it — a student who
-            submitted the wrong file shouldn't have to wait for a review to
-            fix it. Once APPROVED, the submission is final. */}
-        {!isApproved && (
-          <button
-            onClick={() => setResubmitting(true)}
-            className={`mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors ${
-              isNeedsChanges ? 'bg-red-500 hover:bg-red-400' : 'bg-gray-500 hover:bg-gray-400'
-            }`}
-          >
-            {isNeedsChanges ? 'Resubmit Work' : 'Edit Submission'}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700/50 space-y-2">
-      <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Complete the task and upload your work.</p>
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        Documents, images, ZIP archives, or coding project files (.py, .ipynb, .html, .css, .js, .java, .sb3, .rbxl, and more) — you can attach multiple files.
-      </p>
-      <input
-        type="file"
-        multiple
-        onChange={(e) => {
-          // Materialize the FileList into a plain array *before* clearing
-          // the input's value below. `input.files` is a live FileList in
-          // Chromium/Firefox — resetting `value` mutates that same object
-          // to length 0 immediately, and since setFiles' functional updater
-          // doesn't run until after this handler returns, passing the live
-          // FileList straight through silently drops every selected file.
-          const selected = e.target.files ? Array.from(e.target.files) : [];
-          addFiles(selected);
-          e.target.value = '';
-        }}
-        className="block w-full text-sm text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-500/10 file:text-teal-700 dark:file:text-teal-400 hover:file:bg-teal-500/20"
-      />
-      {files.length > 0 && (
-        <ul className="space-y-1">
-          {files.map((f, i) => (
-            <li
-              key={`${f.name}-${i}`}
-              className="flex items-center justify-between gap-2 text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 rounded-lg px-2.5 py-1.5"
-            >
-              <span className="truncate">📎 {f.name}</span>
-              <button
-                onClick={() => removeFile(i)}
-                className="text-gray-400 hover:text-red-500 flex-shrink-0"
-                aria-label={`Remove ${f.name}`}
-              >
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="space-y-1.5 pt-1">
-        <p className="text-xs text-gray-500 dark:text-gray-400">Or share a link (Scratch, GitHub, Replit, etc.)</p>
-        {links.map((link, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={link}
-              onChange={(e) => setLink(i, e.target.value)}
-              placeholder="https://scratch.mit.edu/projects/..."
-              className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400"
-            />
-            {links.length > 1 && (
-              <button
-                onClick={() => removeLink(i)}
-                className="text-gray-400 hover:text-red-500 flex-shrink-0"
-                aria-label="Remove link"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-        ))}
-        <button onClick={addLinkField} className="text-xs text-teal-600 dark:text-teal-400 hover:underline">
-          + Add another link
-        </button>
-      </div>
-
-      <input
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="Add a note for your teacher (optional)"
-        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white placeholder:text-gray-400"
-      />
-      {error && <p className="text-xs text-red-500">{error}</p>}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={submit}
-          disabled={uploading}
-          className="px-4 py-2 rounded-lg text-sm font-semibold text-black bg-teal-500 hover:bg-teal-400 disabled:opacity-60 transition-colors"
-        >
-          {uploading ? 'Submitting…' : 'Submit Work'}
-        </button>
-        {resubmitting && (
-          <button onClick={() => setResubmitting(false)} className="text-sm text-gray-500 hover:underline">
-            Cancel
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
