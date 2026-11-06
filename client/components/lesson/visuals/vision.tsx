@@ -340,7 +340,7 @@ export function BoundingBox({ config, onUse }: VisualProps) {
 
   return (
     <div>
-      <svg viewBox={`${-fs * 2.6} ${-fs * 2.2} ${W + fs * 4.2} ${H + fs * 4.6}`} aria-hidden="true" focusable="false" style={{ borderRadius: 10 }}>
+      <svg viewBox={`${-fs * 4.6} ${-fs * 2.2} ${W + fs * 6.4} ${H + fs * 4.6}`} aria-hidden="true" focusable="false" style={{ borderRadius: 10 }}>
         <defs>
           <linearGradient id={`bb-${gradId}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#bfdbfe" />
@@ -360,7 +360,7 @@ export function BoundingBox({ config, onUse }: VisualProps) {
         <text x={cx} y={cy - fs * 0.4} fontSize={fs} fontWeight={700} fill="#166534" style={{ fill: '#166534' }}>{label}</text>
         <g fontSize={fs} fontWeight={700}>
           <text x={cx / 2} y={Math.max(fs, cy - sw * 3)} textAnchor="middle" style={{ fill: '#6d28d9' }}>x = {cx}</text>
-          <text x={cx + sw * 3} y={cy / 2 + fs / 3} style={{ fill: '#1d4ed8' }}>y = {cy}</text>
+          <text x={cx - sw * 3} y={Math.max(fs, cy / 2) + fs / 3} textAnchor="end" style={{ fill: '#1d4ed8' }}>y = {cy}</text>
           <text x={cx + w / 2} y={cy + h + fs * 1.15} textAnchor="middle" style={{ fill: '#166534' }}>width = {w}</text>
           <text x={cx + w + fs * 0.4} y={cy + h / 2} style={{ fill: '#166534' }}>height = {h}</text>
         </g>

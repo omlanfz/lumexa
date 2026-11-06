@@ -582,7 +582,13 @@ export async function seedCurriculumContent(
   await backfillAdvancedDataScience(prisma, logger);
   // Last: every learning lesson — pathway, Odyssey copy, custom course, imported —
   // is brought up to the structured content model (cleanup, quiz, notes, visuals).
-  await backfillLessonContent(prisma, logger);
+  // Isolated on purpose: whatever happens while tidying lesson text must never stop the
+  // rest of the boot seed (the assessment-bank sync runs right after this).
+  try {
+    await backfillLessonContent(prisma, logger);
+  } catch (err) {
+    logger.warn(`[curriculum-seed] lesson content backfill failed (will retry on the next boot): ${(err as Error).message}`);
+  }
 }
 
 // ── Portfolio-project links (per pathway) ───────────────────────────────────

@@ -135,7 +135,7 @@ export function CssLayout({ config, onUse }: VisualProps) {
         <div style={{ flex: '2 1 280px', minWidth: 0 }}>
           <div aria-hidden="true" style={{ ...style, minHeight: 200, padding: 10, border: `2px dashed ${C.border}`, borderRadius: 10, background: C.surface }}>
             {Array.from({ length: count }, (_, i) => (
-              <div key={i} style={{ background: ITEM_TONES[i % ITEM_TONES.length], color: '#fff', fontWeight: 700, borderRadius: 8, padding: mode === 'flex' ? `${10 + (i % 3) * 8}px 16px` : '14px', minWidth: 54, textAlign: 'center' }}>
+              <div key={i} style={{ background: ITEM_TONES[i % ITEM_TONES.length], color: '#fff', fontWeight: 700, borderRadius: 8, padding: mode === 'flex' ? `${10 + (i % 3) * 8}px 10px` : '14px 8px', minWidth: 0, flex: mode === 'flex' ? '0 1 auto' : undefined, textAlign: 'center', overflow: 'hidden' }}>
                 {labels[i] ?? i + 1}
               </div>
             ))}
