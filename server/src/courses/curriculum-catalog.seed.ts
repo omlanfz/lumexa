@@ -32,99 +32,17 @@
 // for the *supported* path once a course is genuinely restructured live).
 
 import { LessonStatus, PrismaClient, SessionType } from '@prisma/client';
-import * as fs from 'fs';
-import * as path from 'path';
 import { standardInstructions } from '../assessments/bank/bank.constants';
 import type { BankTestType } from '../assessments/bank/bank.types';
 import { ADVANCED_DATA_SCIENCE_FIXES } from './advanced-data-science.content';
-
-const DATA_DIR = path.join(__dirname, '../../prisma/curriculum-data');
-
-// ── Raw JSON shapes (see scripts/extract-curriculum.mjs) ───────────────────
-
-interface RawCodeSnippet {
-  label: string;
-  language: string;
-  code: string;
-  part?: string;
-}
-interface RawLesson {
-  order: number;
-  title: string;
-  objectives: string[];
-  contentMarkdown: string;
-  homework?: string | null;
-  teacherNotes?: string | null;
-  codeSnippets: RawCodeSnippet[];
-  sourceRefs?: unknown;
-  hasEmbeddedProject?: boolean;
-  checkpoint?: string;
-  projectSlug?: string | null;
-}
-interface RawProjectFile {
-  label: string;
-  language: string;
-  code: string;
-  part?: string;
-}
-interface RawProject {
-  slug: string;
-  title: string;
-  order: number;
-  description?: string | null;
-  sourceRepoPath?: string;
-  files: RawProjectFile[];
-}
-interface RawModule {
-  slug: string;
-  title: string;
-  lessons: RawLesson[];
-  projects: RawProject[];
-}
-interface RawPathway {
-  slug: string;
-  modules: RawModule[];
-}
-
-// Some source markdown (PDF-derived content in particular) contains
-// unpaired UTF-16 surrogate code units from lossy extraction — Postgres'
-// UTF-8 encoder rejects those outright ("lone leading surrogate in hex
-// escape"). Stripped once here, at load time, so every downstream Prisma
-// write is already clean.
-function stripLoneSurrogates(str: string): string {
-  let out = '';
-  for (let i = 0; i < str.length; i++) {
-    const code = str.charCodeAt(i);
-    if (code >= 0xd800 && code <= 0xdbff) {
-      const next = str.charCodeAt(i + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        out += str[i] + str[i + 1];
-        i++;
-      } // else: lone high surrogate — drop it
-    } else if (code >= 0xdc00 && code <= 0xdfff) {
-      // lone low surrogate — drop it
-    } else {
-      out += str[i];
-    }
-  }
-  return out;
-}
-
-function deepCleanStrings<T>(value: T): T {
-  if (typeof value === 'string') return stripLoneSurrogates(value) as unknown as T;
-  if (Array.isArray(value)) return value.map((v) => deepCleanStrings(v)) as unknown as T;
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) out[k] = deepCleanStrings(v);
-    return out as T;
-  }
-  return value;
-}
-
-function loadPathway(slug: string): RawPathway {
-  const file = path.join(DATA_DIR, `${slug}.json`);
-  return deepCleanStrings(JSON.parse(fs.readFileSync(file, 'utf8')));
-}
+import { CONTENT_VERSION, upgradeLesson } from '../curriculum/lesson-content';
+import { backfillLessonContent, upgradeAdvancedDataScienceFix } from './lesson-content.backfill';
+import {
+  PATHWAY_SLUGS,
+  loadPathway,
+  type RawModule,
+  type RawPathway,
+} from './curriculum-source';
 
 // ── Project-checkpoint assignment: the standard 8-lesson shape ─────────────
 // L1 intro · L2-3 Project1 · L4-5 Project2 · L6-7 Project3 · L8 review
@@ -190,6 +108,15 @@ function assignDigitalIndependenceCheckpoints(mod: RawModule) {
 
 // ── Core builders ────────────────────────────────────────────────────────────
 
+/** Replaces a lesson's raw title wherever generated text (a checkpoint, an embedded
+ *  project's name) quotes it, so a cleaned title never leaves its old form behind. */
+export function retitleText(text: string | null | undefined, retitle: Map<string, string>): string | undefined {
+  if (text === null || text === undefined) return undefined;
+  let out = text;
+  for (const [from, to] of retitle) if (from.length >= 6) out = out.split(from).join(to);
+  return out;
+}
+
 async function createModuleRows(
   prisma: PrismaClient,
   courseId: string,
@@ -197,6 +124,7 @@ async function createModuleRows(
   moduleOrder: number,
   lessonOrderStart: number,
   stageNumber: number | null,
+  courseTitle: string | null = null,
 ): Promise<number> {
   const courseModule = await prisma.courseModule.create({
     data: {
@@ -208,14 +136,49 @@ async function createModuleRows(
     },
   });
 
+  // Bring every lesson up to the current content model BEFORE any row is written:
+  // cleaned body, structured quiz, instructor notes, visuals and lineage. A new
+  // database therefore never holds the duplicated, unstructured content that
+  // backfillLessonContent exists to repair in old ones.
+  const learningCount = mod.lessons.length;
+  const upgrades = mod.lessons.map(
+    (lesson, i) =>
+      upgradeLesson({
+        row: {
+          id: '',
+          title: lesson.title,
+          type: 'LEARNING',
+          objectives: lesson.objectives,
+          contentMarkdown: lesson.contentMarkdown,
+          homework: lesson.homework ?? null,
+          teacherNotes: null,
+          miniQuiz: null,
+          visuals: null,
+          contentVersion: 0,
+          sourceRefs: lesson.sourceRefs ?? null,
+          duration: null,
+        },
+        courseTitle,
+        module: { slug: mod.slug, title: mod.title },
+        positionInGroup: i + 1,
+        groupSize: learningCount,
+        source: { teacherNotes: lesson.teacherNotes ?? null, miniQuiz: lesson.miniQuiz ?? null, moduleLessonCount: learningCount },
+      }).patch,
+  );
+  const retitle = new Map<string, string>();
+  mod.lessons.forEach((lesson, i) => {
+    const cleaned = upgrades[i]?.title;
+    if (cleaned && cleaned !== lesson.title) retitle.set(lesson.title, cleaned);
+  });
+
   const projectRows = new Map<string, string>();
   for (const p of mod.projects) {
     const row = await prisma.project.create({
       data: {
         moduleId: courseModule.id,
         slug: p.slug,
-        title: p.title,
-        description: p.description ?? undefined,
+        title: retitleText(p.title, retitle) ?? p.title,
+        description: retitleText(p.description, retitle),
         sourceRepoPath: p.sourceRepoPath ?? undefined,
         order: p.order,
       },
@@ -224,21 +187,26 @@ async function createModuleRows(
   }
 
   let order = lessonOrderStart;
-  for (const lesson of mod.lessons) {
+  for (const [i, lesson] of mod.lessons.entries()) {
+    const patch = upgrades[i];
     await prisma.lesson.create({
       data: {
         courseId,
         moduleId: courseModule.id,
-        title: lesson.title,
+        title: patch?.title ?? lesson.title,
         order,
         type: SessionType.LEARNING,
-        objectives: lesson.objectives,
-        contentMarkdown: lesson.contentMarkdown,
-        homework: lesson.homework ?? undefined,
-        checkpoint: lesson.checkpoint,
+        objectives: patch?.objectives ?? lesson.objectives,
+        contentMarkdown: patch && patch.contentMarkdown !== undefined ? patch.contentMarkdown : lesson.contentMarkdown,
+        homework: patch && patch.homework !== undefined ? patch.homework : (lesson.homework ?? undefined),
+        teacherNotes: patch?.teacherNotes ?? undefined,
+        miniQuiz: patch?.miniQuiz ? (patch.miniQuiz as object) : undefined,
+        visuals: patch?.visuals ? (patch.visuals as object) : undefined,
+        contentVersion: CONTENT_VERSION,
+        checkpoint: retitleText(lesson.checkpoint, retitle),
         projectId: lesson.projectSlug ? projectRows.get(lesson.projectSlug) : undefined,
         codeSnippets: (lesson.codeSnippets as unknown as object[]) ?? [],
-        sourceRefs: (lesson.sourceRefs as object) ?? undefined,
+        sourceRefs: ((patch?.sourceRefs ?? lesson.sourceRefs) as object) ?? undefined,
       },
     });
     order++;
@@ -296,6 +264,7 @@ async function createAssessmentShell(
 
 export async function seedPathwayCurriculum(prisma: PrismaClient, courseId: string, pathwaySlug: string) {
   const raw = loadPathway(pathwaySlug);
+  const courseRow = await prisma.course.findUnique({ where: { id: courseId }, select: { title: true } });
   for (const mod of raw.modules) {
     if (mod.slug === 'build-your-professional-identity' || mod.slug === 'skills-that-pay' || mod.slug === 'professional-presence') {
       assignDigitalIndependenceCheckpoints(mod);
@@ -306,7 +275,7 @@ export async function seedPathwayCurriculum(prisma: PrismaClient, courseId: stri
 
   let order = 1;
   for (let i = 0; i < raw.modules.length; i++) {
-    order = await createModuleRows(prisma, courseId, raw.modules[i], i + 1, order, null);
+    order = await createModuleRows(prisma, courseId, raw.modules[i], i + 1, order, null, courseRow?.title ?? null);
   }
 
   // Final Test: 25 MCQs + 5 True/False across all 3 modules plus one ~15-minute
@@ -366,6 +335,7 @@ export const ODYSSEY_STAGES: { pathway: string; module: string }[][] = [
 ];
 
 export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: string) {
+  const courseRow = await prisma.course.findUnique({ where: { id: courseId }, select: { title: true } });
   const pathwayCache = new Map<string, RawPathway>();
   function getModule(pathwaySlug: string, moduleSlug: string): RawModule {
     if (!pathwayCache.has(pathwaySlug)) pathwayCache.set(pathwaySlug, loadPathway(pathwaySlug));
@@ -388,7 +358,7 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
     }
 
     for (const mod of stageModules) {
-      order = await createModuleRows(prisma, courseId, mod, moduleOrderCounter, order, stageIdx + 1);
+      order = await createModuleRows(prisma, courseId, mod, moduleOrderCounter, order, stageIdx + 1, courseRow?.title ?? null);
       moduleOrderCounter++;
     }
 
@@ -432,15 +402,6 @@ export async function seedOdysseyCurriculum(prisma: PrismaClient, courseId: stri
 }
 
 // ── Orchestration + idempotency guard ───────────────────────────────────────
-
-const PATHWAY_SLUGS: Record<string, string> = {
-  'ai-builder-path': 'ai-builder-path',
-  'data-scientist-path': 'data-scientist-path',
-  'game-creator-path': 'game-creator-path',
-  'little-coders-path': 'little-coders-path',
-  'digital-independence-path': 'digital-independence-path',
-  'web-developer-path': 'web-developer-path',
-};
 
 async function buildFreshStructure(prisma: PrismaClient, course: { id: string; slug: string }) {
   if (course.slug === 'lumexa-odyssey') return seedOdysseyCurriculum(prisma, course.id);
@@ -619,6 +580,9 @@ export async function seedCurriculumContent(
   await backfillDataScientistKeyTerminologyTables(prisma, logger);
   await backfillWebDeveloperLessonContent(prisma, logger);
   await backfillAdvancedDataScience(prisma, logger);
+  // Last: every learning lesson — pathway, Odyssey copy, custom course, imported —
+  // is brought up to the structured content model (cleanup, quiz, notes, visuals).
+  await backfillLessonContent(prisma, logger);
 }
 
 // ── Portfolio-project links (per pathway) ───────────────────────────────────
@@ -978,9 +942,11 @@ async function backfillWebDeveloperLessonContent(
       if (!newContent) continue;
       const current = lesson.contentMarkdown ?? '';
       if (current.length >= WEB_DEVELOPER_STUB_MAX_LEN || current === newContent) continue;
+      // The replacement is the raw source text: reset the content version so the
+      // cleanup (backfillLessonContent, below) runs over it.
       await prisma.lesson.update({
         where: { id: lesson.id },
-        data: { contentMarkdown: newContent },
+        data: { contentMarkdown: newContent, contentVersion: 0 },
       });
       updated++;
     }
@@ -1028,7 +994,23 @@ async function backfillAdvancedDataScience(
 
   const lessons = await prisma.lesson.findMany({
     where: { courseId: course.id, order: { in: ADVANCED_DATA_SCIENCE_FIXES.map((f) => f.order) } },
-    select: { id: true, order: true, title: true },
+    select: {
+      id: true,
+      order: true,
+      title: true,
+      objectives: true,
+      contentMarkdown: true,
+      homework: true,
+      checkpoint: true,
+      codeSnippets: true,
+      projectLinks: true,
+      teacherNotes: true,
+      miniQuiz: true,
+      visuals: true,
+      sourceRefs: true,
+      duration: true,
+      contentVersion: true,
+    },
   });
   const byOrder = new Map(lessons.map((l) => [l.order, l]));
 
@@ -1040,18 +1022,12 @@ async function backfillAdvancedDataScience(
       ? fix.matchTitle.includes(lesson.title)
       : lesson.title === fix.matchTitle;
     if (!titleMatches) continue;
-    await prisma.lesson.update({
-      where: { id: lesson.id },
-      data: {
-        ...(fix.title ? { title: fix.title } : {}),
-        objectives: fix.objectives,
-        contentMarkdown: fix.contentMarkdown,
-        homework: fix.homework,
-        ...(fix.checkpoint !== undefined ? { checkpoint: fix.checkpoint } : {}),
-        codeSnippets: fix.codeSnippets as unknown as object,
-        projectLinks: fix.projectLinks as unknown as object,
-      },
-    });
+    // The redesign is applied in its CLEAN form (same cleanup as every lesson) and
+    // only written when the stored row differs — so this no longer rewrites every
+    // lesson on every boot, and never re-introduces duplicated sections.
+    const data = upgradeAdvancedDataScienceFix(fix, lesson);
+    if (!data) continue;
+    await prisma.lesson.update({ where: { id: lesson.id }, data });
     updated++;
   }
   if (updated > 0) {

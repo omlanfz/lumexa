@@ -8,6 +8,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Max,
@@ -102,6 +103,45 @@ export class UpdateLessonContentDto {
   // Buttons shown in the lesson page's "Project" section, replacing the
   // Code section when non-empty — see Lesson.projectLinks in schema.prisma.
   @IsOptional() @IsArray() projectLinks?: ProjectLinkDto[];
+  // Teacher-only preparation notes (Markdown). Never part of the shared lesson.
+  @IsOptional() @IsString() teacherNotes?: string;
+  // The lesson's Mini Quiz and visuals. Deeply validated and normalised by
+  // validateLessonContent (server/src/curriculum/lesson-content/validate.ts), which
+  // rejects the save with a list of what is wrong.
+  @IsOptional() @IsArray() miniQuiz?: unknown[];
+  @IsOptional() @IsArray() visuals?: unknown[];
+}
+
+/** Checks one Mini Quiz answer (learning lessons only — not the assessment system). */
+export class QuizCheckDto {
+  @IsString() @MaxLength(60) questionId: string;
+  @IsObject() answer: Record<string, unknown>;
+  /** A student must say which of their own classes they are reading the lesson through. */
+  @IsOptional() @IsString() @MaxLength(64) scheduledLessonId?: string;
+  /** The classroom's own request (see CurriculumService.isAttendingNow). */
+  @IsOptional() @IsBoolean() inClassroom?: boolean;
+}
+
+/** A student's study progress: what they have actually read / done. */
+export class SaveProgressDto {
+  @IsOptional() @IsArray() @ArrayMaxSize(80) @IsString({ each: true }) @MaxLength(60, { each: true }) sectionsRead?: string[];
+  @IsOptional() @IsArray() @ArrayMaxSize(80) @IsString({ each: true }) @MaxLength(60, { each: true }) activitiesDone?: string[];
+  @IsOptional() @IsBoolean() inClassroom?: boolean;
+}
+
+/** A draft lesson to preview exactly as learners / the teacher's presentation would see it. */
+export class PreviewLessonDto {
+  @IsOptional() @IsString() @MaxLength(64) lessonId?: string;
+  @IsOptional() @IsString() @MaxLength(200) title?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) objectives?: string[];
+  @IsOptional() @IsString() contentMarkdown?: string;
+  @IsOptional() @IsString() homework?: string;
+  @IsOptional() @IsString() teacherNotes?: string;
+  @IsOptional() @IsString() checkpoint?: string;
+  @IsOptional() @IsArray() miniQuiz?: unknown[];
+  @IsOptional() @IsArray() visuals?: unknown[];
+  @IsOptional() @IsArray() projectLinks?: ProjectLinkDto[];
+  @IsOptional() @IsArray() codeSnippets?: CodeSnippetDto[];
 }
 
 // A question is either a four-option MCQ or a True/False statement (options
