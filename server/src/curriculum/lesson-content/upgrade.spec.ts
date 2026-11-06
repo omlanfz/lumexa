@@ -104,10 +104,10 @@ describe('the structured-content upgrade of every learning lesson', () => {
     const { res } = results.find(({ c }) => c.key === 'python-ai-foundations/3')!;
     const patch = res.patch!;
     expect(patch.teacherNotes).toContain(DISCUSSION_HEADING);
-    expect(patch.teacherNotes).toMatch(/difference between a for loop and a while loop/);
+    expect(patch.teacherNotes).toMatch(/difference between a `for` loop and a `while` loop/);
     expect(res.review.some((x) => x.kind === 'quiz-needs-rewrite')).toBe(true);
     // …and none of it reaches the student quiz.
-    expect(JSON.stringify(readQuiz(patch.miniQuiz))).not.toMatch(/difference between a for loop and a while loop/);
+    expect(JSON.stringify(readQuiz(patch.miniQuiz))).not.toMatch(/difference between a .?for.? loop and a .?while.? loop/);
     // A statement that was turned into a multiple-choice question, and then repeated as "True or False: …", is not kept twice.
     expect(JSON.stringify(readQuiz(patch.miniQuiz))).toMatch(/variable that is defined inside a function/);
     expect(patch.teacherNotes).not.toMatch(/variable defined inside a function can be used anywhere/);

@@ -80,6 +80,7 @@ export interface ConformContext {
 }
 
 export interface Leftover {
+  /** The question as written (inline Markdown such as `code` is kept; it is shown in the teacher notes, which are Markdown). */
   prompt: string;
   /** The kind of question it was ("self_check", "true_false", …). */
   kind: string;
@@ -110,6 +111,8 @@ const text = (v: unknown): string => (typeof v === 'string' ? v : '');
  */
 export const squash = (s: string): string => comparable(s).replace(/\s+/g, '');
 const plain = (s: string): string => stripInlineMarkdown(s).replace(/\s+/g, ' ').trim();
+/** A question on one line for a bullet in the notes. Inline Markdown stays; a multi-line code block cannot, so it is flattened to plain text. */
+const asBullet = (s: string): string => (/```|~~~/.test(s) ? plain(s) : s.replace(/\s+/g, ' ').trim());
 
 /** Puts the right answer (given first) at a spot that depends on the question, not always first. */
 function place(correctFirst: string[], seed: string): { options: string[]; correctIndex: number } {
@@ -287,7 +290,7 @@ export function conformQuiz(raw: unknown, ctx: ConformContext): ConformResult {
     }
 
     // 6. Cannot be multiple choice without inventing answers: keep it for the teacher (once).
-    leftover.push({ prompt: plain(prompt) || '(no text)', kind: text(q.type) || 'unknown' });
+    leftover.push({ prompt: asBullet(prompt) || '(no text)', kind: text(q.type) || 'unknown' });
     asked.add(askedKey(prompt));
   });
 
@@ -309,7 +312,7 @@ export function conformQuiz(raw: unknown, ctx: ConformContext): ConformResult {
   if (leftover.length > 0) {
     review.push({
       kind: 'quiz-needs-rewrite',
-      detail: `${leftover.length} quiz question${leftover.length === 1 ? '' : 's'} could not be asked as multiple choice and ${leftover.length === 1 ? 'was' : 'were'} moved to the teacher notes as discussion prompts: ${leftover.map((l) => `"${l.prompt.slice(0, 70)}"`).join('; ')}`,
+      detail: `${leftover.length} quiz question${leftover.length === 1 ? '' : 's'} could not be asked as multiple choice and ${leftover.length === 1 ? 'was' : 'were'} moved to the teacher notes as discussion prompts: ${leftover.map((l) => `"${plain(l.prompt).slice(0, 70)}"`).join('; ')}`,
     });
   }
   const changed = out.length !== list.length || leftover.length > 0 || converted > 0 || stable(out) !== stable(list);

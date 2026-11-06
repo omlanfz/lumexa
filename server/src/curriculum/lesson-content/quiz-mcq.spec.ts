@@ -79,13 +79,17 @@ describe('conformQuiz: bringing older questions up to the rule', () => {
     const out = conformQuiz(raw, ctx);
     expect(out.quiz.map((q) => q.id)).toEqual(['q1']);
     expect(out.leftover.map((l) => l.kind)).toEqual(['self_check', 'reflection', 'true_false']);
-    expect(out.leftover[0].prompt).toBe('Why does a while loop need its condition to change?'); // plain text, no Markdown
+    expect(out.leftover[0].prompt).toBe('Why does a `while` loop need its condition to change?'); // inline code is kept: the notes are Markdown
+    expect(out.review[0].detail).toContain('"Why does a while loop need its condition to change?"'); // the review list is plain text
     expect(out.review).toHaveLength(1);
     expect(out.review[0]).toMatchObject({ kind: 'quiz-needs-rewrite' });
     expect(out.review[0].detail).toMatch(/3 quiz questions/);
     const notes = discussionSection(out.leftover);
     expect(notes).toContain(`## ${DISCUSSION_HEADING}`);
     expect(notes).toContain('- Describe a time you debugged something.');
+    // A question that holds a code block cannot be a one-line bullet, so it is flattened to plain text.
+    const flat = conformQuiz([{ id: 'q1', type: 'self_check', prompt: 'What does this print?\n```python\nprint(1)\n```' }], ctx);
+    expect(flat.leftover[0].prompt).not.toMatch(/```|\n/);
   });
 
   it('does not keep the same question twice ("True or False: …" repeating one, or a copy cut short)', () => {

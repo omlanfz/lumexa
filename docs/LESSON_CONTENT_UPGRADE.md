@@ -57,7 +57,9 @@ notes, quiz, objectives or homework); a second run changes nothing.
 
 * Source quiz defects: AI Builder *Python & AI Foundations* L2 (answer key missing entries), Game
   Creator *Python Arcade* L2 (key misaligned), Web Developer *JavaScript Interactivity* L6 (an
-  "open response" entry in a key). These stay as text for review.
+  "open response" entry in a key), and many "write your answer" questions whose model answers belong
+  to a neighbouring question. The multiple-choice rewrites do not use those model answers; the old
+  answer key text stays in the teacher notes for review.
 * 38 lessons whose source answers are heavily weighted to one option — the runtime now shuffles
   options deterministically, so position gives nothing away.
 * 6 lessons whose text states a duration different from the stored one; 6 objective sections that
@@ -80,12 +82,68 @@ left as text and reported.
 
 ## Quiz
 
-One question at a time; every graded question is checked on the server, which returns the right
-answer and the explanation **only in response to an answer**. Types: multiple choice, true/false,
-code output, code error, ordering, matching, self-check, reflection. Option ids are opaque hashes
-and the order is a deterministic per-lesson shuffle. Self-check / reflection answers never leave the
-learner's device. 120 lessons got their quiz from the text; the 24 Little Coders lessons had none
-and received a short, friendly knowledge check. It is separate from the assessment system.
+**Every quiz question is a multiple-choice question with exactly four answer options and one right
+answer — there is no other kind** (see "Multiple choice only" below). One question at a time; every
+question is checked on the server, which returns the right answer and the explanation **only in
+response to an answer**. Option ids are opaque hashes and the order is a deterministic per-lesson
+shuffle. The quiz is separate from the assessment system.
+
+## Multiple choice only (content version 2)
+
+**The rule:** every question in a learning lesson's Mini Quiz is a multiple-choice question with
+exactly four distinct answer options and one correct option. Typed answers ("self-check"),
+reflection prompts, true/false, ordering and matching no longer exist as quiz questions anywhere —
+not in the database, the API, the student quiz, the teacher answer key or the admin editor.
+Assessment / test lessons and their question banks are **not** part of this and are untouched.
+
+**Enforced in the backend, not just the UI.** `normalizeQuiz` accepts only four-option multiple
+choice; the admin save endpoint rejects anything else with a message that names the rule; the read
+path (`readQuiz`) never serves — or grades, or puts in an answer key — a stored question that breaks
+it, so even a row written by an older release or edited by hand cannot show a typed-answer box.
+
+**What happened to the existing content** (counts are for the six pathway datasets; Lumexa Odyssey
+and custom courses inherit by lineage or title):
+
+| | Questions |
+| --- | --- |
+| Already four-option multiple choice — kept exactly as written | 299 |
+| Typed-answer, reflection and true/false questions rewritten **by hand** as four-option multiple choice (one right answer, three plausible wrong ones, an explanation) | 301 |
+| Little Coders' knowledge checks (24 lessons × 3), now multiple choice | 72 |
+| Advanced Data Science (custom course), 8 lessons rewritten by title | 40 |
+| The same statement asked twice (`True or False: …` repeating a question) — removed | 12 |
+| Open-ended questions with no single right answer — **kept for the teacher** as "Discussion questions (not in the student quiz)" in the teacher notes, and flagged for review | 325 (71 lessons) |
+
+Every lesson that had five or more questions still has at least five, all multiple choice. The
+rewrites are matched to a question by the start of its text (punctuation, code ticks and Markdown
+ignored); a test proves each rewrite matches exactly one question of its lesson, none is unused or
+dangling, and every shipped lesson ends with nothing but four-option multiple choice.
+
+**Answers were authored from what the lesson teaches** (the lesson text, the code in it and its
+answer key where it was reliable) — the worksheet "model answers" in the source data are misaligned
+in many lessons, so they were not trusted. The right answer sits in a spread of positions (about a
+quarter each, and the runtime shuffles them again per lesson), and the wrong answers are written to be
+about as long as the right one, so neither position nor length gives the answer away (a test checks
+both).
+
+**Migration.** A lesson already at version 1 gets a quiz-only migration: its quiz is brought up to
+the rule, its teacher notes gain the discussion questions, and its version becomes 2 — nothing else
+about it (text, visuals, title, links, an admin's edits) is touched, and a question an admin already
+wrote as four-option multiple choice is kept as it is. A lesson at version 0 goes through the full
+pipeline and ends up in the same place. Running the backfill again changes nothing. Verified on a
+database of 216 learning lessons at version 1: all 216 reach version 2 with 1,007 questions, every
+one four-option multiple choice, no lesson without a quiz, tests and assessment tables byte-identical
+before and after, a second run inspecting zero rows.
+
+**Things to know.**
+
+* A converted question gets a new id (`q5` → `q5m`). A student who had finished a lesson's old quiz
+  sees it as not finished until they answer the new questions; their lesson reading progress is kept.
+* A custom lesson written by an admin with typed-answer questions and no hand-written rewrite loses
+  those questions from the student quiz (they move to its teacher notes and are flagged
+  `quiz-needs-rewrite` in the editor) — the server never invents answers.
+* The admin editor shows an older stored question as an unfinished four-option draft, so it can be
+  completed or removed.
+* Students' score and "completed" now count every question (all are graded).
 
 ## Visuals
 
@@ -126,7 +184,8 @@ or the classroom.
 
 ## Admin lesson editor (`/admin/lessons/:id/edit`)
 
-Structured quiz editor (all question types, reorder, per-question errors), visuals editor (kind,
+Structured quiz editor (multiple choice only: four option boxes, one marked correct, an explanation;
+reorder; per-question errors), visuals editor (kind,
 alt, caption, configuration with live preview and a starter template per kind), teacher notes,
 placement helpers for the quiz and visuals, live server validation with every problem listed,
 review flags from the cleanup, and Student / Presentation previews of the draft. Saving is
@@ -143,18 +202,20 @@ An imported lesson copies every new field **by value** (independent copy) and re
 * `prisma migrate deploy` (additive), then the normal boot runs the seed, which now ends with the
   version-gated backfill. It logs a summary and the flagged lessons. A second boot is a no-op.
 * To add or change visuals / knowledge checks for future releases, edit
-  `server/src/curriculum/lesson-content/catalog/*` and bump `CONTENT_VERSION` only with the
-  additions (existing rows already at the version are never rewritten).
+  `server/src/curriculum/lesson-content/catalog/*` (hand-written multiple-choice rewrites live in
+  `catalog/mcq/*`) and bump `CONTENT_VERSION` only with the additions (existing rows already at the
+  version are never rewritten).
 * Rollback: the new columns are optional; the previous renderer ignores them.
 
 ## Verification
 
-Server: `tsc` clean, `nest build`, 73 new unit tests (cleanup over all shipped lessons, quiz
-secrecy and grading, serialization / numbering / references, visual validation and placement,
-upgrade gating, authorization, import independence); full suite 59 suites passing — the two
-failing `auth.*.spec.ts` template specs fail identically on the untouched baseline. The
-integration suites (assessments, class tests, classroom details, batches) pass.
-Client: `tsc` and `next build` clean, lint clean for the new code, 438 tests including an SSR
-render of every catalog visual. Checked in a real browser (desktop, mobile, light, dark, student,
+Server: `tsc` clean, `nest build`, unit tests for cleanup over all shipped lessons, quiz secrecy and
+grading, the multiple-choice rule and the conversion (including every rewrite against every shipped
+lesson), the version 1 → 2 migration, serialization / numbering / references, visual validation and
+placement, upgrade gating, authorization and import independence; the full unit suite passes — the
+two `auth.*.spec.ts` template specs fail identically on the untouched baseline. The integration
+suites (assessments, class tests, classroom details, batches) pass.
+Client: `tsc` and `next build` clean, lint clean for the new code, 462 tests including an SSR
+render of every catalog visual, the quiz component and the quiz editor. Checked in a real browser (desktop, mobile, light, dark, student,
 teacher, admin, Presentation Mode, classroom route) with no console errors and no horizontal
 overflow.
