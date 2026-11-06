@@ -13,7 +13,7 @@ import { numberingFor, findByLineage, neighbours, type IndexedLesson } from './n
 import { normalizeQuiz, gradedCount, toPublicQuiz } from './quiz';
 import { extractRefKeys } from './refs';
 import { normalizeVisuals } from './visuals';
-import type { LessonVisual, PublicQuizQuestion, QuizQuestion } from './types';
+import type { LessonVisual, McqQuestion, PublicQuizQuestion } from './types';
 
 export type Viewer = 'student' | 'teacher' | 'admin';
 
@@ -40,7 +40,7 @@ export interface LessonRow {
 
 export interface PublicQuiz {
   questions: PublicQuizQuestion[];
-  /** Questions that are machine-graded (the score's denominator). */
+  /** The score's denominator: every question is scored. */
   gradedCount: number;
 }
 
@@ -62,7 +62,8 @@ export interface SharedLesson {
   visuals: LessonVisual[];
 }
 
-export function readQuiz(raw: unknown): QuizQuestion[] {
+/** The lesson's quiz as stored — and only the questions that obey the rule (four-option multiple choice). */
+export function readQuiz(raw: unknown): McqQuestion[] {
   return normalizeQuiz(raw).quiz;
 }
 
@@ -101,7 +102,7 @@ export interface TeacherPrep {
   teacherNotes: string | null;
   reviewNotes: string | null;
   /** The whole quiz, answers and explanations included. */
-  answerKey: QuizQuestion[];
+  answerKey: McqQuestion[];
 }
 
 /** Served only to an assigned teacher or an admin. */

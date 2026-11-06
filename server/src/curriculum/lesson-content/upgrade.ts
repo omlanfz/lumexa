@@ -8,7 +8,10 @@
 //
 // Gated by `contentVersion`: once a row has been upgraded it is never touched by a
 // later boot, so an admin's own edits are never overwritten. A future release that
-// adds content bumps CONTENT_VERSION and ships only the additions.
+// adds content bumps CONTENT_VERSION and ships only the additions:
+//   1 = cleanup, structured quiz, teacher notes, visuals;
+//   2 = every quiz question is four-option multiple choice (quiz-mcq.ts). A row already at 1
+//       gets ONLY that quiz conversion — nothing else about it is touched.
 
 import { cleanLesson } from './cleaner';
 import { lineageKey, parseLineageKey } from './refs';
@@ -18,12 +21,12 @@ import { catalogFor, catalogForTitle } from './visual-catalog';
 import { quizCatalogFor } from './quiz-catalog';
 import { addQuizPlaceholder } from './quiz-extract';
 import { normalizeQuiz } from './quiz';
+import { DISCUSSION_HEADING, conformQuiz, discussionSection, type Leftover } from './quiz-mcq';
 import { extractVisualIds, normalizeVisuals, placeVisuals } from './visuals';
-import { readQuiz } from './serialize';
-import type { ChangeRecord, LessonContentFields, LessonVisual, ReviewRecord, SourceQuizQuestion } from './types';
+import type { ChangeRecord, LessonContentFields, LessonVisual, QuizQuestion, ReviewRecord, SourceQuizQuestion } from './types';
 
 /** Version of the structured-content backfill. Bump when a release adds content. */
-export const CONTENT_VERSION = 1;
+export const CONTENT_VERSION = 2;
 
 export interface UpgradeInput {
   row: {
@@ -74,6 +77,48 @@ export interface UpgradeResult {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/** Keeps the questions that could not become multiple choice, for the teacher, in the teacher notes. */
+export function appendDiscussion(notes: string | null, leftover: Leftover[]): string | null {
+  if (leftover.length === 0) return notes;
+  const base = (notes ?? '').trimEnd();
+  if (base.includes(DISCUSSION_HEADING)) {
+    const fresh = leftover.filter((l) => !base.includes(l.prompt));
+    return fresh.length === 0 ? notes : `${base}\n${fresh.map((l) => `- ${l.prompt}`).join('\n')}`;
+  }
+  return [base, discussionSection(leftover)].filter((x) => x !== '').join('\n\n');
+}
+
+/** The authored quiz for a lineage, validated (it is data in this repo, but never trusted blindly). */
+function authoredQuiz(lineage: string | null, review: ReviewRecord[]) {
+  const authored = lineage ? quizCatalogFor(lineage) : null;
+  if (!authored) return null;
+  const norm = normalizeQuiz(authored);
+  if (norm.errors.length > 0 || norm.quiz.length === 0) {
+    review.push({ kind: 'content-quality', detail: `The authored quiz for ${lineage} is invalid: ${norm.errors.join(' ')}` });
+    return null;
+  }
+  return norm.quiz;
+}
+
+/**
+ * A row already at content version 1 has been cleaned, given its visuals and notes, and may
+ * have been edited since. All it needs now is its quiz brought up to the multiple-choice rule —
+ * so that, and nothing else, is what this changes.
+ */
+function upgradeQuizOnly(input: UpgradeInput, lineage: string | null): UpgradeResult {
+  const { row } = input;
+  const review: ReviewRecord[] = [];
+  const authored = authoredQuiz(lineage, review);
+  const conformed = conformQuiz(row.miniQuiz, { lineage, title: row.title, authored });
+  const patch: UpgradePatch = { contentVersion: CONTENT_VERSION };
+  if (conformed.changed) patch.miniQuiz = conformed.quiz;
+  if (conformed.leftover.length > 0) {
+    const notes = appendDiscussion(row.teacherNotes, conformed.leftover);
+    if (notes !== row.teacherNotes) patch.teacherNotes = notes;
+  }
+  return { patch, changes: conformed.changes, review: [...review, ...conformed.review] };
+}
+
 export function upgradeLesson(input: UpgradeInput): UpgradeResult {
   const { row } = input;
   if (row.type !== 'LEARNING') return { patch: null, changes: [], review: [] };
@@ -87,13 +132,17 @@ export function upgradeLesson(input: UpgradeInput): UpgradeResult {
   const lineagePosition = parsed?.position ?? null;
   const moduleLessonCount = input.source?.moduleLessonCount ?? (input.module ? input.groupSize : null);
 
+  // Already cleaned and enriched by the first release: only the quiz needs bringing up to the rule.
+  if (!input.force && row.contentVersion === 1) return upgradeQuizOnly(input, lineage);
+
   const before: LessonContentFields = {
     title: row.title,
     objectives: row.objectives ?? [],
     contentMarkdown: row.contentMarkdown,
     homework: row.homework,
     teacherNotes: row.teacherNotes,
-    miniQuiz: row.miniQuiz === null || row.miniQuiz === undefined ? null : readQuiz(row.miniQuiz),
+    // The stored quiz as it is (it may hold older question shapes); quiz-mcq.ts brings it up to the rule below.
+    miniQuiz: Array.isArray(row.miniQuiz) ? (row.miniQuiz as QuizQuestion[]) : null,
     visuals: row.visuals === null || row.visuals === undefined ? null : normalizeVisuals(row.visuals).visuals,
   };
 
@@ -112,21 +161,22 @@ export function upgradeLesson(input: UpgradeInput): UpgradeResult {
   const f = cleaned.fields;
 
   let markdown = f.contentMarkdown;
-  let quiz = f.miniQuiz;
+  let teacherNotes = f.teacherNotes;
 
-  // A lesson whose source has no quiz gets the authored self-check from the quiz catalog (if there is one).
-  if ((quiz === null || quiz.length === 0) && markdown !== null && (row.miniQuiz === null || row.miniQuiz === undefined)) {
-    const authored = lineage ? quizCatalogFor(lineage) : null;
-    if (authored) {
-      const norm = normalizeQuiz(authored);
-      if (norm.errors.length === 0 && norm.quiz.length > 0) {
-        quiz = norm.quiz;
-        markdown = addQuizPlaceholder(markdown);
-        changes.push({ kind: 'quiz-authored', detail: `This lesson had no quiz; added a ${quiz.length}-question knowledge check.` });
-      } else {
-        review.push({ kind: 'content-quality', detail: `The authored quiz for ${lineage} is invalid: ${norm.errors.join(' ')}` });
-      }
-    }
+  // EVERY quiz question is four-option multiple choice. What was extracted or stored in an older
+  // shape is converted (authored rewrites first); what cannot be is kept for the teacher.
+  const authored = authoredQuiz(lineage, review);
+  const conformed = conformQuiz(f.miniQuiz, { lineage, title: f.title, authored });
+  changes.push(...conformed.changes);
+  review.push(...conformed.review);
+  let quiz = conformed.quiz;
+  if (conformed.leftover.length > 0) teacherNotes = appendDiscussion(teacherNotes, conformed.leftover);
+
+  // A lesson whose source has no quiz gets the authored knowledge check from the quiz catalog (if there is one).
+  if (quiz.length === 0 && markdown !== null && (row.miniQuiz === null || row.miniQuiz === undefined) && authored) {
+    quiz = authored;
+    markdown = addQuizPlaceholder(markdown);
+    changes.push({ kind: 'quiz-authored', detail: `This lesson had no quiz; added a ${quiz.length}-question knowledge check.` });
   }
 
   // Visuals from the catalog (only for a lesson that has never been given any).
@@ -153,8 +203,12 @@ export function upgradeLesson(input: UpgradeInput): UpgradeResult {
   if (!same(f.objectives, row.objectives ?? [])) patch.objectives = f.objectives;
   if (markdown !== row.contentMarkdown) patch.contentMarkdown = markdown;
   if (f.homework !== row.homework) patch.homework = f.homework;
-  if (f.teacherNotes !== row.teacherNotes) patch.teacherNotes = f.teacherNotes;
-  if (quiz !== null && quiz.length > 0 && (row.miniQuiz === null || row.miniQuiz === undefined)) patch.miniQuiz = quiz;
+  if (teacherNotes !== row.teacherNotes) patch.teacherNotes = teacherNotes;
+  if (row.miniQuiz === null || row.miniQuiz === undefined) {
+    if (quiz.length > 0) patch.miniQuiz = quiz;
+  } else if (conformed.changed) {
+    patch.miniQuiz = quiz;
+  }
   if (visuals !== null && (row.visuals === null || row.visuals === undefined)) patch.visuals = visuals;
   if (lineage && lineage !== stored) {
     const refs = row.sourceRefs && typeof row.sourceRefs === 'object' && !Array.isArray(row.sourceRefs) ? (row.sourceRefs as Record<string, unknown>) : {};

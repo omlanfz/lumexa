@@ -8,6 +8,7 @@ export * from './numbering';
 export * from './quiz';
 export { extractQuiz, addQuizPlaceholder, QUIZ_BLOCK_LANG, QUIZ_PLACEHOLDER, type QuizExtraction } from './quiz-extract';
 export * from './quiz-catalog';
+export * from './quiz-mcq';
 export { cleanLesson, type CleanResult } from './cleaner';
 export * from './visuals';
 export * from './visual-catalog';
