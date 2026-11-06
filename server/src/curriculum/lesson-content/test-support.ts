@@ -5,6 +5,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { upgradeLesson, type UpgradeInput, type UpgradePatch, type UpgradeResult } from './upgrade';
 import type { LessonContentFields, LessonContext } from './types';
 
 const DIR = path.join(__dirname, '../../../prisma/curriculum-data');
@@ -67,4 +68,58 @@ export function contextOf(c: SourceLessonCase): LessonContext {
     sourceTeacherNotes: c.raw.teacherNotes ?? null,
     sourceQuiz: (c.raw.miniQuiz ?? null) as LessonContext['sourceQuiz'],
   };
+}
+
+/** The upgrade input for a shipped lesson as a fresh seed sees it (a new row, version 0). */
+export function upgradeInputFor(c: SourceLessonCase, over: Partial<UpgradeInput['row']> = {}): UpgradeInput {
+  return {
+    row: {
+      id: `row-${c.key}`,
+      title: c.raw.title,
+      type: 'LEARNING',
+      objectives: c.raw.objectives,
+      contentMarkdown: c.raw.contentMarkdown,
+      homework: c.raw.homework ?? null,
+      teacherNotes: null,
+      miniQuiz: null,
+      visuals: null,
+      contentVersion: 0,
+      sourceRefs: null,
+      duration: 60,
+      ...over,
+    },
+    courseTitle: c.pathway,
+    module: { slug: c.moduleSlug, title: c.moduleTitle },
+    positionInGroup: c.position,
+    groupSize: c.moduleSize,
+    source: { teacherNotes: c.raw.teacherNotes ?? null, miniQuiz: (c.raw.miniQuiz ?? null) as never, moduleLessonCount: c.moduleSize },
+  };
+}
+
+/** What the database row holds after an upgrade patch has been written. */
+export function rowAfter(c: SourceLessonCase, patch: UpgradePatch): UpgradeInput {
+  return upgradeInputFor(c, {
+    title: patch.title ?? c.raw.title,
+    objectives: patch.objectives ?? c.raw.objectives,
+    contentMarkdown: patch.contentMarkdown !== undefined ? patch.contentMarkdown : c.raw.contentMarkdown,
+    homework: patch.homework !== undefined ? patch.homework : c.raw.homework ?? null,
+    teacherNotes: patch.teacherNotes ?? null,
+    miniQuiz: patch.miniQuiz ?? null,
+    visuals: patch.visuals ?? null,
+    contentVersion: patch.contentVersion,
+    sourceRefs: patch.sourceRefs ?? null,
+  });
+}
+
+let upgraded: { c: SourceLessonCase; res: UpgradeResult; patch: UpgradePatch }[] | null = null;
+
+/** Every shipped lesson run through the real upgrade, as a fresh seed does (pure, so cached). */
+export function upgradeAll(): { c: SourceLessonCase; res: UpgradeResult; patch: UpgradePatch }[] {
+  if (!upgraded) {
+    upgraded = allSourceLessons().map((c) => {
+      const res = upgradeLesson(upgradeInputFor(c));
+      return { c, res, patch: res.patch as UpgradePatch };
+    });
+  }
+  return upgraded;
 }

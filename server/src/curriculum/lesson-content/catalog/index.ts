@@ -14,3 +14,4 @@ import './mcq/game-creator';
 import './mcq/web-developer';
 import './mcq/data-scientist';
 import './mcq/digital-independence';
+import './mcq/advanced-data-science';

@@ -14,7 +14,7 @@
 //       gets ONLY that quiz conversion — nothing else about it is touched.
 
 import { cleanLesson } from './cleaner';
-import { lineageKey, parseLineageKey } from './refs';
+import { lineageKey, linkLessonReferences, parseLineageKey } from './refs';
 import { persistedLineage } from './numbering';
 import './catalog';
 import { catalogFor, catalogForTitle } from './visual-catalog';
@@ -77,15 +77,31 @@ export interface UpgradeResult {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+type NotesLinker = (notes: string | null) => string | null;
+const unlinked: NotesLinker = (notes) => notes;
+
+/**
+ * Links "Lesson N" mentions in teacher notes exactly the way the cleanup does, so that text added after
+ * the cleanup (the discussion prompts) is already in its final form and a later pass has nothing to change.
+ */
+function notesLinker(lineage: string | null, fallbackPosition: number, moduleLessonCount: number | null): NotesLinker {
+  const parsed = lineage ? parseLineageKey(lineage) : null;
+  return (notes) => {
+    if (!notes || !parsed || !moduleLessonCount) return notes;
+    return linkLessonReferences(notes, { lineageModule: parsed.moduleSlug, moduleLessonCount, selfPosition: parsed.position ?? fallbackPosition }).markdown;
+  };
+}
+
 /** Keeps the questions that could not become multiple choice, for the teacher, in the teacher notes. */
-export function appendDiscussion(notes: string | null, leftover: Leftover[]): string | null {
+export function appendDiscussion(notes: string | null, leftover: Leftover[], link: NotesLinker = unlinked): string | null {
   if (leftover.length === 0) return notes;
   const base = (notes ?? '').trimEnd();
   if (base.includes(DISCUSSION_HEADING)) {
-    const fresh = leftover.filter((l) => !base.includes(l.prompt));
-    return fresh.length === 0 ? notes : `${base}\n${fresh.map((l) => `- ${l.prompt}`).join('\n')}`;
+    const present = (prompt: string) => base.includes(prompt) || base.includes(link(prompt) ?? prompt);
+    const fresh = leftover.filter((l) => !present(l.prompt));
+    return fresh.length === 0 ? notes : link(`${base}\n${fresh.map((l) => `- ${l.prompt}`).join('\n')}`);
   }
-  return [base, discussionSection(leftover)].filter((x) => x !== '').join('\n\n');
+  return link([base, discussionSection(leftover)].filter((x) => x !== '').join('\n\n'));
 }
 
 /** The authored quiz for a lineage, validated (it is data in this repo, but never trusted blindly). */
@@ -105,7 +121,7 @@ function authoredQuiz(lineage: string | null, review: ReviewRecord[]) {
  * have been edited since. All it needs now is its quiz brought up to the multiple-choice rule —
  * so that, and nothing else, is what this changes.
  */
-function upgradeQuizOnly(input: UpgradeInput, lineage: string | null): UpgradeResult {
+function upgradeQuizOnly(input: UpgradeInput, lineage: string | null, link: NotesLinker): UpgradeResult {
   const { row } = input;
   const review: ReviewRecord[] = [];
   const authored = authoredQuiz(lineage, review);
@@ -113,7 +129,7 @@ function upgradeQuizOnly(input: UpgradeInput, lineage: string | null): UpgradeRe
   const patch: UpgradePatch = { contentVersion: CONTENT_VERSION };
   if (conformed.changed) patch.miniQuiz = conformed.quiz;
   if (conformed.leftover.length > 0) {
-    const notes = appendDiscussion(row.teacherNotes, conformed.leftover);
+    const notes = appendDiscussion(row.teacherNotes, conformed.leftover, link);
     if (notes !== row.teacherNotes) patch.teacherNotes = notes;
   }
   return { patch, changes: conformed.changes, review: [...review, ...conformed.review] };
@@ -132,8 +148,10 @@ export function upgradeLesson(input: UpgradeInput): UpgradeResult {
   const lineagePosition = parsed?.position ?? null;
   const moduleLessonCount = input.source?.moduleLessonCount ?? (input.module ? input.groupSize : null);
 
+  const linkNotes = notesLinker(lineage, lineagePosition ?? input.positionInGroup, moduleLessonCount);
+
   // Already cleaned and enriched by the first release: only the quiz needs bringing up to the rule.
-  if (!input.force && row.contentVersion === 1) return upgradeQuizOnly(input, lineage);
+  if (!input.force && row.contentVersion === 1) return upgradeQuizOnly(input, lineage, linkNotes);
 
   const before: LessonContentFields = {
     title: row.title,
@@ -170,7 +188,7 @@ export function upgradeLesson(input: UpgradeInput): UpgradeResult {
   changes.push(...conformed.changes);
   review.push(...conformed.review);
   let quiz = conformed.quiz;
-  if (conformed.leftover.length > 0) teacherNotes = appendDiscussion(teacherNotes, conformed.leftover);
+  if (conformed.leftover.length > 0) teacherNotes = appendDiscussion(teacherNotes, conformed.leftover, linkNotes);
 
   // A lesson whose source has no quiz gets the authored knowledge check from the quiz catalog (if there is one).
   if (quiz.length === 0 && markdown !== null && (row.miniQuiz === null || row.miniQuiz === undefined) && authored) {

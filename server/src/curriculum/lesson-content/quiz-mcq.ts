@@ -286,8 +286,9 @@ export function conformQuiz(raw: unknown, ctx: ConformContext): ConformResult {
       return;
     }
 
-    // 6. Cannot be multiple choice without inventing answers: keep it for the teacher.
+    // 6. Cannot be multiple choice without inventing answers: keep it for the teacher (once).
     leftover.push({ prompt: plain(prompt) || '(no text)', kind: text(q.type) || 'unknown' });
+    asked.add(askedKey(prompt));
   });
 
   const converted = how.rewritten + how.authored + how.derived;
