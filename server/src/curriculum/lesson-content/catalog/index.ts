@@ -8,3 +8,10 @@ import './game-creator';
 import './little-coders';
 import './web-developer';
 import './advanced-data-science';
+// Four-option multiple-choice rewrites of older quiz questions (the rule: every question is multiple choice)
+import './mcq/ai-builder';
+import './mcq/game-creator';
+import './mcq/web-developer';
+import './mcq/data-scientist';
+import './mcq/digital-independence';
+import './mcq/advanced-data-science';

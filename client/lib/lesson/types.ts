@@ -21,42 +21,43 @@ export interface ProjectLink {
 }
 
 // ─── Mini quiz ──────────────────────────────────────────────────────────────
+// Every quiz question is a multiple-choice question with exactly four options. There
+// is no other kind: no typed answers, no true/false, no ordering or matching.
 
-export type ChoiceType = 'multiple_choice' | 'true_false' | 'code_output' | 'code_error';
+/** How many answer options every question has. */
+export const MCQ_OPTION_COUNT = 4;
 
 export interface PublicOption {
   id: string;
   text: string;
 }
 
-export type PublicQuizQuestion =
-  | { id: string; type: ChoiceType; prompt: string; code?: { language: string; code: string }; options: PublicOption[] }
-  | { id: string; type: 'ordering'; prompt: string; items: PublicOption[] }
-  | { id: string; type: 'matching'; prompt: string; left: PublicOption[]; right: PublicOption[] }
-  | { id: string; type: 'self_check'; prompt: string; hasSampleAnswer: boolean }
-  | { id: string; type: 'reflection'; prompt: string };
+export interface PublicQuizQuestion {
+  id: string;
+  type: 'multiple_choice';
+  prompt: string;
+  code?: { language: string; code: string };
+  /** The four options, in the order this lesson shows them (the server shuffles them the same way for everyone). */
+  options: PublicOption[];
+}
 
 export interface PublicQuiz {
   questions: PublicQuizQuestion[];
+  /** Questions that count towards the score — all of them. */
   gradedCount: number;
 }
 
-export type QuizAnswer =
-  | { optionId: string }
-  | { order: string[] }
-  | { pairs: { leftId: string; rightId: string }[] }
-  | { text?: string; selfRating?: 'got_it' | 'review'; answered?: boolean };
+export interface QuizAnswer {
+  optionId: string;
+}
 
 export interface QuizCheckResult {
   questionId: string;
-  graded: boolean;
-  correct: boolean | null;
+  graded: true;
+  correct: boolean;
   explanation?: string;
-  reveal?:
-    | { optionId: string }
-    | { order: string[] }
-    | { pairs: { leftId: string; rightId: string }[] }
-    | { sampleAnswer: string };
+  /** The right option — only ever sent in response to an answer. */
+  reveal: { optionId: string };
 }
 
 // ─── Visuals ────────────────────────────────────────────────────────────────
@@ -176,14 +177,12 @@ export interface TeacherPrep {
 
 export interface AnswerKeyQuestion {
   id: string;
-  type: string;
+  type: 'multiple_choice';
   prompt: string;
   explanation?: string;
-  options?: string[];
-  correctIndex?: number;
-  items?: string[];
-  pairs?: { left: string; right: string }[];
-  sampleAnswer?: string;
+  /** The four options in their authored order. */
+  options: string[];
+  correctIndex: number;
   code?: { language: string; code: string };
 }
 

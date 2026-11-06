@@ -5,7 +5,8 @@
 // caption, structured config) plus WHERE it goes (a heading in the lesson).
 
 import type { CatalogEntry } from '../visual-catalog';
-import type { QuizQuestion } from '../types';
+import type { McqQuestion } from '../types';
+import { buildMcq, type McqRewrite } from '../quiz-mcq';
 
 /** Where in the lesson a visual belongs: under the heading containing `after`. */
 export type After = string | RegExp;
@@ -117,63 +118,29 @@ export const blocks = (id: string, after: After, alt: string, caption: string, s
 /** Block shorthand for Scratch-style scripts: kind + text, optional children. */
 export const blk = (kind: string, text: string, children?: unknown[]) => ({ kind, text, ...(children ? { children } : {}) });
 
-// ─── Authored quiz questions (for lessons whose source has none) ────────────
+// ─── Authored quiz questions: four-option multiple choice, always ───────────
 
-export const mcq = (id: string, prompt: string, options: string[], correctIndex: number, explanation: string): QuizQuestion => ({
-  id,
-  type: 'multiple_choice',
-  prompt,
-  options,
-  correctIndex,
-  explanation,
-  source: 'authored',
-});
+/**
+ * A multiple-choice question: the RIGHT answer first, then three plausible wrong ones (the
+ * position of the right answer is chosen for you, deterministically, and learners see the
+ * options in a shuffled order anyway).
+ */
+export const mcq = (
+  id: string,
+  prompt: string,
+  options: [string, string, string, string],
+  explanation: string,
+  code?: { language: string; code: string },
+): McqQuestion => buildMcq(id, prompt, options, explanation, { code });
 
-export const tf = (id: string, prompt: string, answer: boolean, explanation: string): QuizQuestion => ({
-  id,
-  type: 'true_false',
-  prompt,
-  options: ['True', 'False'],
-  correctIndex: answer ? 0 : 1,
-  explanation,
-  source: 'authored',
-});
-
-export const codeOut = (id: string, prompt: string, language: string, code: string, options: string[], correctIndex: number, explanation: string): QuizQuestion => ({
-  id,
-  type: 'code_output',
-  prompt,
-  code: { language, code },
-  options,
-  correctIndex,
-  explanation,
-  source: 'authored',
-});
-
-export const ordering = (id: string, prompt: string, items: string[], explanation?: string): QuizQuestion => ({
-  id,
-  type: 'ordering',
-  prompt,
-  items,
-  ...(explanation ? { explanation } : {}),
-  source: 'authored',
-});
-
-export const matching = (id: string, prompt: string, pairs: [string, string][], explanation?: string): QuizQuestion => ({
-  id,
-  type: 'matching',
-  prompt,
-  pairs: pairs.map(([left, right]) => ({ left, right })),
-  ...(explanation ? { explanation } : {}),
-  source: 'authored',
-});
-
-export const selfCheck = (id: string, prompt: string, sampleAnswer?: string): QuizQuestion => ({
-  id,
-  type: 'self_check',
-  prompt,
-  ...(sampleAnswer ? { sampleAnswer } : {}),
-  source: 'authored',
-});
-
-export const reflection = (id: string, prompt: string): QuizQuestion => ({ id, type: 'reflection', prompt, source: 'authored' });
+/**
+ * An authored rewrite of ONE older question (found by the start of its original text) as
+ * four-option multiple choice: right answer first, three plausible wrong ones, an explanation.
+ * Give `prompt` only when the original wording does not work as a multiple-choice question.
+ */
+export const rw = (
+  from: string,
+  options: [string, string, string, string],
+  explanation: string,
+  extra: { prompt?: string; code?: { language: string; code: string } } = {},
+): McqRewrite => ({ from, options, explanation, ...extra });

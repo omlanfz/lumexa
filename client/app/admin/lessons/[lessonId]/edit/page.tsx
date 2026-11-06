@@ -7,7 +7,7 @@ import { Card } from '@/components/admin/AdminUI';
 import LessonMarkdown from '@/components/lesson/LessonMarkdown';
 import { LessonRenderContext } from '@/components/lesson/LessonContext';
 import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/ProjectLinksSection';
-import QuizEditor, { type DraftQuestion } from '@/components/admin/lesson-editor/QuizEditor';
+import QuizEditor, { toDraftQuestion, type DraftQuestion } from '@/components/admin/lesson-editor/QuizEditor';
 import VisualsEditor, { type VisualTypeInfo } from '@/components/admin/lesson-editor/VisualsEditor';
 import LessonPreview, { usePreview, type Draft } from '@/components/admin/lesson-editor/LessonPreview';
 import type { LessonVisualData } from '@/lib/lesson/types';
@@ -80,7 +80,7 @@ export default function AdminLessonEditPage() {
       setHomework(l.homework ?? '');
       setTeacherNotes(l.teacherNotes ?? '');
       setReviewNotes(l.reviewNotes ?? '');
-      setMiniQuiz(l.miniQuiz ?? []);
+      setMiniQuiz(Array.isArray(l.miniQuiz) ? l.miniQuiz.map((q, i) => toDraftQuestion(q, i)) : []);
       setVisuals(l.visuals ?? []);
       setContentReview(l.contentReview ?? []);
       setCodeSnippetCount(l.codeSnippets?.length ?? 0);
@@ -102,7 +102,7 @@ export default function AdminLessonEditPage() {
 
   const errors = result?.validation.errors ?? [];
   const warnings = result?.validation.warnings ?? [];
-  const quizErrors = errors.filter((e) => /^Question \d+:|^The quiz|^A quiz|^A True/.test(e));
+  const quizErrors = errors.filter((e) => /^Question \d+:|^The quiz|^A quiz|^Every quiz question/.test(e));
   const visualErrors = errors.filter((e) => /^Visual \d+ |^A lesson can have at most 40 visuals|^Visuals must/.test(e) || /places a visual/.test(e));
   const otherErrors = errors.filter((e) => !quizErrors.includes(e) && !visualErrors.includes(e));
 

@@ -2,11 +2,12 @@
 //
 // Visuals AND knowledge checks for the Little Coders pathway (lineage keys
 // "<module-slug>/<position>"). These lessons have no quiz of their own, so each gets
-// a short, friendly, ungraded self-check written for their age group.
+// a short, friendly knowledge check written for their age group — three multiple-choice
+// questions with four options each, like every quiz question in Lumexa.
 
 import { registerVisualCatalog, type CatalogSource } from '../visual-catalog';
 import { registerQuizCatalog } from '../quiz-catalog';
-import { blk, blocks, cards, checklist, codeOut, flow, matching, mcq, ordering, reflection, selfCheck, table, tf, trace, tree, uiMap } from './helpers';
+import { blk, blocks, cards, checklist, flow, mcq, table, trace, tree, uiMap } from './helpers';
 
 const source: CatalogSource = {
   // ── Scratch Adventures ───────────────────────────────────────────────────
@@ -122,129 +123,130 @@ const source: CatalogSource = {
 
 registerVisualCatalog(source);
 
-// Short, friendly, ungraded checks (3 questions each). Types vary on purpose.
+// Short, friendly knowledge checks: three questions per lesson, each with four options.
+// Question ids q1–q3 are stable: a stored copy of the first release's version of a question
+// (which used other shapes) is replaced by the same id here.
 registerQuizCatalog({
   'scratch-adventures/1': [
-    mcq('q1', 'What is **code**?', ['A set of instructions a computer can follow', 'A secret password', 'A kind of video game', 'A type of computer screen'], 0, 'Code is a list of instructions. A computer follows them exactly, in order.'),
-    tf('q2', 'A computer can guess what you meant if your instructions are not clear.', false, 'Computers follow instructions exactly. If the steps are unclear, they do the wrong thing — that is why coders are precise.'),
-    ordering('q3', 'Put the steps in the right order to make a sandwich.', ['Put the bread on the plate', 'Add the filling', 'Put the second slice on top'], 'The order matters, just like in code.'),
+    mcq('q1', 'What is **code**?', ['A set of instructions a computer can follow', 'A secret password that unlocks the computer', 'A kind of video game you play on a screen', 'A type of computer screen that shows pictures'], 'Code is a list of instructions. A computer follows them exactly, in order.'),
+    mcq('q2', 'Which sentence about computers is true?', ['A computer follows your steps exactly, in order', 'A computer guesses what you meant when a step is unclear', 'A computer fixes your mistakes by itself', 'A computer skips steps that look boring'], 'Computers follow instructions exactly. If the steps are unclear, they do the wrong thing — that is why coders are precise.'),
+    mcq('q3', 'Which list of steps makes a sandwich in the right order?', ['Put the bread on the plate, add the filling, put the second slice on top', 'Add the filling, put the second slice on top, put the bread on the plate', 'Put the second slice on top, put the bread on the plate, add the filling', 'Add the filling, put the bread on the plate, put the second slice on top'], 'The order matters, just like in code.'),
   ],
   'scratch-adventures/2': [
-    mcq('q1', 'Where do your sprites perform in Scratch?', ['The stage', 'The block palette', 'The sprite list', 'The menu bar'], 0, 'The stage is where your sprites move and talk. The audience sees the stage.'),
-    mcq('q2', 'What does the green flag do?', ['Starts your program', 'Deletes a sprite', 'Saves your project', 'Changes the costume'], 0, 'Clicking the green flag runs every script that starts with “when 🏁 clicked”.'),
-    tf('q3', 'A sprite is a character or object that you can program.', true, 'Sprites can be animals, people, objects — anything you can code to move, talk or change.'),
+    mcq('q1', 'Where do your sprites perform in Scratch?', ['The stage', 'The block palette', 'The sprite list', 'The menu bar'], 'The stage is where your sprites move and talk. The audience sees the stage.'),
+    mcq('q2', 'What does the green flag do?', ['Starts your program', 'Deletes a sprite', 'Saves your project', 'Changes the costume'], 'Clicking the green flag runs every script that starts with “when 🏁 clicked”.'),
+    mcq('q3', 'Which sentence about sprites is true?', ['A sprite is a character or object that you can program', 'A sprite is the colour of a Scratch block', 'A sprite is another word for the stage background', 'A sprite is a sound that you record yourself'], 'Sprites can be animals, people, objects — anything you can code to move, talk or change.'),
   ],
   'scratch-adventures/3': [
-    matching('q1', 'Match each block to its superpower.', [['move 10 steps', 'Motion'], ['say Hello!', 'Looks'], ['play sound Meow', 'Sound']], 'Motion blocks move a sprite, Looks blocks change how it looks or what it says, Sound blocks make noise.'),
-    tf('q2', 'The order of the blocks in a script does not matter.', false, 'Scratch runs blocks from top to bottom. Changing the order changes what happens.'),
-    mcq('q3', 'Where is the centre of the Scratch stage?', ['x = 0, y = 0', 'x = 240, y = 180', 'x = −240, y = −180', 'x = 100, y = 100'], 0, 'The middle of the stage is (0, 0). x goes left and right, y goes down and up.'),
+    mcq('q1', 'Which block belongs to the **Looks** superpower?', ['say Hello!', 'move 10 steps', 'play sound Meow', 'turn 15 degrees'], 'Looks blocks change how a sprite looks or what it says. Motion blocks move it and Sound blocks make noise.'),
+    mcq('q2', 'What can happen if you change the order of the blocks in a script?', ['The sprite may do something different, as blocks run top to bottom', 'Nothing happens — the order of the blocks never matters at all', 'Scratch always puts them back into the right order for you', 'The script stops working until you reload the whole page'], 'Scratch runs blocks from top to bottom. Changing the order changes what happens.'),
+    mcq('q3', 'Where is the centre of the Scratch stage?', ['x = 0, y = 0', 'x = 240, y = 180', 'x = −240, y = −180', 'x = 100, y = 100'], 'The middle of the stage is (0, 0). x goes left and right, y goes down and up.'),
   ],
   'scratch-adventures/4': [
-    mcq('q1', 'What does a **hat block** (like “when space key pressed”) do?', ['Starts a script when something happens', 'Makes the sprite wear a hat', 'Ends the program', 'Plays a sound'], 0, 'A hat block waits for something — a key, a click, a message — and then runs the blocks under it.'),
-    mcq('q2', 'What does **broadcast** do?', ['Sends a message that other scripts can listen for', 'Shows the stage to everyone', 'Makes the sprite louder', 'Saves the project'], 0, 'A broadcast is like a walkie-talkie message. Scripts with “when I receive” listen for it.'),
-    tf('q3', 'Two different sprites can both react to the same broadcast.', true, 'Every script that is listening for that message will run — which is how you make a whole scene react.'),
+    mcq('q1', 'What does a **hat block** (like “when space key pressed”) do?', ['Starts a script when something happens', 'Makes the sprite wear a hat on its head', 'Ends the program when it is finished', 'Plays a sound when the project loads'], 'A hat block waits for something — a key, a click, a message — and then runs the blocks under it.'),
+    mcq('q2', 'What does **broadcast** do?', ['Sends a message that other scripts can hear', 'Shows the stage to everyone in the room', 'Makes the sprite louder when it talks', 'Saves the project onto the computer'], 'A broadcast is like a walkie-talkie message. Scripts with “when I receive” listen for it.'),
+    mcq('q3', 'Which sentence about broadcasts is true?', ['More than one sprite can react to the same broadcast', 'Only one sprite can ever hear a broadcast', 'Only the sprite that sent it can hear it', 'A broadcast makes a sprite get louder and bigger'], 'Every script that is listening for that message will run — which is how you make a whole scene react.'),
   ],
   'scratch-adventures/5': [
-    mcq('q1', 'Which block makes blocks run again and again?', ['repeat', 'say', 'turn', 'hide'], 0, 'A loop block, like repeat or forever, runs the blocks inside it more than once.'),
-    mcq('q2', 'To walk in a square, how many times do you repeat “move, then turn 90 degrees”?', ['4', '2', '3', '10'], 0, 'A square has 4 sides and 4 corners.'),
-    tf('q3', 'A loop saves you from building the same blocks again and again.', true, 'One repeat block can do the work of many copied blocks — shorter code, fewer mistakes.'),
+    mcq('q1', 'Which block makes blocks run again and again?', ['repeat', 'say', 'turn', 'hide'], 'A loop block, like repeat or forever, runs the blocks inside it more than once.'),
+    mcq('q2', 'To walk in a square, how many times do you repeat “move, then turn 90 degrees”?', ['4', '2', '3', '10'], 'A square has 4 sides and 4 corners.'),
+    mcq('q3', 'Why do coders use loops?', ['A loop saves you from building the same blocks again', 'Loops make the stage bigger so more sprites fit', 'Loops are the only way to make a sprite move', 'Loops delete the blocks that you do not need'], 'One repeat block can do the work of many copied blocks — shorter code, fewer mistakes.'),
   ],
   'scratch-adventures/6': [
-    mcq('q1', 'An **if** block runs the blocks inside it when…', ['the condition is true', 'the condition is false', 'the green flag is red', 'the sprite is hidden'], 0, 'If the condition is true, the blocks inside run. If not, Scratch skips them.'),
-    tf('q2', 'An if/else block lets a sprite choose between two different things.', true, 'If the condition is true it does the first thing; otherwise it does the else part.'),
-    mcq('q3', 'Which of these is a **condition** (a yes-or-no question)?', ['touching edge?', 'move 10 steps', 'play sound Meow', 'say Hello!'], 0, 'A condition is a question the computer can answer with yes (true) or no (false).'),
+    mcq('q1', 'An **if** block runs the blocks inside it when…', ['the condition is true', 'the condition is false', 'the green flag is red', 'the sprite is hidden'], 'If the condition is true, the blocks inside run. If not, Scratch skips them.'),
+    mcq('q2', 'What does an if/else block let a sprite do?', ['Choose between two different things', 'Run every block in the script twice', 'Hide the whole stage from the player', 'Play every sound in the project at once'], 'If the condition is true it does the first thing; otherwise it does the else part.'),
+    mcq('q3', 'Which of these is a **condition** (a yes-or-no question)?', ['touching edge?', 'move 10 steps', 'play sound Meow', 'say Hello!'], 'A condition is a question the computer can answer with yes (true) or no (false).'),
   ],
   'scratch-adventures/7': [
-    ordering('q1', 'Put the story-building steps in a sensible order.', ['Draw a storyboard', 'Build scene 1', 'Build scene 2', 'Add a player choice'], 'Planning first makes building quicker.'),
-    mcq('q2', 'What can switch your story from one scene to the next?', ['A broadcast message', 'A new sprite name', 'The stage size', 'The green flag colour'], 0, 'A broadcast “turns the page”: the next scene’s scripts start when they receive it.'),
-    tf('q3', 'Planning on paper before you build can save time.', true, 'A quick storyboard helps you see the scenes and choices before you place a single block.'),
+    mcq('q1', 'Which order is best for building a story?', ['Draw a storyboard, build scene 1, build scene 2, add a player choice', 'Add a player choice, build scene 2, draw a storyboard, build scene 1', 'Build scene 2, add a player choice, build scene 1, draw a storyboard', 'Build scene 1, add a player choice, draw a storyboard, build scene 2'], 'Planning first makes building quicker.'),
+    mcq('q2', 'What can switch your story from one scene to the next?', ['A broadcast message', 'A new sprite name', 'The stage size', 'The green flag colour'], 'A broadcast “turns the page”: the next scene’s scripts start when they receive it.'),
+    mcq('q3', 'Why is it helpful to plan on paper before you build?', ['You can see the scenes and choices before building', 'Paper makes the finished code run much faster', 'Scratch will not start unless you have a plan', 'A plan makes the sprites move on their own'], 'A quick storyboard helps you see the scenes and choices before you place a single block.'),
   ],
   'scratch-adventures/8': [
-    mcq('q1', 'Where does a game keep track of the score?', ['In a variable', 'In the costume', 'In the backdrop', 'In a sound'], 0, 'A variable is a box with a name that holds a number — change it and the score changes.'),
-    mcq('q2', 'What is a **win condition**?', ['A rule that decides when the player has won', 'A prize you buy', 'A sprite that waves', 'A loud sound'], 0, 'For example: “if score = 10, then say You win!”.'),
-    reflection('q3', 'What was the trickiest part of your game, and how did you fix it?'),
+    mcq('q1', 'Where does a game keep track of the score?', ['In a variable', 'In the costume', 'In the backdrop', 'In a sound'], 'A variable is a box with a name that holds a number — change it and the score changes.'),
+    mcq('q2', 'What is a **win condition**?', ['A rule that decides when the player has won', 'A prize that you buy from the shop', 'A sprite that waves at the player', 'A loud sound that plays at the start'], 'For example: “if score = 10, then say You win!”.'),
+    mcq('q3', 'Your game is not working the way you wanted. What is a good thing to do?', ['Test one small part at a time and fix what is wrong', 'Delete the whole game and start again straight away', 'Add lots more blocks until it works', 'Ignore it and share the game anyway'], 'Debug detectives look for the small part that is wrong and fix just that.'),
   ],
 
   'python-for-young-builders/1': [
-    codeOut('q1', 'What does this program show on the screen?', 'python', 'print("Hello!")', ['Hello!', 'print("Hello!")', '"Hello!"', 'Nothing'], 0, 'print shows the words inside the quotes — without the quotes.'),
-    tf('q2', 'Python is a text-based language: you type instructions instead of dragging blocks.', true, 'The ideas are the same as in Scratch, but you write them as words.'),
-    matching('q3', 'Match each Scratch idea to its Python word.', [['say Hello!', 'print("Hello!")'], ['ask and wait', 'input()'], ['repeat 10', 'for i in range(10):']], 'Same ideas, new words.'),
+    mcq('q1', 'What does this program show on the screen?', ['Hello!', 'print("Hello!")', '"Hello!"', 'Nothing'], 'print shows the words inside the quotes — without the quotes.', { language: 'python', code: 'print("Hello!")' }),
+    mcq('q2', 'What kind of language is Python?', ['A text language: you type instructions, not drag blocks', 'A block-based language, where you snap blocks together', 'A language that can only be used to make games', 'A language that only computers can read, not people'], 'The ideas are the same as in Scratch, but you write them as words.'),
+    mcq('q3', 'Which Python code does the same job as the Scratch block “say Hello!”?', ['print("Hello!")', 'input("Hello!")', 'for i in range(10):', 'if "Hello!":'], 'say in Scratch is print in Python; input asks a question, for repeats, if decides.'),
   ],
   'python-for-young-builders/2': [
-    codeOut('q1', 'What does this program show?', 'python', 'name = "Mia"\nprint(name)', ['Mia', 'name', '"name"', 'Nothing'], 0, 'The variable name holds "Mia", so print(name) shows Mia.'),
-    mcq('q2', 'What does `input()` do?', ['Waits for the user to type something', 'Prints a message', 'Ends the program', 'Makes a list'], 0, 'input() pauses the program until the person types an answer and presses Enter.'),
-    tf('q3', 'A variable is like a labelled box that stores a value.', true, 'You give it a name, put a value inside, and use the name later.'),
+    mcq('q1', 'What does this program show?', ['Mia', 'name', '"name"', 'Nothing'], 'The variable name holds "Mia", so print(name) shows Mia.', { language: 'python', code: 'name = "Mia"\nprint(name)' }),
+    mcq('q2', 'What does `input()` do?', ['Waits for the user to type something', 'Prints a message on the screen', 'Ends the program straight away', 'Makes a list of the player\'s names'], 'input() pauses the program until the person types an answer and presses Enter.'),
+    mcq('q3', 'What is a variable?', ['A labelled box that stores a value', 'A command that ends the program', 'A kind of loop that repeats forever', 'A picture that appears on the screen'], 'You give it a name, put a value inside, and use the name later.'),
   ],
   'python-for-young-builders/3': [
-    codeOut('q1', 'What does this show?', 'python', 'name = "Leo"\nprint(f"Hi, {name}!")', ['Hi, Leo!', 'Hi, {name}!', 'Hi, name!', 'Nothing'], 0, 'The f in front tells Python to put the value of name inside the curly brackets.'),
-    mcq('q2', 'What happens if you forget the **f** in an f-string?', ['It prints {name} instead of the value', 'Python crashes at once', 'It prints the value twice', 'Nothing is printed'], 0, 'Without the f, the curly brackets are just ordinary text.'),
-    mcq('q3', '`input()` always gives you text. Which function turns it into a whole number so you can do maths?', ['int()', 'print()', 'str()', 'len()'], 0, 'int("5") becomes the number 5.'),
+    mcq('q1', 'What does this show?', ['Hi, Leo!', 'Hi, {name}!', 'Hi, name!', 'Nothing'], 'The f in front tells Python to put the value of name inside the curly brackets.', { language: 'python', code: 'name = "Leo"\nprint(f"Hi, {name}!")' }),
+    mcq('q2', 'What happens if you forget the **f** in an f-string?', ['It prints {name} instead of the value', 'Python crashes with an error straight away', 'It prints the value of the variable twice', 'Nothing is printed on the screen at all'], 'Without the f, the curly brackets are just ordinary text.'),
+    mcq('q3', '`input()` always gives you text. Which function turns it into a whole number so you can do maths?', ['int()', 'print()', 'str()', 'len()'], 'int("5") becomes the number 5.'),
   ],
   'python-for-young-builders/4': [
-    codeOut('q1', 'What does this program show?', 'python', 'score = 75\nif score >= 90:\n    print("A")\nelif score >= 70:\n    print("B")\nelse:\n    print("Keep going")', ['B', 'A', 'Keep going', 'Nothing'], 0, '75 is not 90 or more, but it is 70 or more, so the elif part runs and shows B.'),
-    tf('q2', '`elif` means “else, if this is true instead”.', true, 'elif lets you check another condition when the first one was False.'),
-    mcq('q3', 'Which symbol checks whether two things are **equal**?', ['==', '=', '=>', '!'], 0, 'One = stores a value in a variable; two == asks “are these equal?”.'),
+    mcq('q1', 'What does this program show?', ['B', 'A', 'Keep going', 'Nothing'], '75 is not 90 or more, but it is 70 or more, so the elif part runs and shows B.', { language: 'python', code: 'score = 75\nif score >= 90:\n    print("A")\nelif score >= 70:\n    print("B")\nelse:\n    print("Keep going")' }),
+    mcq('q2', 'What does `elif` mean?', ['“else, if this other condition is true”', '“end the loop and start again”', '“print the answer on the screen”', '“ask the user another question”'], 'elif lets you check another condition when the first one was False.'),
+    mcq('q3', 'Which symbol checks whether two things are **equal**?', ['==', '=', '=>', '!'], 'One = stores a value in a variable; two == asks “are these equal?”.'),
   ],
   'python-for-young-builders/5': [
-    mcq('q1', 'How many times does this print "Go!"?\n\n`for i in range(3):`\n`    print("Go!")`', ['3 times', '2 times', '4 times', 'Once'], 0, 'range(3) gives 0, 1, 2 — three times round the loop.'),
-    mcq('q2', 'When does a **while** loop stop?', ['When its condition becomes False', 'After exactly 10 times', 'Never — it always runs forever', 'When the program is saved'], 0, 'A while loop keeps going as long as its condition is True.'),
-    tf('q3', 'A loop whose condition never changes can run forever.', true, 'That is called an infinite loop — make sure something inside the loop can make the condition False.'),
+    mcq('q1', 'How many times does this print "Go!"?', ['3 times', '2 times', '4 times', 'Once'], 'range(3) gives 0, 1, 2 — three times round the loop.', { language: 'python', code: 'for i in range(3):\n    print("Go!")' }),
+    mcq('q2', 'When does a **while** loop stop?', ['When its condition becomes False', 'After exactly 10 times', 'Never — it always runs forever', 'When the program is saved'], 'A while loop keeps going as long as its condition is True.'),
+    mcq('q3', 'What can happen if the condition of a loop never changes?', ['The loop can run forever (an infinite loop)', 'The loop runs exactly once and then stops', 'Python deletes the loop from the program', 'The computer turns itself off to be safe'], 'Make sure something inside the loop can make the condition False.'),
   ],
   'python-for-young-builders/6': [
-    codeOut('q1', 'What does this show?', 'python', 'crew = ["Mia", "Leo", "Zoe"]\nprint(crew[0])', ['Mia', 'Leo', 'Zoe', 'crew'], 0, 'List positions start at 0, so crew[0] is the first item, "Mia".'),
-    mcq('q2', 'How do you add a new item to the end of a list?', ['crew.append("Kai")', 'crew.add("Kai")', 'print("Kai")', 'crew = "Kai"'], 0, '.append() puts a new item at the end of the list.'),
-    tf('q3', 'The first item in a list is at position 1.', false, 'Python counts from 0, so the first item is at position 0.'),
+    mcq('q1', 'What does this show?', ['Mia', 'Leo', 'Zoe', 'crew'], 'List positions start at 0, so crew[0] is the first item, "Mia".', { language: 'python', code: 'crew = ["Mia", "Leo", "Zoe"]\nprint(crew[0])' }),
+    mcq('q2', 'How do you add a new item to the end of a list?', ['crew.append("Kai")', 'crew.add("Kai")', 'print("Kai")', 'crew = "Kai"'], '.append() puts a new item at the end of the list.'),
+    mcq('q3', 'What position number does the first item in a list have?', ['0', '1', '2', '-1'], 'Python counts from 0, so the first item is at position 0.'),
   ],
   'python-for-young-builders/7': [
-    mcq('q1', 'How does the quiz app check whether an answer is right?', ['It compares the answer with the correct one using ==', 'It guesses', 'It prints the answer', 'It asks the question again'], 0, 'if answer == "paris": means “is what the player typed equal to the right answer?”.'),
-    mcq('q2', 'What keeps track of how many answers were right?', ['A variable like score', 'A comment', 'A print statement', 'A file name'], 0, 'score = score + 1 adds one each time the player gets it right.'),
-    ordering('q3', 'Put the quiz steps in order.', ['Ask the question', 'Get the answer', 'Check if it is right', 'Add to the score', 'Show the final score'], 'Each question follows these steps; the final score comes last.'),
+    mcq('q1', 'How does the quiz app check whether an answer is right?', ['It compares the answer to the right one with ==', 'It guesses and hopes to be right', 'It prints the answer on the screen', 'It asks the same question again'], 'if answer == "paris": means “is what the player typed equal to the right answer?”.'),
+    mcq('q2', 'What keeps track of how many answers were right?', ['A variable such as score', 'A comment that starts with #', 'A print statement on its own', 'A file name with .py on the end'], 'score = score + 1 adds one each time the player gets it right.'),
+    mcq('q3', 'Which order do the steps of a quiz app go in?', ['Ask the question, get the answer, check if it is right, add to the score, show the final score', 'Show the final score, ask the question, add to the score, get the answer, check if it is right', 'Get the answer, show the final score, ask the question, check if it is right, add to the score', 'Check if it is right, ask the question, show the final score, get the answer, add to the score'], 'Each question follows these steps; the final score comes last.'),
   ],
   'python-for-young-builders/8': [
-    mcq('q1', 'Which module helps a game pick a random secret number?', ['random', 'print', 'time', 'input'], 0, 'import random lets you use random.randint(1, 10) to pick a number.'),
-    tf('q2', 'Planning a game on paper before coding can help.', true, 'A short plan shows what you need to build, in what order.'),
-    reflection('q3', 'If you had one more hour, what would you add to your game?'),
+    mcq('q1', 'Which module helps a game pick a random secret number?', ['random', 'print', 'time', 'input'], 'import random lets you use random.randint(1, 10) to pick a number.'),
+    mcq('q2', 'Why is a plan on paper useful before you code a game?', ['It shows what to build, and in what order', 'It makes the finished game run faster', 'Python will not start without a plan on paper', 'It makes your code shorter all by itself'], 'A short plan shows what you need to build, in what order.'),
+    mcq('q3', 'You have one more hour to improve your game. Which is a good idea?', ['Add one new feature, such as a replay option, and test it', 'Delete the scoring so the game is simpler', 'Rename every variable to a single letter', 'Remove the instructions so players must guess'], 'Small, tested improvements make a game better without breaking it.'),
   ],
 
   'ai-for-kids/1': [
-    mcq('q1', 'How does a machine learning AI learn?', ['From lots of examples', 'By reading minds', 'By guessing at random every time', 'It is born knowing everything'], 0, 'Machine learning finds patterns in many examples — like lots of cat and dog pictures.'),
-    tf('q2', 'AI always understands things exactly like a human does.', false, 'AI finds patterns in data. It can be very good at one job and still make silly mistakes.'),
-    reflection('q3', 'Where have you seen AI being used this week?'),
+    mcq('q1', 'How does a machine learning AI learn?', ['From lots of examples', 'By reading minds', 'By guessing at random every time', 'It is born knowing everything'], 'Machine learning finds patterns in many examples — like lots of cat and dog pictures.'),
+    mcq('q2', 'Which sentence about AI is true?', ['AI finds patterns in data and can still make silly mistakes', 'AI always understands things exactly like a human does', 'AI never makes a mistake, however hard the job', 'AI works without any data or examples at all'], 'AI can be very good at one job and still get things wrong.'),
+    mcq('q3', 'Which of these uses AI?', ['A phone that understands your voice when you speak', 'A calculator that adds 2 + 2 when you press equals', 'A light switch that turns a lamp on and off', 'A paper book with pictures that never change'], 'Voice assistants learn from lots of recordings. A calculator or a light switch just follows fixed rules.'),
   ],
   'ai-for-kids/2': [
-    mcq('q1', 'Why do we give the model many different examples?', ['So it learns what really matters, not just one picture', 'To make the computer slower', 'To fill up the memory', 'So the pictures look nice'], 0, 'With lots of different examples the model learns the pattern, not one particular photo.'),
-    tf('q2', 'If the model gets something wrong, you can add more examples and train it again.', true, 'Better examples make a better model — that is how you improve it.'),
-    ordering('q3', 'Put the steps of training a model in order.', ['Collect examples', 'Label them', 'Train the model', 'Test it', 'Improve it'], 'Collect → label → train → test → improve.'),
+    mcq('q1', 'Why do we give the model many different examples?', ['So it learns what matters, not just one picture', 'To make the computer work more slowly', 'To fill up the computer\'s memory', 'So that the pictures look nice together'], 'With lots of different examples the model learns the pattern, not one particular photo.'),
+    mcq('q2', 'What can you do if the model gets something wrong?', ['Add more and better examples, then train it again', 'Nothing — a model can never be improved', 'Delete all the photos and give up', 'Turn the computer off and on again'], 'Better examples make a better model — that is how you improve it.'),
+    mcq('q3', 'Which order is right for training a model?', ['Collect examples, label them, train the model, test it, improve it', 'Train the model, collect examples, test it, label them, improve it', 'Test it, train the model, label them, collect examples, improve it', 'Improve it, test it, train the model, label them, collect examples'], 'Collect → label → train → test → improve.'),
   ],
   'ai-for-kids/3': [
-    tf('q1', 'You train the model first, and then use it from Scratch.', true, 'The model learns in ML for Kids; Scratch then asks it questions.'),
-    mcq('q2', 'What does the model give back to Scratch?', ['Its answer (a label) for what it was shown', 'A new sprite', 'A different Scratch project', 'A sound effect'], 0, 'It answers with the label it thinks fits best.'),
-    mcq('q3', 'What can your code do with the model’s answer?', ['Make sprites react, for example with a broadcast', 'Nothing at all', 'Delete the project', 'Turn off the computer'], 0, 'You can use the label like a condition: if the label is “happy”, do this.'),
+    mcq('q1', 'When do you train the model?', ['First — then Scratch asks the trained model', 'After the Scratch project has finished running', 'Never — Scratch trains the model by itself', 'Only after you have shared the project'], 'The model learns in ML for Kids; Scratch then asks it questions.'),
+    mcq('q2', 'What does the model give back to Scratch?', ['Its answer (a label) for what it was shown', 'A brand new sprite for your project', 'A different Scratch project to open', 'A sound effect to play at the end'], 'It answers with the label it thinks fits best.'),
+    mcq('q3', 'What can your code do with the model’s answer?', ['Make sprites react, for example with a broadcast', 'Nothing at all — it is only for show', 'Delete the project to save space', 'Turn off the computer when it\'s done'], 'You can use the label like a condition: if the label is “happy”, do this.'),
   ],
   'ai-for-kids/4': [
-    matching('q1', 'Match each hand to what it beats.', [['rock', 'scissors'], ['paper', 'rock'], ['scissors', 'paper']], 'Rock beats scissors, paper beats rock, scissors beat paper.'),
-    tf('q2', 'The rules of rock-paper-scissors stay the same every round.', true, 'The game checks the same three rules each time.'),
-    reflection('q3', 'How would you make the game smarter or more fun?'),
+    mcq('q1', 'Which pair is right in rock-paper-scissors?', ['Rock beats scissors', 'Scissors beat rock', 'Paper beats scissors', 'Rock beats paper'], 'Rock beats scissors, scissors beat paper, and paper beats rock.'),
+    mcq('q2', 'Do the rules of rock-paper-scissors change from round to round?', ['No — the game checks the same three rules every time', 'Yes — the rules are random each round', 'Yes — the computer invents new rules', 'The rules only apply to the first round'], 'The rules stay the same; only the choices change.'),
+    mcq('q3', 'Which idea would make a rock-paper-scissors game more fun?', ['Keep a score and play best of five', 'Remove the winner message', 'Let rock always win', 'Hide what the computer chose'], 'A score and a goal give the game something to aim for.'),
   ],
   'ai-for-kids/5': [
-    mcq('q1', 'Why record each word more than once?', ['To give the model different examples (voice, volume, speed)', 'To use up the storage', 'So the words sound longer', 'It makes no difference'], 0, 'Different recordings teach the model what stays the same about a word.'),
-    tf('q2', 'Background noise can confuse a sound model.', true, 'If it never heard noise in training, noise can make it guess wrong.'),
-    mcq('q3', 'The sound model mixes up two words. What helps most?', ['More and better examples of each word', 'Turning the volume up', 'Deleting the project', 'Shouting'], 0, 'Add clear, varied examples of the words it mixes up, then train again.'),
+    mcq('q1', 'Why record each word more than once?', ['To give the model different examples of each word', 'To use up all of the storage space', 'So the words sound longer when played', 'It makes no difference to the model'], 'Different recordings teach the model what stays the same about a word.'),
+    mcq('q2', 'Which sentence about background noise is true?', ['It can confuse a model that never heard noise in training', 'Sound models always ignore any background noise', 'Noise makes a sound model learn much faster', 'Noise only ever matters for picture models'], 'If it never heard noise in training, noise can make it guess wrong.'),
+    mcq('q3', 'The sound model mixes up two words. What helps most?', ['More and better examples of each word', 'Turning the speaker volume right up', 'Deleting the project and starting over', 'Shouting the words much louder'], 'Add clear, varied examples of the words it mixes up, then train again.'),
   ],
   'ai-for-kids/6': [
-    mcq('q1', 'What decides which path the story takes?', ['The label the sound model gives', 'The colour of the stage', 'A coin flip', 'The size of the sprite'], 0, 'The label from the model decides which broadcast is sent.'),
-    tf('q2', 'A broadcast can start a different part of the story.', true, 'Scripts listening for a broadcast run when it is sent.'),
-    selfCheck('q3', 'In one sentence, explain how your voice changes the story.', 'My voice is recognised by the sound model, which gives a label; the label decides which broadcast is sent, and that broadcast starts one story path.'),
+    mcq('q1', 'What decides which path the story takes?', ['The label the sound model gives', 'The colour of the stage backdrop', 'A coin that the computer flips', 'The size of the main sprite'], 'The label from the model decides which broadcast is sent.'),
+    mcq('q2', 'Which sentence about broadcasts in the voice story is true?', ['A broadcast can start a different part of the story', 'A broadcast deletes the story that came before', 'A broadcast only ever changes the colours', 'A broadcast ends the project for everyone'], 'Scripts listening for a broadcast run when it is sent.'),
+    mcq('q3', 'How does your voice change the story?', ['The sound model gives a label that picks the story path', 'Your voice changes the colour of the stage and sprites', 'Your voice deletes all of the other story paths', 'Your voice makes all of the sprites bigger'], 'Voice → label → broadcast → story path.'),
   ],
   'ai-for-kids/7': [
-    mcq('q1', 'What does the expression model look at?', ['A picture of a face', 'A person’s password', 'A person’s thoughts', 'A sound recording'], 0, 'It looks at what the face looks like in the camera picture.'),
-    tf('q2', 'The model knows exactly how a person really feels inside.', false, 'It only guesses from how a face looks. A smile does not always mean someone is happy.'),
-    reflection('q3', 'Why is it important to be careful when AI guesses how people feel?'),
+    mcq('q1', 'What does the expression model look at?', ['A picture of a face', 'A person’s password', 'A person’s thoughts', 'A sound recording'], 'It looks at what the face looks like in the camera picture.'),
+    mcq('q2', 'Does the expression model know how a person really feels inside?', ['No — it only guesses from how a face looks', 'Yes — it always knows exactly how they feel', 'Yes — it can read thoughts inside the head', 'Only when the person is smiling widely'], 'A smile does not always mean someone is happy, so the guess can be wrong.'),
+    mcq('q3', 'Why should we be careful when AI guesses how people feel?', ['A smile does not always mean happy, so the guess can be wrong', 'AI is never wrong about how people are feeling', 'People never hide how they are really feeling', 'Faces never change from one moment to the next'], 'AI sees the face, not the feeling behind it.'),
   ],
   'ai-for-kids/8': [
-    mcq('q1', 'What is a good thing to do before you present?', ['Practise out loud', 'Skip testing', 'Read from the screen the whole time', 'Change everything at the last minute'], 0, 'Practising out loud helps you know what you want to say and how long it takes.'),
-    tf('q2', 'It is good to say what your project cannot do yet.', true, 'Being honest about limits shows you understand your project.'),
-    reflection('q3', 'What are you proudest of in your project?'),
+    mcq('q1', 'What is a good thing to do before you present?', ['Practise out loud', 'Skip testing', 'Read from the screen the whole time', 'Change everything at the last minute'], 'Practising out loud helps you know what you want to say and how long it takes.'),
+    mcq('q2', 'Is it good to say what your project cannot do yet?', ['Yes — honesty about limits shows you understand it', 'No — never mention any problems with your project', 'No — only ever say the good parts about it', 'Only if someone in the audience asks twice'], 'Honesty about limits is a sign of a good maker.'),
+    mcq('q3', 'What is a good way to end your showcase?', ['Say what you are proudest of and thank your helpers', 'Say nothing and leave the room quietly', 'List every single mistake in a loud voice', 'Skip the demo and read all of the code aloud'], 'End on what you are proud of — and say thank you.'),
   ],
 });
-

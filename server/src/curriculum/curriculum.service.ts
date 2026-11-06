@@ -651,19 +651,19 @@ export class CurriculumService {
     lessonId: string,
     questions: ReturnType<typeof readQuiz>,
     questionId: string,
-    correct: boolean | null,
+    correct: boolean,
   ) {
     const key = { studentUserId_lessonId: { studentUserId, lessonId } };
     const prev = await this.prisma.lessonProgress.findUnique({ where: key });
     const results = { ...((prev?.quizResults as Record<string, { correct: boolean | null; attempts: number; at: string }> | null) ?? {}) };
     results[questionId] = { correct, attempts: (results[questionId]?.attempts ?? 0) + 1, at: new Date().toISOString() };
-    const graded = questions.filter((q) => q.type !== 'self_check' && q.type !== 'reflection');
+    // Every question is multiple choice, so every question is scored.
     const allAnswered = questions.length > 0 && questions.every((q) => results[q.id]);
-    const score = graded.filter((q) => results[q.id]?.correct === true).length;
+    const score = questions.filter((q) => results[q.id]?.correct === true).length;
     const now = new Date();
     const data = {
       quizResults: results as unknown as Prisma.InputJsonValue,
-      quizTotal: graded.length,
+      quizTotal: questions.length,
       ...(allAnswered ? { quizScore: score, quizCompletedAt: prev?.quizCompletedAt ?? now } : {}),
       lastOpenedAt: now,
     };
@@ -680,7 +680,6 @@ export class CurriculumService {
     });
     const questions = readQuiz(miniQuiz);
     const results = (row?.quizResults as Record<string, { correct: boolean | null; attempts: number }> | null) ?? {};
-    const graded = questions.filter((q) => q.type !== 'self_check' && q.type !== 'reflection');
     const submission = await this.prisma.submission.findFirst({
       where: { studentUserId, lessonId },
       select: { id: true },
@@ -693,9 +692,10 @@ export class CurriculumService {
           ? {
               total: questions.length,
               answered: questions.filter((q) => results[q.id]).length,
-              gradedTotal: graded.length,
-              score: graded.filter((q) => results[q.id]?.correct === true).length,
-              completed: !!row?.quizCompletedAt,
+              gradedTotal: questions.length,
+              score: questions.filter((q) => results[q.id]?.correct === true).length,
+              // Finished only if every question that is in the quiz NOW has been answered (a quiz can change).
+              completed: !!row?.quizCompletedAt && questions.every((q) => results[q.id]),
               results: Object.fromEntries(
                 questions.filter((q) => results[q.id]).map((q) => [q.id, { correct: results[q.id].correct, attempts: results[q.id].attempts }]),
               ),

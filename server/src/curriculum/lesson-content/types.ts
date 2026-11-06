@@ -5,6 +5,12 @@
 // quiz, visuals and notes along unchanged.
 
 // ─── Mini quiz (ordinary LEARNING lessons only — never the assessment system) ──
+//
+// THE RULE: every question a learner is ever asked is a multiple-choice question with
+// exactly four options (McqQuestion, below). The wider shapes in this section
+// (true/false, ordering, matching, self-check, reflection) are LEGACY: they describe what
+// older stored quizzes and the text extractor produced, and exist only so quiz-mcq.ts can
+// convert them. Nothing stores, validates, serves or grades them any more.
 
 export type ChoiceQuestionType =
   | 'multiple_choice'
@@ -48,6 +54,31 @@ interface QuizBase {
   source?: 'markdown' | 'json' | 'authored' | 'derived';
 }
 
+/** Every question has exactly this many answer options. */
+export const MCQ_OPTION_COUNT = 4;
+
+/** The ONLY question shape that is stored, validated, served and graded. */
+export interface McqQuestion {
+  /** Stable within the lesson ("q1", "q2", …). */
+  id: string;
+  type: 'multiple_choice';
+  /** Markdown (inline code / emphasis allowed). */
+  prompt: string;
+  /** Shown only after the learner has answered. */
+  explanation?: string;
+  /** Never shuffle the options (e.g. "All of the above"). */
+  fixedOrder?: boolean;
+  /** Where the question came from — for review tooling, never shown. */
+  source?: 'markdown' | 'json' | 'authored' | 'derived';
+  /** A snippet displayed with the prompt ("what does this print?"). */
+  code?: { language: string; code: string };
+  /** Exactly four answers, in authored order. */
+  options: string[];
+  /** Index (0–3) of the one right answer. */
+  correctIndex: number;
+}
+
+/** Legacy: see the note above. */
 export interface ChoiceQuestion extends QuizBase {
   type: ChoiceQuestionType;
   /** Snippet displayed with the prompt (output prediction / error spotting). */
@@ -93,45 +124,27 @@ export interface PublicOption {
   text: string;
 }
 
-export type PublicQuizQuestion =
-  | {
-      id: string;
-      type: ChoiceQuestionType;
-      prompt: string;
-      code?: { language: string; code: string };
-      options: PublicOption[];
-    }
-  | { id: string; type: 'ordering'; prompt: string; items: PublicOption[] }
-  | {
-      id: string;
-      type: 'matching';
-      prompt: string;
-      left: PublicOption[];
-      right: PublicOption[];
-    }
-  | { id: string; type: 'self_check'; prompt: string; hasSampleAnswer: boolean }
-  | { id: string; type: 'reflection'; prompt: string };
+export interface PublicQuizQuestion {
+  id: string;
+  type: 'multiple_choice';
+  prompt: string;
+  code?: { language: string; code: string };
+  /** Exactly four, in a deterministic per-lesson shuffle. */
+  options: PublicOption[];
+}
 
-/** What the learner sends to be checked. */
-export type QuizAnswer =
-  | { optionId: string }
-  | { order: string[] }
-  | { pairs: { leftId: string; rightId: string }[] }
-  | { text?: string; selfRating?: 'got_it' | 'review'; answered?: boolean };
+/** What the learner sends to be checked: the option they picked. */
+export interface QuizAnswer {
+  optionId: string;
+}
 
 /** What the server returns once an answer has been submitted. */
 export interface QuizCheckResult {
   questionId: string;
-  /** False for self-check / reflection prompts — nothing was machine-graded. */
-  graded: boolean;
-  /** null when not graded. */
-  correct: boolean | null;
+  graded: true;
+  correct: boolean;
   explanation?: string;
-  reveal?:
-    | { optionId: string }
-    | { order: string[] }
-    | { pairs: { leftId: string; rightId: string }[] }
-    | { sampleAnswer: string };
+  reveal: { optionId: string };
 }
 
 // ─── Visuals / interactive blocks ───────────────────────────────────────────
@@ -162,6 +175,7 @@ export type ChangeKind =
   | 'homework-removed'
   | 'quiz-extracted'
   | 'quiz-authored'
+  | 'quiz-converted'
   | 'teacher-section-moved'
   | 'teacher-notes-attached'
   | 'heading-relevelled'
@@ -182,6 +196,7 @@ export type ReviewKind =
   | 'quiz-unparsed'
   | 'quiz-partial'
   | 'quiz-answer-bias'
+  | 'quiz-needs-rewrite'
   | 'ref-unresolved'
   | 'ref-range'
   | 'ref-qualified'

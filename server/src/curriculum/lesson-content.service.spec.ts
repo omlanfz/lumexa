@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { ClassroomAdmissionStatus, LessonStatus, Role } from '@prisma/client';
 import { CurriculumService } from './curriculum.service';
-import { optionId } from './lesson-content';
+import { CONTENT_VERSION, optionId } from './lesson-content';
 
 // The lesson-content features of CurriculumService, against a mocked Prisma:
 //   * what a student receives never contains teacher-only material or answers;
@@ -12,8 +12,15 @@ import { optionId } from './lesson-content';
 const minutesFromNow = (m: number) => new Date(Date.now() + m * 60_000);
 
 const QUIZ = [
-  { id: 'q1', type: 'multiple_choice', prompt: 'Pick', options: ['one', 'two', 'three'], correctIndex: 2, explanation: 'SECRET-EXPLANATION', source: 'markdown' },
+  { id: 'q1', type: 'multiple_choice', prompt: 'Pick', options: ['one', 'two', 'three', 'four'], correctIndex: 2, explanation: 'SECRET-EXPLANATION', source: 'markdown' },
+  { id: 'q2', type: 'multiple_choice', prompt: 'Pick again', options: ['red', 'green', 'blue', 'amber'], correctIndex: 0, explanation: 'SECRET-EXPLANATION-2', source: 'markdown' },
+];
+
+/** What an older release may have left in a row: shapes the quiz no longer allows. */
+const LEGACY_QUIZ = [
+  QUIZ[0],
   { id: 'q2', type: 'self_check', prompt: 'Explain', sampleAnswer: 'SECRET-SAMPLE', source: 'markdown' },
+  { id: 'q3', type: 'true_false', prompt: 'True?', options: ['True', 'False'], correctIndex: 0, explanation: 'SECRET-TF' },
 ];
 
 const lessonRow = (over: Record<string, unknown> = {}) => ({
@@ -104,7 +111,18 @@ describe('a student’s lesson payload', () => {
     const { service } = build({ sl: classRow({ status: LessonStatus.COMPLETED }) });
     const res: any = await service.getScheduledLessonDetails('sl-1', student);
     expect(res.lesson.quiz.questions).toHaveLength(2);
-    expect(res.lesson.quiz.questions[0].options).toHaveLength(3);
+    expect(res.lesson.quiz.gradedCount).toBe(2);
+    for (const q of res.lesson.quiz.questions) {
+      expect(q.type).toBe('multiple_choice');
+      expect(q.options).toHaveLength(4);
+    }
+  });
+
+  it('never includes a stored question that is not four-option multiple choice', async () => {
+    const { service } = build({ sl: classRow({ status: LessonStatus.COMPLETED, lesson: lessonRow({ miniQuiz: LEGACY_QUIZ }) }), lesson: lessonRow({ miniQuiz: LEGACY_QUIZ }) });
+    const res: any = await service.getScheduledLessonDetails('sl-1', student);
+    expect(res.lesson.quiz.questions.map((q: { id: string }) => q.id)).toEqual(['q1']);
+    for (const secret of ['SECRET-SAMPLE', 'SECRET-TF']) expect(JSON.stringify(res)).not.toContain(secret);
   });
 
   it('is the same for the teacher and the shared classroom view: teacher notes are fetched separately', async () => {
@@ -126,8 +144,15 @@ describe('teacher preparation', () => {
       expect(prep.teacherNotes).toBe('SECRET-TEACHER-NOTE');
       expect(prep.reviewNotes).toBe('SECRET-REVIEW-NOTE');
       expect(prep.answerKey).toHaveLength(2);
+      expect(prep.answerKey.map((q: { correctIndex: number }) => q.correctIndex)).toEqual([2, 0]);
       expect(JSON.stringify(prep)).toContain('SECRET-EXPLANATION');
     }
+  });
+
+  it('keeps only four-option multiple-choice questions in the answer key', async () => {
+    const prep: any = await build({ teaches: true, lesson: lessonRow({ miniQuiz: LEGACY_QUIZ }) }).service.getTeacherPrep('lesson-1', teacher);
+    expect(prep.answerKey.map((q: { id: string }) => q.id)).toEqual(['q1']);
+    expect(JSON.stringify(prep)).not.toContain('SECRET-SAMPLE');
   });
 });
 
@@ -160,11 +185,53 @@ describe('checking a quiz answer', () => {
   it('turns a malformed answer into a clear 400, never a crash', async () => {
     const { service } = build();
     await expect(service.checkQuizAnswer('lesson-1', { ...right, answer: { optionId: 'nonsense' } } as never, student)).rejects.toThrow(BadRequestException);
+    // A typed answer is not an answer to a multiple-choice question.
+    await expect(service.checkQuizAnswer('lesson-1', { ...right, answer: { text: 'a typed answer' } } as never, student)).rejects.toThrow(BadRequestException);
+    await expect(service.checkQuizAnswer('lesson-1', { ...right, answer: undefined } as never, student)).rejects.toThrow(BadRequestException);
+  });
+
+  it('cannot be used to grade a stored question that is no longer a four-option multiple-choice question', async () => {
+    const { service } = build({ lesson: lessonRow({ miniQuiz: LEGACY_QUIZ }) });
+    await expect(service.checkQuizAnswer('lesson-1', { ...right, questionId: 'q2', answer: { optionId: optionId('q2', 0) } } as never, student)).rejects.toThrow('That question is not in this lesson.');
+    await expect(service.checkQuizAnswer('lesson-1', { ...right, questionId: 'q3', answer: { optionId: optionId('q3', 0) } } as never, student)).rejects.toThrow('That question is not in this lesson.');
   });
 
   it('only quizzes learning lessons — never a test', async () => {
     const { service } = build({ lesson: lessonRow({ type: 'COURSE_TEST' }) });
     await expect(service.checkQuizAnswer('lesson-1', right as never, student)).rejects.toThrow(BadRequestException);
+  });
+});
+
+describe('a student’s quiz progress', () => {
+  const answer = (q: string, optionIndex: number) => ({ questionId: q, answer: { optionId: optionId(q, optionIndex) }, scheduledLessonId: 'sl-1', inClassroom: true });
+
+  it('scores every question, and finishes the quiz only when every question has been answered', async () => {
+    const { service, prisma } = build();
+    await service.checkQuizAnswer('lesson-1', answer('q1', 2) as never, student); // right
+    const first = prisma.lessonProgress.upsert.mock.calls[0][0].update;
+    expect(first.quizTotal).toBe(2);
+    expect(first.quizCompletedAt).toBeUndefined(); // one of two answered
+
+    prisma.lessonProgress.findUnique.mockResolvedValue({ quizResults: first.quizResults, quizCompletedAt: null });
+    await service.checkQuizAnswer('lesson-1', answer('q2', 3) as never, student); // wrong
+    const second = prisma.lessonProgress.upsert.mock.calls[1][0].update;
+    expect(second).toMatchObject({ quizTotal: 2, quizScore: 1 });
+    expect(second.quizCompletedAt).toBeInstanceOf(Date);
+  });
+
+  it('reports the whole quiz as scored, and unfinished again if the quiz now has a question the student has not answered', async () => {
+    const stored = { sectionsRead: [], activitiesDone: [], lastOpenedAt: null };
+    const done = { ...stored, quizCompletedAt: new Date(), quizResults: { q1: { correct: true, attempts: 1 }, q2: { correct: false, attempts: 2 } } };
+    const finished = build();
+    finished.prisma.lessonProgress.findUnique.mockResolvedValue(done);
+    const a: any = await finished.service.getProgress('sl-1', student, true);
+    expect(a.progress.quiz).toMatchObject({ total: 2, answered: 2, gradedTotal: 2, score: 1, completed: true });
+
+    // The quiz was converted: its questions have new ids, so the old answers no longer count.
+    const converted = build({ lesson: lessonRow({ miniQuiz: [{ ...QUIZ[0], id: 'q1m' }, { ...QUIZ[1], id: 'q2m' }] }), sl: classRow({ lesson: lessonRow() }) });
+    converted.prisma.lessonProgress.findUnique.mockResolvedValue(done);
+    const b: any = await converted.service.getProgress('sl-1', student, true);
+    expect(b.progress.quiz).toMatchObject({ total: 2, answered: 0, score: 0, completed: false });
   });
 });
 
@@ -177,7 +244,7 @@ describe('importing a lesson into a custom curriculum', () => {
     course: { slug: 'ai-builder-path' },
     visuals: [{ id: 'haar-features', type: 'haar', alt: 'Haar features on a face', caption: 'c', config: { features: ['edge'] } }],
     sourceRefs: { lineageKey: 'computer-vision/3', contentReview: [{ kind: 'quiz-answer-bias', detail: 'x' }] },
-    contentVersion: 1,
+    contentVersion: CONTENT_VERSION,
     duration: 60,
     order: 3,
   });
@@ -203,7 +270,7 @@ describe('importing a lesson into a custom curriculum', () => {
     expect(copy.teacherNotes).toBe('SECRET-TEACHER-NOTE');
     expect(copy.miniQuiz).toEqual(QUIZ);
     expect(copy.visuals).toEqual((source as any).visuals);
-    expect(copy.contentVersion).toBe(1);
+    expect(copy.contentVersion).toBe(CONTENT_VERSION);
     expect(copy.sourceRefs).toMatchObject({ importedFromLessonId: 'src-1', lineageKey: 'computer-vision/3' });
     expect(copy.sourceRefs.contentReview).toHaveLength(1);
   });
@@ -217,6 +284,7 @@ describe('importing a lesson into a custom curriculum', () => {
     (copy.miniQuiz as any[])[0].prompt = 'EDITED IN THE COPY';
     (copy.visuals as any[])[0].config.features.push('line');
     expect((source.miniQuiz as any[])[0].prompt).toBe('Pick');
+    expect((copy.miniQuiz as any[])[0].options).toHaveLength(4);
     expect(((source as any).visuals as any[])[0].config.features).toEqual(['edge']);
   });
 

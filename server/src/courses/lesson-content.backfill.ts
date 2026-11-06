@@ -21,7 +21,9 @@
 import { Prisma, PrismaClient, SessionType } from '@prisma/client';
 import {
   CONTENT_VERSION,
+  appendDiscussion,
   comparable,
+  conformQuiz,
   indexCourseLessons,
   persistedLineage,
   textSimilarity,
@@ -197,7 +199,11 @@ export async function applyLessonUpgrade(prisma: PrismaClient, e: LessonUpgradeE
   const keep = reviewItemsToKeep(e.result.review);
   const refsBase = (sourceRefs ?? (e.sourceRefs && typeof e.sourceRefs === 'object' && !Array.isArray(e.sourceRefs) ? e.sourceRefs : {})) as Record<string, unknown>;
   if (sourceRefs || keep.length > 0) {
-    data.sourceRefs = (keep.length > 0 ? { ...refsBase, contentReview: keep } : refsBase) as Prisma.InputJsonValue;
+    // Earlier review items (from the first upgrade) stay; new ones are added once.
+    const earlier = Array.isArray(refsBase.contentReview) ? (refsBase.contentReview as { kind: string; detail: string }[]) : [];
+    const seen = new Set(earlier.map((r) => `${r.kind}|${r.detail}`));
+    const merged = [...earlier, ...keep.filter((r) => !seen.has(`${r.kind}|${r.detail}`))];
+    data.sourceRefs = (merged.length > 0 ? { ...refsBase, contentReview: merged } : refsBase) as Prisma.InputJsonValue;
   }
 
   // A cleaned title must also reach the checkpoint text and embedded project that quoted the old one.
@@ -338,8 +344,18 @@ export function upgradeAdvancedDataScienceFix(
   if (!same(fix.codeSnippets, lesson.codeSnippets)) data.codeSnippets = fix.codeSnippets as unknown as Prisma.InputJsonValue;
   if (!same(fix.projectLinks, lesson.projectLinks)) data.projectLinks = fix.projectLinks as unknown as Prisma.InputJsonValue;
 
-  if ((lesson.miniQuiz === null || lesson.miniQuiz === undefined) && p?.miniQuiz) data.miniQuiz = p.miniQuiz as Prisma.InputJsonValue;
-  if (lesson.teacherNotes === null && p?.teacherNotes) data.teacherNotes = p.teacherNotes;
+  if (lesson.miniQuiz === null || lesson.miniQuiz === undefined) {
+    if (p?.miniQuiz) data.miniQuiz = p.miniQuiz as Prisma.InputJsonValue;
+  } else {
+    // The stored quiz may still hold older question shapes: bring it up to the multiple-choice rule.
+    const c = conformQuiz(lesson.miniQuiz, { lineage: persistedLineage(lesson.sourceRefs), title });
+    if (c.changed) data.miniQuiz = c.quiz as unknown as Prisma.InputJsonValue;
+    if (c.leftover.length > 0) {
+      const notes = appendDiscussion(lesson.teacherNotes, c.leftover);
+      if (notes !== lesson.teacherNotes) data.teacherNotes = notes;
+    }
+  }
+  if (lesson.teacherNotes === null && p?.teacherNotes && data.teacherNotes === undefined) data.teacherNotes = p.teacherNotes;
   if ((lesson.visuals === null || lesson.visuals === undefined) && p?.visuals) data.visuals = p.visuals as Prisma.InputJsonValue;
   if (Object.keys(data).length === 0) return null;
   data.contentVersion = CONTENT_VERSION;

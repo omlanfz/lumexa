@@ -3,8 +3,16 @@ import { describeNumbering, indexCourseLessons, numberingFor, type CourseLessonR
 import { buildNavigation, buildSharedLesson, buildTeacherPrep, hasTeacherPrep, resolveLessonRefs, type LessonRow } from './serialize';
 
 const quiz = [
-  { id: 'q1', type: 'multiple_choice', prompt: 'Pick', options: ['a1', 'b1', 'c1'], correctIndex: 1, explanation: 'SECRET-EXPLANATION' },
-  { id: 'q2', type: 'self_check', prompt: 'Explain', sampleAnswer: 'SECRET-SAMPLE' },
+  { id: 'q1', type: 'multiple_choice', prompt: 'Pick', options: ['a1', 'b1', 'c1', 'd1'], correctIndex: 1, explanation: 'SECRET-EXPLANATION' },
+  { id: 'q2', type: 'multiple_choice', prompt: 'Pick again', options: ['a2', 'b2', 'c2', 'd2'], correctIndex: 3, explanation: 'SECRET-EXPLANATION-2' },
+];
+
+/** A row stored by an older release: it still holds question shapes that are no longer allowed. */
+const legacyQuiz = [
+  quiz[0],
+  { id: 'q8', type: 'self_check', prompt: 'Explain', sampleAnswer: 'SECRET-SAMPLE' },
+  { id: 'q9', type: 'multiple_choice', prompt: 'Only two options', options: ['a', 'b'], correctIndex: 0, explanation: 'SECRET-TWO' },
+  { id: 'q10', type: 'true_false', prompt: 'True?', options: ['True', 'False'], correctIndex: 0 },
 ];
 
 const row: LessonRow = {
@@ -31,10 +39,26 @@ describe('role-aware serialization', () => {
   it('the shared lesson contains nothing teacher-only, whatever the row holds', () => {
     const shared = buildSharedLesson(row, {});
     const json = JSON.stringify(shared);
-    for (const secret of ['SECRET-REVIEW-NOTE', 'SECRET-TEACHER-NOTE', 'SECRET-EXPLANATION', 'SECRET-SAMPLE']) expect(json).not.toContain(secret);
+    for (const secret of ['SECRET-REVIEW-NOTE', 'SECRET-TEACHER-NOTE', 'SECRET-EXPLANATION']) expect(json).not.toContain(secret);
     for (const key of ['teacherNotes', 'reviewNotes', 'answerKey', 'correctIndex', 'sampleAnswer']) expect(json).not.toContain(`"${key}"`);
     expect(shared.quiz?.questions).toHaveLength(2);
+    expect(shared.quiz?.gradedCount).toBe(2); // every question is multiple choice, so every question is scored
+    for (const q of shared.quiz?.questions ?? []) {
+      expect(q.type).toBe('multiple_choice');
+      expect(q.options).toHaveLength(4);
+    }
+  });
+
+  it('never serves a stored question that is not four-option multiple choice — not in the lesson and not in the answer key', () => {
+    const old = { ...row, miniQuiz: legacyQuiz };
+    const shared = buildSharedLesson(old, {});
+    expect(shared.quiz?.questions.map((q) => q.id)).toEqual(['q1']);
     expect(shared.quiz?.gradedCount).toBe(1);
+    const prep = buildTeacherPrep(old);
+    expect(prep.answerKey.map((q) => q.id)).toEqual(['q1']);
+    for (const secret of ['SECRET-SAMPLE', 'SECRET-TWO']) expect(JSON.stringify({ shared, prep })).not.toContain(secret);
+    // A lesson whose stored quiz holds only older shapes has no quiz at all (and no empty quiz box).
+    expect(buildSharedLesson({ ...row, miniQuiz: legacyQuiz.slice(1) }, {}).quiz).toBeNull();
   });
 
   it('is an allowlist: a new column added to the row never reaches a learner by accident', () => {
@@ -48,6 +72,7 @@ describe('role-aware serialization', () => {
     expect(prep.teacherNotes).toContain('SECRET-TEACHER-NOTE');
     expect(prep.reviewNotes).toBe('SECRET-REVIEW-NOTE');
     expect(prep.answerKey).toHaveLength(2);
+    expect(prep.answerKey.map((q) => q.correctIndex)).toEqual([1, 3]);
     expect(JSON.stringify(prep)).toContain('SECRET-EXPLANATION');
     expect(hasTeacherPrep(row)).toBe(true);
     expect(hasTeacherPrep({ ...row, teacherNotes: '  ', reviewNotes: null, miniQuiz: null })).toBe(false);

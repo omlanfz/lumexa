@@ -1,47 +1,13 @@
+import { cleanLesson } from './cleaner';
 import { CONTENT_VERSION, upgradeLesson, type UpgradeInput } from './upgrade';
 import { extractVisualIds, normalizeVisuals } from './visuals';
 import { validateLessonContent } from './validate';
 import { readQuiz } from './serialize';
 import { catalogForTitle } from './visual-catalog';
-import { allSourceLessons } from './test-support';
+import { quizCatalogFor } from './quiz-catalog';
+import { DISCUSSION_HEADING } from './quiz-mcq';
+import { allSourceLessons, contextOf, fieldsOf, rowAfter as apply, upgradeInputFor as inputFor } from './test-support';
 import type { SourceLessonCase } from './test-support';
-
-const inputFor = (c: SourceLessonCase, over: Partial<UpgradeInput['row']> = {}): UpgradeInput => ({
-  row: {
-    id: `row-${c.key}`,
-    title: c.raw.title,
-    type: 'LEARNING',
-    objectives: c.raw.objectives,
-    contentMarkdown: c.raw.contentMarkdown,
-    homework: c.raw.homework ?? null,
-    teacherNotes: null,
-    miniQuiz: null,
-    visuals: null,
-    contentVersion: 0,
-    sourceRefs: null,
-    duration: 60,
-    ...over,
-  },
-  courseTitle: c.pathway,
-  module: { slug: c.moduleSlug, title: c.moduleTitle },
-  positionInGroup: c.position,
-  groupSize: c.moduleSize,
-  source: { teacherNotes: c.raw.teacherNotes ?? null, miniQuiz: (c.raw.miniQuiz ?? null) as never, moduleLessonCount: c.moduleSize },
-});
-
-/** What the database row looks like after a patch is written. */
-const apply = (c: SourceLessonCase, patch: NonNullable<ReturnType<typeof upgradeLesson>['patch']>) =>
-  inputFor(c, {
-    title: patch.title ?? c.raw.title,
-    objectives: patch.objectives ?? c.raw.objectives,
-    contentMarkdown: patch.contentMarkdown !== undefined ? patch.contentMarkdown : c.raw.contentMarkdown,
-    homework: patch.homework !== undefined ? patch.homework : c.raw.homework ?? null,
-    teacherNotes: patch.teacherNotes ?? null,
-    miniQuiz: patch.miniQuiz ?? null,
-    visuals: patch.visuals ?? null,
-    contentVersion: patch.contentVersion,
-    sourceRefs: patch.sourceRefs ?? null,
-  });
 
 const lessons = allSourceLessons();
 
@@ -114,13 +80,38 @@ describe('the structured-content upgrade of every learning lesson', () => {
     expect(types).toEqual(expect.arrayContaining(['haar', 'cascade', 'bbox', 'detection-lab', 'colorspace']));
   });
 
-  it('adds a friendly knowledge check to the Little Coders lessons that had none, and says so', () => {
+  it('adds a friendly multiple-choice knowledge check to the Little Coders lessons that had none, and says so', () => {
     const lc = results.filter(({ c }) => c.pathway === 'little-coders-path');
     expect(lc).toHaveLength(24);
     for (const { c, res } of lc) {
       expect({ key: c.key, authored: res.changes.some((x) => x.kind === 'quiz-authored') }).toEqual({ key: c.key, authored: true });
       expect(res.patch!.contentMarkdown).toMatch(/```lumexa-quiz/);
+      const quiz = readQuiz(res.patch!.miniQuiz);
+      expect({ key: c.key, n: quiz.length, allFourOptions: quiz.every((q) => q.type === 'multiple_choice' && q.options.length === 4) }).toEqual({ key: c.key, n: 3, allFourOptions: true });
     }
+  });
+
+  it('gives every lesson at least five multiple-choice questions when its source had five or more, and never fewer than it had', () => {
+    for (const { c, res } of results) {
+      if (c.pathway === 'little-coders-path') continue;
+      const sourceCount = (cleanLesson(fieldsOf(c), contextOf(c)).fields.miniQuiz ?? []).length;
+      const served = readQuiz(res.patch!.miniQuiz).length;
+      expect({ key: c.key, enough: served >= Math.min(5, sourceCount - 1) }).toEqual({ key: c.key, enough: true });
+    }
+  });
+
+  it('keeps the questions that cannot be asked as multiple choice for the teacher, and says so in the review', () => {
+    const { res } = results.find(({ c }) => c.key === 'python-ai-foundations/3')!;
+    const patch = res.patch!;
+    expect(patch.teacherNotes).toContain(DISCUSSION_HEADING);
+    expect(patch.teacherNotes).toMatch(/difference between a `for` loop and a `while` loop/);
+    expect(res.review.some((x) => x.kind === 'quiz-needs-rewrite')).toBe(true);
+    // …and none of it reaches the student quiz.
+    expect(JSON.stringify(readQuiz(patch.miniQuiz))).not.toMatch(/difference between a .?for.? loop and a .?while.? loop/);
+    // A statement that was turned into a multiple-choice question, and then repeated as "True or False: …", is not kept twice.
+    expect(JSON.stringify(readQuiz(patch.miniQuiz))).toMatch(/variable that is defined inside a function/);
+    expect(patch.teacherNotes).not.toMatch(/variable defined inside a function can be used anywhere/);
+    expect(res.changes.some((x) => /repeated quiz question/.test(x.detail))).toBe(true);
   });
 
   it('a custom lesson imported from a pathway lesson inherits its visuals through the lineage', () => {
@@ -142,5 +133,96 @@ describe('the structured-content upgrade of every learning lesson', () => {
     };
     const out = upgradeLesson(redesigned);
     expect((out.patch!.visuals as { id: string }[]).map((v) => v.id)).toEqual(['health-trace']);
+  });
+});
+
+
+describe('moving a lesson from the first release (version 1) to multiple choice only (version 2)', () => {
+  const byKey = new Map(results0());
+  function results0() {
+    return allSourceLessons().map((c) => [c.key, { c, fresh: upgradeLesson(inputFor(c)).patch! }] as const);
+  }
+
+  /** A row as the first release left it: cleaned, with visuals and notes — its quiz still in the older shapes. */
+  function v1Row(c: SourceLessonCase): UpgradeInput {
+    const { fresh } = byKey.get(c.key)!;
+    const cleaned = cleanLesson(fieldsOf(c), contextOf(c)).fields;
+    return inputFor(c, {
+      title: fresh.title ?? c.raw.title,
+      objectives: fresh.objectives ?? c.raw.objectives,
+      contentMarkdown: fresh.contentMarkdown ?? c.raw.contentMarkdown,
+      homework: fresh.homework !== undefined ? fresh.homework : c.raw.homework ?? null,
+      teacherNotes: cleaned.teacherNotes,
+      miniQuiz: cleaned.miniQuiz,
+      visuals: fresh.visuals,
+      sourceRefs: fresh.sourceRefs,
+      contentVersion: 1,
+    });
+  }
+
+  it('changes only the quiz and the teacher notes, and ends up exactly where a fresh seed ends up', () => {
+    for (const c of lessons) {
+      if (c.pathway === 'little-coders-path') continue; // their older quiz was authored in the catalog (covered below)
+      const out = upgradeLesson(v1Row(c));
+      const fresh = byKey.get(c.key)!.fresh;
+      const keys = Object.keys(out.patch ?? {}).sort();
+      expect({ key: c.key, touched: keys.filter((k) => !['contentVersion', 'miniQuiz', 'teacherNotes'].includes(k)) }).toEqual({ key: c.key, touched: [] });
+      expect({ key: c.key, version: out.patch!.contentVersion }).toEqual({ key: c.key, version: CONTENT_VERSION });
+      expect({ key: c.key, quiz: JSON.stringify(out.patch!.miniQuiz) }).toEqual({ key: c.key, quiz: JSON.stringify(fresh.miniQuiz) });
+      expect({ key: c.key, notes: out.patch!.teacherNotes ?? v1Row(c).row.teacherNotes }).toEqual({ key: c.key, notes: fresh.teacherNotes ?? null });
+    }
+  });
+
+  it('is done after one pass: the migrated row needs nothing more', () => {
+    for (const c of lessons) {
+      if (c.pathway === 'little-coders-path') continue;
+      const out = upgradeLesson(v1Row(c));
+      const migrated = inputFor(c, { ...v1Row(c).row, miniQuiz: out.patch!.miniQuiz ?? v1Row(c).row.miniQuiz, teacherNotes: out.patch!.teacherNotes ?? v1Row(c).row.teacherNotes, contentVersion: out.patch!.contentVersion });
+      expect({ key: c.key, again: upgradeLesson(migrated).patch }).toEqual({ key: c.key, again: null });
+      const forced = upgradeLesson({ ...migrated, force: true }).patch;
+      expect({ key: c.key, changed: Object.keys(forced ?? {}).filter((k) => k !== 'contentVersion') }).toEqual({ key: c.key, changed: [] });
+    }
+  });
+
+  it('leaves a quiz an admin already wrote as multiple choice exactly as it is, and never touches the lesson text', () => {
+    const c = lessons.find((l) => l.key === 'html-css-mastery/2')!;
+    const adminQuiz = [
+      { id: 'a1', type: 'multiple_choice', prompt: 'Which tag?', options: ['<a>', '<b>', '<i>', '<u>'], correctIndex: 0, explanation: 'Because.' },
+      { id: 'a2', type: 'multiple_choice', prompt: 'Which attribute?', options: ['href', 'src', 'alt', 'id'], correctIndex: 0, explanation: 'Because.' },
+    ];
+    const row = { ...v1Row(c).row, contentMarkdown: 'An admin rewrote this lesson.', miniQuiz: adminQuiz };
+    const out = upgradeLesson({ ...v1Row(c), row });
+    expect(out.patch).toEqual({ contentVersion: CONTENT_VERSION });
+  });
+
+  it('keeps an admin’s own multiple-choice questions and converts only the older ones next to them', () => {
+    const c = lessons.find((l) => l.key === 'html-css-mastery/2')!;
+    const keep = { id: 'a1', type: 'multiple_choice', prompt: 'Which tag?', options: ['<a>', '<b>', '<i>', '<u>'], correctIndex: 0, explanation: 'Because.' };
+    const row = { ...v1Row(c).row, miniQuiz: [keep, { id: 'a2', type: 'true_false', prompt: '`alt=""` is always wrong.', options: ['True', 'False'], correctIndex: 1 }, { id: 'a3', type: 'self_check', prompt: 'Explain the box model in your own words.' }] };
+    const out = upgradeLesson({ ...v1Row(c), row });
+    const quiz = out.patch!.miniQuiz as { id: string; options: string[] }[];
+    expect(quiz.map((q) => q.id)).toEqual(['a1', 'a2m']); // the admin's question is untouched, the true/false one became multiple choice
+    expect(quiz[1].options).toHaveLength(4);
+    expect(out.patch!.teacherNotes).toContain('Explain the box model in your own words.'); // the typed-answer question is kept for the teacher
+    expect(out.review.some((r) => r.kind === 'quiz-needs-rewrite')).toBe(true);
+  });
+
+  it('turns an authored Little Coders question from the first release into the catalog’s multiple-choice version', () => {
+    const c = lessons.find((l) => l.pathway === 'little-coders-path')!;
+    const catalog = quizCatalogFor(c.key)!;
+    const oldQuiz = catalog.map((q) => ({ id: q.id, type: 'ordering', prompt: 'older version', items: ['a', 'b', 'c'], source: 'authored' }));
+    const fresh = byKey.get(c.key)!.fresh;
+    const row = { ...inputFor(c).row, contentMarkdown: fresh.contentMarkdown ?? c.raw.contentMarkdown, visuals: fresh.visuals, sourceRefs: fresh.sourceRefs, miniQuiz: oldQuiz, contentVersion: 1 };
+    const out = upgradeLesson({ ...inputFor(c), row });
+    const quiz = out.patch!.miniQuiz as { id: string; prompt: string }[];
+    expect(quiz.map((q) => q.id)).toEqual(catalog.map((q) => `${q.id}m`));
+    expect(quiz.map((q) => q.prompt)).toEqual(catalog.map((q) => q.prompt));
+  });
+
+  it('leaves tests alone at version 1 as well', () => {
+    const c = lessons[0];
+    for (const type of ['COURSE_TEST', 'STAGE_TEST', 'FINAL_TEST']) {
+      expect(upgradeLesson({ ...v1Row(c), row: { ...v1Row(c).row, type } }).patch).toBeNull();
+    }
   });
 });
