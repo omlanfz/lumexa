@@ -1,0 +1,9 @@
+[
+  { "key": "main", "program": "web-developer-path", "studentName": "Ayaan Rahman", "issuedAt": "2026-11-06T09:30:00+06:00", "certificateId": "LMX-2026-7K3F-9QWM" },
+  { "key": "honors", "program": "ai-builder-path", "studentName": "Nusrat Jahan Tamanna", "honors": "with Distinction", "issuedAt": "2026-11-06T09:30:00+06:00", "certificateId": "LMX-2026-H4D8-2PXC" },
+  { "key": "long", "program": "digital-independence-path", "studentName": "Muhammad Abdullah Al Mahmud Chowdhury", "issuedAt": "2026-11-06T01:10:00+06:00", "certificateId": "LMX-2026-R9TB-6LNE" },
+  { "key": "bangla", "program": "little-coders-path", "studentName": "তাসনিম আহমেদ", "issuedAt": "2026-11-06T09:30:00+06:00", "certificateId": "LMX-2026-B2KQ-8VYA" },
+  { "key": "odyssey", "program": "lumexa-odyssey", "studentName": "Zara Khan", "honors": "with Distinction", "issuedAt": "2026-11-06T09:30:00+06:00", "certificateId": "LMX-2026-O5WM-3GJD" },
+  { "key": "game", "program": "game-creator-path", "studentName": "Rafi Hasan", "issuedAt": "2026-11-06T09:30:00+06:00", "certificateId": "LMX-2026-G7ZN-4HUS" },
+  { "key": "data", "program": "data-scientist-path", "studentName": "Mahiya Islam", "issuedAt": "2026-11-06T09:30:00+06:00", "certificateId": "LMX-2026-D3FV-5TQE" }
+]

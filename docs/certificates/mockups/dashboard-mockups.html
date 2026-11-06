@@ -1,0 +1,211 @@
+<!doctype html>
+<!--
+  MOCKUPS (illustrative, not the real app): where certificates live in the Lumexa student experience.
+    #home          Student Home with the one-time "You earned a certificate" banner
+    #certificates  The new "Certificates" page (download, share, verify, next mission)
+    #verify        The public verification page, as it looks on a phone after scanning the QR code
+  Rendered to PNG by tools/render-mockups.mjs. Plain CSS on purpose: it only has to look like the app.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lumexa certificates: mockups</title>
+<style>
+  @font-face { font-family: "Inter"; font-weight: 400; src: url("../template/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 500; src: url("../template/fonts/inter-latin-500-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 600; src: url("../template/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Inter"; font-weight: 700; src: url("../template/fonts/inter-latin-700-normal.woff2") format("woff2"); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Inter", system-ui, sans-serif; color: #111827; background: #e5e7eb; padding: 24px; display: flex; flex-direction: column; gap: 40px; align-items: flex-start; }
+  .screen { position: relative; background: linear-gradient(180deg, rgba(240,253,250,.55), #fff 380px); border-radius: 14px; overflow: hidden; border: 1px solid #d1d5db; }
+  .screen.desktop { width: 1240px; }
+  .tag { position: absolute; right: 12px; bottom: 10px; font-size: 11px; font-weight: 600; letter-spacing: .08em; color: #6b7280; background: rgba(255,255,255,.9); border: 1px solid #e5e7eb; padding: 3px 9px; border-radius: 999px; z-index: 5; }
+
+  /* ── top nav (mirrors components/StudentTopNav.tsx) ───────────────────── */
+  .nav { height: 64px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: rgba(255,255,255,.92); border-bottom: 1px solid rgba(0,0,0,.08); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: #14b8a6; font-size: 14px; }
+  .brand .mark { width: 32px; height: 32px; border-radius: 8px; background: #0B1026; display: grid; place-items: center; overflow: hidden; }
+  .brand .mark img { width: 32px; height: 32px; }
+  .links { display: flex; gap: 4px; }
+  .links a { padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #4b5563; text-decoration: none; position: relative; }
+  .links a.active { background: rgba(20,184,166,.15); color: #0d9488; }
+  .links a .dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 2px #fff; }
+  .links a.new { outline: 2px dashed #f59e0b; outline-offset: 2px; }
+  .right { display: flex; align-items: center; gap: 10px; }
+  .pill { font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(20,184,166,.35); background: rgba(20,184,166,.1); color: #0f766e; }
+  .pill.rank { border-color: rgba(124,58,237,.3); background: rgba(124,58,237,.08); color: #6d28d9; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg,#14b8a6,#22d3ee); display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #000; }
+
+  .page { padding: 28px 40px 56px; }
+  .h { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .h .ico { width: 44px; height: 44px; border-radius: 12px; background: rgba(20,184,166,.15); display: grid; place-items: center; font-size: 22px; }
+  .h h1 { font-size: 24px; font-weight: 700; }
+  .h p { font-size: 14px; color: #6b7280; margin-top: 2px; }
+
+  .card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 14px; padding: 22px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 10px; font-size: 14px; font-weight: 600; border: 1px solid #d1d5db; background: #fff; color: #111827; text-decoration: none; }
+  .btn.primary { background: #14b8a6; border-color: #14b8a6; color: #04201c; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .muted { color: #6b7280; }
+
+  /* certificate card */
+  .cert { display: grid; grid-template-columns: 440px 1fr; gap: 28px; align-items: start; }
+  .cert .thumb { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,.08); }
+  .cert .thumb img { width: 100%; display: block; }
+  .cert h2 { font-size: 26px; font-weight: 700; margin: 10px 0 4px; }
+  .meta { font-size: 14px; color: #4b5563; line-height: 1.9; margin-bottom: 18px; }
+  .meta b { color: #111827; font-weight: 600; }
+  .copy { font-size: 12px; font-weight: 600; color: #0d9488; border: 1px solid rgba(20,184,166,.4); border-radius: 6px; padding: 1px 8px; margin-left: 6px; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; position: relative; }
+  .btn.open { background: #ecfeff; border-color: #67e8f9; color: #0e7490; }
+  .share { margin-top: 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 16px; max-width: 640px; }
+  .share .t { font-size: 12px; font-weight: 700; letter-spacing: .1em; color: #6b7280; margin-bottom: 10px; }
+  .share .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .share .c { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid #e5e7eb; border-radius: 999px; font-size: 13.5px; font-weight: 600; background: #f9fafb; }
+  .share .c.native { background: #14b8a6; border-color: #14b8a6; color: #04201c; }
+  .share .note { margin-top: 10px; font-size: 12px; color: #6b7280; line-height: 1.5; }
+  .next { margin-top: 18px; background: linear-gradient(135deg, rgba(20,184,166,.10), rgba(124,58,237,.08)); border: 1px solid rgba(20,184,166,.35); border-radius: 14px; padding: 22px 24px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+  .next .k { font-size: 11px; font-weight: 700; letter-spacing: .14em; color: #0f766e; }
+  .next h3 { font-size: 22px; font-weight: 700; margin: 4px 0 6px; }
+  .next p { font-size: 14px; color: #374151; max-width: 640px; line-height: 1.55; }
+  .prog { margin-top: 18px; display: flex; align-items: center; gap: 18px; }
+  .prog .lock { width: 54px; height: 54px; border-radius: 12px; border: 2px dashed #cbd5e1; display: grid; place-items: center; font-size: 22px; filter: grayscale(1); opacity: .7; }
+  .bar { height: 8px; background: #e5e7eb; border-radius: 99px; overflow: hidden; width: 320px; margin-top: 8px; }
+  .bar i { display: block; height: 100%; width: 25%; background: #14b8a6; }
+
+  /* home banner */
+  .banner { border-radius: 16px; padding: 2px; background: linear-gradient(90deg,#14b8a6,#3b82f6,#7c3aed); margin-bottom: 20px; }
+  .banner .in { background: #fff; border-radius: 14px; padding: 18px 22px; display: grid; grid-template-columns: 200px 1fr auto; gap: 22px; align-items: center; position: relative; }
+  .banner .in img { width: 200px; border-radius: 6px; border: 1px solid #e5e7eb; display: block; }
+  .banner h2 { font-size: 22px; font-weight: 700; }
+  .banner p { font-size: 14px; color: #4b5563; margin-top: 4px; }
+  .banner .x { position: absolute; top: 10px; right: 14px; color: #9ca3af; font-size: 18px; }
+  .ghost { background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 14px; padding: 20px; }
+  .ghost .l { height: 10px; background: #e5e7eb; border-radius: 6px; margin-top: 10px; }
+  .ghost .t { font-size: 11px; font-weight: 600; letter-spacing: .12em; color: #9ca3af; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+  /* public verification page (phone) */
+  .phone { width: 390px; background: #f8fafc; border-radius: 30px; border: 10px solid #0f172a; overflow: hidden; }
+  .phone .top { background: #0B1026; color: #5eead4; padding: 14px 18px; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 10px; }
+  .phone .top img { width: 26px; height: 26px; border-radius: 6px; }
+  .valid { margin: 16px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; padding: 16px; display: flex; gap: 12px; align-items: center; }
+  .valid .tick { width: 40px; height: 40px; border-radius: 50%; background: #10b981; color: #fff; display: grid; place-items: center; font-size: 22px; font-weight: 700; flex: none; }
+  .valid b { display: block; font-size: 16px; color: #065f46; }
+  .valid span { font-size: 12.5px; color: #047857; }
+  .vcard { margin: 0 16px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 4px 16px; }
+  .vrow { padding: 11px 0; border-bottom: 1px solid #f1f5f9; }
+  .vrow:last-child { border: 0; }
+  .vrow small { display: block; font-size: 10.5px; letter-spacing: .12em; font-weight: 600; color: #94a3b8; text-transform: uppercase; }
+  .vrow div { font-size: 15px; font-weight: 600; margin-top: 2px; color: #0f172a; }
+  .vrow div.n { font-size: 18px; }
+  .vimg { margin: 0 16px 14px; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; background: #fff; }
+  .vimg img { width: 100%; display: block; }
+  .vbtns { margin: 0 16px 14px; display: grid; gap: 10px; }
+  .vbtns .btn { justify-content: center; }
+  .vfoot { padding: 6px 20px 22px; font-size: 11.5px; color: #64748b; line-height: 1.55; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- ═════════ 1. Student Home: one-time celebration banner ═════════ -->
+<section class="screen desktop" id="home">
+  <div class="nav">
+    <div class="brand"><span class="mark"><img src="../template/images/logo-mark.png" alt=""></span>Lumexa</div>
+    <nav class="links">
+      <a class="active">Home</a><a>Learning</a><a>My Badges</a><a class="new">Certificates<span class="dot"></span></a><a>Profile</a>
+    </nav>
+    <div class="right"><span class="pill">💎 12 Credits</span><span class="pill rank">🚀 Explorer</span><span class="avatar">A</span></div>
+  </div>
+  <div class="page">
+    <div class="banner"><div class="in">
+      <img src="../samples/lumexa-certificate-sample.preview.jpg" alt="">
+      <div>
+        <h2>🎓 You earned a certificate!</h2>
+        <p>Web Developer Path · issued 6 November 2026. Download it, share it with family and friends, or add it to your portfolio.</p>
+        <div style="display:flex;gap:10px;margin-top:14px"><a class="btn primary">View &amp; share</a><a class="btn">Download PDF</a></div>
+      </div>
+      <span class="x">✕</span>
+    </div></div>
+    <div class="grid3">
+      <div class="ghost"><div class="t">NEXT CLASS</div><div class="l" style="width:70%"></div><div class="l" style="width:45%"></div></div>
+      <div class="ghost"><div class="t">CONTINUE LEARNING</div><div class="l" style="width:80%"></div><div class="l" style="width:55%"></div></div>
+      <div class="ghost"><div class="t">YOUR PROGRESS</div><div class="l" style="width:60%"></div><div class="l" style="width:75%"></div></div>
+    </div>
+  </div>
+  <span class="tag">MOCKUP · HOME (shown for 14 days or until dismissed)</span>
+</section>
+
+<!-- ═════════ 2. The new Certificates page ═════════ -->
+<section class="screen desktop" id="certificates">
+  <div class="nav">
+    <div class="brand"><span class="mark"><img src="../template/images/logo-mark.png" alt=""></span>Lumexa</div>
+    <nav class="links">
+      <a>Home</a><a>Learning</a><a>My Badges</a><a class="active">Certificates</a><a>Profile</a>
+    </nav>
+    <div class="right"><span class="pill">💎 12 Credits</span><span class="pill rank">🚀 Explorer</span><span class="avatar">A</span></div>
+  </div>
+  <div class="page">
+    <div class="h"><div class="ico">🎓</div><div><h1>My Certificates</h1><p>Your official Lumexa certificates. Download, share or verify them any time.</p></div></div>
+
+    <div class="card cert">
+      <div class="thumb"><img src="../samples/lumexa-certificate-sample.preview.jpg" alt=""></div>
+      <div>
+        <span class="chip">✓ Verified by Lumexa</span>
+        <h2>Web Developer Path</h2>
+        <div class="meta">Issued <b>6 November 2026</b><br>Certificate ID <b>LMX-2026-7K3F-9QWM</b><span class="copy">Copy</span><br>Final Test <b>86%</b> · 24 lessons · 9 projects</div>
+        <div class="actions">
+          <a class="btn primary">⬇ Download PDF</a>
+          <a class="btn">🖼 Save as image</a>
+          <a class="btn open">↗ Share ▴</a>
+        </div>
+        <div class="share">
+          <div class="t">SHARE THIS ACHIEVEMENT</div>
+          <div class="chips">
+            <span class="c native">📱 Share… <span style="font-weight:500;opacity:.8">(phones)</span></span>
+            <span class="c">💬 WhatsApp</span>
+            <span class="c">📘 Facebook</span>
+            <span class="c">🔗 Copy link</span>
+            <span class="c">💼 LinkedIn guide</span>
+          </div>
+          <div class="note">“Share…” opens the phone's own share sheet with the certificate image attached, which is how it reaches Instagram. LinkedIn only allows members aged 16+, so that option shows a how-to guide for older students.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="next">
+      <div>
+        <div class="k">RECOMMENDED NEXT MISSION</div>
+        <h3>AI Builder Path</h3>
+        <p>You already write JavaScript and React. AI Builder adds Python and machine learning to everything you can build. 24 lessons · 9 projects · ages 12–18.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:stretch"><a class="btn primary" style="justify-content:center">Start next mission →</a><a class="btn" style="justify-content:center">Compare all programs</a></div>
+    </div>
+
+    <div class="card prog">
+      <div class="lock">🎓</div>
+      <div><b style="font-size:15px">Your next certificate: AI Builder Path</b><div class="muted" style="font-size:13px;margin-top:2px">6 of 24 lessons · Final Test unlocks after the last lesson</div><div class="bar"><i></i></div></div>
+    </div>
+  </div>
+  <span class="tag">MOCKUP · NEW "CERTIFICATES" PAGE</span>
+</section>
+
+<!-- ═════════ 3. Public verification page, on a phone ═════════ -->
+<section class="phone" id="verify">
+  <div class="top"><img src="../template/images/logo-mark.png" alt="">Lumexa AI School · Certificate check</div>
+  <div class="valid"><div class="tick">✓</div><div><b>Valid certificate</b><span>Issued by Lumexa AI School. Checked just now.</span></div></div>
+  <div class="vcard">
+    <div class="vrow"><small>Awarded to</small><div class="n">Ayaan Rahman</div></div>
+    <div class="vrow"><small>Program</small><div>Web Developer Path</div></div>
+    <div class="vrow"><small>Awarded for</small><div style="font-weight:500;font-size:14px">Completing the program (24 lessons, 3 courses, 9 projects) and passing the Final Test</div></div>
+    <div class="vrow"><small>Date of issue</small><div>6 November 2026</div></div>
+    <div class="vrow"><small>Certificate ID</small><div>LMX-2026-7K3F-9QWM</div></div>
+  </div>
+  <div class="vimg"><img src="../samples/lumexa-certificate-sample.preview.jpg" alt=""></div>
+  <div class="vbtns"><a class="btn primary">⬇ Download PDF</a><a class="btn">💬 Share on WhatsApp</a></div>
+  <div class="vfoot">This page confirms that the certificate was issued by Lumexa AI School and shows it exactly as printed. Something doesn't look right? <b>lumexa.school@gmail.com</b></div>
+  <span class="tag" style="position:static;display:inline-block;margin:0 0 14px 16px">MOCKUP · PUBLIC /verify PAGE</span>
+</section>
+
+</body>
+</html>

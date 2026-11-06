@@ -1,0 +1,21 @@
+{
+  "name": "lumexa-certificate-design",
+  "private": true,
+  "description": "Design source and reference renderer for the Lumexa certificate (HTML template -> PDF/PNG). Not part of the app build.",
+  "type": "module",
+  "scripts": {
+    "ornaments": "node tools/generate-ornaments.mjs",
+    "render": "node tools/render.mjs",
+    "test": "node tools/selftest.mjs",
+    "email-preview": "tsx email/render-preview.ts",
+    "mockups": "node tools/render-mockups.mjs"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.50.0",
+    "pngjs": "^7.0.0",
+    "qrcode": "^1.5.4",
+    "tsx": "^4.19.0"
+  }
+}
