@@ -23,6 +23,7 @@
 //     the safety net here only (re)links their imported test lessons.
 
 import { Prisma, PrismaClient, SessionType } from '@prisma/client';
+import { canonicalCourseSlug } from '../../courses/course-slug';
 import { BANK_CONTENT_VERSION, standardInstructions } from './bank.constants';
 import { materializeBank } from './bank.materialize';
 import { BankRegistry, DEFAULT_REGISTRY } from './bank.registry';
@@ -87,14 +88,16 @@ export function resolveBank(
     course: { slug: string };
   },
 ): TestBank | null {
-  if (!registry.courseSlugs.includes(lesson.course.slug)) return null;
+  // Canonical so a database that still has the old "-path" spelling resolves too.
+  const courseSlug = canonicalCourseSlug(lesson.course.slug);
+  if (!registry.courseSlugs.includes(courseSlug)) return null;
   switch (lesson.type) {
     case SessionType.COURSE_TEST:
       return lesson.module
         ? (registry.courseTests[lesson.module.slug] ?? null)
         : null;
     case SessionType.FINAL_TEST:
-      return registry.finalTests[lesson.course.slug] ?? null;
+      return registry.finalTests[courseSlug] ?? null;
     case SessionType.STAGE_TEST: {
       const m = /stage\s*(\d+)/i.exec(lesson.title);
       return m ? (registry.stageTests[Number(m[1])] ?? null) : null;
@@ -468,11 +471,13 @@ async function fixLegacyFinalTestTitles(prisma: PrismaClient): Promise<number> {
     where: { isCustom: false },
     select: { slug: true, title: true },
   });
-  const titleBySlug = new Map(courses.map((c) => [c.slug, c.title]));
+  const titleBySlug = new Map(
+    courses.map((c) => [canonicalCourseSlug(c.slug), c.title]),
+  );
   let fixed = 0;
   for (const l of lessons) {
     const m = LEGACY_FINAL_TITLE.exec(l.title);
-    const nice = m ? titleBySlug.get(m[1]) : undefined;
+    const nice = m ? titleBySlug.get(canonicalCourseSlug(m[1])) : undefined;
     if (!nice) continue;
     await prisma.lesson.update({
       where: { id: l.id },

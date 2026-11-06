@@ -44,6 +44,7 @@ import {
   getProjectLinksFallback,
   tableizeKeyTerminology,
 } from '../courses/curriculum-catalog.seed';
+import { canonicalCourseSlug } from '../courses/course-slug';
 import { getBankSummary } from '../assessments/bank-summary';
 import {
   PRESENTABLE_FILE_SELECT,
@@ -147,8 +148,8 @@ export class CurriculumService {
       courseTitle: '',
     };
 
-    const course = await this.prisma.course.findUnique({
-      where: { slug: 'ai-builder-path' },
+    const course = await this.prisma.course.findFirst({
+      where: { slug: { in: ['ai-builder', 'ai-builder-path'] } },
     });
     const module = course
       ? await this.prisma.courseModule.findUnique({
@@ -196,7 +197,7 @@ export class CurriculumService {
       },
       lesson: buildSharedLesson(lesson as unknown as LessonRow, {
         projectLinks: this.resolveProjectLinks(
-          'ai-builder-path',
+          'ai-builder',
           lesson.order,
           lesson.projectLinks,
         ),
@@ -963,7 +964,7 @@ export class CurriculumService {
     return getProjectLinksFallback(courseSlug, order);
   }
 
-  /** Converts data-scientist-path's "## Key Terminology" bullet lists into a
+  /** Converts data-scientist's "## Key Terminology" bullet lists into a
    * real table on read (see tableizeKeyTerminology) — the same read-time
    * safety net as resolveProjectLinks above, for the same reason: an
    * environment that hasn't rebooted since this shipped would otherwise
@@ -974,7 +975,7 @@ export class CurriculumService {
     courseSlug: string,
     markdown: string | null,
   ): string | null {
-    if (!markdown || courseSlug !== 'data-scientist-path') return markdown;
+    if (!markdown || canonicalCourseSlug(courseSlug) !== 'data-scientist') return markdown;
     return tableizeKeyTerminology(markdown);
   }
 

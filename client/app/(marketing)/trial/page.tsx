@@ -10,12 +10,13 @@
 
 "use client";
 
-import { Suspense, useCallback, useState } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import axios from "axios";
 import TrialSlotPicker from "@/components/marketing/TrialSlotPicker";
-import { ALL_PROGRAMS, getProgram, resolveProgramId, trialSubjectLabel } from "@/lib/programs";
+import { getProgram, resolveProgramId, trialSubjectLabel } from "@/lib/programs";
+import { usePrograms } from "@/lib/usePrograms";
 import { FORMATS, resolveFormat } from "@/lib/pricing";
 import { CONTACT_EMAIL, CONTACT_MAILTO, WHATSAPP_DISPLAY, WHATSAPP_URL } from "@/lib/siteContact";
 import { normalizePhone } from "@/lib/phone";
@@ -32,7 +33,6 @@ import {
 } from "@/lib/trial";
 
 const NOT_SURE = "Not sure yet, help me choose";
-const subjects = [...ALL_PROGRAMS.map(trialSubjectLabel), NOT_SURE];
 
 // Preferred learning format. Optional: families who have not decided can leave it.
 const formatOptions = [
@@ -97,7 +97,9 @@ function TrialForm() {
   const searchParams = useSearchParams();
   // /programs and /pricing link here with ?program=ai&format=batch so the
   // family's choice arrives already selected.
-  const programId = resolveProgramId(searchParams.get("program"));
+  const { all: allPrograms } = usePrograms();
+  const subjects = useMemo(() => [...allPrograms.map(trialSubjectLabel), NOT_SURE], [allPrograms]);
+  const programId = resolveProgramId(searchParams.get("program"), allPrograms);
   const formatParam = resolveFormat(searchParams.get("format"));
 
   const [form, setForm] = useState<FormState>(() => ({
@@ -106,7 +108,7 @@ function TrialForm() {
     parentPhone: "",
     childName: "",
     childAge: "",
-    subject: programId ? trialSubjectLabel(getProgram(programId)) : "",
+    subject: programId ? trialSubjectLabel(getProgram(programId, allPrograms)) : "",
     format: formatParam ?? "",
     message: "",
     consent: false,

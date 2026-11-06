@@ -3,14 +3,9 @@
 import { useState, useEffect, Suspense, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useCatalog, findCourse, describeRange } from "@/lib/catalog";
-import {
-  ODYSSEY,
-  PROGRAMS,
-  resolveProgramId,
-  type ProgramKey,
-  type ProgramMeta,
-} from "@/lib/programs";
+import { describeRange } from "@/lib/catalog";
+import { ODYSSEY, resolveProgramId, type ProgramKey, type ProgramMeta } from "@/lib/programs";
+import { usePrograms } from "@/lib/usePrograms";
 import {
   BATCH_PRICE_RATIO,
   FORMATS,
@@ -241,7 +236,7 @@ function PriceCard({
         </div>
 
         <div className={wide ? "md:text-right" : ""}>
-          <div className={`text-4xl font-black ${program.accent}`}>{formatBDT(pricePerBlock(program.id, format))}</div>
+          <div className={`text-4xl font-black ${program.accent}`}>{formatBDT(pricePerBlock(program, format))}</div>
           <p className="text-sm text-[#64748B] dark:text-gray-400">
             for every {LESSONS_PER_BLOCK} lessons · {FORMATS[format].short}
           </p>
@@ -270,8 +265,8 @@ function PriceCard({
 
 function PricingContent() {
   const searchParams = useSearchParams();
-  const selectedProgram: ProgramKey | null = resolveProgramId(searchParams.get("program"));
-  const { catalog } = useCatalog();
+  const { odyssey: odysseyEntry, specialized, all } = usePrograms();
+  const selectedProgram: ProgramKey | null = resolveProgramId(searchParams.get("program"), all);
 
   const [format, setFormat] = useState<LearningFormat>(resolveFormat(searchParams.get("format")) ?? "private");
   const [openFaq, setOpenFaq] = useState<string | null>(null);
@@ -297,11 +292,7 @@ function PricingContent() {
     return () => clearTimeout(timer);
   }, [selectedProgram]);
 
-  const odysseyCourse = findCourse(catalog, ODYSSEY.catalogSlug);
-  const specialized = PROGRAMS.flatMap((meta) => {
-    const course = findCourse(catalog, meta.catalogSlug);
-    return course ? [{ meta, course }] : [];
-  });
+  const odysseyCourse = odysseyEntry?.course;
   const specializedLessons = describeRange(specialized.map((s) => s.course.totalLessons));
 
   return (
@@ -386,8 +377,8 @@ function PricingContent() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             <PriceCard program={ODYSSEY} format={format} selected={selectedProgram === "odyssey"} wide />
-            {PROGRAMS.map((program) => (
-              <PriceCard key={program.id} program={program} format={format} selected={selectedProgram === program.id} />
+            {specialized.map(({ meta }) => (
+              <PriceCard key={meta.id} program={meta} format={format} selected={selectedProgram === meta.id} />
             ))}
           </div>
 
@@ -444,7 +435,7 @@ function PricingContent() {
 
             <div className="divide-y divide-[#E2E8F0] dark:divide-gray-800 rounded-2xl border border-[#E2E8F0] dark:border-gray-700/60 overflow-hidden">
               {specialized.map(({ meta, course }) => {
-                const pay = fullPayment(meta.id, format, course.totalLessons);
+                const pay = fullPayment(meta, format, course.totalLessons);
                 return (
                   <div
                     key={meta.id}
@@ -576,7 +567,7 @@ function FullPaymentBlock({
   saleLine: string;
   detail: string;
 }) {
-  const pay = fullPayment(program.id, format, lessons);
+  const pay = fullPayment(program, format, lessons);
   return (
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
       <div className="flex-1 min-w-0">

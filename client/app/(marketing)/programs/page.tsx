@@ -1,26 +1,20 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import {
-  useCatalog,
-  findCourse,
-  describeRange,
-  type Catalog,
-  type CatalogCourse,
-  type CatalogModule,
-} from "@/lib/catalog";
+import { describeRange, type CatalogCourse, type CatalogModule } from "@/lib/catalog";
 import {
   ODYSSEY,
-  PROGRAMS,
   STAGE_NAMES,
   ageSpan,
-  COURSE_OUTCOMES,
+  courseOutcome,
   resolveProgramId,
+  type ProgramEntry,
   type ProgramId,
   type ProgramMeta,
 } from "@/lib/programs";
+import { usePrograms } from "@/lib/usePrograms";
 
 // Shown on the card of the program most families start with.
 const MOST_POPULAR: ProgramId = "ai";
@@ -174,6 +168,11 @@ function ProgramCard({
           <h3 className="text-[#0F172A] dark:text-white font-black text-xl leading-tight">{program.title}</h3>
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${program.badge}`}>{program.ages}</span>
+            {program.beginner.ok && (
+              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                🌱 Beginner-friendly
+              </span>
+            )}
             {program.id === MOST_POPULAR && (
               <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
                 Most Popular
@@ -185,7 +184,8 @@ function ProgramCard({
 
       <p className={`font-bold text-sm mb-1 ${program.accent}`}>{program.tagline}</p>
       <p className="text-[#64748B] dark:text-gray-400 text-xs mb-4">
-        {plural(course.modules.length, "course")} · {course.totalLessons} lessons
+        {course.modules.length > 0 ? `${plural(course.modules.length, "course")} · ` : ""}
+        {course.totalLessons} lessons
       </p>
 
       <ul className="space-y-1.5 mb-5">
@@ -240,7 +240,7 @@ function CourseRow({
   isOpen: boolean;
   onToggle: () => void;
 }) {
-  const outcome = COURSE_OUTCOMES[module.slug];
+  const outcome = courseOutcome(module);
   const hasTest = module.lessonCount > module.learningCount;
   const teachingLessons = module.lessons.filter((l) => l.type === "LEARNING");
   const lessonSummary = `${module.learningCount} lessons${hasTest ? " + test" : ""}`;
@@ -332,14 +332,16 @@ function ProgramDetail({
           </div>
         </div>
         <div className="flex flex-wrap gap-2 flex-shrink-0">
-          <a
-            href={`/curriculums/${program.curriculumFile}`}
-            download
-            className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border ${program.border} ${program.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 transition-all`}
-          >
-            <DownloadIcon className="w-4 h-4" />
-            Download Curriculum
-          </a>
+          {program.curriculumFile && (
+            <a
+              href={`/curriculums/${program.curriculumFile}`}
+              download
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border ${program.border} ${program.badge} text-xs font-bold hover:brightness-95 dark:hover:brightness-125 transition-all`}
+            >
+              <DownloadIcon className="w-4 h-4" />
+              Download Curriculum
+            </a>
+          )}
           <button
             type="button"
             onClick={onClose}
@@ -402,10 +404,9 @@ function ProgramDetail({
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-function JourneyChoice({ catalog, odyssey }: { catalog: Catalog; odyssey: CatalogCourse | undefined }) {
-  const specialized = catalog.courses.filter((c) => c.kind === "specialized");
-  const lessons = describeRange(specialized.map((c) => c.totalLessons));
-  const courses = describeRange(specialized.map((c) => c.modules.length));
+function JourneyChoice({ specialized, odyssey }: { specialized: ProgramEntry[]; odyssey: CatalogCourse | undefined }) {
+  const lessons = describeRange(specialized.map((s) => s.course.totalLessons));
+  const courses = describeRange(specialized.map((s) => s.course.modules.length));
 
   return (
     <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-12">
@@ -455,7 +456,7 @@ function JourneyChoice({ catalog, odyssey }: { catalog: Catalog; odyssey: Catalo
           <p className="text-xs font-semibold text-[#64748B] dark:text-gray-400 mb-1">
             {lessons} lessons · {courses} courses per program
           </p>
-          <p className="text-xs text-[#64748B] dark:text-gray-400 mb-5">{ageSpan(PROGRAMS)}, depending on the program</p>
+          <p className="text-xs text-[#64748B] dark:text-gray-400 mb-5">{ageSpan(specialized.map((s) => s.meta))}, depending on the program</p>
           <span className="mt-auto text-sm font-black text-blue-600 dark:text-blue-400 group-hover:translate-x-1 transition-transform">
             Explore the {specialized.length} programs ↓
           </span>
@@ -476,8 +477,8 @@ function JourneyChoice({ catalog, odyssey }: { catalog: Catalog; odyssey: Catalo
 function ProgramsContent() {
   const searchParams = useSearchParams();
   // `program` is the canonical query param; `pathway` is kept so old links still work.
-  const programParam = resolveProgramId(searchParams.get("program") || searchParams.get("pathway"));
-  const { catalog } = useCatalog();
+  const { odyssey: odysseyEntry, specialized: visible, all } = usePrograms();
+  const programParam = resolveProgramId(searchParams.get("program") || searchParams.get("pathway"), all);
 
   const [openProgram, setOpenProgram] = useState<ProgramId | null>(
     programParam && programParam !== "odyssey" ? programParam : null,
@@ -501,15 +502,7 @@ function ProgramsContent() {
     return () => clearTimeout(timer);
   }, [programParam]);
 
-  const odyssey = findCourse(catalog, ODYSSEY.catalogSlug);
-  const visible = useMemo(
-    () =>
-      PROGRAMS.flatMap((meta) => {
-        const course = findCourse(catalog, meta.catalogSlug);
-        return course ? [{ meta, course }] : [];
-      }),
-    [catalog],
-  );
+  const odyssey = odysseyEntry?.course;
   const open = visible.find((v) => v.meta.id === openProgram);
 
   const toggleProgram = (id: ProgramId) => {
@@ -558,7 +551,7 @@ function ProgramsContent() {
       </section>
 
       {/* The parent decision comes first */}
-      <JourneyChoice catalog={catalog} odyssey={odyssey} />
+      <JourneyChoice specialized={visible} odyssey={odyssey} />
 
       {/* Odyssey */}
       {odyssey && (

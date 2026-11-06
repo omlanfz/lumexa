@@ -83,7 +83,11 @@ describe('question-bank catalog', () => {
       expect(b.type).toBe('COURSE_TEST');
     }
     for (const [slug, b] of Object.entries(DEFAULT_REGISTRY.finalTests)) {
-      expect(b.id).toBe(`final-test/${slug}`);
+      // Bank ids are stable identifiers stored with the assessments, so they keep
+      // the historical "-path" spelling even though registry slots are now "ai-builder".
+      expect(b.id).toBe(
+        slug === 'lumexa-odyssey' ? `final-test/${slug}` : `final-test/${slug}-path`,
+      );
       expect(b.type).toBe('FINAL_TEST');
     }
     for (const [n, b] of Object.entries(DEFAULT_REGISTRY.stageTests)) {
