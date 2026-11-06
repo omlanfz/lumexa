@@ -106,7 +106,14 @@ Proper Markdown (GFM tables in a scroll wrapper, highlighted code that scrolls o
 callouts, safe links and images; raw HTML is shown as text, never run), a 68–72 character reading
 column, table of contents with active highlighting, reading progress, collapsible supplementary
 sections, previous / next that respect access, and Presentation Mode (teacher / admin only, nothing
-private). The live classroom keeps its compact layout (`mode="classroom"`). Progress separates
+private). The live classroom keeps its compact layout (`mode="classroom"`). The contents sidebar
+("On this page") can be hidden with a toggle button at its top-left — the same button brings it
+back, from the student, teacher and admin lesson views alike. Hidden, it collapses to a slim rail
+that keeps the button where it was, and the lesson content takes the freed space: cards, visuals,
+code and tables use the wider column (diagrams stay centred at a sensible size), the reading
+measure grows from 72 to 86 characters and the progress chips sit in one row. The choice is
+remembered on the device (`lumexa:lesson-sidebar`) and applies to every lesson; below the `lg`
+breakpoint the contents stay a collapsible drawer. Progress separates
 *read*, *activities*, *quiz* and *homework*; opening a page never completes it. No XP, levels,
 streaks or badges were added.
 

@@ -1498,7 +1498,57 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
   .lesson-presenting .lesson-prose blockquote,
   .lesson-presenting .lesson-prose .lesson-callout { max-width: 80ch; }
 
+  /* ── Lesson page layout: the contents sidebar can be hidden ────────────────
+     Open:   [ contents | content ] — the reading column is capped at 56rem.
+     Hidden: the sidebar collapses to a slim rail that keeps the toggle button exactly where
+             it was, and the content takes the freed space — wider blocks (cards, visuals,
+             code, tables), a slightly longer reading measure and a one-row progress strip. */
+  .lesson-layout { display: block; }
+  .lesson-content { max-width: 56rem; }
+  .lesson-quiz { max-width: 56rem; }
+  /* The four study-progress chips: one column, two from the small breakpoint (as before). */
+  .lesson-progress-grid { display: grid; gap: 0.5rem; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 640px) { .lesson-progress-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  @media (min-width: 1024px) {
+    .lesson-layout {
+      display: grid;
+      grid-template-columns: 15rem minmax(0, 1fr);
+      column-gap: 2rem;
+      transition: grid-template-columns 0.24s ease, column-gap 0.24s ease;
+    }
+    .lesson-layout[data-sidebar='hidden'] { grid-template-columns: 2.25rem minmax(0, 1fr); column-gap: 1rem; }
+    .lesson-content { transition: max-width 0.24s ease; }
+    .lesson-layout[data-sidebar='hidden'] .lesson-content { max-width: 78rem; }
+
+    /* overflow-x: clip, not hidden — a scroll container would stop the sticky sidebar sticking */
+    .lesson-sidebar { min-width: 0; overflow-x: clip; }
+    .lesson-sidebar-sticky { position: sticky; top: 6rem; display: flex; flex-direction: column; width: 15rem; max-height: calc(100vh - 7rem); }
+    .lesson-sidebar-head { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; margin-bottom: 0.5rem; }
+    .lesson-sidebar-title { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #6b7280; white-space: nowrap; }
+    :where(.dark) .lesson-sidebar-title { color: #9ca3af; }
+    .lesson-sidebar-body { min-height: 0; overflow-y: auto; padding-right: 0.5rem; opacity: 1; transition: opacity 0.18s ease 0.06s; }
+    .lesson-layout[data-sidebar='hidden'] .lesson-sidebar-title { display: none; }
+    .lesson-layout[data-sidebar='hidden'] .lesson-sidebar-body { visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 0.12s ease, visibility 0s linear 0.12s; }
+
+    /* The freed width goes to the reading experience. */
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose p,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose ul,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose ol,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose blockquote,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-callout,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-h2,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-h3,
+    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-h4 { max-width: 86ch; }
+    .lesson-layout[data-sidebar='hidden'] .lesson-progress-grid { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+    /* Pictures and diagrams stay a sensible size in the wider column: centred, and never
+       blown up past ~1.15x their natural size (but never smaller than with the sidebar open). */
+    .lesson-layout[data-sidebar='hidden'] .lesson-visual { max-width: 66rem; margin-inline: auto; }
+    .lesson-layout[data-sidebar='hidden'] .lesson-visual svg { max-width: max(calc(var(--natural, 100%) * 1.15), 54rem); margin-inline: auto; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
+    .lesson-layout, .lesson-content, .lesson-sidebar-body { transition: none; }
     .lesson-visual-skeleton { animation: none; }
     .lesson-prose *, .lesson-visual * { scroll-behavior: auto; }
   }

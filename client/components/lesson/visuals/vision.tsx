@@ -340,7 +340,7 @@ export function BoundingBox({ config, onUse }: VisualProps) {
 
   return (
     <div>
-      <svg viewBox={`${-fs * 4.6} ${-fs * 2.2} ${W + fs * 6.4} ${H + fs * 4.6}`} aria-hidden="true" focusable="false" style={{ borderRadius: 10 }}>
+      <svg viewBox={`${-fs * 4.6} ${-fs * 2.2} ${W + fs * 6.4} ${H + fs * 4.6}`} aria-hidden="true" focusable="false" style={{ borderRadius: 10, ['--natural' as string]: `${Math.round(W + fs * 6.4)}px` }}>
         <defs>
           <linearGradient id={`bb-${gradId}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" stopColor="#bfdbfe" />
@@ -533,7 +533,7 @@ export function DetectionLab({ onUse }: VisualProps) {
 
   return (
     <div>
-      <svg viewBox={`0 0 ${LAB_W} ${LAB_H}`} aria-hidden="true" focusable="false" style={{ borderRadius: 10, border: `1px solid ${C.border}` }}>
+      <svg viewBox={`0 0 ${LAB_W} ${LAB_H}`} aria-hidden="true" focusable="false" style={{ borderRadius: 10, border: `1px solid ${C.border}`, ['--natural' as string]: `${LAB_W}px` }}>
         <rect width={LAB_W} height={LAB_H} fill="#dbeafe" />
         <rect y={LAB_H * 0.8} width={LAB_W} height={LAB_H * 0.2} fill="#b7c9a8" />
         {LAB_OBJECTS.map((o) =>

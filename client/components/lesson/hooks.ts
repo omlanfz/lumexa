@@ -5,7 +5,8 @@
 // Scroll-driven behaviour for the lesson page: which heading is "current", whether a
 // section has genuinely been read, and how far down the lesson the reader is.
 
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { getSidebarOpen, setSidebarOpen, subscribeSidebar } from '@/lib/lesson/sidebarPreference';
 
 /** How long the end of a section must stay on screen before it counts as read. */
 export const READ_DWELL_MS = 1500;
@@ -117,4 +118,14 @@ export function useScrollProgress(target: RefObject<HTMLElement | null>, enabled
     };
   }, [target, enabled, scroller]);
   return p;
+}
+
+/**
+ * Whether the contents sidebar is open, and a setter. Open for the server render and the
+ * first paint, then the reader's remembered choice (shared by every lesson, every role).
+ */
+export function useLessonSidebar(): [boolean, (open: boolean) => void] {
+  const open = useSyncExternalStore(subscribeSidebar, getSidebarOpen, () => true);
+  const set = useCallback((next: boolean) => setSidebarOpen(next), []);
+  return [open, set];
 }
