@@ -5,7 +5,8 @@ import { isConformingQuestion, normalizeQuiz } from './quiz';
 import { quizCatalogFor } from './quiz-catalog';
 import './catalog';
 import { MCQ_OPTION_COUNT, type McqQuestion } from './types';
-import { allSourceLessons, contextOf, fieldsOf } from './test-support';
+import { readQuiz } from './serialize';
+import { allSourceLessons, contextOf, fieldsOf, upgradeAll } from './test-support';
 
 const four = (over: Record<string, unknown> = {}) => ({ id: 'q1', type: 'multiple_choice', prompt: 'Which one?', options: ['a', 'b', 'c', 'd'], correctIndex: 1, explanation: 'Because b.', ...over });
 const ctx = { lineage: null, title: 'Nothing registered for this title' };
@@ -204,6 +205,26 @@ describe('the hand-written rewrites cover every shipped lesson', () => {
       expect({ label, explained: w.explanation.trim().length > 10 && w.explanation.length <= 1500 }).toEqual({ label, explained: true });
       if (w.prompt) expect({ label, ok: w.prompt.length <= 1500 }).toEqual({ label, ok: true });
     }
+  });
+
+  it('does not give the answer away by length: the right option is rarely much longer than the wrong ones', () => {
+    // The hand-written questions (not the courses' own) — a learner who simply picks the longest answer should not pass.
+    let n = 0;
+    let longest = 0;
+    let decisive = 0;
+    for (const { patch } of upgradeAll()) {
+      for (const q of readQuiz(patch.miniQuiz)) {
+        if (q.source !== 'authored') continue;
+        const wrong = q.options.filter((_, i) => i !== q.correctIndex).map((o) => o.length);
+        const right = q.options[q.correctIndex].length;
+        n++;
+        if (right > Math.max(...wrong)) longest++;
+        if (right >= 1.2 * Math.max(...wrong) && right - Math.max(...wrong) >= 8) decisive++;
+      }
+    }
+    expect(n).toBeGreaterThan(340);
+    expect(longest / n).toBeLessThan(0.55); // chance is about 25%
+    expect(decisive / n).toBeLessThan(0.1);
   });
 
   it('the Advanced Data Science course’s lessons (matched by title) end up as multiple choice only, each question matched once', () => {
