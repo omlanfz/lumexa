@@ -15,7 +15,9 @@ import CertificatePreviewModal from '@/components/student/certificates/Certifica
 import ShareCertificateModal from '@/components/student/certificates/ShareCertificateModal';
 import StudentCertificateCard from '@/components/student/certificates/StudentCertificateCard';
 import { studentCertificates } from '@/lib/certificates/api';
+import { certificatesToMarkSeen } from '@/lib/certificates/seen';
 import { useMyCertificates } from '@/lib/certificates/useCertificates';
+import { getImpersonationBackup } from '@/lib/storage';
 import type { StudentCertificate } from '@/lib/certificates/types';
 
 function CertificatesSkeleton() {
@@ -46,12 +48,15 @@ function CertificatesContent() {
     );
   }, [certificates]);
 
-  // Seeing the certificates clears the home page's achievement card.
+  // Seeing the certificates clears the home page's achievement card — but only
+  // when the STUDENT is looking. An admin viewing the student's dashboard
+  // (impersonation) must not clear a card the student has not seen yet.
   useEffect(() => {
-    for (const cert of certificates ?? []) {
-      if (cert.status === 'ACTIVE' && !cert.seen) {
-        void studentCertificates.markSeen(cert.certificateId).catch(() => undefined);
-      }
+    for (const id of certificatesToMarkSeen(
+      certificates ?? [],
+      getImpersonationBackup() !== null,
+    )) {
+      void studentCertificates.markSeen(id).catch(() => undefined);
     }
   }, [certificates]);
 
