@@ -154,6 +154,15 @@ export default function CertificateDetailModal({
                   From the previous system
                 </span>
               )}
+              {cert.designOutdated && !cert.isLegacy && (
+                <span
+                  className="rounded-full bg-[var(--a-warning-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--a-warning-text)]"
+                  title="Issued before the design was updated. It can be re-issued in the current design from Replace…"
+                  data-testid="earlier-design-badge"
+                >
+                  Earlier design ({cert.templateVersion})
+                </span>
+              )}
               {cert.withDistinction && (
                 <span className="rounded-full bg-[var(--a-info-bg)] px-2.5 py-1 text-xs font-semibold text-[var(--a-info)]">
                   With Distinction

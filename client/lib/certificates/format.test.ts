@@ -8,6 +8,7 @@ import {
   firstName,
   formatBytes,
   formatCertificateDate,
+  readBlobError,
   studentStatusLabel,
   verificationHeadline,
 } from './format.ts';
@@ -79,4 +80,29 @@ test('an API error becomes a readable sentence', () => {
   assert.equal(apiErrorMessage({}, 'fallback'), 'fallback');
   assert.equal(apiErrorMessage(null, 'fallback'), 'fallback');
   assert.equal(apiErrorMessage({ response: { data: { message: '   ' } } }, 'fallback'), 'fallback');
+});
+
+test('a failed FILE request still gives the server\'s own message', async () => {
+  const body = JSON.stringify({ message: 'FRONTEND_URL is not set.' });
+  const err = { response: { data: new Blob([body], { type: 'application/json' }) } };
+  // as axios hands it over, the message is locked inside a Blob…
+  assert.equal(apiErrorMessage(err, 'fallback'), 'fallback');
+  // …until it is read back out
+  assert.equal(await readBlobError(err), err);
+  assert.equal(apiErrorMessage(err, 'fallback'), 'FRONTEND_URL is not set.');
+});
+
+test('reading a failure body never throws and never changes what it cannot read', async () => {
+  const html = { response: { data: new Blob(['<html>Bad gateway</html>'], { type: 'text/html' }) } };
+  await readBlobError(html);
+  assert.ok(html.response.data instanceof Blob); // left alone
+  assert.equal(apiErrorMessage(html, 'fallback'), 'fallback');
+
+  const parsed = { response: { data: { message: 'Already parsed.' } } };
+  await readBlobError(parsed);
+  assert.equal(apiErrorMessage(parsed, 'fallback'), 'Already parsed.');
+
+  const offline = new Error('Network Error');
+  assert.equal(await readBlobError(offline), offline);
+  assert.equal(await readBlobError(null), null);
 });

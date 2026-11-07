@@ -75,6 +75,9 @@ export interface AdminCertificate {
   themeColor: string | null;
   templateVersion: string;
   isLegacy: boolean;
+  /** Issued with an earlier design (or by the previous system): can be re-issued as it
+   * is, in the current design. */
+  designOutdated: boolean;
   verificationUrl: string | null;
   files: {
     pdf: boolean;
@@ -185,4 +188,32 @@ export interface CertificateDetailsInput {
   programName: string;
   completionDate: string;
   withDistinction: boolean;
+}
+
+/** One certificate theme and the programmes that get it right now. */
+export interface ThemeInfo {
+  key: string;
+  label: string;
+  /** The colour described for people, e.g. "Deep blue". */
+  accent: string;
+  /** A real swatch colour (hex). */
+  color: string;
+  programs: { id: string; title: string }[];
+}
+
+export interface ThemesResponse {
+  /** The design version a certificate issued today is rendered with. */
+  templateVersion: string;
+  themes: ThemeInfo[];
+}
+
+/** What the admin's "Preview template" tool asks for. */
+export interface TemplatePreviewRequest {
+  theme: string;
+  recipientName?: string;
+  programName?: string;
+  completionDate?: string;
+  withDistinction?: boolean;
+  /** png (default) to look at, pdf to open as it prints. */
+  format?: 'png' | 'pdf';
 }

@@ -10,6 +10,7 @@
 // server, never regenerated.
 
 import api from '@/lib/axios';
+import { readBlobError } from './format';
 import type {
   AchievementResponse,
   AdminCertificate,
@@ -21,14 +22,25 @@ import type {
   Paged,
   ReviewDetail,
   StudentCertificate,
+  TemplatePreviewRequest,
+  ThemesResponse,
 } from './types';
 
 export type FileKind = 'pdf' | 'png';
 
+/** A file request: the Blob on success; on failure the server's own message, readable
+ * through apiErrorMessage() (see readBlobError). */
+async function asFile(request: Promise<{ data: Blob }>): Promise<Blob> {
+  try {
+    return (await request).data;
+  } catch (err) {
+    throw await readBlobError(err);
+  }
+}
+
 /** An authenticated GET of a binary file. */
 export async function fetchBlob(path: string): Promise<Blob> {
-  const res = await api.get<Blob>(path, { responseType: 'blob' });
-  return res.data;
+  return asFile(api.get<Blob>(path, { responseType: 'blob' }));
 }
 
 // ─── Student ─────────────────────────────────────────────────────────────────
@@ -105,12 +117,28 @@ export const adminCertificates = {
     reviewId: string,
     details: CertificateDetailsInput,
   ): Promise<Blob> {
-    const res = await api.post<Blob>(
-      `/admin/certificates/reviews/${encodeURIComponent(reviewId)}/preview`,
-      details,
-      { responseType: 'blob' },
+    return asFile(
+      api.post<Blob>(
+        `/admin/certificates/reviews/${encodeURIComponent(reviewId)}/preview`,
+        details,
+        { responseType: 'blob' },
+      ),
     );
-    return res.data;
+  },
+
+  /** The themes and which programmes use each one right now. */
+  async themes(): Promise<ThemesResponse> {
+    return (await api.get<ThemesResponse>('/admin/certificates/themes')).data;
+  },
+
+  /** A watermarked sample of the finished design (PNG or PDF). Nothing is issued,
+   * stored or emailed. */
+  async templatePreview(body: TemplatePreviewRequest): Promise<Blob> {
+    return asFile(
+      api.post<Blob>('/admin/certificates/template-preview', body, {
+        responseType: 'blob',
+      }),
+    );
   },
 
   async approve(

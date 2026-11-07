@@ -24,6 +24,7 @@ import {
 } from "@/components/admin/AdminUI";
 import ApprovalModal from "@/components/admin/certificates/ApprovalModal";
 import CertificateDetailModal from "@/components/admin/certificates/CertificateDetailModal";
+import TemplatePreviewModal from "@/components/admin/certificates/TemplatePreviewModal";
 import { BTN_GHOST, BTN_PRIMARY, INPUT, ThemePill } from "@/components/admin/certificates/shared";
 import { adminCertificates } from "@/lib/certificates/api";
 import { notifyCertificatesChanged } from "@/lib/certificates/events";
@@ -70,6 +71,7 @@ function CertificatesContent() {
 
   const [approving, setApproving] = useState<CertificateReview | null>(null);
   const [dismissing, setDismissing] = useState<CertificateReview | null>(null);
+  const [showTemplate, setShowTemplate] = useState(false);
   const [openId, setOpenId] = useState<string | null>(searchParams.get("certificate"));
 
   const loadSummary = useCallback(() => {
@@ -143,12 +145,23 @@ function CertificatesContent() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--a-text)]">Certificates</h1>
-        <p className="mt-1 text-sm text-[var(--a-text-muted)]">
-          Review finished programs, approve official certificates, and manage the ones already issued. Certificates and their
-          files are kept permanently.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--a-text)]">Certificates</h1>
+          <p className="mt-1 text-sm text-[var(--a-text-muted)]">
+            Review finished programs, approve official certificates, and manage the ones already issued. Certificates and
+            their files are kept permanently.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={BTN_GHOST}
+          onClick={() => setShowTemplate(true)}
+          data-testid="open-template-preview"
+          title="See the finished design — nothing is issued or stored"
+        >
+          Preview template
+        </button>
       </div>
 
       {readiness && !readiness.canIssue && (
@@ -419,6 +432,8 @@ function CertificatesContent() {
         totalPages={(tab === "pending" ? reviews?.totalPages : issued?.totalPages) ?? 1}
         onChange={setPage}
       />
+
+      {showTemplate && <TemplatePreviewModal onClose={() => setShowTemplate(false)} />}
 
       {approving && (
         <ApprovalModal
