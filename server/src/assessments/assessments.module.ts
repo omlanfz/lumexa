@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma.module';
 import { AlertsModule } from '../alerts/alerts.module';
-import { CertificatesModule } from '../certificates/certificates.module';
 import { AssessmentsController } from './assessments.controller';
 import { AssessmentsService } from './assessments.service';
 import { ClassTestsService } from './class-tests.service';
@@ -12,7 +11,7 @@ import { TestReportsService } from './test-reports.service';
 // in-process code runner and AI auto-grader were removed: nothing needs to
 // execute student-submitted code inside the API process anymore.
 @Module({
-  imports: [PrismaModule, CertificatesModule, AlertsModule],
+  imports: [PrismaModule, AlertsModule],
   controllers: [AssessmentsController, TestReportsController],
   providers: [AssessmentsService, ClassTestsService, TestReportsService],
   exports: [AssessmentsService, ClassTestsService, TestReportsService],

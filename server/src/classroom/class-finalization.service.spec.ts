@@ -82,6 +82,9 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
   const studentProgress = {
     syncAfterClass: jest.fn().mockResolvedValue(undefined),
   };
+  const certificateReviews = {
+    onClassFinalized: jest.fn().mockResolvedValue(undefined),
+  };
 
   const service = new ClassFinalizationService(
     prisma as any,
@@ -95,6 +98,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     batches as any,
     rooms as any,
     studentProgress as any,
+    certificateReviews as any,
   );
   return {
     service,
@@ -110,6 +114,7 @@ function setup(lesson: ReturnType<typeof makeLesson> | null = makeLesson()) {
     batches,
     rooms,
     studentProgress,
+    certificateReviews,
   };
 }
 
@@ -980,5 +985,98 @@ describe('ClassFinalizationService — student progress hook', () => {
       'student-1',
       'student-2',
     ]);
+  });
+});
+
+// ─── The admin's certificate review follows a taken class ────────────────────
+//
+// Finalising a class as taken asks CertificateReviewsService whether it was the
+// student's FINAL class of the programme (that service decides, from the class
+// records, and creates the review at most once). Finalization itself decides
+// nothing about certificates and must never fail because of them.
+
+describe('ClassFinalizationService — certificate review hook', () => {
+  it('a 1:1 COMPLETED class asks for the student/programme to be checked', async () => {
+    const t = setup();
+    await t.service.finalizeLesson(LESSON_ID, {
+      outcome: 'COMPLETED',
+      actor: teacher,
+    });
+    expect(t.certificateReviews.onClassFinalized).toHaveBeenCalledTimes(1);
+    expect(t.certificateReviews.onClassFinalized).toHaveBeenCalledWith(
+      'course-1',
+      ['student-1'],
+    );
+  });
+
+  it('a PARTIALLY_COMPLETED class counts as taken too (the extra class decides when it is over)', async () => {
+    const t = setup();
+    await t.service.finalizeLesson(LESSON_ID, {
+      outcome: 'PARTIALLY_COMPLETED',
+      actor: teacher,
+    });
+    expect(t.certificateReviews.onClassFinalized).toHaveBeenCalledWith(
+      'course-1',
+      ['student-1'],
+    );
+  });
+
+  it('an INCOMPLETE class never prompts (nothing was taken)', async () => {
+    const t = setup();
+    await t.service.finalizeLesson(LESSON_ID, {
+      outcome: 'INCOMPLETE',
+      reason: ClassEndReason.TECHNICAL_ISSUE,
+      actor: teacher,
+    });
+    expect(t.certificateReviews.onClassFinalized).not.toHaveBeenCalled();
+  });
+
+  it('a repeated finalization (already finalized) prompts nothing more', async () => {
+    const t = setup(null);
+    t.prisma.scheduledLesson.findUnique.mockResolvedValue({
+      ...(await t.prisma.scheduledLesson.findUnique({
+        where: { id: LESSON_ID },
+      })),
+      status: LessonStatus.COMPLETED,
+      endedByRole: 'TEACHER',
+    });
+    const res = await t.service.finalizeLesson(LESSON_ID, {
+      outcome: 'COMPLETED',
+      actor: teacher,
+    });
+    expect(res.finalized).toBe(false);
+    expect(t.certificateReviews.onClassFinalized).not.toHaveBeenCalled();
+  });
+
+  it('a batch class prompts for the credited students only, not an absent one', async () => {
+    const t = setupBatch(
+      makeSession([
+        participant(1),
+        participant(2),
+        participant(3, { studentJoinedAt: null }),
+      ]),
+    );
+    await t.service.finalizeBatchSession(SESSION_ID, {
+      outcome: 'COMPLETED',
+      actor: teacher,
+    });
+    expect(t.certificateReviews.onClassFinalized).toHaveBeenCalledTimes(1);
+    const [courseId, ids] = t.certificateReviews.onClassFinalized.mock
+      .calls[0] as [string, string[]];
+    expect(courseId).toBe('course-1');
+    expect([...ids].sort()).toEqual(['student-1', 'student-2']);
+  });
+
+  it('a failing review prompt never fails the class finalization', async () => {
+    const t = setup();
+    t.certificateReviews.onClassFinalized.mockRejectedValue(
+      new Error('db down'),
+    );
+    await expect(
+      t.service.finalizeLesson(LESSON_ID, {
+        outcome: 'COMPLETED',
+        actor: teacher,
+      }),
+    ).resolves.toEqual({ finalized: true, status: 'COMPLETED' });
   });
 });

@@ -180,6 +180,7 @@ function flatMatch(row: Row, where: Row): boolean {
 
 function setup(initial: Row, opts: { teacherProfile?: boolean } = {}) {
   const db = { report: initial, attemptUpdates: [] as Row[] };
+  const certificateFindFirst = jest.fn().mockResolvedValue(null);
   const prisma: any = {
     teacherProfile: {
       findUnique: jest
@@ -216,7 +217,7 @@ function setup(initial: Row, opts: { teacherProfile?: boolean } = {}) {
       }),
     },
     practicalSubmission: { updateMany: jest.fn().mockResolvedValue({}) },
-    certificate: { findFirst: jest.fn().mockResolvedValue(null) },
+    certificate: { findFirst: certificateFindFirst },
     emailLog: { findUnique: jest.fn().mockResolvedValue(null) },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
@@ -225,15 +226,8 @@ function setup(initial: Row, opts: { teacherProfile?: boolean } = {}) {
       .fn()
       .mockResolvedValue({ ok: true, logId: 'mail-1' }),
   };
-  const certificates = {
-    checkAndIssueCertificate: jest.fn().mockResolvedValue(null),
-  };
-  const service = new TestReportsService(
-    prisma,
-    notifications as any,
-    certificates as any,
-  );
-  return { service, prisma, db, notifications, certificates };
+  const service = new TestReportsService(prisma, notifications as any);
+  return { service, prisma, db, notifications, certificateFindFirst };
 }
 
 describe('TestReportsService — access', () => {
@@ -555,28 +549,24 @@ describe('TestReportsService.approve / reopen', () => {
     expect(db.attemptUpdates).toHaveLength(0);
   });
 
-  it('a passed Final Test triggers the certificate check; a failed one does not', async () => {
+  it('approving a Final Test never issues a certificate by itself', async () => {
+    // Certificates are approved by an admin after the student's final class
+    // (server/src/certificates) — a passed (or failed) Final Test report only
+    // records the result. The service has no certificate dependency at all, and
+    // approval must not even read the certificate table.
     const marks = (a: number, b: number): RubricScore[] => [
       { criterion: 'Functions', maxPoints: 8, score: a },
       { criterion: 'Calculations', maxPoints: 12, score: b },
     ];
     const pass = setup(finalReport({ codingRubricScores: marks(8, 12) }));
     await pass.service.approve('rep-1', TEACHER);
-    expect(pass.certificates.checkAndIssueCertificate).toHaveBeenCalledWith(
-      STUDENT.userId,
-      'course-1',
-    );
+    expect(pass.db.report.passed).toBe(true);
+    expect(pass.certificateFindFirst).not.toHaveBeenCalled();
 
     const fail = setup(finalReport({ codingRubricScores: marks(0, 0) }));
     await fail.service.approve('rep-1', TEACHER);
     expect(fail.db.report.passed).toBe(false);
-    expect(fail.certificates.checkAndIssueCertificate).not.toHaveBeenCalled();
-  });
-
-  it('a passed course test does not trigger a certificate', async () => {
-    const { service, certificates } = setup(courseReport());
-    await service.approve('rep-1', TEACHER);
-    expect(certificates.checkAndIssueCertificate).not.toHaveBeenCalled();
+    expect(fail.certificateFindFirst).not.toHaveBeenCalled();
   });
 
   it('approving twice is refused', async () => {

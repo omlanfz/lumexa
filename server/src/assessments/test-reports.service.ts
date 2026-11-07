@@ -35,7 +35,6 @@ import {
   TestReportStatus,
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
-import { CertificatesService } from '../certificates/certificates.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import {
   QuestionResult,
@@ -113,7 +112,6 @@ export class TestReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
-    private readonly certificates: CertificatesService,
   ) {}
 
   // ─── Access ───────────────────────────────────────────────────────────────
@@ -621,15 +619,9 @@ export class TestReportsService {
       });
     });
 
-    if (report.assessmentType === SessionType.FINAL_TEST && totals.passed) {
-      this.certificates
-        .checkAndIssueCertificate(report.studentUserId, report.courseId)
-        .catch((err) =>
-          this.logger.warn(
-            `Certificate check after report ${id} failed: ${err}`,
-          ),
-        );
-    }
+    // An approved Final Test report does not issue a certificate by itself:
+    // certificates are approved by an admin after the student's final class
+    // (see server/src/certificates).
     return this.get(id, requester);
   }
 

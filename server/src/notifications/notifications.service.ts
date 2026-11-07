@@ -9,7 +9,7 @@
 // this codebase (see StudentLedgerService, EngagementService, etc.).
 
 import { Injectable, Logger } from '@nestjs/common';
-import { EmailService, EmailAttachment } from '../email/email.service';
+import { EmailService } from '../email/email.service';
 import {
   welcomeEmail,
   passwordResetEmail,
@@ -489,28 +489,53 @@ export class NotificationsService {
     );
   }
 
-  async sendCertificateIssuedEmail(
-    to: string,
-    data: {
-      studentUserId: string;
-      courseId: string;
-      studentName: string;
-      courseName: string;
-      progressSummaryHtml: string;
-      recommendedCourseName: string | null;
-      recommendedCourseBlurb: string | null;
-    },
-    attachments: EmailAttachment[],
-  ): Promise<void> {
-    const dashboardUrl = `${process.env.FRONTEND_URL}/student-dashboard`;
-    const { subject, html } = certificateIssuedEmail({ ...data, dashboardUrl });
-    await this.email.send({
-      to,
+  /** The certificate congratulations, with the stored PDF attached.
+   *
+   * Like the test report it is NOT fire-and-forget: CertificateEmailService must
+   * know whether the mail server really accepted it before it may call the
+   * certificate "emailed", so this waits for the delivery attempt and returns
+   * the real outcome (see EmailService.sendTracked). Each attempt has its own
+   * dedupe key — a retried HTTP request for the same attempt is a no-op, while a
+   * deliberate retry after a failure is a new attempt. Every link is passed in
+   * by the caller, built from the strict FRONTEND_URL helper (certificate-config)
+   * rather than the lenient one above. */
+  async sendCertificateIssuedEmail(data: {
+    to: string;
+    studentUserId: string;
+    certificateRowId: string;
+    attempt: number;
+    studentFirstName: string;
+    programName: string;
+    completionDate: string;
+    certificateId: string;
+    certificateUrl: string;
+    verificationUrl: string;
+    programCatalogueUrl: string;
+    pdf: Buffer;
+  }) {
+    const { subject, html } = certificateIssuedEmail({
+      studentFirstName: data.studentFirstName,
+      programName: data.programName,
+      completionDate: data.completionDate,
+      certificateId: data.certificateId,
+      certificateUrl: data.certificateUrl,
+      verificationUrl: data.verificationUrl,
+      programCatalogueUrl: data.programCatalogueUrl,
+    });
+    return this.email.sendTracked({
+      to: data.to,
       subject,
       html,
       category: 'CERTIFICATE_ISSUED',
-      dedupeKey: `certificate:${data.studentUserId}:${data.courseId}`,
-      attachments,
+      dedupeKey: `certificate:${data.certificateRowId}:attempt:${data.attempt}`,
+      relatedUserId: data.studentUserId,
+      attachments: [
+        {
+          filename: `Lumexa-Certificate-${data.certificateId}.pdf`,
+          content: data.pdf,
+          contentType: 'application/pdf',
+        },
+      ],
     });
   }
 

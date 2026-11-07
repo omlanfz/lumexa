@@ -49,7 +49,6 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AlertsService } from '../alerts/alerts.service';
-import { CertificatesService } from '../certificates/certificates.service';
 import {
   getClassWindow,
   JOIN_WINDOW_MS,
@@ -142,7 +141,6 @@ export class AssessmentsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly certificates: CertificatesService,
     private readonly alerts: AlertsService,
   ) {}
 
@@ -1336,14 +1334,9 @@ export class AssessmentsService {
         gradedAt: new Date(),
       },
     });
-    if (passed) {
-      this.certificates
-        .checkAndIssueCertificate(
-          attempt.studentUserId,
-          attempt.assessment.lesson.courseId,
-        )
-        .catch(() => {});
-    }
+    // Passing a Final Test no longer issues a certificate: certificates are
+    // approved by an admin after the student's final class (see
+    // server/src/certificates). The result stays on the record the admin reviews.
     return viva;
   }
 

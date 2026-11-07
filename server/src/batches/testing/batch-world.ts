@@ -7,6 +7,7 @@
 
 import { Role } from '@prisma/client';
 import { AuditService } from '../../audit/audit.service';
+import { CertificateReviewsService } from '../../certificates/certificate-reviews.service';
 import { ClassFinalizationService } from '../../classroom/class-finalization.service';
 import { PayoutsService } from '../../payouts/payouts.service';
 import { PrismaService } from '../../prisma.service';
@@ -103,6 +104,7 @@ export function buildBatchWorld(prisma: PrismaService): BatchWorld {
     // No video provider in these tests: closing a room is a no-op.
     { deleteRoom: () => Promise.resolve() } as never,
     new StudentProgressService(prisma, notifications as never),
+    new CertificateReviewsService(prisma),
   );
   return {
     prisma,

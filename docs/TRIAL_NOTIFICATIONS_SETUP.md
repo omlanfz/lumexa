@@ -173,7 +173,7 @@ layout (`email/templates/layout.ts`) and `NotificationsService`.
 | Monthly digest | monthly cron, 1st 08:00 UTC (`engagement.service`) | billing contact | yes |
 | Gem top-up request | child requests gems (`gems.service`) | billing contact | yes |
 | Class credits running low (≤ 3) / run out | daily cron 03:00 UTC (`package-alerts.service`); the **Make a payment** button opens the admin's WhatsApp chat (see `docs/STUDENT_PROGRESS_AND_CREDITS.md`) | billing contact or student | yes |
-| Certificate issued | certificate generation (`certificates.service`) | billing contact or student | yes |
+| Certificate issued | after an admin approves a certificate and its PDF is stored (`certificate-email.service`; see `docs/CERTIFICATES_SETUP.md`) | billing contact or student | yes (per certificate and attempt) |
 | Admin: new registration / new teacher application | `auth.service`, `students.service` | `ADMIN_NOTIFICATION_EMAILS` | yes |
 | Admin: dispute filed | `disputes.service` | `ADMIN_NOTIFICATION_EMAILS` | yes |
 | Admin: high cancellation rate / low activity | daily cron 04:00 UTC (`admin-alerts.service`) | `ADMIN_NOTIFICATION_EMAILS` | yes |
@@ -195,8 +195,11 @@ layout (`email/templates/layout.ts`) and `NotificationsService`.
 own copy and a retry can never duplicate one.) No other email events were added.
 
 **Greeting.** No Lumexa email says "Hi {name}": every email to a family (trial,
-class, certificate, report card, welcome, password reset, the class-credit emails)
-opens "Dear Parent,". Emails to a teacher or admin open "Dear {name},".
+class, report card, welcome, password reset, the class-credit emails) opens
+"Dear Parent,". Emails to a teacher or admin open "Dear {name},". The one exception
+is the **certificate** email, which is the founder's own congratulation to the
+student and opens "Hi {student first name}," (its wording is fixed in
+`certificateIssuedEmail`; `templates.spec.ts` checks it separately).
 
 ### What was missing / changed
 

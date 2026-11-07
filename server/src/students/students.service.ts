@@ -801,7 +801,7 @@ export class StudentsService {
         subjects: true,
         createdAt: true,
         billingContactEmail: true,
-        assignedCourse: { select: { title: true, emoji: true } },
+        assignedCourse: { select: { id: true, title: true, emoji: true } },
       },
     });
     if (!user) throw new NotFoundException('Student not found.');
@@ -960,6 +960,9 @@ export class StudentsService {
               ),
             )
           : null,
+        // The programme's id lets the Learning page link a completed programme
+        // to its certificate.
+        courseId: user.assignedCourse?.id ?? null,
         courseTitle: user.assignedCourse?.title ?? null,
         courseEmoji: user.assignedCourse?.emoji ?? null,
         earnedBadges: badges.filter((b) => b.earned).length,

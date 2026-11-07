@@ -9,7 +9,7 @@ import LiveClassCard, { LiveClass } from '@/components/student/LiveClassCard';
 import SessionReviewCard from '@/components/student/SessionReviewCard';
 import CreditsReminder from '@/components/student/CreditsReminder';
 import RankUpCeremony from '@/components/student/RankUpCeremony';
-import CertificatesCard from '@/components/student/CertificatesCard';
+import CertificateAchievementCard from '@/components/student/CertificateAchievementCard';
 import HomeworkDueCard, { PendingHomeworkItem } from '@/components/student/HomeworkDueCard';
 import HomeworkNeedsChangesCard, {
   NeedsChangesHomeworkItem,
@@ -315,6 +315,9 @@ export default function StudentDashboardPage() {
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">{motivation}</p>
       </div>
 
+      {/* A new certificate — shown until the student has opened their certificates */}
+      <CertificateAchievementCard firstName={firstName} />
+
       {isDemoStudent && (
         <div className="flex items-center justify-between gap-3 flex-wrap px-4 py-3.5 bg-teal-500/10 border border-dashed border-teal-500/40 rounded-xl">
           <p className="text-sm font-medium text-gray-900 dark:text-white">
@@ -451,9 +454,6 @@ export default function StudentDashboardPage() {
               </div>
             </div>
           </div>
-
-          {/* 6. Certificates — only renders once the student has earned one */}
-          <CertificatesCard />
         </>
       )}
     </div>

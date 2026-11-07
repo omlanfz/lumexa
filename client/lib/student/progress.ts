@@ -127,6 +127,8 @@ export interface ProgressData {
     lessonsCompleted: number;
     totalLessons: number | null;
     curriculumProgressPct: number | null;
+    /** The assigned programme's id — links a completed programme to its certificate. */
+    courseId: string | null;
     courseTitle: string | null;
     courseEmoji: string | null;
     earnedBadges: number;

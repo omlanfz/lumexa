@@ -196,14 +196,6 @@ describe('"Dear Parent" — no Lumexa email says "Hi {name}"', () => {
       teacherName: 'Mr Rahman',
       classStart: when,
     }).html,
-    certificate: certificateIssuedEmail({
-      studentName: 'Ada',
-      courseName: 'AI Builder Path',
-      progressSummaryHtml: '<p>Great</p>',
-      recommendedCourseName: null,
-      recommendedCourseBlurb: null,
-      dashboardUrl: 'https://x.test/d',
-    }).html,
     testReport: testReportEmail({
       studentName: 'Ada',
       teacherName: 'Mr Rahman',
@@ -399,5 +391,100 @@ describe('"Dear Parent" — no Lumexa email says "Hi {name}"', () => {
         }).html,
       ).not.toContain('Dear');
     });
+  });
+});
+
+// The certificate email is the ONE family-facing email that is addressed to the
+// student by first name rather than "Dear Parent,": the founder wrote it to the
+// student ("Hi {{studentFirstName}},"), so it is deliberately not in the
+// "Dear Parent" list above. Where it GOES still follows the platform's rule
+// (the billing contact, else the student account) — see CertificateEmailService.
+describe('certificate email (founder-authored)', () => {
+  const params = {
+    studentFirstName: 'Nusrat',
+    programName: 'AI Builder',
+    completionDate: '2 November 2026',
+    certificateId: 'LXA-2026-A7K9Q2',
+    certificateUrl:
+      'https://frontend.test/student-dashboard/certificates?highlight=LXA-2026-A7K9Q2',
+    verificationUrl: 'https://frontend.test/verify/LXA-2026-A7K9Q2',
+    programCatalogueUrl: 'https://frontend.test/programs',
+  };
+  const { subject, html } = certificateIssuedEmail(params);
+  // What a reader sees: entities decoded (the shared `text` helper leaves &amp;).
+  const body = text(html).replace(/&amp;/g, '&');
+
+  it('has the agreed subject', () => {
+    expect(subject).toBe(
+      '🎉 Congratulations! Your Lumexa certificate is ready!',
+    );
+  });
+
+  it('greets the student by first name and carries the agreed copy, word for word', () => {
+    expect(body).toContain('Hi Nusrat,');
+    expect(body).toContain('Congratulations! 🎉');
+    expect(body).toContain(
+      "You've successfully completed the AI Builder at Lumexa AI School!",
+    );
+    expect(body).toContain(
+      "This is a wonderful milestone in your learning journey. You've put in the effort, explored new ideas, worked on practical projects, and taken another exciting step forward. We're proud of what you've accomplished! 🚀",
+    );
+    expect(body).toContain(
+      'Your official Lumexa Certificate of Completion is attached to this email as a PDF. You can also access it anytime from your student dashboard, where you can download, share, and verify your certificate.',
+    );
+    expect(body).toContain(
+      'One learning adventure ends, but another is waiting! There are always new skills to explore, ideas to discover, and exciting projects to create.',
+    );
+    expect(body).toContain('Ready for your next challenge?');
+    expect(body).toContain(
+      'Keep creating, keep experimenting, and never stop learning! 🌟',
+    );
+  });
+
+  it('lists the programme, completion date and certificate ID', () => {
+    expect(body).toContain('Your achievement:');
+    expect(body).toContain('Program: AI Builder');
+    expect(body).toContain('Completion date: 2 November 2026');
+    expect(body).toContain('Certificate ID: LXA-2026-A7K9Q2');
+  });
+
+  it('is signed by the founder', () => {
+    expect(body).toContain(
+      'Warm regards, Fairooz Mashwiyat Omlan Founder & CEO Lumexa AI School Code. Create. Impact.',
+    );
+  });
+
+  it('links to the certificate, its public verification page and the GENERAL catalogue', () => {
+    expect(html).toContain(`href="${params.certificateUrl}"`);
+    expect(html).toContain('View &amp; Download Your Certificate');
+    expect(html).toContain(`href="${params.verificationUrl}"`);
+    expect(html).toContain(`href="${params.programCatalogueUrl}"`);
+    expect(html).toContain('Find Your Next Program');
+  });
+
+  it('never recommends a specific next programme', () => {
+    // The only programme named anywhere is the one just completed.
+    expect(html).not.toMatch(
+      /Data Scientist|Game Creator|Web Developer|Little Coders|Odyssey/,
+    );
+    expect(html).not.toMatch(/\?program=/);
+    expect(html).not.toMatch(/curriculum/i);
+  });
+
+  it('escapes anything it prints', () => {
+    const evil = certificateIssuedEmail({
+      ...params,
+      studentFirstName: '<img src=x onerror=alert(1)>',
+      programName: '<script>alert(1)</script>',
+    }).html;
+    expect(evil).not.toContain('<script>');
+    expect(evil).not.toContain('<img src=x');
+    expect(evil).toContain('&lt;script&gt;');
+  });
+
+  it('falls back to "there" when the student has no first name', () => {
+    expect(
+      text(certificateIssuedEmail({ ...params, studentFirstName: '' }).html),
+    ).toContain('Hi there,');
   });
 });
