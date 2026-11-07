@@ -15,4 +15,9 @@ const { join } = require('path');
 /** @type {import("puppeteer").Configuration} */
 module.exports = {
   cacheDirectory: join(__dirname, '.cache', 'puppeteer'),
+  // The renderer launches full Chrome in its (new) headless mode — headless: true —
+  // so the separate chrome-headless-shell build that Puppeteer also downloads by
+  // default is never used. Skipping it roughly halves what each build downloads
+  // and stores.
+  'chrome-headless-shell': { skipDownload: true },
 };

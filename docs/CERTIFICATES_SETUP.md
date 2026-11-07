@@ -146,7 +146,8 @@ network request is blocked — so it needs nothing from the internet.
 - **Default (Render's native Node runtime):** `npm install` downloads a matching Chrome. By
   default Puppeteer keeps it in `~/.cache`, which Render preserves for the *build* but not for
   the running service, so `server/.puppeteerrc.cjs` keeps it inside the project
-  (`server/.cache/puppeteer`, git-ignored). Keep the install in the build command (the existing
+  (`server/.cache/puppeteer`, git-ignored, about 380 MB; the unused `chrome-headless-shell`
+  build is not downloaded). Keep the install in the build command (the existing
   `npm install && npm run build` is enough; Puppeteer is a normal dependency).
 - **Docker, or Chromium missing system libraries:** install Chromium yourself and point at
   it. For example on Debian/Ubuntu: `apt-get install -y chromium fonts-liberation` in the
