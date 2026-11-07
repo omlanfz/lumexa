@@ -43,6 +43,9 @@ const NAV_ITEMS = [
   { href: '/student-dashboard', label: 'Home', exact: true },
   { href: '/student-dashboard/learning', label: 'Learning', exact: false },
   { href: '/student-dashboard/badges', label: 'My Badges', exact: false },
+  // Permanent: visible before the first certificate too (the page has a friendly
+  // empty state), so students always know where theirs will appear.
+  { href: '/student-dashboard/certificates', label: 'Certificates', exact: false },
   { href: '/student-dashboard/profile', label: 'Profile', exact: false },
 ];
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import api from "@/lib/axios";
 import { Card, formatBDT } from "@/components/admin/AdminUI";
+import { adminCertificates } from "@/lib/certificates/api";
 
 interface DashboardSummary {
   todayClasses: number;
@@ -48,6 +49,8 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Programs whose final class has been completed and that wait for a certificate review.
+  const [pendingCertificates, setPendingCertificates] = useState(0);
 
   useEffect(() => {
     api
@@ -55,6 +58,11 @@ export default function AdminDashboardPage() {
       .then((res) => setData(res.data))
       .catch(() => setError("Couldn't load the dashboard summary."))
       .finally(() => setLoading(false));
+    // Separate from the summary above so a problem there never hides the prompt.
+    adminCertificates
+      .summary()
+      .then((s) => setPendingCertificates(s.pending))
+      .catch(() => undefined);
   }, []);
 
   const monthLabel = data
@@ -69,6 +77,34 @@ export default function AdminDashboardPage() {
           Operational overview{data ? ` · ${monthLabel}` : ""}
         </p>
       </div>
+
+      {pendingCertificates > 0 && (
+        <Card className="border-[var(--a-accent)]">
+          <div className="flex flex-wrap items-center justify-between gap-3" data-testid="certificates-prompt">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl" aria-hidden>
+                🎓
+              </span>
+              <div>
+                <p className="font-semibold text-[var(--a-text)]">
+                  {pendingCertificates} certificate{pendingCertificates === 1 ? "" : "s"} waiting for your review
+                </p>
+                <p className="text-sm text-[var(--a-text-muted)]">
+                  {pendingCertificates === 1 ? "A student has" : "Students have"} completed the final class of a program.
+                  Confirm the details and approve to issue the certificate.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => router.push("/admin/certificates?tab=pending")}
+              className="rounded-lg bg-[var(--a-accent)] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[var(--a-accent-hover)]"
+            >
+              Review now
+            </button>
+          </div>
+        </Card>
+      )}
 
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

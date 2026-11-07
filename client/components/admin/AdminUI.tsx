@@ -35,6 +35,12 @@ const STATUS_STYLES: Record<string, string> = {
   OPEN: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",
   FINALIZED: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
   PAID: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
+  // Certificates
+  PROCESSING: "bg-[var(--a-info-bg)] text-[var(--a-info)]",
+  ISSUED: "bg-[var(--a-success-bg)] text-[var(--a-success-text)]",
+  REVOKED: "bg-[var(--a-danger-bg)] text-[var(--a-danger-text)]",
+  REPLACED: "bg-[var(--a-warning-bg)] text-[var(--a-warning-text)]",
+  DISMISSED: "bg-[var(--a-surface-3)] text-[var(--a-text-muted)]",
 };
 
 export function StatusBadge({ status }: { status: string }) {

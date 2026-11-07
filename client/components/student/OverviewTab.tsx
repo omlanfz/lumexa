@@ -5,7 +5,10 @@
 // progress, time in class and what is coming up. No placeholders: a value is
 // shown as 0 only when the records really say 0.
 
+import { useRouter } from 'next/navigation';
+import CompletedProgramsCard, { certificateHref } from '@/components/student/CompletedProgramsCard';
 import RankProgressBar from '@/components/student/RankProgressBar';
+import { useMyCertificates } from '@/lib/certificates/useCertificates';
 import type { ProgressData } from '@/lib/student/progress';
 import { formatShortDate } from '@/lib/student/progress';
 
@@ -57,6 +60,13 @@ const dhaka = (iso: string) => {
 
 export default function OverviewTab({ progress, upcoming, legacyNext }: Props) {
   const o = progress.overview;
+  const router = useRouter();
+  // The student's certificates: a finished programme links to its certificate.
+  const { certificates } = useMyCertificates();
+  const earned = (certificates ?? []).filter((c) => c.status === 'ACTIVE');
+  const currentProgramCertificate = o.courseId
+    ? (earned.find((c) => c.courseId === o.courseId) ?? null)
+    : null;
 
   return (
     <div className="space-y-4 fade-in" data-testid="learning-overview">
@@ -131,6 +141,16 @@ export default function OverviewTab({ progress, upcoming, legacyNext }: Props) {
                     style={{ width: `${o.curriculumProgressPct}%` }}
                   />
                 </div>
+                {currentProgramCertificate && (
+                  <button
+                    type="button"
+                    onClick={() => router.push(certificateHref(currentProgramCertificate.certificateId))}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-teal-500/15 px-3 py-1.5 text-xs font-semibold text-teal-700 hover:bg-teal-500/25 dark:text-teal-300"
+                    data-testid="program-certificate-link"
+                  >
+                    🎓 Program completed — View your certificate →
+                  </button>
+                )}
               </div>
             ) : (
               <p className="mb-5 text-sm text-gray-500 dark:text-gray-400">
@@ -175,6 +195,8 @@ export default function OverviewTab({ progress, upcoming, legacyNext }: Props) {
               </ul>
             )}
           </div>
+
+          <CompletedProgramsCard certificates={earned} />
         </div>
 
         <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/50 rounded-xl p-4 sm:p-6 h-fit">

@@ -2,7 +2,8 @@
 //
 // Top navigation for /admin, mirroring TeacherTopNav/StudentTopNav's
 // structure. Primary nav is deliberately short: Dashboard | Classes |
-// Trial Classes | Teachers | Students | Batches | Payouts. "Manage Courses" is a secondary link in
+// Trial Classes | Teachers | Students | Batches | Certificates (with a count
+// of programs awaiting review) | Payouts. "Manage Courses" is a secondary link in
 // the profile dropdown, not a main nav item (courses are a supporting
 // config screen, not a daily Operations workspace).
 
@@ -12,10 +13,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import { ThemeToggle } from "./ThemeProvider";
+import { adminCertificates } from "@/lib/certificates/api";
+import { CERTIFICATES_CHANGED_EVENT } from "@/lib/certificates/events";
 
 interface AdminTopNavProps {
   adminName: string;
 }
+
+const CERTIFICATES_HREF = "/admin/certificates";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Dashboard" },
@@ -24,8 +29,23 @@ const NAV_ITEMS = [
   { href: "/admin/teachers", label: "Teachers" },
   { href: "/admin/students", label: "Students" },
   { href: "/admin/batches", label: "Batches" },
+  { href: CERTIFICATES_HREF, label: "Certificates" },
   { href: "/admin/payouts", label: "Payouts" },
 ];
+
+/** The red count shown beside "Certificates" while programs await review. */
+function PendingBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span
+      className="ml-2 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--a-danger)] px-1.5 text-[11px] font-bold leading-5 text-white"
+      aria-label={`${count} waiting for review`}
+      data-testid="certificates-pending-badge"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 const DROPDOWN_ITEMS = [{ href: "/admin/courses", label: "Manage Courses" }];
 
@@ -35,6 +55,30 @@ export default function AdminTopNav({ adminName }: AdminTopNavProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Programs whose final class has been completed and that wait for an admin to
+  // review. Refreshed on every page change, after any certificate action, and
+  // once a minute.
+  const [pendingCertificates, setPendingCertificates] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      adminCertificates
+        .summary()
+        .then((s) => {
+          if (alive) setPendingCertificates(s.pending);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    window.addEventListener(CERTIFICATES_CHANGED_EVENT, refresh);
+    const timer = setInterval(refresh, 60_000);
+    return () => {
+      alive = false;
+      window.removeEventListener(CERTIFICATES_CHANGED_EVENT, refresh);
+      clearInterval(timer);
+    };
+  }, [pathname]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -92,6 +136,7 @@ export default function AdminTopNav({ adminName }: AdminTopNavProps) {
               aria-current={isActive(item.href) ? "page" : undefined}
             >
               {item.label}
+              {item.href === CERTIFICATES_HREF && <PendingBadge count={pendingCertificates} />}
             </button>
           ))}
         </nav>
@@ -172,6 +217,7 @@ export default function AdminTopNav({ adminName }: AdminTopNavProps) {
               }`}
             >
               {item.label}
+              {item.href === CERTIFICATES_HREF && <PendingBadge count={pendingCertificates} />}
             </button>
           ))}
         </nav>
