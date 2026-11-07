@@ -460,7 +460,8 @@ export class HomeworkFilesService {
    * Which of these students have FINISHED the program (course) — pure reads.
    *
    * Finished means one of:
-   *   • a certificate was issued for the course (the final test was passed), or
+   *   • an ACTIVE certificate was issued for the course (an admin approved it after
+   *     the student's final class — a revoked or replaced one proves nothing), or
    *   • the student has had the course's LAST lesson (a completed class at, or
    *     after, the highest lesson number — a batch student who joined mid-way
    *     never had the early lessons, so every lesson is not required) AND has no
@@ -490,7 +491,11 @@ export class HomeworkFilesService {
 
     const certified = (
       await this.prisma.certificate.findMany({
-        where: { courseId, studentUserId: { in: studentUserIds } },
+        where: {
+          courseId,
+          studentUserId: { in: studentUserIds },
+          status: 'ACTIVE',
+        },
         select: { studentUserId: true },
       })
     ).map((c) => c.studentUserId);

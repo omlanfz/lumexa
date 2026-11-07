@@ -35,6 +35,16 @@ export interface EmailAttachment {
   contentType?: string;
 }
 
+/** An attachment whose bytes are held in memory — for the one caller that must
+ *  attach exactly what is stored elsewhere (a certificate PDF) and re-reads it on
+ *  every attempt. Only sendTracked() accepts these: send() journals its
+ *  attachments as JSON for the retry sweep, and bytes must never be journaled. */
+export interface EmailContentAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+}
+
 export interface SendEmailParams {
   to: string;
   subject: string;
@@ -46,6 +56,12 @@ export interface SendEmailParams {
   relatedUserId?: string;
   attachments?: EmailAttachment[];
 }
+
+/** sendTracked() parameters: like SendEmailParams, but attachments may also be
+ *  in-memory content (see EmailContentAttachment). */
+export type TrackedEmailParams = Omit<SendEmailParams, 'attachments'> & {
+  attachments?: Array<EmailAttachment | EmailContentAttachment>;
+};
 
 const MAX_ATTEMPTS = 5;
 const INLINE_RETRY_DELAYS_MS = [1000, 3000]; // two quick in-process retries before falling back to the cron sweep
@@ -132,7 +148,7 @@ export class EmailService implements OnModuleInit {
    * `pending: true`: the send may still complete, and the EmailLog row
    * (returned as `logId`) is the source of truth for the final status. */
   async sendTracked(
-    params: SendEmailParams,
+    params: TrackedEmailParams,
     timeoutMs = 25_000,
   ): Promise<{
     ok: boolean;
@@ -245,7 +261,7 @@ export class EmailService implements OnModuleInit {
     to: string,
     subject: string,
     html: string,
-    attachments?: EmailAttachment[],
+    attachments?: Array<EmailAttachment | EmailContentAttachment>,
   ): Promise<boolean> {
     if (!this.transporter) {
       await this.prisma.emailLog

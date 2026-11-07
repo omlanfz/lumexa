@@ -51,7 +51,9 @@ export async function truncateAssessmentData(
   prisma: PrismaService,
 ): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "User", "Course", "EmailLog" RESTART IDENTITY CASCADE',
+    // Certificate and CertificateReview hold plain ids (no foreign keys), so
+    // truncating User/Course does not clear them: name them too.
+    'TRUNCATE TABLE "User", "Course", "EmailLog", "Certificate", "CertificateReview" RESTART IDENTITY CASCADE',
   );
 }
 

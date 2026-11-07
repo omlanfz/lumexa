@@ -20,6 +20,7 @@ import { SchedulingModule } from '../scheduling/scheduling.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { AlertsModule } from '../alerts/alerts.module';
 import { BatchesModule } from '../batches/batches.module';
+import { CertificatesModule } from '../certificates/certificates.module';
 
 @Module({
   imports: [
@@ -28,6 +29,8 @@ import { BatchesModule } from '../batches/batches.module';
     PayoutsModule,
     AlertsModule,
     BatchesModule,
+    // A finalised final class opens the admin's certificate review.
+    CertificatesModule,
     // DailyRoomsService, RoomAccessService and TrialClassroomService
     TrialClassroomModule,
   ],

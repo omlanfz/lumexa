@@ -1107,21 +1107,44 @@ describeDb(
         expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
       });
 
-      it('a certificate (final test passed) also means the program is finished', async () => {
+      // An issued certificate for the program (see server/src/certificates).
+      const issuedCertificate = (over: Record<string, unknown> = {}) => {
+        const id = `LXA-2026-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+        return prisma.certificate.create({
+          data: {
+            certificateId: id,
+            studentUserId: student.id,
+            courseId: course.id,
+            recipientName: 'Test Student',
+            programName: 'hw course',
+            completionDate: '2026-11-02',
+            theme: 'general',
+            templateVersion: 'v1',
+            storageBucket: 'lumexa-certificates',
+            pdfKey: `certificates/2026/${id}/${id}.pdf`,
+            pngKey: `certificates/2026/${id}/${id}.png`,
+            ...over,
+          },
+        });
+      };
+
+      it('an active certificate also means the program is finished', async () => {
         const { submissionId, fileId } = await handIn('main.py');
         await review(teacher, submissionId, { status: 'APPROVED' });
         expect(await files.runSweep()).toMatchObject({ marked: 0 });
-        await prisma.certificate.create({
-          data: {
-            studentUserId: student.id,
-            courseId: course.id,
-            courseName: 'hw course',
-            certificateNumber: `LMX-IT-${Date.now()}`,
-            pdfUrl: 'https://example.invalid/c.pdf',
-          },
-        });
+        await issuedCertificate();
         expect(await files.runSweep()).toMatchObject({ marked: 1, removed: 1 });
         expect((await fileRow(fileId)).status).toBe(HomeworkFileStatus.DELETED);
+      });
+
+      it('a revoked certificate proves nothing: the work is kept (every doubt means "not finished")', async () => {
+        const { submissionId, fileId } = await handIn('main.py');
+        await review(teacher, submissionId, { status: 'APPROVED' });
+        await issuedCertificate({ status: 'REVOKED', revokedAt: new Date() });
+        expect(await files.runSweep()).toMatchObject({ marked: 0 });
+        expect((await fileRow(fileId)).status).toBe(
+          HomeworkFileStatus.ATTACHED,
+        );
       });
 
       it('finishing one program does not touch the files of another', async () => {

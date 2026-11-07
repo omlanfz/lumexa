@@ -2024,29 +2024,165 @@ model PackageAlertState {
   updatedAt     DateTime           @updatedAt
 }
 
-// ─── Curriculum-completion certificates ───────────────────────────────────────
+// ─── Certificates of Completion ───────────────────────────────────────────────
 //
-// One row per (student, completed course) — @@unique enforces that a
-// certificate is issued at most once per curriculum per student, which is
-// also how CertificateService.checkAndIssueCertificate stays idempotent
-// (relies on the P2002 from a duplicate create, same pattern as
-// StudentLedgerEntry). Deliberately holds no Prisma relation to User/Course
-// (plain ids only) so this model never gains a migration dependency on
-// those — see CertificateService for the lookups.
-model Certificate {
-  id                     String   @id @default(uuid())
-  studentUserId          String
-  courseId               String
-  courseName             String // denormalized snapshot at issue time
-  certificateNumber      String   @unique
-  pdfUrl                 String
-  issuedAt               DateTime @default(now())
-  recommendedCourseId    String?
-  recommendedCourseName  String?
-  metadata               Json? // progress report snapshot (lessons completed, hours, final score, etc.)
+// One certificate per programme (Course), issued ONLY by an admin. The flow:
+//
+//   1. The student's final scheduled class of a programme is finalised →
+//      a CertificateReview (PENDING) is created, once (unique per student +
+//      programme), and the admin dashboard shows it. This is a prompt to
+//      REVIEW, never an eligibility decision and never an issuance.
+//   2. An admin checks the student's progress, confirms the exact name,
+//      programme and completion date, and approves.
+//   3. Only then are the ID, QR code, PDF and PNG generated, stored in the
+//      dedicated R2 bucket and a Certificate row is written (ACTIVE).
+//
+// Certificate rows are NEVER deleted, and neither are their files. A correction
+// is a replacement: the original is kept and marked REPLACED, the new
+// certificate gets a new ID. Revoking changes status only. Rows deliberately
+// hold plain ids (no relations to User/Course): a certificate and its public
+// verification page must outlive any change to those records, and what was
+// printed (name, programme, dates) is snapshotted on the row.
+//
+// Rows issued by the previous certificate system (pdfkit + Cloudinary) were
+// migrated in place: templateVersion/theme = 'legacy', their LMX-… number kept
+// as certificateId, their Cloudinary link kept in pdfUrl, no PNG.
+//
+// Constraints beyond what Prisma can express live in the migration SQL: at most
+// ONE ACTIVE certificate per student + programme (a partial unique index), and
+// CHECKs that an issued (non-legacy) certificate always has both of its files,
+// and that REVOKED / REPLACED rows carry what makes them so.
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+  REPLACED
+}
+
+enum CertificateReviewStatus {
+  PENDING // waiting for an admin
+  PROCESSING // an admin approved it and the certificate is being generated
+  ISSUED // a certificate was issued from it
+  DISMISSED // an admin decided no certificate is due (can be reopened)
+}
+
+enum CertificateEmailStatus {
+  PENDING // not attempted yet
+  SENDING // an attempt is in flight
+  SENT
+  FAILED // the last attempt failed; retried until the attempt cap
+  SKIPPED // deliberately not sent (a replacement issued without an email, or a legacy certificate)
+}
+
+// The "this student has finished the programme — an admin should look" item.
+// Created exactly once per student + programme (the unique constraint), however
+// many times the completion event fires.
+model CertificateReview {
+  id            String                  @id @default(uuid())
+  studentUserId String
+  courseId      String
+  status        CertificateReviewStatus @default(PENDING)
+
+  // What the completion found. The completion date offered to the admin is the
+  // Asia/Dhaka calendar day of the final class (YYYY-MM-DD).
+  finalClassId            String? // the ScheduledLesson that completed the programme
+  completedAt             DateTime // that class's start
+  suggestedCompletionDate String
+  // CLASS_FINALIZED | RECONCILIATION | LEGACY
+  source                  String
+
+  // An approval in flight (a lease, so a crashed approval can be retried).
+  processingStartedAt DateTime?
+  processingByAdminId String?
+  attempts            Int       @default(0)
+  lastError           String?
+
+  // Outcome.
+  decidedAt           DateTime?
+  decidedByAdminId    String?
+  dismissReason       String?
+  // Certificate.id of the certificate issued from this review.
+  issuedCertificateId String?   @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([studentUserId, courseId])
+  @@index([status, createdAt])
+}
+
+model Certificate {
+  id            String            @id @default(uuid())
+  // The public identity: LXA-<issue year>-<6 random characters>. Unique at the
+  // database level. (A certificate from the previous system keeps its LMX-… number.)
+  certificateId String            @unique
+  studentUserId String
+  courseId      String
+  // The CertificateReview this was approved from (null for a replacement or a
+  // legacy certificate).
+  reviewId      String?           @unique
+  status        CertificateStatus @default(ACTIVE)
+
+  // ── What is printed (snapshots) ──
+  recipientName   String
+  programName     String
+  // The day the final class took place, 'YYYY-MM-DD' (Asia/Dhaka).
+  completionDate  String
+  withDistinction Boolean  @default(false)
+  // The ISSUE DATE: when the certificate was generated, stored and made available.
+  issuedAt        DateTime @default(now())
+
+  // ── Design: recorded so a later palette or template change never touches this one ──
+  theme           String
+  themeSnapshot   Json?
+  templateVersion String
+
+  // ── Files (Cloudflare R2, never deleted or overwritten) ──
+  storageBucket String?
+  pdfKey        String? @unique
+  pngKey        String? @unique
+  pdfBytes      Int?
+  pngBytes      Int?
+  pdfSha256     String?
+  pngSha256     String?
+  // The Cloudinary PDF of a certificate issued by the previous system.
+  pdfUrl        String?
+
+  issuedByAdminId String?
+
+  // ── Replacement ──
+  replacesCertificateId   String? // Certificate.id of the certificate this one replaced
+  replacedByCertificateId String?   @unique // Certificate.id of its replacement
+  replacedAt              DateTime?
+  replacedByAdminId       String?
+  replacementReason       String?
+
+  // ── Revocation ──
+  revokedAt        DateTime?
+  revokedByAdminId String?
+  revocationReason String?
+
+  // ── The congratulatory email (one per certificate; see CertificateEmailService) ──
+  emailStatus       CertificateEmailStatus @default(PENDING)
+  emailAttempts     Int                    @default(0)
+  emailLastError    String?
+  emailSentAt       DateTime?
+  emailSendingSince DateTime?
+  emailRecipient    String?
+  emailLogId        String?
+
+  // Set when the student has seen the "your certificate is ready" card.
+  achievementSeenAt DateTime?
+
+  // Retired: the previous system recommended a next programme. Never written now.
+  recommendedCourseId   String?
+  recommendedCourseName String?
+  metadata              Json?
+
+  updatedAt DateTime @updatedAt
+
   @@index([studentUserId])
+  @@index([courseId])
+  @@index([status, issuedAt])
 }
 
 // ─── Disputes / complaints ─────────────────────────────────────────────────────

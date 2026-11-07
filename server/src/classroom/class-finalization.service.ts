@@ -69,6 +69,7 @@ import { DailyRoomsService } from './daily-rooms.service';
 import { RecordingService } from './recording.service';
 import { roomForBatchSession, roomForLessonRecord } from './room-ref.util';
 import { BatchSessionsService } from '../batches/batch-sessions.service';
+import { CertificateReviewsService } from '../certificates/certificate-reviews.service';
 
 export type ClassOutcome = 'COMPLETED' | 'PARTIALLY_COMPLETED' | 'INCOMPLETE';
 
@@ -142,6 +143,7 @@ export class ClassFinalizationService {
     private readonly batches: BatchSessionsService,
     private readonly rooms: DailyRoomsService,
     private readonly studentProgress: StudentProgressService,
+    private readonly certificateReviews: CertificateReviewsService,
   ) {}
 
   // ─── Public: finalize one class ───────────────────────────────────────────
@@ -578,6 +580,7 @@ export class ClassFinalizationService {
   private async afterFinalizeSession(
     session: {
       id: string;
+      courseId: string;
       lessonNumber: number;
       start: Date;
       batch: { id: string; name: string };
@@ -614,6 +617,7 @@ export class ClassFinalizationService {
         )
         .map((p) => p.student.id);
       await this.studentProgress.syncAfterClass(ids);
+      await this.promptCertificateReview(session.courseId, ids);
     }
 
     await this.wrapUpSessionRoom(session.id);
@@ -762,6 +766,9 @@ export class ClassFinalizationService {
     // Incomplete class — nothing was attended).
     if (isPaid) {
       await this.studentProgress.syncAfterClass([lesson.studentUserId]);
+      await this.promptCertificateReview(lesson.courseId, [
+        lesson.studentUserId,
+      ]);
     }
 
     // The classroom itself (recording, the live room) belongs to the whole
@@ -886,6 +893,26 @@ export class ClassFinalizationService {
           .catch(() => {});
       }
     }
+  }
+
+  /** A class was taken. If it was the student's FINAL scheduled class of the
+   * programme, a pending certificate review is opened for the admin (once — the
+   * database's unique constraint decides, so a retried or repeated finalization
+   * can never open a second one). This only asks a human to LOOK: it decides
+   * nothing about the student and issues nothing (see server/src/certificates).
+   * Best-effort like every other post-commit step here — the class is already
+   * finalised and paid — and an hourly sweep re-checks anything this misses. */
+  private async promptCertificateReview(
+    courseId: string,
+    studentUserIds: string[],
+  ) {
+    await this.certificateReviews
+      .onClassFinalized(courseId, studentUserIds)
+      .catch((err) =>
+        this.logger.error(
+          `Certificate review prompt failed for course ${courseId}: ${err}`,
+        ),
+      );
   }
 
   private async closeRoom(room: string) {

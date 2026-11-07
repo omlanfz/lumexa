@@ -206,36 +206,55 @@ export function packageExpiredEmail(params: {
   };
 }
 
+/** The congratulatory email sent once a certificate has been issued and stored,
+ *  with the certificate PDF attached. Wording is the founder's own; the only
+ *  dynamic parts are the student's first name, the programme, the dates, the
+ *  certificate ID and the links (all built from FRONTEND_URL by the caller). The
+ *  "next programme" button always opens the general catalogue — it never picks a
+ *  programme for the student (any personal recommendation is made by an admin). */
 export function certificateIssuedEmail(params: {
-  studentName: string;
-  courseName: string;
-  progressSummaryHtml: string;
-  recommendedCourseName: string | null;
-  recommendedCourseBlurb: string | null;
-  dashboardUrl: string;
+  studentFirstName: string;
+  programName: string;
+  /** Already formatted for display, e.g. "2 November 2026". */
+  completionDate: string;
+  certificateId: string;
+  /** The student's My Certificates page. */
+  certificateUrl: string;
+  /** The public verification page. */
+  verificationUrl: string;
+  /** Lumexa's general programme catalogue. */
+  programCatalogueUrl: string;
 }) {
-  const nextStepHtml = params.recommendedCourseName
-    ? `
-      <div style="background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; padding: 16px; margin: 20px 0;">
-        <p style="margin: 0 0 6px; color: #0f766e; font-weight: 700;">What's next: ${params.recommendedCourseName}</p>
-        <p style="margin: 0; color: #134e4a;">${params.recommendedCourseBlurb ?? ''} We've attached the full curriculum breakdown so you can see exactly what's covered.</p>
-      </div>
-    `
-    : `<p style="margin: 16px 0; color: #475569;">${params.studentName} has now completed every Lumexa pathway — an incredible achievement! Reach out to us if you'd like to talk about advanced or custom next steps.</p>`;
-
+  const first = escapeHtml(params.studentFirstName || 'there');
+  const program = escapeHtml(params.programName);
+  const verifyHref = escapeHtml(params.verificationUrl);
+  const row = (label: string, value: string) =>
+    `<p style="margin: 0 0 6px;"><strong>${label}:</strong> ${value}</p>`;
   return {
-    subject: `🎓 ${params.studentName} completed ${params.courseName}!`,
+    subject: '🎉 Congratulations! Your Lumexa certificate is ready!',
     html: emailLayout({
-      title: 'Certificate issued',
+      title: 'Your Lumexa certificate is ready',
+      previewText: `You've completed the ${program} at Lumexa AI School — your certificate is attached.`,
       bodyHtml: `
-        <h2 style="margin: 0 0 12px; color: #0f172a;">🎓 Congratulations, ${params.studentName}!</h2>
-        ${dearParent()}
-        <p style="margin: 0 0 8px;">${params.studentName} has successfully completed <strong>${params.courseName}</strong>! Their certificate is attached to this email and also available anytime on their Lumexa dashboard.</p>
+        <p style="margin: 0 0 12px;">Hi ${first},</p>
+        <h2 style="margin: 0 0 12px; color: #0f172a;">Congratulations! 🎉</h2>
+        <p style="margin: 0 0 12px;">You've successfully completed the <strong>${program}</strong> at Lumexa AI School!</p>
+        <p style="margin: 0 0 12px;">This is a wonderful milestone in your learning journey. You've put in the effort, explored new ideas, worked on practical projects, and taken another exciting step forward. We're proud of what you've accomplished! 🚀</p>
+        <p style="margin: 0 0 12px;">Your official Lumexa Certificate of Completion is attached to this email as a PDF. You can also access it anytime from your student dashboard, where you can download, share, and verify your certificate.</p>
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 16px 0;">
-          ${params.progressSummaryHtml}
+          <p style="margin: 0 0 8px; font-weight: 700; color: #0f172a;">Your achievement:</p>
+          ${row('Program', program)}
+          ${row('Completion date', escapeHtml(params.completionDate))}
+          ${row('Certificate ID', escapeHtml(params.certificateId))}
         </div>
-        ${nextStepHtml}
-        ${emailButton('View on dashboard', params.dashboardUrl)}
+        ${emailButton('View &amp; Download Your Certificate', escapeHtml(params.certificateUrl))}
+        <p style="margin: 0 0 12px; font-size: 13px; color: #475569;">Anyone can check that your certificate is genuine at <a href="${verifyHref}" style="color: #0d9488;">${verifyHref}</a>.</p>
+        <h3 style="margin: 24px 0 8px; color: #0f172a;">What's next?</h3>
+        <p style="margin: 0 0 12px;">One learning adventure ends, but another is waiting! There are always new skills to explore, ideas to discover, and exciting projects to create.</p>
+        <p style="margin: 0 0 4px;">Ready for your next challenge?</p>
+        ${emailButton('Find Your Next Program', escapeHtml(params.programCatalogueUrl), '#4f46e5')}
+        <p style="margin: 0 0 16px;">Keep creating, keep experimenting, and never stop learning! 🌟</p>
+        <p style="margin: 0;">Warm regards,<br /><strong>Fairooz Mashwiyat Omlan</strong><br />Founder &amp; CEO<br />Lumexa AI School<br /><em>Code. Create. Impact.</em></p>
       `,
     }),
   };

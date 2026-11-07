@@ -103,12 +103,7 @@ function setup() {
     $transaction: jest.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
   const alerts = { create: jest.fn().mockResolvedValue({}) };
-  const certificates = { checkAndIssueCertificate: jest.fn() };
-  const service = new AssessmentsService(
-    prisma,
-    certificates as any,
-    alerts as any,
-  );
+  const service = new AssessmentsService(prisma, alerts as any);
   return { service, prisma, tx, alerts };
 }
 
