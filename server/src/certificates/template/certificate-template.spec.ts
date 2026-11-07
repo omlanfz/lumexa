@@ -186,11 +186,16 @@ describe('the master template — safety', () => {
 
   it('is self-contained: it can never load anything from the network', () => {
     const html = render();
+    // Links (<a href>) only navigate when someone clicks them in the PDF; the one
+    // address they may carry is the verification page. Nothing else may reference a URL.
+    const withoutLinks = html.replace(/<a href="[^"]*"/g, '<a');
     const urls = [
-      ...html.matchAll(/(?:href|src)="([^"]+)"|url\(([^)]+)\)/g),
+      ...withoutLinks.matchAll(/(?:href|src)="([^"]+)"|url\(([^)]+)\)/g),
     ].map((m) => m[1] ?? m[2]);
     expect(urls.length).toBeGreaterThan(5);
     for (const url of urls) expect(url).toMatch(/^(data:|#)/);
+    for (const m of html.matchAll(/<a href="([^"]*)"/g))
+      expect(m[1]).toBe(BASE.verificationUrl);
     expect(html).not.toMatch(/@import/);
     expect(html).not.toMatch(/<link\b/i);
     expect(html).not.toMatch(/<iframe|<object|<embed/i);
@@ -247,6 +252,30 @@ describe('printedVerificationLink', () => {
 });
 
 // ─── Version freeze ──────────────────────────────────────────────────────────
+describe('the verification links', () => {
+  const anchors = (html: string) =>
+    [...html.matchAll(/<a href="([^"]*)"[^>]*>(.*?)<\/a>/gs)].map((m) => ({
+      href: m[1],
+      inner: m[2],
+    }));
+
+  it('makes the printed link and the QR code clickable, both to the verification page', () => {
+    const found = anchors(render());
+    expect(found).toHaveLength(2);
+    for (const a of found) expect(a.href).toBe(BASE.verificationUrl);
+    expect(found[0].inner).toContain('<path d="'); // the QR code
+    expect(found[1].inner).toContain('Verify this certificate: ');
+  });
+
+  it('never lets the address break out of the attribute', () => {
+    const html = render({
+      verificationUrl: 'https://x.test/verify/"><script>alert(1)</script>',
+    });
+    expect(html).not.toContain('<script>alert(1)</script>');
+    for (const a of anchors(html)) expect(a.href).not.toMatch(/["<>]/);
+  });
+});
+
 //
 // A certificate is rendered ONCE and its files are kept; the template version
 // recorded on it says which design it was. These hashes pin what v1 produces —
@@ -257,25 +286,26 @@ describe('printedVerificationLink', () => {
 // they were rendered with.
 //
 // History: v1 was the first release (completion date in the third italic line);
-// v2 restored the design's own line and added the completion-date pair.
-describe('template v2 is frozen', () => {
-  it('is version v2', () => {
-    expect(TEMPLATE_VERSION).toBe('v2');
+// v2 restored the design's own line and added the completion-date pair; v3 made the
+// printed verification link and the QR code clickable in the PDF.
+describe('template v3 is frozen', () => {
+  it('is version v3', () => {
+    expect(TEMPLATE_VERSION).toBe('v3');
   });
 
   const FROZEN: Record<string, string> = {
     'creative-coding-game-dev':
-      'a35e7cafa0e2e07d080599947179a91dd04a574a49725601b45b85d48172030a',
+      'aff988fd7f97dd23694d814d0a2f06ada2f3686de72c70f011662249ee598904',
     'web-digital-skills':
-      '168396af40a0fcc3b67798164a65f4388670c050add5f8cf914e9f26207e5dc1',
+      'b62e83808fa449c84727cf2103d42b5e9da187fe5710f0295eadcfc6b77e023a',
     'ai-data-science':
-      'd93928d248b5a4d9c15739dd3a5502e828a101d758bf06c1134a222da67863bf',
-    general: '438ec83cc6808cf0877e4679d5977934709d084cc98aca2452bc2678f5c76482',
+      '37a2ed81090cdba540cc8d327057bb2c2d96a2774c9e6c0100147a541852da85',
+    general: 'd5eae3ba35427ecb5e5fb0fd4bca69a6384647fe5df9dbf146298e73bd38553e',
   };
 
   it.each(
     Object.values(CERTIFICATE_CATEGORIES).map((c) => [c.key, c] as const),
-  )('renders %s exactly as it did when v2 was issued', (key, theme) => {
+  )('renders %s exactly as it did when v3 was issued', (key, theme) => {
     const html = renderCertificateHtml({
       ...BASE,
       withDistinction: true,

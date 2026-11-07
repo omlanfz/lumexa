@@ -47,8 +47,10 @@ import { qrPath } from './qr';
  *       ("Awarded on passing the Final Test."), and the completion date — which the
  *       supplied design has no place for — is added as a "DATE OF COMPLETION" pair
  *       above "DATE OF ISSUE", in the same style. Nothing else moved.
+ *   v3  the printed verification link and the QR code are clickable in the PDF
+ *       (link annotations to the verification page). Nothing visible changed.
  */
-export const TEMPLATE_VERSION = 'v2';
+export const TEMPLATE_VERSION = 'v3';
 
 /** A4 landscape in CSS px at 96 dpi, for the PNG viewport. */
 export const PAGE_WIDTH_PX = 1123;
@@ -211,6 +213,13 @@ function text(opts: {
 
 const diamond = (cx: number, cy: number, half: number) =>
   `<path d="M${cx} ${cy - half}L${cx + half} ${cy}L${cx} ${cy + half}L${cx - half} ${cy}Z" fill="${GOLD_TEXT}"/>`;
+
+/** Makes `inner` (SVG markup) a link: in the PDF it becomes a clickable area that
+ * opens `url` (Chromium turns SVG anchors into PDF link annotations). Nothing about
+ * how it looks changes. `url` is the server-built verification URL and is escaped. */
+function linkTo(url: string, label: string, inner: string): string {
+  return `<a href="${escapeHtml(url)}" target="_blank" aria-label="${escapeHtml(label)}">${inner}</a>`;
+}
 
 /** The verification link as printed: no scheme, as in the design. */
 export function printedVerificationLink(url: string): string {
@@ -495,8 +504,11 @@ export function renderCertificateHtml(input: CertificateTemplateInput): string {
       anchor: 'end',
       fit: [330, 0.7],
     }),
-    `<rect x="1167.5" y="733.5" width="102" height="102" rx="12.5" fill="#ffffff" stroke="#dcdfe8" stroke-width="1"/>`,
-    `<path d="${qr.path}" fill="${INK}"/>`,
+    linkTo(
+      input.verificationUrl,
+      'Open the verification page',
+      `<rect x="1167.5" y="733.5" width="102" height="102" rx="12.5" fill="#ffffff" stroke="#dcdfe8" stroke-width="1"/><path d="${qr.path}" fill="${INK}"/>`,
+    ),
     text({
       x: 1172.8,
       y: 848,
@@ -511,7 +523,11 @@ export function renderCertificateHtml(input: CertificateTemplateInput): string {
 
   // ── verification link ──
   body.push(
-    `<text x="702" y="${883 + TEXT_NUDGE_Y}" text-anchor="middle" font-family="Inter" font-size="12.4" letter-spacing="0.04" data-fit="880" data-size="12.4" data-min="0.6"><tspan font-weight="400" fill="${TEXT.body}">Verify this certificate: </tspan><tspan font-weight="600" fill="${TEXT.url}">${link}</tspan></text>`,
+    linkTo(
+      input.verificationUrl,
+      'Open the verification page',
+      `<text x="702" y="${883 + TEXT_NUDGE_Y}" text-anchor="middle" font-family="Inter" font-size="12.4" letter-spacing="0.04" data-fit="880" data-size="12.4" data-min="0.6"><tspan font-weight="400" fill="${TEXT.body}">Verify this certificate: </tspan><tspan font-weight="600" fill="${TEXT.url}">${link}</tspan></text>`,
+    ),
   );
 
   const title = `Lumexa AI School — Certificate of Completion — ${id}`;

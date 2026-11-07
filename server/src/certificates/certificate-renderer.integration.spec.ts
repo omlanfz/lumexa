@@ -77,6 +77,19 @@ const hasPdftotext = (() => {
 /** The PDF's text. `-layout` reads it as a person would (columns, lines); `-raw`
  * reads it in the order it was drawn, which keeps rotated text (a watermark) in one
  * piece, where `-layout` scatters its letters. */
+/** The clickable areas of a PDF: each link annotation's address and its box
+ * [x1, y1, x2, y2] in PDF points (origin bottom-left). Chromium writes them uncompressed. */
+function pdfLinks(pdf: Buffer): { url: string; rect: number[] }[] {
+  const raw = pdf.toString('latin1');
+  return [...raw.matchAll(/\/Subtype\s*\/Link[\s\S]*?endobj/g)].flatMap((m) => {
+    const url = m[0].match(/\/URI\s*\(([^)]*)\)/)?.[1];
+    const rect = m[0].match(/\/Rect\s*\[([^\]]*)\]/)?.[1];
+    return url && rect
+      ? [{ url, rect: rect.trim().split(/\s+/).map(Number) }]
+      : [];
+  });
+}
+
 function pdfText(pdf: Buffer, mode: 'layout' | 'raw' = 'layout'): string {
   const file = `${os.tmpdir()}/lx-cert-${process.pid}-${Date.now()}.pdf`;
   fs.writeFileSync(file, pdf);
@@ -164,6 +177,23 @@ describeRender('CertificateRendererService (real Chromium)', () => {
     it('is a print-ready vector document of a sensible size', () => {
       expect(rendered.pdf.length).toBeGreaterThan(200_000);
       expect(rendered.pdf.length).toBeLessThan(6_000_000);
+    });
+
+    it('has clickable links: the printed verification link and the QR code both open the verification page', () => {
+      const links = pdfLinks(rendered.pdf);
+      expect(links).toHaveLength(2);
+      for (const l of links) expect(l.url).toBe(INPUT.verificationUrl);
+      // QR code: right-hand side, above the bottom edge; printed link: a wide, thin strip at the foot of the page
+      const [qr, printed] = [...links].sort(
+        (a, b) => a.rect[2] - a.rect[0] - (b.rect[2] - b.rect[0]),
+      );
+      expect(qr.rect[2] - qr.rect[0]).toBeCloseTo(62, -1);
+      expect(qr.rect[0]).toBeGreaterThan(650);
+      expect(printed.rect[2] - printed.rect[0]).toBeGreaterThan(150);
+      expect(printed.rect[3] - printed.rect[1]).toBeLessThan(20);
+      expect(printed.rect[1]).toBeLessThan(120);
+      for (const l of links)
+        for (const v of l.rect) expect(v).toBeGreaterThanOrEqual(0);
     });
 
     (hasPdftotext ? it : it.skip)(
@@ -300,6 +330,10 @@ describeRender('CertificateRendererService (real Chromium)', () => {
       expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
       expect(countPdfPages(pdf)).toBe(1);
       expect(pdf.length).toBeGreaterThan(200_000);
+      // the sample's links work too, so the admin can click through to the page
+      const links = pdfLinks(pdf);
+      expect(links).toHaveLength(2);
+      for (const l of links) expect(l.url).toBe(INPUT.verificationUrl);
     });
 
     (hasPdftotext ? it : it.skip)(
