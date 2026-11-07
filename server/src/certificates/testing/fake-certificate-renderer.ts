@@ -17,6 +17,8 @@ import type { CertificateTemplateInput } from '../template/certificate-template'
 export class FakeCertificateRenderer implements CertificateRenderer {
   calls: CertificateTemplateInput[] = [];
   previews: CertificateTemplateInput[] = [];
+  /** What renderPreviewPdf() was asked to print (the admin's sample PDFs). */
+  previewPdfs: CertificateTemplateInput[] = [];
   /** Makes the next render(s) fail, as if Chromium were broken. */
   failWith: CertificateRenderError | null = null;
 
@@ -42,6 +44,16 @@ export class FakeCertificateRenderer implements CertificateRenderer {
       Buffer.from(
         `\x89PNG\r\n\x1a\n fake preview ${input.recipientName}`,
         'latin1',
+      ),
+    );
+  }
+
+  renderPreviewPdf(input: CertificateTemplateInput): Promise<Buffer> {
+    this.previewPdfs.push(input);
+    if (this.failWith) return Promise.reject(this.failWith);
+    return Promise.resolve(
+      Buffer.from(
+        `%PDF-1.4\n% fake preview ${input.recipientName}|${input.programName}\n%%EOF`,
       ),
     );
   }

@@ -74,11 +74,14 @@ const hasPdftotext = (() => {
   }
 })();
 
-function pdfText(pdf: Buffer): string {
+/** The PDF's text. `-layout` reads it as a person would (columns, lines); `-raw`
+ * reads it in the order it was drawn, which keeps rotated text (a watermark) in one
+ * piece, where `-layout` scatters its letters. */
+function pdfText(pdf: Buffer, mode: 'layout' | 'raw' = 'layout'): string {
   const file = `${os.tmpdir()}/lx-cert-${process.pid}-${Date.now()}.pdf`;
   fs.writeFileSync(file, pdf);
   try {
-    return execFileSync('pdftotext', ['-layout', file, '-'], {
+    return execFileSync('pdftotext', [`-${mode}`, file, '-'], {
       encoding: 'utf8',
     });
   } finally {
@@ -169,8 +172,9 @@ describeRender('CertificateRendererService (real Chromium)', () => {
         const text = pdfText(rendered.pdf).replace(/\s+/g, ' ');
         expect(text).toContain('Nusrat Jahan Tamanna');
         expect(text).toContain('AI Builder');
-        expect(text).toContain('Completed on 2 November 2026.');
-        expect(text).toContain('6 November 2026');
+        expect(text).toContain('Awarded on passing the Final Test.');
+        expect(text).toContain('2 November 2026'); // completion date
+        expect(text).toContain('6 November 2026'); // issue date
         expect(text).toContain('LXA-2026-A7K9Q2');
         expect(text).toContain('Fairooz Omlan');
         expect(text).toContain('frontend.example.test/verify/LXA-2026-A7K9Q2');
@@ -290,6 +294,40 @@ describeRender('CertificateRendererService (real Chromium)', () => {
       });
       expect(preview.length).toBeGreaterThan(50_000);
     });
+
+    it('as a PDF: one watermarked A4 page, so the admin can check it as it prints', async () => {
+      const pdf = await renderer.renderPreviewPdf(INPUT);
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+      expect(countPdfPages(pdf)).toBe(1);
+      expect(pdf.length).toBeGreaterThan(200_000);
+    });
+
+    (hasPdftotext ? it : it.skip)(
+      'the sample PDF carries the watermark; a real certificate never does',
+      async () => {
+        const sampleRaw = pdfText(
+          await renderer.renderPreviewPdf(INPUT),
+          'raw',
+        );
+        expect(sampleRaw).toMatch(/^PREVIEW$/m);
+        expect(sampleRaw).toMatch(/^NOT ISSUED$/m);
+        // the sample is the same finished design, not a stand-in
+        const sample = pdfText(await renderer.renderPreviewPdf(INPUT)).replace(
+          /\s+/g,
+          ' ',
+        );
+        expect(sample).toContain('Nusrat Jahan Tamanna');
+        expect(sample).toContain('Awarded on passing the Final Test.');
+
+        const realPdf = (await renderer.render(INPUT)).pdf;
+        const realRaw = pdfText(realPdf, 'raw');
+        expect(realRaw).not.toMatch(/^PREVIEW$/m);
+        expect(realRaw).not.toContain('NOT ISSUED');
+        expect(pdfText(realPdf)).toContain(
+          'Awarded on passing the Final Test.',
+        );
+      },
+    );
   });
 
   it('renders one at a time and survives many in a row', async () => {

@@ -64,7 +64,10 @@ import {
 } from './certificate-renderer.service';
 import { CERTIFICATE_STORAGE } from './certificate-storage.service';
 import { CERTIFICATE_CATEGORIES } from './certificate-themes';
-import { formatCertificateDate } from './template/certificate-template';
+import {
+  TEMPLATE_VERSION,
+  formatCertificateDate,
+} from './template/certificate-template';
 import { FakeCertificateRenderer } from './testing/fake-certificate-renderer';
 import { MemoryCertificateStorage } from './testing/memory-certificate-storage';
 
@@ -331,6 +334,7 @@ describeDb(
       storage.configured = true;
       renderer.calls = [];
       renderer.previews = [];
+      renderer.previewPdfs = [];
       renderer.failWith = null;
       sent = [];
       smtpFails = false;
@@ -389,6 +393,8 @@ describeDb(
       const adminRoutes: [string, string, () => object][] = [
         ['get', '/status', () => ({})],
         ['get', '/summary', () => ({})],
+        ['get', '/themes', () => ({})],
+        ['post', '/template-preview', () => ({ theme: 'general' })],
         ['get', '/reviews', () => ({})],
         ['get', '/issued', () => ({})],
         ['get', `/CERT`, () => ({})],
@@ -748,7 +754,8 @@ describeDb(
           // snapshot stored on the certificate
           themeLabel: 'AI & Data Science',
           themeColor: CERTIFICATE_CATEGORIES.AI_DATA_SCIENCE.palette.ribbon[1],
-          templateVersion: 'v1',
+          templateVersion: TEMPLATE_VERSION,
+          designOutdated: false, // issued in the current design
           verificationUrl: `${FRONTEND}/verify/${id}`,
           isLegacy: false,
         });
@@ -765,7 +772,7 @@ describeDb(
           issuedByAdminId: admin.id,
           storageBucket: 'lumexa-certificates',
           theme: 'ai-data-science',
-          templateVersion: 'v1',
+          templateVersion: TEMPLATE_VERSION,
         });
         expect(row.themeSnapshot).toMatchObject({
           key: 'ai-data-science',
@@ -861,7 +868,7 @@ describeDb(
         expect(issued.afterData).toMatchObject({
           certificateId: res.body.certificateId,
           theme: 'ai-data-science',
-          templateVersion: 'v1',
+          templateVersion: TEMPLATE_VERSION,
         });
       });
 
@@ -1232,7 +1239,7 @@ describeDb(
             programName: 'AI Builder',
             completionDate: '2026-10-01',
             theme: 'general',
-            templateVersion: 'v1',
+            templateVersion: TEMPLATE_VERSION,
             storageBucket: 'lumexa-certificates',
             pdfKey: 'certificates/2026/LXA-2026-ZZZZZ2/LXA-2026-ZZZZZ2.pdf',
             pngKey: 'certificates/2026/LXA-2026-ZZZZZ2/LXA-2026-ZZZZZ2.png',
@@ -1295,6 +1302,196 @@ describeDb(
     });
 
     // ═══ The pending-approvals queue ═══════════════════════════════════════════
+
+    // ═══ Checking the finished design: nothing is issued ═══════════════════════
+
+    describe('the admin template preview', () => {
+      const preview = (body: object, who: Person = admin) =>
+        http()
+          .post('/admin/certificates/template-preview')
+          .set(as(who))
+          .send(body);
+
+      /** Nothing came into being: no record, review, file, email or audit row. */
+      async function expectNothingCreated() {
+        expect(await prisma.certificate.count()).toBe(0);
+        expect(await prisma.certificateReview.count()).toBe(0);
+        expect(await prisma.emailLog.count()).toBe(0);
+        expect(
+          await prisma.auditLog.count({
+            where: { action: { startsWith: 'CERTIFICATE_' } },
+          }),
+        ).toBe(0);
+        expect(storage.writeLog).toHaveLength(0);
+        expect(storage.objects.size).toBe(0);
+        expect(renderer.calls).toHaveLength(0); // the real render never ran
+      }
+
+      it('lists the four themes and the programmes that use each one right now', async () => {
+        const make = (title: string, category: string) =>
+          makeProgram(category, 1, title);
+        await make('Game Creator', 'Game Creator');
+        await make('Web Developer', 'Web Developer');
+        await make('Data Scientist', 'Data Scientist');
+        await make('Odyssey', 'Odyssey');
+        await make('Something New', 'Something New');
+
+        const res = await adminGet('/themes').expect(200);
+        expect(res.body.templateVersion).toBe(TEMPLATE_VERSION);
+        const themes = res.body.themes as {
+          key: string;
+          label: string;
+          accent: string;
+          color: string;
+          programs: { id: string; title: string }[];
+        }[];
+        expect(themes.map((t) => t.key)).toEqual([
+          'creative-coding-game-dev',
+          'web-digital-skills',
+          'ai-data-science',
+          'general',
+        ]);
+        for (const theme of themes) {
+          expect(theme.label).toBeTruthy();
+          expect(theme.accent).toBeTruthy();
+          expect(theme.color).toMatch(/^#[0-9a-f]{6}$/i);
+        }
+        const titlesOf = (key: string) =>
+          themes.find((t) => t.key === key)!.programs.map((p) => p.title);
+        expect(titlesOf('creative-coding-game-dev')).toEqual(['Game Creator']);
+        expect(titlesOf('web-digital-skills')).toEqual(['Web Developer']);
+        expect(titlesOf('ai-data-science')).toEqual(
+          expect.arrayContaining(['AI Builder', 'Data Scientist']),
+        );
+        // anything unrecognised gets the general theme
+        expect(titlesOf('general')).toEqual(
+          expect.arrayContaining(['Odyssey', 'Something New']),
+        );
+      });
+
+      it('returns a watermarked PNG of the chosen theme, with sample values, and creates nothing', async () => {
+        const res = await preview({ theme: 'web-digital-skills' }).expect(201);
+        expect(res.headers['content-type']).toMatch(/image\/png/);
+        expect(res.headers['content-disposition']).toMatch(
+          /^inline; filename="Lumexa-Certificate-SAMPLE\.png"/,
+        );
+        expect(res.headers['cache-control']).toMatch(/no-store/);
+
+        expect(renderer.previews).toHaveLength(1);
+        const asked = renderer.previews[0];
+        expect(asked).toMatchObject({
+          certificateId: 'LXA-PREVIEW', // a placeholder that never exists
+          recipientName: 'Student Full Name',
+          programName: 'Program Name',
+          withDistinction: false,
+          verificationUrl: `${FRONTEND}/verify/LXA-PREVIEW`,
+          palette: CERTIFICATE_CATEGORIES.WEB_DIGITAL_SKILLS.palette,
+        });
+        expect(asked.completionDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+        expect(asked.issueDate).toBe(asked.completionDate); // both "today" in a sample
+        await expectNothingCreated();
+      });
+
+      it('renders each theme with its own palette', async () => {
+        for (const category of Object.values(CERTIFICATE_CATEGORIES)) {
+          await preview({ theme: category.key }).expect(201);
+        }
+        expect(renderer.previews.map((p) => p.palette)).toEqual(
+          Object.values(CERTIFICATE_CATEGORIES).map((c) => c.palette),
+        );
+        await expectNothingCreated();
+      });
+
+      it("shows the admin's own sample text, date and distinction line", async () => {
+        await preview({
+          theme: 'creative-coding-game-dev',
+          recipientName: '  Nusrat   Jahan Tamanna ',
+          programName: 'Game Creator',
+          completionDate: '2026-10-20',
+          withDistinction: true,
+        }).expect(201);
+        expect(renderer.previews[0]).toMatchObject({
+          recipientName: 'Nusrat Jahan Tamanna', // tidied like a real one
+          programName: 'Game Creator',
+          completionDate: '2026-10-20',
+          withDistinction: true,
+        });
+        await expectNothingCreated();
+      });
+
+      it('returns the same sample as a one-page PDF for printing', async () => {
+        const res = await preview({ theme: 'ai-data-science', format: 'pdf' })
+          .buffer(true)
+          .parse((response, callback) => {
+            const chunks: Buffer[] = [];
+            response.on('data', (chunk: Buffer) => chunks.push(chunk));
+            response.on('end', () => callback(null, Buffer.concat(chunks)));
+          })
+          .expect(201);
+        expect(res.headers['content-type']).toMatch(/application\/pdf/);
+        expect(res.headers['content-disposition']).toMatch(
+          /^attachment; filename="Lumexa-Certificate-SAMPLE\.pdf"/,
+        );
+        expect((res.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+        expect(renderer.previewPdfs).toHaveLength(1);
+        expect(renderer.previewPdfs[0].palette).toEqual(
+          CERTIFICATE_CATEGORIES.AI_DATA_SCIENCE.palette,
+        );
+        expect(renderer.previews).toHaveLength(0); // the PDF path, not the PNG one
+        await expectNothingCreated();
+      });
+
+      it('refuses what cannot be printed, before rendering anything', async () => {
+        const bad: Record<string, unknown>[] = [
+          { theme: 'not-a-theme' },
+          { theme: 'general', recipientName: 'নুসরাত' },
+          { theme: 'general', recipientName: 'A'.repeat(70) },
+          { theme: 'general', programName: '构建' },
+          { theme: 'general', completionDate: '06/11/2026' },
+          { theme: 'general', completionDate: '2999-01-01' },
+          { theme: 'general', format: 'docx' },
+          { theme: 'general', isAdmin: true }, // unknown field
+          {}, // no theme
+        ];
+        for (const body of bad) expect((await preview(body)).status).toBe(400);
+        expect(renderer.previews).toHaveLength(0);
+        expect(renderer.previewPdfs).toHaveLength(0);
+      });
+
+      it('needs a valid FRONTEND_URL, like a real certificate (the QR code encodes it)', async () => {
+        delete process.env.FRONTEND_URL;
+        const res = await preview({ theme: 'general' });
+        expect(res.status).toBe(503);
+        expect(res.body.message).toMatch(/FRONTEND_URL/);
+        expect(renderer.previews).toHaveLength(0);
+      });
+
+      it('says so when the renderer is broken', async () => {
+        renderer.failWith = new CertificateRenderError(
+          'Certificate rendering is unavailable on this server: Chromium could not be started.',
+          'chromium-unavailable',
+        );
+        const res = await preview({ theme: 'general' });
+        expect(res.status).toBe(503);
+        expect(res.body.message).toMatch(/Chromium could not be started/);
+        await expectNothingCreated();
+      });
+
+      it('is for admins only', async () => {
+        for (const who of [teacher, student]) {
+          expect((await preview({ theme: 'general' }, who)).status).toBe(403);
+          await http()
+            .get('/admin/certificates/themes')
+            .set(as(who))
+            .expect(403);
+        }
+        await http()
+          .post('/admin/certificates/template-preview')
+          .send({ theme: 'general' })
+          .expect(401);
+        expect(renderer.previews).toHaveLength(0);
+      });
+    });
 
     describe('the pending-approvals queue', () => {
       let review: { id: string };
@@ -1505,7 +1702,7 @@ describeDb(
           replaces: original.certificateId,
           replacedBy: null,
           theme: 'ai-data-science',
-          templateVersion: 'v1',
+          templateVersion: TEMPLATE_VERSION,
           issuedByAdminId: admin2.id,
         });
 
@@ -1665,6 +1862,78 @@ describeDb(
         expect(second.email.status).toBe('SKIPPED');
         await emails.idle();
         expect(certificateMails()).toHaveLength(2);
+      });
+
+      it('a certificate issued in an EARLIER design can be re-issued as it is, in the current one', async () => {
+        // as if it had been issued before the design was corrected
+        await prisma.certificate.update({
+          where: { certificateId: original.certificateId },
+          data: { templateVersion: 'v1' },
+        });
+        const before = await adminGet(`/${original.certificateId}`).expect(200);
+        expect(before.body).toMatchObject({
+          templateVersion: 'v1',
+          designOutdated: true,
+        });
+        const originalRow = await prisma.certificate.findUniqueOrThrow({
+          where: { certificateId: original.certificateId },
+        });
+        const originalPdf = storage.objects
+          .get(originalRow.pdfKey!)!
+          .body.toString('hex');
+
+        const res = await adminPost(
+          `/${original.certificateId}/replace`,
+          { reason: 'Re-issued in the corrected design', sendEmail: false },
+          admin2,
+        ).expect(201);
+        expect(res.body).toMatchObject({
+          status: 'ACTIVE',
+          templateVersion: TEMPLATE_VERSION,
+          designOutdated: false,
+          // nothing else was touched
+          recipientName: 'Nusrat Jahan Tamanna',
+          programName: 'AI Builder',
+          completionDate: '2026-10-29',
+          replaces: original.certificateId,
+        });
+        expect(res.body.certificateId).not.toBe(original.certificateId);
+
+        // the original and its files are kept exactly as they were
+        const old = await prisma.certificate.findUniqueOrThrow({
+          where: { certificateId: original.certificateId },
+        });
+        expect(old).toMatchObject({
+          status: 'REPLACED',
+          templateVersion: 'v1',
+          replacementReason: 'Re-issued in the corrected design',
+        });
+        expect(
+          storage.objects.get(originalRow.pdfKey!)!.body.toString('hex'),
+        ).toBe(originalPdf);
+
+        // the audit trail shows the design it moved from and to
+        const audit = await prisma.auditLog.findFirstOrThrow({
+          where: { action: 'CERTIFICATE_REPLACED' },
+        });
+        expect(audit.beforeData).toMatchObject({ templateVersion: 'v1' });
+        expect(audit.afterData).toMatchObject({
+          templateVersion: TEMPLATE_VERSION,
+        });
+      });
+
+      it('a certificate in the CURRENT design still needs a real correction to be replaced', async () => {
+        expect(
+          (await adminGet(`/${original.certificateId}`).expect(200)).body,
+        ).toMatchObject({
+          templateVersion: TEMPLATE_VERSION,
+          designOutdated: false,
+        });
+        const res = await adminPost(`/${original.certificateId}/replace`, {
+          reason: 'No change at all',
+        });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toMatch(/Nothing was corrected/);
       });
 
       it('refuses a "correction" that changes nothing, a missing reason and unreadable text', async () => {
@@ -2499,22 +2768,27 @@ describeDb(
         expect(await prisma.certificateReview.count()).toBe(0);
       });
 
-      it('can be replaced by a certificate in the new design — the old record is kept', async () => {
-        const res = await adminPost(`/${LEGACY_ID}/replace`, {
-          reason: 'Re-issued in the official design',
-        }).expect(400); // nothing changed
-        expect(res.body.message).toMatch(/Nothing was corrected/);
+      it('can be re-issued in the current design exactly as it is — the old record is kept', async () => {
+        const view = await adminGet(`/${LEGACY_ID}`).expect(200);
+        expect(view.body).toMatchObject({
+          isLegacy: true,
+          designOutdated: true,
+        });
+
+        // no detail needs to change: an older design is reason enough
         const next = (
           await adminPost(`/${LEGACY_ID}/replace`, {
             reason: 'Re-issued in the official design',
-            completionDate: '2026-09-19',
           }).expect(201)
         ).body;
         expect(next).toMatchObject({
           status: 'ACTIVE',
-          templateVersion: 'v1',
+          templateVersion: TEMPLATE_VERSION,
+          designOutdated: false,
           replaces: LEGACY_ID,
-          completionDate: '2026-09-19',
+          recipientName: 'Nusrat Jahan',
+          programName: 'AI Builder',
+          completionDate: '2026-09-20',
         });
         const old = await prisma.certificate.findUniqueOrThrow({
           where: { certificateId: LEGACY_ID },
@@ -2522,6 +2796,20 @@ describeDb(
         expect(old).toMatchObject({
           status: 'REPLACED',
           pdfUrl: 'https://legacy-files.example/old-certificate.pdf',
+        });
+      });
+
+      it('can also be replaced with a correction, as any certificate can', async () => {
+        const next = (
+          await adminPost(`/${LEGACY_ID}/replace`, {
+            reason: 'Wrong completion date',
+            completionDate: '2026-09-19',
+          }).expect(201)
+        ).body;
+        expect(next).toMatchObject({
+          status: 'ACTIVE',
+          replaces: LEGACY_ID,
+          completionDate: '2026-09-19',
         });
       });
     });
@@ -2773,7 +3061,7 @@ describeDb(
           programName: 'AI Builder',
           completionDate: '2026-10-29',
           theme: 'general',
-          templateVersion: 'v1',
+          templateVersion: TEMPLATE_VERSION,
           storageBucket: 'lumexa-certificates',
           emailStatus: 'SKIPPED' as const,
         };

@@ -80,6 +80,8 @@ import {
   type CertificateActor,
 } from './certificate-reviews.service';
 import {
+  CERTIFICATE_CATEGORIES,
+  listCertificateThemes,
   resolveCertificateTheme,
   themeSnapshot,
   type CertificatePalette,
@@ -110,6 +112,22 @@ export interface ReplaceInput {
 }
 
 export type CertificateFileKind = 'pdf' | 'png';
+
+/** What the admin's "Preview template" tool may ask for. */
+export interface TemplatePreviewInput {
+  theme: string;
+  recipientName?: string;
+  programName?: string;
+  completionDate?: string;
+  withDistinction?: boolean;
+  format?: 'png' | 'pdf';
+}
+
+/** What a sample shows when the admin leaves a field out. */
+const SAMPLE_RECIPIENT = 'Student Full Name';
+const SAMPLE_PROGRAM = 'Program Name';
+/** The placeholder ID on every preview and sample: it never exists as a certificate. */
+const PREVIEW_CERTIFICATE_ID = 'LXA-PREVIEW';
 
 /** What generateAndStore() hands back: the files are already in R2. */
 interface GeneratedFiles {
@@ -216,6 +234,77 @@ export class CertificatesService {
       );
   }
 
+  // ═══ Checking the finished design (admin; nothing is issued) ═══════════════
+
+  /** The themes and which programmes use each one right now. A programme gets the
+   * theme of its category at the moment a certificate is issued, so this is what
+   * an approval today would print. */
+  async themes() {
+    const courses = await this.prisma.course.findMany({
+      select: { id: true, title: true, category: true, slug: true },
+      orderBy: { title: 'asc' },
+      take: 1000,
+    });
+    const byTheme = new Map<string, { id: string; title: string }[]>();
+    for (const course of courses) {
+      const key = resolveCertificateTheme(course).key;
+      byTheme.set(key, [
+        ...(byTheme.get(key) ?? []),
+        { id: course.id, title: course.title },
+      ]);
+    }
+    return {
+      templateVersion: TEMPLATE_VERSION,
+      themes: listCertificateThemes().map((theme) => ({
+        ...theme,
+        programs: byTheme.get(theme.key) ?? [],
+      })),
+    };
+  }
+
+  /** A sample of the FINISHED design — the same template and the same renderer as a
+   * real certificate — for an admin to check before any student has one. It is
+   * watermarked "PREVIEW — NOT ISSUED", carries a placeholder ID that never exists,
+   * and is never stored, recorded, audited or emailed. */
+  async templatePreview(raw: TemplatePreviewInput) {
+    this.assertCanIssueFrontend();
+    const category = Object.values(CERTIFICATE_CATEGORIES).find(
+      (c) => c.key === raw.theme,
+    );
+    if (!category)
+      throw new BadRequestException('Choose one of the certificate themes.');
+
+    const today = todayDhakaDateStr();
+    const sample = this.cleanDetails({
+      recipientName: raw.recipientName?.trim() || SAMPLE_RECIPIENT,
+      programName: raw.programName?.trim() || SAMPLE_PROGRAM,
+      completionDate: raw.completionDate?.trim() || today,
+    });
+    const input = {
+      certificateId: PREVIEW_CERTIFICATE_ID,
+      ...sample,
+      issueDate: today,
+      verificationUrl: certificateVerificationUrl(PREVIEW_CERTIFICATE_ID),
+      withDistinction: !!raw.withDistinction,
+      palette: category.palette,
+    };
+    try {
+      if (raw.format === 'pdf')
+        return {
+          body: await this.renderer.renderPreviewPdf(input),
+          contentType: 'application/pdf',
+          fileName: 'Lumexa-Certificate-SAMPLE.pdf',
+        };
+      return {
+        body: await this.renderer.renderPreview(input),
+        contentType: 'image/png',
+        fileName: 'Lumexa-Certificate-SAMPLE.png',
+      };
+    } catch (err) {
+      throw this.httpError(err);
+    }
+  }
+
   // ═══ Approval (the only way a first certificate comes to exist) ═══════════
 
   /** Confirms the details of what would be printed and renders a watermarked
@@ -231,12 +320,12 @@ export class CertificatesService {
     const today = todayDhakaDateStr();
     try {
       return await this.renderer.renderPreview({
-        certificateId: 'LXA-PREVIEW',
+        certificateId: PREVIEW_CERTIFICATE_ID,
         recipientName: input.recipientName,
         programName: input.programName,
         completionDate: input.completionDate,
         issueDate: today,
-        verificationUrl: certificateVerificationUrl('LXA-PREVIEW'),
+        verificationUrl: certificateVerificationUrl(PREVIEW_CERTIFICATE_ID),
         withDistinction: !!raw.withDistinction,
         palette: theme.palette,
       });
@@ -438,7 +527,11 @@ export class CertificatesService {
       input.programName !== original.programName ||
       input.completionDate !== original.completionDate ||
       withDistinction !== original.withDistinction;
-    if (!changed)
+    // A certificate issued with an earlier design (or by the previous system) may be
+    // re-issued exactly as it is, in the current design: nothing has to be
+    // "corrected" for that to be worth doing.
+    const designOutdated = original.templateVersion !== TEMPLATE_VERSION;
+    if (!changed && !designOutdated)
       throw new BadRequestException(
         'Nothing was corrected. Change the name, programme, completion date or distinction to replace this certificate.',
       );
@@ -503,6 +596,7 @@ export class CertificatesService {
                   programName: original.programName,
                   completionDate: original.completionDate,
                   withDistinction: original.withDistinction,
+                  templateVersion: original.templateVersion,
                 } as Prisma.InputJsonValue,
                 afterData: {
                   replacedBy: created.certificateId,
@@ -510,6 +604,7 @@ export class CertificatesService {
                   programName: input.programName,
                   completionDate: input.completionDate,
                   withDistinction,
+                  templateVersion: TEMPLATE_VERSION,
                 } as Prisma.InputJsonValue,
               },
               {
@@ -1175,6 +1270,9 @@ export class CertificatesService {
         themeColor: snapshot?.palette?.ribbon?.[1] ?? null,
         templateVersion: c.templateVersion,
         isLegacy: c.templateVersion === LEGACY_MARKER,
+        // Issued with an earlier design (or by the previous system): may be
+        // re-issued as it is, in the current design.
+        designOutdated: c.templateVersion !== TEMPLATE_VERSION,
         verificationUrl: certificateVerificationUrlSafe(c.certificateId),
         files: {
           pdf: !!c.pdfKey || !!c.pdfUrl,
