@@ -33,6 +33,16 @@ import {
  * on A4 — sharp enough to print, and what social platforms downscale from. */
 export const PNG_SCALE = 3;
 
+/** How the page is printed to PDF: landscape A4, backgrounds on. One definition, used
+ * by the real render AND the admin's sample, so the sample can never drift from what
+ * a real certificate gets. */
+const A4_LANDSCAPE_PDF = {
+  width: '297mm',
+  height: '210mm',
+  printBackground: true,
+  preferCSSPageSize: true,
+} as const;
+
 const LAUNCH_TIMEOUT_MS = 45_000;
 const PAGE_TIMEOUT_MS = 45_000;
 
@@ -61,6 +71,9 @@ export interface CertificateRenderer {
   /** A watermarked, low-resolution PNG for the admin to check before approving.
    * Never stored. */
   renderPreview(input: CertificateTemplateInput): Promise<Buffer>;
+  /** The same watermarked preview as a one-page A4 PDF — for the admin to check
+   * the finished design as it prints. Never stored. */
+  renderPreviewPdf(input: CertificateTemplateInput): Promise<Buffer>;
 }
 
 /** Injection token: CertificatesService depends on the interface, not on Chromium. */
@@ -104,14 +117,7 @@ export class CertificateRendererService implements CertificateRenderer {
             clip: { x: 0, y: 0, width: PAGE_WIDTH_PX, height: PAGE_HEIGHT_PX },
           }),
         );
-        const pdf = Buffer.from(
-          await page.pdf({
-            width: '297mm',
-            height: '210mm',
-            printBackground: true,
-            preferCSSPageSize: true,
-          }),
-        );
+        const pdf = Buffer.from(await page.pdf(A4_LANDSCAPE_PDF));
         return this.validate(pdf, png);
       }),
     );
@@ -128,6 +134,28 @@ export class CertificateRendererService implements CertificateRenderer {
             clip: { x: 0, y: 0, width: PAGE_WIDTH_PX, height: PAGE_HEIGHT_PX },
           }),
         );
+      }),
+    );
+  }
+
+  async renderPreviewPdf(input: CertificateTemplateInput): Promise<Buffer> {
+    const html = renderCertificateHtml(input);
+    return this.exclusive(() =>
+      this.withPage(1, html, async (page) => {
+        await page.evaluate(PREVIEW_WATERMARK);
+        const pdf = Buffer.from(await page.pdf(A4_LANDSCAPE_PDF));
+        if (!pdf.subarray(0, 5).equals(Buffer.from('%PDF-')))
+          throw new CertificateRenderError(
+            'The rendered sample is not a PDF.',
+            'invalid-output',
+          );
+        const pages = countPdfPages(pdf);
+        if (pages !== 1)
+          throw new CertificateRenderError(
+            `The rendered sample has ${pages} pages instead of 1.`,
+            'invalid-output',
+          );
+        return pdf;
       }),
     );
   }

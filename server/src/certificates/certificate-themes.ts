@@ -286,11 +286,14 @@ export function themeSnapshot(theme: ResolvedCertificateTheme) {
   };
 }
 
-/** Every theme, for the admin UI. */
+/** Every theme, for the admin UI. `accent` describes the colour for people
+ * ("Deep blue"); `color` is a real swatch (the palette's middle ribbon colour) to
+ * draw a dot with. */
 export function listCertificateThemes() {
   return Object.values(CERTIFICATE_CATEGORIES).map((c) => ({
     key: c.key,
     label: c.label,
     accent: c.accent,
+    color: c.palette.ribbon[1],
   }));
 }

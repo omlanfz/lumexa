@@ -161,9 +161,10 @@ network request is blocked — so it needs nothing from the internet.
 ### 2.7 Check it works
 
 Open **Admin ▸ Certificates**. If something is not configured, a yellow banner says what. Then
-open any pending review and press **Show preview**: it renders through the same Chromium as an
-approval (watermarked "PREVIEW — NOT ISSUED", stored nowhere, no ID) — a safe smoke test. The
-admin API also answers `GET /admin/certificates/status` → `{ "canIssue": true, "problems": [] }`.
+press **Preview template** (top right): it renders the finished design through the same
+Chromium as an approval (watermarked "PREVIEW — NOT ISSUED", stored nowhere, no ID) — a safe
+smoke test that works before any student has finished anything (section 4.1). The admin API also
+answers `GET /admin/certificates/status` → `{ "canIssue": true, "problems": [] }`.
 
 ## 3. What is stored
 
@@ -206,6 +207,13 @@ All of it lives in **one file**, `server/src/certificates/certificate-themes.ts`
 never stores a theme: it inherits its category's at the moment a certificate is issued, so a
 programme added tomorrow in an existing category is themed correctly with no change.
 
+**What is printed.** The wording is the supplied design's, unchanged — including the third
+italic line, "Awarded on passing the Final Test.", which is the same on every certificate. What
+varies is the recipient's name, the programme name, the optional "With Distinction" line, the
+**date of completion**, the **date of issue**, the certificate ID, the QR code and the printed
+verification link. The supplied design had a place for the date of issue only, so the date of
+completion is printed above it ("DATE OF COMPLETION"), in the same style.
+
 **Adding a new category** is one edit in that file: add an entry to `CERTIFICATE_CATEGORIES`
 (key, label, palette) and list the `Course.category` spellings that belong to it in
 `CATEGORY_ALIASES`. The template, renderer and database need no change.
@@ -215,6 +223,42 @@ never alter one that was issued. Any change to the template, its assets or its o
 **bump `TEMPLATE_VERSION`** (`template/certificate-template.ts`); a snapshot test
 (`certificate-template.spec.ts`) fails until you do, and you then update the recorded hashes
 in the same commit. Changing a palette in `certificate-themes.ts` is covered the same way.
+
+### 4.1 Checking the finished design: Preview template
+
+**Admin ▸ Certificates ▸ Preview template** shows the finished certificate exactly as it is
+issued — the same template and the same renderer — so you can check it before any student has
+one, and again whenever the design or a programme's category changes.
+
+- **Themes.** Pick one of the four. Each card shows its colour and **which programmes get it
+  right now** (a programme gets the theme of its category), so you can also check a new
+  programme is coloured as you expect.
+- **Sample text.** Type any name, programme and date, and tick "With Distinction" — try a very
+  long name to see it shrink to fit. **Update preview** re-renders.
+- **Open sample PDF ↗** opens it as it prints: one A4 landscape page. The picture on screen is
+  the PNG that is shared on social media.
+- A sample is **watermarked** "PREVIEW — NOT ISSUED" and carries a placeholder ID
+  (`LXA-PREVIEW`), so it can never be mistaken for a real certificate (its QR code leads to the
+  verification page of an ID that does not exist). **Nothing is issued, stored, recorded or
+  emailed**, so it is safe to use on production at any time.
+- It needs a valid `FRONTEND_URL` (the QR code encodes it) and a working Chromium, so it is also
+  the quickest check of both. The design version in use is shown at the top.
+
+### 4.2 Design versions
+
+Every certificate records the design version it was rendered with.
+
+| Version | What it is |
+| --- | --- |
+| **v1** | The first release. Its third italic line carried the completion date ("Completed on …"). |
+| **v2** | The current design: the supplied wording restored ("Awarded on passing the Final Test.") and "DATE OF COMPLETION" added above "DATE OF ISSUE". |
+
+A certificate issued with an earlier design keeps its files for ever (they are never
+regenerated) and shows an **Earlier design (v1)** badge to the admin. It can be **re-issued
+exactly as it is, in the current design**: open it ▸ **Replace…** ▸ leave the fields alone, give
+a reason ▸ **Re-issue in the current design**. A new certificate (new ID, new issue date) is
+issued, the original is kept as Replaced, and the student is emailed the new one unless you untick
+that. Certificates from the previous system can be re-issued the same way.
 
 ## 5. Operating it
 
@@ -240,7 +284,8 @@ dashboard) counts the programmes waiting for review.
 A certificate is never edited or silently overwritten. **Replace…** issues a **new**
 certificate (new unique ID, new files, optionally emailed) and marks the original
 **Replaced** — the original, its record and its files are kept, its verification page says it
-was replaced and links to the new one. A reason is required and recorded.
+was replaced and links to the new one. A reason is required and recorded. A certificate in an
+earlier design can also be re-issued as it is, with no detail changed (section 4.2).
 
 ### 5.3 Revoking
 
@@ -288,7 +333,8 @@ explicit confirmation. Emails are logged in `EmailLog` like every other email.
 Certificates issued before this system (numbers like `LMX-…`, PDFs on Cloudinary) were migrated
 in place: they keep their numbers and PDFs, are listed and downloadable by the student and
 verifiable at `/verify/<LMX number>`, are marked "from the previous system", are never
-re-emailed, and can be replaced by a certificate in the new design.
+re-emailed, and can be re-issued as they are in the current design (section 4.2) or replaced with
+a correction.
 
 ### 5.8 Backups
 
@@ -308,6 +354,89 @@ returned**, and an unknown or malformed ID gets the same "not found" answer. The
 in any letter case.
 
 ## 7. Testing
+
+### 7.1 Trying the whole workflow by hand, start to finish
+
+**Where to do it.** Use a **staging** copy if you can: its own database, its own R2 bucket
+**without** the Bucket Lock (so it can be emptied — any name except the recordings, homework or
+chat buckets), and the staging site's address as `FRONTEND_URL`. Certificates and their files can
+never be deleted, only revoked, so every test certificate made on a site that talks to
+production stays on record for ever. Note that a Vercel **preview** deployment talks to whichever
+API it was built with — usually production — so approving there writes to production too. If you
+must test on production, use clearly named test accounts ("Test Student — do not certify") and
+**Revoke** every test certificate afterwards.
+
+**What else the steps touch.** Marking a class Completed pays the teacher the class fee (it shows
+in that teacher's payouts) and takes a credit from the student *if the student joined it* (a class
+the student never joined costs no credit). So use a test teacher.
+
+**0. Look at the design first.** Admin ▸ Certificates ▸ **Preview template** (section 4.1): check
+each theme, a long name, and **Open sample PDF**. Nothing is created.
+
+**1. A tiny test programme.** Profile menu (top right) ▸ **Manage Courses** ▸ **+ New Course**.
+Choose a **Category** that gives the colours you want to see — `Web Developer` (deep blue),
+`AI Builder` (teal), `Game Creator` (violet) or `Other` (navy and gold) — set **Sessions** to
+2, **Create course**, then open **Lessons** and add two lessons. (Two lessons means only two
+classes to finish; a long programme works the same.)
+
+**2. Two test accounts.** Register a test **student** at `/register` — give a parent/billing
+email you can read, because the certificate email goes there (to the student's own address if
+there is none). Register a test **teacher** too (approve it under Admin ▸ Teachers if it needs
+approval), or reuse one you already keep for testing.
+
+**3. Assign and schedule.** Admin ▸ Students ▸ the student ▸ **Overview**: press **Change** beside
+*Assigned Teacher* and beside *Course* (pick the test programme). Open the **Schedule** tab: choose
+**1-to-1**, set **First Class Date** (today or later; it must fall on one of the weekdays you
+add), add a **Weekly Time Slot**, and **Save Schedule** — it reports the lessons scheduled.
+
+**4. Finish the programme.** Schedule tab ▸ **Upcoming Lessons** ▸ **Set status…** ▸
+**Completed** ▸ **Mark Completed** for lesson 1. Nothing happens in Certificates yet — it is not
+the final class. Do the same for lesson 2, the **final** class. Now the red number beside
+**Certificates** in the admin menu is 1 and the dashboard says a certificate is waiting for your
+review. No ID, files or email exist yet. (Nothing there? Press **Check for missed completions**
+on the Pending tab.) Marking the final lesson *Partially Completed* instead schedules an extra
+class, so the programme is not finished until that one is completed; *Incomplete* does not count.
+
+**5. Review and approve.** Certificates ▸ **Pending Approvals** ▸ **Review & approve**. Check the
+facts shown ("No graded tests on record" is normal — nothing is decided for you), the **name**
+(correct it if needed; a name written in another script must be typed in Latin letters), the
+programme and the **completion date** — a class completed before its scheduled day suggests a
+date in the future, which is refused: set it to today. Press **Show preview**; change a detail
+and see the preview mark itself out of date; refresh it; tick the confirmation; **Approve & issue
+certificate**. Expect "Certificate issued" and an ID like `LXA-2026-A7K9Q2`.
+
+**6. Check what follows.**
+
+- *Admin:* Certificates ▸ the certificate — the picture, **Download PDF** and **Download image**
+  (the PDF is one A4 landscape page; scan its QR code with a phone: it opens the verification
+  page), **View public page**, email status **Sent**, and an audit trail listing the review
+  opening, the approval, the issue and the email.
+- *Email:* the billing contact's inbox has "🎉 Congratulations! Your Lumexa certificate is ready!"
+  with the PDF attached and buttons pointing at your site (View & Download → My Certificates; Find
+  Your Next Program → the programme catalogue).
+- *Student:* log in as the student. Home shows the **New achievement** card ▸ **View Your
+  Certificate** ▸ My Certificates: preview, dates, ID, **Download PDF** / **Download Image**,
+  **Share** (try each option; on a phone, the share sheet) and **Copy Verification Link**. Learning ▸
+  Overview lists it under **Completed programs**. (Looking through the admin's "View Student
+  Dashboard" does not clear the card.)
+- *Public:* open the verification link in a private window — **Active**, the name, programme, dates
+  and ID, and nothing private. An invented ID says "We couldn't find that certificate".
+
+**7. Corrections.** On the certificate press **Replace…**, fix something (a reason is required): a
+new ID is issued; the old one shows **Replaced** and links to the new one (check its verification
+page and the student's list). Then **Revoke…** the new one: verification says **Revoked**, the
+student can no longer download or share it, and the files are still there.
+
+**8. The other branch.** With a second test student, finish the programme and **Dismiss** the
+review (a reason is required) — it moves to *Dismissed*; **Reopen** it.
+
+**9. Failure drills (staging only).** Temporarily break `CERTIFICATE_R2_SECRET_ACCESS_KEY` (or
+point `CERTIFICATE_CHROMIUM_PATH` at nothing) and approve: you get a clear error — "Nothing was
+issued and no email was sent" — and the review stays Pending; fix it and approve again, which
+works with a new ID. Unset the SMTP settings: the certificate is still issued and the email shows
+Failed; fix SMTP and press **Send email now**.
+
+### 7.2 Automated tests
 
 Server (from `server/`):
 
@@ -352,3 +481,6 @@ access), `npx tsc --noEmit`, `npm run lint`, `npm run build`.
 | Student's page shows no "Share" / "Copy link" | `FRONTEND_URL` is invalid, so there is no link to share | Fix `FRONTEND_URL` |
 | QR code of an old certificate stopped working after a domain change | The old domain no longer serves `/verify/*` | Redirect the old domain to the new one (2.1) |
 | Email shows "Failed" | The mail server rejected it | Fix SMTP, then **Send email now** on the certificate |
+| Approve → "The completion date cannot be in the future" | The final class was completed before its scheduled day (only happens when testing), so the suggested date is in the future | Set the completion date to today |
+| The certificate shows an **Earlier design (v1)** badge | It was issued before the design was updated | **Replace…** ▸ **Re-issue in the current design** (section 4.2) |
+| "Preview template" fails with a Chromium or `FRONTEND_URL` message | The same prerequisites as issuing | Fix them (2.1, 2.6); the sample works again at once |

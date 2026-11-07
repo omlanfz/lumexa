@@ -39,8 +39,16 @@ import {
 import { qrPath } from './qr';
 
 /** Recorded on every issued certificate. Bump it with ANY change to the
- * template, its assets or its ornaments. */
-export const TEMPLATE_VERSION = 'v1';
+ * template, its assets or its ornaments.
+ *
+ *   v1  first release. Its third italic line carried the completion date
+ *       ("Completed on 2 November 2026.") in place of the design's own wording.
+ *   v2  the design's third italic line is restored exactly as supplied
+ *       ("Awarded on passing the Final Test."), and the completion date — which the
+ *       supplied design has no place for — is added as a "DATE OF COMPLETION" pair
+ *       above "DATE OF ISSUE", in the same style. Nothing else moved.
+ */
+export const TEMPLATE_VERSION = 'v2';
 
 /** A4 landscape in CSS px at 96 dpi, for the PNG viewport. */
 export const PAGE_WIDTH_PX = 1123;
@@ -367,14 +375,13 @@ export function renderCertificateHtml(input: CertificateTemplateInput): string {
     text({
       x: 702,
       y: 648,
-      content: `Completed on ${completion}.`,
+      content: 'Awarded on passing the Final Test.',
       size: 20.5,
       weight: 500,
       italic: true,
       family: 'Cormorant Garamond',
       fill: TEXT.body,
       anchor: 'middle',
-      fit: [800, 0.6],
     }),
   );
 
@@ -416,8 +423,33 @@ export function renderCertificateHtml(input: CertificateTemplateInput): string {
   // ── seal ──
   body.push(seal(certificateImage('seal-mascot.png')));
 
-  // ── issue date, certificate id, QR ──
+  // ── completion date, issue date, certificate id, QR ──
+  // The supplied design has only "DATE OF ISSUE". The completion date is added above
+  // it in the same label/value style and rhythm (label 21 above its value, 32 between
+  // pairs), growing the block upwards so nothing already placed moves.
   body.push(
+    text({
+      x: 1137.7,
+      y: 719,
+      content: 'DATE OF COMPLETION',
+      size: 9.6,
+      weight: 700,
+      family: 'Inter',
+      fill: TEXT.goldLabel,
+      spacing: 1.92,
+      anchor: 'end',
+    }),
+    text({
+      x: 1137.7,
+      y: 740,
+      content: completion,
+      size: 17.6,
+      weight: 600,
+      family: 'Inter',
+      fill: INK,
+      anchor: 'end',
+      fit: [330, 0.7],
+    }),
     text({
       x: 1137.7,
       y: 772,

@@ -38,6 +38,7 @@ import {
   ReplaceCertificateDto,
   ResendCertificateEmailDto,
   RevokeCertificateDto,
+  TemplatePreviewDto,
 } from './dto/certificate.dto';
 
 interface AuthedRequest {
@@ -74,6 +75,27 @@ export class CertificatesAdminController {
   @Get('summary')
   summary() {
     return this.reviews.summary();
+  }
+
+  // ─── Checking the finished design (nothing is issued) ────────────────────
+
+  /** The themes, and which programmes use each one right now. */
+  @Get('themes')
+  themes() {
+    return this.certificates.themes();
+  }
+
+  /** A watermarked sample of the finished design — a PNG to look at, or a PDF to
+   * open as it prints. Same template and renderer as a real certificate; nothing is
+   * issued, stored, recorded or emailed. */
+  @Post('template-preview')
+  @Header('Cache-Control', 'private, no-store')
+  async templatePreview(@Body() dto: TemplatePreviewDto) {
+    const file = await this.certificates.templatePreview(dto);
+    return new StreamableFile(file.body, {
+      type: file.contentType,
+      disposition: `${dto.format === 'pdf' ? 'attachment' : 'inline'}; filename="${file.fileName}"`,
+    });
   }
 
   // ─── Pending approvals ───────────────────────────────────────────────────

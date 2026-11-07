@@ -54,7 +54,7 @@ export default function ReplaceModal({
 
   const submit = async () => {
     if (!reason.trim()) return setError("Explain why — it is kept in the audit trail.");
-    if (!changed) return setError("Change at least one detail to replace the certificate.");
+    if (!changed && !cert.designOutdated) return setError("Change at least one detail to replace the certificate.");
     if (problem) return setError(problem);
     setSubmitting(true);
     setError(null);
@@ -73,6 +73,16 @@ export default function ReplaceModal({
   return (
     <Modal title={`Replace ${cert.certificateId}`} onClose={() => !submitting && onClose()} wide>
       <div className="space-y-4" data-testid="replace-modal">
+        {cert.designOutdated && (
+          <p
+            className="rounded-lg bg-[var(--a-warning-bg)] px-3 py-2.5 text-sm text-[var(--a-warning-text)]"
+            data-testid="replace-outdated-note"
+          >
+            This certificate was issued with {cert.isLegacy ? "the previous system's design" : `an earlier design (${cert.templateVersion})`}. You can
+            re-issue it in the current design <strong>without changing any detail</strong> — leave the fields as they are and
+            say why below.
+          </p>
+        )}
         <p className="rounded-lg bg-[var(--a-info-bg)] px-3 py-2.5 text-sm text-[var(--a-info)]">
           The original certificate is kept and marked <strong>Replaced</strong> (its files are never touched). A new
           certificate with a <strong>new ID</strong> is issued in its place, and verification of the old ID will point to it.
@@ -98,7 +108,11 @@ export default function ReplaceModal({
             onChange={(e) => edit(setReason)(e.target.value)}
             rows={3}
             className={INPUT}
-            placeholder="e.g. The student's name was misspelled. Recorded in the audit trail."
+            placeholder={
+              cert.designOutdated
+                ? "e.g. Re-issued in the current design. Recorded in the audit trail."
+                : "e.g. The student's name was misspelled. Recorded in the audit trail."
+            }
             data-testid="replace-reason"
           />
         </Field>
@@ -112,7 +126,11 @@ export default function ReplaceModal({
             Cancel
           </button>
           <button className={BTN_PRIMARY} onClick={() => void submit()} disabled={submitting}>
-            {submitting ? "Issuing replacement…" : "Issue replacement"}
+            {submitting
+              ? "Issuing replacement…"
+              : !changed && cert.designOutdated
+                ? "Re-issue in the current design"
+                : "Issue replacement"}
           </button>
         </div>
       </div>

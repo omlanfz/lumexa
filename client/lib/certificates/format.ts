@@ -120,3 +120,19 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
   if (typeof message === 'string' && message.trim()) return message;
   return fallback;
 }
+
+/** A request whose success body is a FILE also gets its failure body as a Blob (axios
+ * keeps the response type), so the server's JSON message — "FRONTEND_URL is not
+ * set…", "Nothing was issued…" — would be unreadable. This reads it and puts the
+ * parsed JSON back where apiErrorMessage() looks, then returns the same error. */
+export async function readBlobError<T>(err: T): Promise<T> {
+  const response = (err as { response?: { data?: unknown } } | null)?.response;
+  if (response && typeof Blob !== 'undefined' && response.data instanceof Blob) {
+    try {
+      response.data = JSON.parse(await response.data.text());
+    } catch {
+      // not JSON (a proxy's HTML page, say): leave it, the caller's fallback applies
+    }
+  }
+  return err;
+}

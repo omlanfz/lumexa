@@ -74,11 +74,45 @@ describe('the master template — content', () => {
     expect(text).toContain('Nusrat Jahan Tamanna');
     expect(text).toContain('for successfully completing the');
     expect(text).toContain('AI Builder');
-    expect(text).toContain('Completed on 2 November 2026.');
+    expect(text).toContain('DATE OF COMPLETION');
+    expect(text).toContain('2 November 2026');
     expect(text).toContain('DATE OF ISSUE');
     expect(text).toContain('6 November 2026');
     expect(text).toContain('CERTIFICATE ID');
     expect(text).toContain('LXA-2026-A7K9Q2');
+  });
+
+  it("keeps the supplied design's own third italic line, exactly", () => {
+    expect(text).toContain('Awarded on passing the Final Test.');
+    // …and no longer carries the completion date in its place (that was v1)
+    expect(text).not.toContain('Completed on');
+    // the line is the same on every certificate: it is design text, not data
+    const other = visibleText(
+      render({ completionDate: '2027-02-14', recipientName: 'Ben Carter' }),
+    );
+    expect(other).toContain('Awarded on passing the Final Test.');
+  });
+
+  it('prints the completion date in its own pair above the issue date, in the same style', () => {
+    expect(text.indexOf('DATE OF COMPLETION')).toBeGreaterThan(-1);
+    expect(text.indexOf('DATE OF COMPLETION')).toBeLessThan(
+      text.indexOf('DATE OF ISSUE'),
+    );
+    expect(text.indexOf('DATE OF ISSUE')).toBeLessThan(
+      text.indexOf('CERTIFICATE ID'),
+    );
+    // the label/value pair order: label, then its value
+    const afterCompletion = text.slice(text.indexOf('DATE OF COMPLETION'));
+    expect(afterCompletion.indexOf('2 November 2026')).toBeLessThan(
+      afterCompletion.indexOf('DATE OF ISSUE'),
+    );
+    // both dates are really the two different dates that were given
+    const completionRender = visibleText(
+      render({ completionDate: '2026-10-20', issueDate: '2026-11-06' }),
+    );
+    expect(completionRender).toMatch(
+      /DATE OF COMPLETION\s+20 October 2026\s+DATE OF ISSUE\s+6 November 2026/,
+    );
   });
 
   it("carries the founder's name and title and the supplied signature image", () => {
@@ -219,25 +253,29 @@ describe('printedVerificationLink', () => {
 // the page, the embedded fonts and images, the ornaments. If one fails you have
 // changed the design (or an asset): that is a NEW template version. Bump
 // TEMPLATE_VERSION in certificate-template.ts, then update the hashes here. Never
-// "fix" the hash alone: previously issued certificates are recorded as v1.
-describe('template v1 is frozen', () => {
-  it('is version v1', () => {
-    expect(TEMPLATE_VERSION).toBe('v1');
+// "fix" the hash alone: previously issued certificates are recorded with the version
+// they were rendered with.
+//
+// History: v1 was the first release (completion date in the third italic line);
+// v2 restored the design's own line and added the completion-date pair.
+describe('template v2 is frozen', () => {
+  it('is version v2', () => {
+    expect(TEMPLATE_VERSION).toBe('v2');
   });
 
   const FROZEN: Record<string, string> = {
     'creative-coding-game-dev':
-      '4bd58577c2d2bcc73ec414711ee234fea5206fb2783356a7f0e0f876b5bc96c9',
+      'a35e7cafa0e2e07d080599947179a91dd04a574a49725601b45b85d48172030a',
     'web-digital-skills':
-      '586de6aaa94cc73fe8b2e48e3b401956ae1ceaece2834e795246d537577276da',
+      '168396af40a0fcc3b67798164a65f4388670c050add5f8cf914e9f26207e5dc1',
     'ai-data-science':
-      '29bca433fdbdbed2c5bf61fc5c144da29a6ac3b9bea5168d12d9fb2b8e01af06',
-    general: '42dfd944b1d18151d9b250587e886145e57a0a27a0982074c705da786776c403',
+      'd93928d248b5a4d9c15739dd3a5502e828a101d758bf06c1134a222da67863bf',
+    general: '438ec83cc6808cf0877e4679d5977934709d084cc98aca2452bc2678f5c76482',
   };
 
   it.each(
     Object.values(CERTIFICATE_CATEGORIES).map((c) => [c.key, c] as const),
-  )('renders %s exactly as it did when v1 was issued', (key, theme) => {
+  )('renders %s exactly as it did when v2 was issued', (key, theme) => {
     const html = renderCertificateHtml({
       ...BASE,
       withDistinction: true,

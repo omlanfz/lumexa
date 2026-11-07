@@ -6,6 +6,7 @@
 
 import {
   IsBoolean,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -52,4 +53,20 @@ export class RevokeCertificateDto {
 export class ResendCertificateEmailDto {
   /** Needed to send again after the certificate was already emailed. */
   @IsOptional() @IsBoolean() force?: boolean;
+}
+
+/** A sample of the finished design for the admin to look at (nothing is issued).
+ * Every field but the theme is optional: leave one out and a sample value is used. */
+export class TemplatePreviewDto {
+  /** The key of one of the themes (GET /admin/certificates/themes). */
+  @IsString() @IsNotEmpty() @MaxLength(60) theme: string;
+  @IsOptional() @IsString() @MaxLength(200) recipientName?: string;
+  @IsOptional() @IsString() @MaxLength(300) programName?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(DATE_PATTERN, { message: 'completionDate must be YYYY-MM-DD' })
+  completionDate?: string;
+  @IsOptional() @IsBoolean() withDistinction?: boolean;
+  /** png (default) to look at, pdf to open as it prints. */
+  @IsOptional() @IsIn(['png', 'pdf']) format?: 'png' | 'pdf';
 }
