@@ -211,8 +211,9 @@ programme added tomorrow in an existing category is themed correctly with no cha
 italic line, "Awarded on passing the Final Test.", which is the same on every certificate. What
 varies is the recipient's name, the programme name, the optional "With Distinction" line, the
 **date of completion**, the **date of issue**, the certificate ID, the QR code and the printed
-verification link. The supplied design had a place for the date of issue only, so the date of
-completion is printed above it ("DATE OF COMPLETION"), in the same style.
+verification link (clickable in the PDF, as is the QR code). The supplied design had a place
+for the date of issue only, so the date of completion is printed above it ("DATE OF
+COMPLETION"), in the same style.
 
 **Adding a new category** is one edit in that file: add an entry to `CERTIFICATE_CATEGORIES`
 (key, label, palette) and list the `Course.category` spellings that belong to it in
@@ -251,7 +252,8 @@ Every certificate records the design version it was rendered with.
 | Version | What it is |
 | --- | --- |
 | **v1** | The first release. Its third italic line carried the completion date ("Completed on …"). |
-| **v2** | The current design: the supplied wording restored ("Awarded on passing the Final Test.") and "DATE OF COMPLETION" added above "DATE OF ISSUE". |
+| **v2** | The supplied wording restored ("Awarded on passing the Final Test.") and "DATE OF COMPLETION" added above "DATE OF ISSUE". |
+| **v3** | The current design: the same page, but the printed verification link and the QR code are **clickable in the PDF** (they open the verification page). Nothing visible changed. |
 
 A certificate issued with an earlier design keeps its files for ever (they are never
 regenerated) and shows an **Earlier design (v1)** badge to the admin. It can be **re-issued
@@ -408,7 +410,7 @@ certificate**. Expect "Certificate issued" and an ID like `LXA-2026-A7K9Q2`.
 **6. Check what follows.**
 
 - *Admin:* Certificates ▸ the certificate — the picture, **Download PDF** and **Download image**
-  (the PDF is one A4 landscape page; scan its QR code with a phone: it opens the verification
+  (the PDF is one A4 landscape page; click the printed verification link or scan its QR code with a phone: both open the verification
   page), **View public page**, email status **Sent**, and an audit trail listing the review
   opening, the approval, the issue and the email.
 - *Email:* the billing contact's inbox has "🎉 Congratulations! Your Lumexa certificate is ready!"
