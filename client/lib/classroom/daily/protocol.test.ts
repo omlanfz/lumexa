@@ -4,6 +4,8 @@ import {
   MAX_CHAT_CHARS,
   acceptChat,
   authorizeControl,
+  MAX_POINTER_AGE_MS,
+  MAX_POINTER_POINTS,
   authorizePointer,
   pointerPayload,
   chatClearPayload,
@@ -185,6 +187,75 @@ test('a position is kept inside the picture and rounded to four decimals', () =>
   });
   const read = parseAppPayload({ app: 'lumexa', kind: 'pointer', pointer: { type: 'click', sid: 's', x: 7, y: 0.5 } });
   assert.deepEqual(read, { app: 'lumexa', kind: 'pointer', pointer: { type: 'click', sid: 's', x: 1, y: 0.5 } });
+});
+
+test('a line being drawn carries its number and the path since the last message, and both survive the trip', () => {
+  const sent = pointerPayload({
+    type: 'move',
+    sid: 's-sharer',
+    x: 0.30004,
+    y: 0.4,
+    k: 3,
+    p: [0.1, 0.2, 80.4, 0.20004, 0.3, 41, 0.3, 0.4, 0],
+  });
+  assert.deepEqual(sent, {
+    app: 'lumexa',
+    kind: 'pointer',
+    pointer: { type: 'move', sid: 's-sharer', x: 0.3, y: 0.4, k: 3, p: [0.1, 0.2, 80, 0.2, 0.3, 41, 0.3, 0.4, 0] },
+  });
+  assert.deepEqual(parseAppPayload(JSON.parse(JSON.stringify(sent))), sent);
+});
+
+test('a plain move has no line number and no path, so it reads exactly as it always did', () => {
+  const sent = pointerPayload({ type: 'move', sid: 's', x: 0.5, y: 0.5 });
+  assert.deepEqual(sent, { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: 's', x: 0.5, y: 0.5 } });
+  assert.deepEqual(parseAppPayload(sent), sent);
+});
+
+test('a path or line number that cannot be used costs the message only its extras — the cursor is still where x, y says', () => {
+  const read = (extra: Record<string, unknown>) => {
+    const got = parseAppPayload({ app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: 's', x: 0.2, y: 0.6, ...extra } });
+    assert.ok(got && got.kind === 'pointer' && got.pointer.type === 'move', JSON.stringify(extra));
+    return got.pointer;
+  };
+  for (const bad of [
+    { p: 'path' },
+    { p: [] },
+    { p: [0.1, 0.2] }, // not whole triplets
+    { p: [0.1, 0.2, 5, 0.3] },
+    { p: [0.1, 0.2, Number.NaN] },
+    { p: [0.1, '0.2', 5] },
+    { p: [0.1, 0.2, Infinity] },
+    { k: 0 },
+    { k: -2 },
+    { k: 1.5 },
+    { k: '3' },
+    { k: 2 ** 31 },
+  ]) {
+    const pointer = read(bad);
+    assert.deepEqual([pointer.x, pointer.y], [0.2, 0.6], JSON.stringify(bad));
+    assert.ok(!('p' in pointer && 'p' in bad && pointer.p), `no path from ${JSON.stringify(bad)}`);
+    assert.ok(!('k' in pointer && 'k' in bad && pointer.k), `no line number from ${JSON.stringify(bad)}`);
+  }
+});
+
+test('a path is kept inside the picture, its ages inside what is believable, and its length inside the limit', () => {
+  const read = parseAppPayload({
+    app: 'lumexa',
+    kind: 'pointer',
+    pointer: { type: 'move', sid: 's', x: 0.5, y: 0.5, p: [-1, 2, -50, 0.5, 0.5, 99_999] },
+  });
+  assert.ok(read && read.kind === 'pointer' && read.pointer.type === 'move');
+  assert.deepEqual(read.pointer.p, [0, 1, 0, 0.5, 0.5, MAX_POINTER_AGE_MS]);
+
+  // more points than may be sent: the newest are kept
+  const many: number[] = [];
+  for (let i = 0; i < MAX_POINTER_POINTS + 10; i++) many.push(i / 100, 0.5, 5);
+  const capped = pointerPayload({ type: 'move', sid: 's', x: 0.5, y: 0.5, p: many });
+  assert.ok(capped.kind === 'pointer' && capped.pointer.type === 'move' && capped.pointer.p);
+  assert.equal(capped.pointer.p.length, MAX_POINTER_POINTS * 3);
+  assert.equal(capped.pointer.p[0], 0.1); // the 10th point was the first of the newest 24
+  assert.ok(JSON.stringify(capped).length < 800, 'a message with the most points is still small');
 });
 
 test('a malformed Pointer message is ignored', () => {

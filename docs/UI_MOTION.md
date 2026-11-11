@@ -36,7 +36,7 @@ error and success message in the app).
 
 One block in the base layer of `globals.css` makes every transition instant and every animation
 jump to its end state under `prefers-reduced-motion: reduce` — for everything, including
-animations added later. `.animate-spin`, `.cr-pointer-pulse` and anything marked
+animations added later. `.animate-spin` and anything marked
 `data-motion-essential` are exempt (motion that carries meaning). Smooth scrolling is turned off
 next to the `html` rule.
 

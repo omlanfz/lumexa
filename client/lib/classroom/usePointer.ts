@@ -1,24 +1,28 @@
 // FILE PATH: client/lib/classroom/usePointer.ts
 //
 // The teacher's Pointer: a dot that follows their cursor over a student's shared
-// screen, and a pulse where they click — for everyone in the room.
+// screen, a thin line they draw by holding the mouse button, and a ring where they
+// click — for everyone in the room.
 //
 // It is carried by the room's existing app messages (see daily/protocol.ts), like
 // raised hands and reactions, and is the TEACHER'S alone: a message is only
 // believed when Daily says it came from the room's owner. What is sent is where
 // the cursor is on the PICTURE of the shared screen, as a share of its width and
-// height (see pointer.ts), so it lands on the same spot everywhere.
+// height (see pointer.ts), so it lands on the same spot everywhere. A moving cursor
+// goes out as one message every 40 ms carrying every point since the last, each with
+// its age, so the others see the real path (see PointerBatcher) — and a line being
+// drawn is told apart from a plain move by its number.
 //
 // Pointer mode belongs to the teacher's browser and starts off. It ends by itself
 // when nobody is presenting any more (the presenter stopped or left), and ending it
-// — any way — tells the room to take the dot down.
+// — any way — tells the room to take everything down.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCall, useCallSnapshot, useCallStore, useLocalPeer } from './daily/CallContext';
 import { authorizePointer, parseAppPayload, pointerPayload, senderOf } from './daily/protocol';
 import type { PointerWire } from './daily/protocol';
 import type { Peer } from './daily/peers';
-import { HEARTBEAT_MS, MOVE_INTERVAL_MS, MoveThrottle, PointerStore } from './pointer';
+import { HEARTBEAT_MS, MOVE_INTERVAL_MS, PointerBatcher, PointerStore } from './pointer';
 import type { Point } from './pointer';
 import { claimsToBeServer } from './serverEvents';
 
@@ -32,6 +36,14 @@ function useLatest<T>(value: T) {
   return ref;
 }
 
+export interface PointerMoveOptions {
+  /** The mouse button is held: this point is part of a line being drawn. */
+  stroke?: boolean;
+  /** When it happened, on the clock of `performance.now()` (an event's `timeStamp`).
+   * Defaults to now. */
+  at?: number;
+}
+
 export interface PointerControls {
   /** The Pointer button is shown: this is the teacher's browser and a student is
    * presenting. */
@@ -43,9 +55,11 @@ export interface PointerControls {
   store: PointerStore;
   /** The teacher's cursor is at `point` (a share of the picture) over the screen
    * shared by `sessionId`. */
-  move: (sessionId: string, point: Point) => void;
+  move: (sessionId: string, point: Point, options?: PointerMoveOptions) => void;
   /** The teacher clicked there. */
   click: (sessionId: string, point: Point) => void;
+  /** The mouse button came up (or the press was interrupted): the line is over. */
+  endStroke: () => void;
   /** The cursor left the picture. */
   leave: (sessionId: string) => void;
 }
@@ -118,20 +132,31 @@ export function usePointer({ isTeacher, shares }: UsePointerOptions): PointerCon
     [call],
   );
 
-  /** Also shown on the teacher's own screen: Daily does not hand a message back to
-   * its sender. */
+  /** Also shown on the teacher's own screen — at once, not a beat late like everyone
+   * else's: Daily does not hand a message back to its sender. */
   const showLocally = useCallback(
-    (wire: PointerWire) => {
-      store.apply({ ...wire, fromSessionId: localSessionRef.current }, shareIdsRef.current);
+    (wire: PointerWire, at?: number) => {
+      store.apply({ ...wire, fromSessionId: localSessionRef.current }, shareIdsRef.current, { local: true, at });
     },
     [store, localSessionRef, shareIdsRef],
   );
 
-  const throttle = useMemo(
+  /** The line being drawn (its number), while the mouse button is held. */
+  const strokeRef = useRef<number | null>(null);
+  const strokeCountRef = useRef(0);
+
+  const batcher = useMemo(
     () =>
-      new MoveThrottle<{ sid: string; point: Point }>({
+      new PointerBatcher({
         intervalMs: MOVE_INTERVAL_MS,
-        send: ({ sid, point }) => send({ type: 'move', sid, x: point.x, y: point.y }),
+        send: ({ sid, stroke, points }) => {
+          const last = points[points.length - 1];
+          const wire: PointerWire = { type: 'move', sid, x: last.x, y: last.y };
+          if (stroke !== null) wire.k = stroke;
+          // a lone point is as fresh as a message gets; only a path needs its ages
+          if (points.length > 1) wire.p = points.flatMap((point) => [point.x, point.y, point.age]);
+          send(wire);
+        },
       }),
     [send],
   );
@@ -139,34 +164,50 @@ export function usePointer({ isTeacher, shares }: UsePointerOptions): PointerCon
   const lastRef = useRef<{ sid: string; point: Point } | null>(null);
 
   const move = useCallback(
-    (sid: string, point: Point) => {
+    (sid: string, point: Point, options: PointerMoveOptions = {}) => {
+      const at = options.at ?? (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      let k: number | null = null;
+      if (options.stroke) {
+        if (strokeRef.current === null) strokeRef.current = ++strokeCountRef.current;
+        k = strokeRef.current;
+      } else {
+        strokeRef.current = null; // a plain move: any line is over
+      }
       lastRef.current = { sid, point };
-      showLocally({ type: 'move', sid, x: point.x, y: point.y });
-      throttle.push({ sid, point });
+      const wire: PointerWire = { type: 'move', sid, x: point.x, y: point.y };
+      if (k !== null) wire.k = k;
+      showLocally(wire, at);
+      batcher.push(sid, k, { x: point.x, y: point.y, t: at });
     },
-    [showLocally, throttle],
+    [showLocally, batcher],
   );
 
   const click = useCallback(
     (sid: string, point: Point) => {
       lastRef.current = { sid, point };
-      throttle.flush(); // the dot is where the click is
+      batcher.flush(); // the dot is where the click is
       const wire: PointerWire = { type: 'click', sid, x: point.x, y: point.y };
       send(wire);
       showLocally(wire);
     },
-    [send, showLocally, throttle],
+    [send, showLocally, batcher],
   );
+
+  const endStroke = useCallback(() => {
+    batcher.flush(); // the last of the line goes out before anything else
+    strokeRef.current = null;
+  }, [batcher]);
 
   const leave = useCallback(
     (sid: string) => {
-      throttle.cancel();
+      batcher.flush(); // the dot gets to where it left before it hides
+      strokeRef.current = null;
       if (lastRef.current?.sid === sid) lastRef.current = null;
       const wire: PointerWire = { type: 'hide', sid };
       send(wire);
       showLocally(wire);
     },
-    [send, showLocally, throttle],
+    [send, showLocally, batcher],
   );
 
   // A still cursor is announced again now and then (see HEARTBEAT_MS).
@@ -176,6 +217,7 @@ export function usePointer({ isTeacher, shares }: UsePointerOptions): PointerCon
       const last = lastRef.current;
       if (!last || !shareIdsRef.current.has(last.sid)) return;
       const wire: PointerWire = { type: 'move', sid: last.sid, x: last.point.x, y: last.point.y };
+      if (strokeRef.current !== null) wire.k = strokeRef.current;
       send(wire);
       showLocally(wire);
     }, HEARTBEAT_MS);
@@ -187,17 +229,18 @@ export function usePointer({ isTeacher, shares }: UsePointerOptions): PointerCon
   useEffect(() => {
     if (!active) return;
     return () => {
-      throttle.cancel();
+      batcher.cancel();
+      strokeRef.current = null;
       lastRef.current = null;
       send({ type: 'off' });
       store.clear();
     };
-  }, [active, send, store, throttle]);
+  }, [active, send, store, batcher]);
 
   const toggle = useCallback(() => setOn((value) => !value), []);
 
   return useMemo(
-    () => ({ available, active, toggle, store, move, click, leave }),
-    [available, active, toggle, store, move, click, leave],
+    () => ({ available, active, toggle, store, move, click, endStroke, leave }),
+    [available, active, toggle, store, move, click, endStroke, leave],
   );
 }

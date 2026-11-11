@@ -4,8 +4,8 @@ Two classroom features that live in the browser and need no server setup:
 
 1. **Video effects** — background blur (slight and full), virtual backgrounds, lighting
    adjustment, touch-up and auto-framing, for the camera a person sends to the class.
-2. **The Pointer** — a dot the teacher moves over a student's shared screen, and a pulse
-   where they click, seen by everyone.
+2. **The Pointer** — a dot the teacher moves over a student's shared screen, a thin line they
+   draw with the mouse button held, and a ring where they click, seen by everyone.
 
 Neither needs an environment variable, a database change or a new service.
 
@@ -102,21 +102,51 @@ show a failure to the person at all.)
 ## 2. The Pointer
 
 The teacher's browser shows a **cursor button** in the bottom bar **only while a student is
-presenting**. Turning it on lets them point at that student's shared screen:
+presenting**. Turning it on lets them point at that student's shared screen, for everyone in the
+class:
 
-- **Point** — a small pink dot follows their cursor, for everyone in the class.
-- **Highlight** — clicking shows two quick pulses around that spot, which then disappear.
+- **Point** — a small red dot (about 10 px, with a thin ring and a very light glow) follows their
+  cursor.
+- **Draw** — holding the left mouse button and moving leaves a thin (2 px), slightly transparent red
+  line behind the cursor, smoothed, which fades over about 0.7 s and is gone. Nothing is drawn
+  while the button is up, and the line stops when it is released.
+- **Highlight** — a click (a press that hardly moves) shows one subtle ring that expands and fades
+  within about 0.8 s.
 
-It is carried by the room's existing app messages (`daily/protocol.ts`, kind `pointer`),
-~25 a second while moving. Positions are a **share of the shared picture's width and height**
-(not pixels), so they land on the same spot on every screen whatever the size of the window or
-the shape of the tile, including a letterboxed picture, the fullscreen view, and a window that
-is resized. Only the teacher's messages are believed (Daily says who sent them); a message about
-a screen that is not a student's share is dropped. The layer never takes the mouse, so the
-tile's buttons and everything else work as before. While Pointer mode is on, double-clicking a
-shared screen makes two highlights instead of going fullscreen (the fullscreen button and Esc
-still do).
+All three are painted on **one canvas** over the shared screen (`components/classroom/PointerLayer.tsx`,
+`lib/classroom/pointerCanvas.ts`): no element is created per movement, and the frame loop only runs
+while something is moving or fading.
+
+**How it is sent.** The room's existing app messages (`daily/protocol.ts`, kind `pointer`), at most 25
+a second. A moving cursor goes out as one message per 40 ms that carries *every* point since the last
+(`p`: x, y and how many ms ago, for up to 24 points) — so a quick curve is still a curve — and a
+line being drawn carries its number (`k`). `x` and `y` are still the newest point, so a browser that
+has not been updated yet still shows the dot. The sender drops points closer than ~3 px.
+**How it is shown.** Viewers play the points back 70 ms late, on the sender's own timing
+(`PointerStore`), so the dot glides instead of stepping at network speed; the teacher's own screen
+shows everything at once. Positions are a **share of the shared picture's width and height** (not
+pixels), so they land on the same spot on every screen whatever the size of the window or the shape of
+the tile, including a letterboxed picture, the fullscreen view, and a window that is resized.
+
+Only the teacher's messages are believed (Daily says who sent them); a message about a screen that is
+not a student's share is dropped. The layer never takes the mouse, so the tile's buttons and
+everything else work as before. While Pointer mode is on, double-clicking a shared screen makes two
+highlights instead of going fullscreen (the fullscreen button and Esc still do). The mouse is
+captured while the button is held, so its release is never missed; an interrupted press (the system
+cancels it, the window loses focus, the tab is hidden) ends the line without making a click, and a
+line leaving the picture ends there and starts again if the cursor comes back with the button down.
 
 Pointer mode starts off and ends by itself when the presenter stops sharing or leaves; turning it
-off — any way — takes the dot down everywhere. A dot that hears nothing for 24 s (the teacher's
-connection dropped) is taken down too.
+off — any way — takes the dot, the lines and the rings down everywhere. A dot that hears nothing for
+24 s (the teacher's connection dropped) is taken down too.
+
+### What a browser cannot do
+
+The pointer is drawn **by Lumexa, over the shared screen as it appears in the classroom**: the
+student sees it on their own tile in the Lumexa tab, and everyone else sees it on theirs. It is
+**not** drawn on the student's real tab, window or screen. A web page can only paint inside its own
+tab — that is the security boundary of the browser — and no web API reaches past it: Captured Surface
+Control can only forward scroll and zoom to a shared tab, and a Document Picture-in-Picture window is
+an opaque window whose position the browser chooses. Showing the pointer on the real content takes
+software that lives outside the web page: a browser extension (tab shares only), or a desktop
+companion app (any share). Neither exists today.
