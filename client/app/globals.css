@@ -79,12 +79,13 @@ body {
      scrolling is switched off next to the html rule above). It sits in the base layer so
      that, being !important, it also outranks every later layer and unlayered rule — new
      animations get this without having to remember it. Motion that carries meaning is
-     exempt: a spinner (stopped, it reads as a hung page), the teacher's pointer highlight
-     (it has its own still version) and anything marked data-motion-essential. */
+     exempt: a spinner (stopped, it reads as a hung page) and anything marked
+     data-motion-essential. (The teacher's pointer is painted on a canvas, so none of this
+     touches it; it reads the preference itself.) */
   @media (prefers-reduced-motion: reduce) {
-    *:not(.animate-spin):not(.cr-pointer-pulse):not([data-motion-essential]),
-    *:not(.animate-spin):not(.cr-pointer-pulse):not([data-motion-essential])::before,
-    *:not(.animate-spin):not(.cr-pointer-pulse):not([data-motion-essential])::after {
+    *:not(.animate-spin):not([data-motion-essential]),
+    *:not(.animate-spin):not([data-motion-essential])::before,
+    *:not(.animate-spin):not([data-motion-essential])::after {
       animation-duration: 0.01ms !important;
       animation-delay: 0ms !important;
       animation-iteration-count: 1 !important;
@@ -1040,61 +1041,35 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
 .cr-hand-pulse { animation: cr-pulse-ring 1.8s ease-out infinite; }
 
 /* ── The teacher's Pointer ────────────────────────────────────────────────────
-   A dot that follows the teacher's cursor over a student's shared screen, and a
-   ring that pulses where they click (see components/classroom/PointerLayer.tsx).
-   The layer covers the shared screen but never takes the mouse: buttons, links
-   and double-click behind it work as they always did. A saturated pink with a
-   white edge reads on dark and light shared content alike. */
+   A small dot that follows the teacher's cursor over a student's shared screen, a thin
+   line they draw by holding the mouse button, and a ring where they click (see
+   components/classroom/PointerLayer.tsx, which paints all three on one canvas, and
+   lib/classroom/pointerCanvas.ts, which says how they look).
+   The layer covers the shared screen but never takes the mouse: buttons, links and
+   double-click behind it work as they always did. */
 .cr-pointer-layer {
-  --cr-pointer: #FF3D71;
+  --cr-pointer: #FF3B30;
   position: absolute;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
 }
-.cr-pointer-dot {
+.cr-pointer-canvas {
   position: absolute;
-  left: 0;
-  top: 0;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  border-radius: 9999px;
-  background: var(--cr-pointer);
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 12px rgba(255, 61, 113, 0.7);
-  /* 25 updates a second, eased into a smooth glide */
-  transition: transform 70ms linear;
-  will-change: transform;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
-.cr-pointer-pulse {
-  position: absolute;
-  width: 64px;
-  height: 64px;
-  margin: -32px 0 0 -32px;
-  border-radius: 9999px;
-  border: 3px solid var(--cr-pointer);
-  box-shadow: 0 0 14px rgba(255, 61, 113, 0.55), inset 0 0 12px rgba(255, 61, 113, 0.25);
-  opacity: 0;
-  /* two quick pulses, then gone (PULSE_MS in lib/classroom/pointer.ts) */
-  animation: cr-pointer-pulse 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) 2 forwards;
+/* Where the teacher is pointing, the cursor is a crosshair, a drag draws instead of
+   selecting the tile's text, and a finger drags instead of scrolling. */
+[data-pointer='on'] {
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
-@keyframes cr-pointer-pulse {
-  0%   { transform: scale(0.3); opacity: 0.95; }
-  75%  { opacity: 0.6; }
-  100% { transform: scale(1.35); opacity: 0; }
-}
-/* Where the teacher is pointing, the cursor is a crosshair. */
-[data-pointer='on'] { cursor: crosshair; }
-@media (prefers-reduced-motion: reduce) {
-  .cr-pointer-dot { transition: none; }
-  /* no growing ring: a still ring that fades out */
-  .cr-pointer-pulse { animation: cr-pointer-pulse-still 1.1s linear 1 forwards; }
-  @keyframes cr-pointer-pulse-still {
-    0%   { transform: none; opacity: 0.95; }
-    100% { transform: none; opacity: 0; }
-  }
-}
+
 
 .cr-live-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;

@@ -49,8 +49,21 @@ export type ControlWire =
  * 1 = right / bottom) — so it lands on the same spot on every participant's
  * screen, whatever the size of their window or the shape of their tile. */
 export type PointerWire =
-  | { type: 'move'; sid: string; x: number; y: number }
-  /** A click: a pulse around that spot, on everyone's screen. */
+  | {
+      type: 'move';
+      sid: string;
+      /** Where the cursor is now — and, for anyone who only reads this, all there is. */
+      x: number;
+      y: number;
+      /** The mouse button is held and this is a line being drawn: the number tells one
+       * line from the next (1, 2, 3 …). Absent while the cursor only moves. */
+      k?: number;
+      /** The path since the last message, oldest first, as [x, y, age, x, y, age, …]:
+       * `age` is how many milliseconds before the message was sent the cursor was
+       * there. It ends at x, y. Absent when there is just the one point. */
+      p?: number[];
+    }
+  /** A click: a ring around that spot, on everyone's screen. */
   | { type: 'click'; sid: string; x: number; y: number }
   /** The cursor left the shared picture: hide the dot (the mode is still on). */
   | { type: 'hide'; sid: string }
@@ -111,15 +124,55 @@ function wireFraction(value: number): number {
   return Math.round(Math.min(1, Math.max(0, value)) * 10_000) / 10_000;
 }
 
+/** The most points one message carries (a cursor moves a few pixels per sample; a
+ * message goes out every 40 ms), so a message stays far below Daily's size limit. */
+export const MAX_POINTER_POINTS = 24;
+/** The oldest a point in a message may claim to be: older than this is a bug or an
+ * attack, not a slow connection. */
+export const MAX_POINTER_AGE_MS = 1_000;
+/** The highest line number (a line is numbered while it is being drawn; the count
+ * starts again each time Pointer mode is turned on). */
+const MAX_STROKE_ID = 2_147_483_647;
+
+/** A path on the wire: [x, y, age, …] with positions to four decimals inside the
+ * picture and whole-millisecond ages — or null when it is not a usable path (so the
+ * message is read for its x, y alone). Only the newest MAX_POINTER_POINTS are kept. */
+function wirePath(value: unknown): number[] | null {
+  if (!Array.isArray(value) || value.length < 3 || value.length % 3 !== 0) return null;
+  const tail = value.length > MAX_POINTER_POINTS * 3 ? value.slice(value.length - MAX_POINTER_POINTS * 3) : value;
+  const out: number[] = [];
+  for (let i = 0; i < tail.length; i += 3) {
+    const x = tail[i];
+    const y = tail[i + 1];
+    const age = tail[i + 2];
+    if (typeof x !== 'number' || typeof y !== 'number' || typeof age !== 'number') return null;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(age)) return null;
+    out.push(wireFraction(x), wireFraction(y), Math.round(Math.min(MAX_POINTER_AGE_MS, Math.max(0, age))));
+  }
+  return out;
+}
+
+function wireStroke(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_STROKE_ID ? value : null;
+}
+
 /** The message for a Pointer signal. Positions are rounded and kept inside the
  * picture. */
 export function pointerPayload(pointer: PointerWire): AppPayload {
-  if (pointer.type === 'move' || pointer.type === 'click') {
+  if (pointer.type === 'click') {
     return {
       app: APP,
       kind: 'pointer',
-      pointer: { type: pointer.type, sid: pointer.sid, x: wireFraction(pointer.x), y: wireFraction(pointer.y) },
+      pointer: { type: 'click', sid: pointer.sid, x: wireFraction(pointer.x), y: wireFraction(pointer.y) },
     };
+  }
+  if (pointer.type === 'move') {
+    const wire: PointerWire = { type: 'move', sid: pointer.sid, x: wireFraction(pointer.x), y: wireFraction(pointer.y) };
+    const k = wireStroke(pointer.k);
+    if (k !== null) wire.k = k;
+    const p = wirePath(pointer.p);
+    if (p) wire.p = p;
+    return { app: APP, kind: 'pointer', pointer: wire };
   }
   return { app: APP, kind: 'pointer', pointer };
 }
@@ -143,7 +196,17 @@ function parsePointer(value: unknown): PointerWire | null {
       const sid = sessionId(p.sid);
       if (!sid || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
       if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
-      return { type: p.type, sid, x: wireFraction(p.x), y: wireFraction(p.y) };
+      const x = wireFraction(p.x);
+      const y = wireFraction(p.y);
+      if (p.type === 'click') return { type: 'click', sid, x, y };
+      // A line number or a path that is not usable only costs the message its extras:
+      // the cursor is still where x, y says.
+      const move: PointerWire = { type: 'move', sid, x, y };
+      const k = wireStroke(p.k);
+      if (k !== null) move.k = k;
+      const path = wirePath(p.p);
+      if (path) move.p = path;
+      return move;
     }
   }
   return null;
