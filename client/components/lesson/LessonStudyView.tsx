@@ -439,7 +439,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
         }
       />
 
-      <div className="lesson-layout" data-sidebar={hasSidebar && !sidebarOpen ? 'hidden' : 'open'}>
+      <div className="lesson-layout" data-sidebar={hasSidebar && !sidebarOpen ? 'hidden' : 'open'} data-no-sidebar={hasSidebar ? undefined : ''}>
         {hasSidebar && (
           <>
             <aside className="lesson-sidebar mb-4 hidden lg:block" aria-label="Lesson contents">

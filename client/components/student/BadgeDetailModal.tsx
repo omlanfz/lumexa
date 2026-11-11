@@ -36,7 +36,7 @@ export default function BadgeDetailModal(props: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm"
+      className="motion-fade fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm"
       onClick={props.onClose}
       data-testid="badge-detail"
     >
@@ -48,7 +48,7 @@ export default function BadgeDetailModal(props: Props) {
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{ ['--bx-rgb' as string]: rgb }}
-        className="modal-pop relative w-full sm:max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-3xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#0B1026] text-gray-900 dark:text-white shadow-2xl outline-none"
+        className="motion-dialog relative w-full sm:max-w-md max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-3xl sm:rounded-3xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#0B1026] text-gray-900 dark:text-white shadow-2xl outline-none"
       >
         <button
           type="button"

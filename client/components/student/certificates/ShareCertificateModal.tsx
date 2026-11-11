@@ -199,7 +199,7 @@ export default function ShareCertificateModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="motion-fade fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
       data-testid="share-certificate"
     >
@@ -210,7 +210,7 @@ export default function ShareCertificateModal({
         aria-labelledby="share-certificate-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="modal-pop relative max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl border border-black/10 bg-white p-5 text-gray-900 shadow-2xl outline-none dark:border-white/10 dark:bg-[#0B1026] dark:text-white sm:max-w-lg sm:rounded-3xl sm:p-6"
+        className="motion-dialog relative max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl border border-black/10 bg-white p-5 text-gray-900 shadow-2xl outline-none dark:border-white/10 dark:bg-[#0B1026] dark:text-white sm:max-w-lg sm:rounded-3xl sm:p-6"
       >
         <button
           type="button"

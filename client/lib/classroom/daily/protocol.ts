@@ -15,7 +15,10 @@
 //     and ignored from anyone else;
 //   - chat from a student is dropped while the teacher has locked the chat;
 //   - removing a chat message, or clearing the chat, is the TEACHER'S (the room's
-//     owner), and ignored from anyone else.
+//     owner), and ignored from anyone else;
+//   - the teacher's Pointer (a dot that follows their cursor over a student's
+//     shared screen, and a pulse where they click) is the TEACHER'S alone, and
+//     ignored from anyone else.
 //
 // Messages from the SERVER (a badge celebration…) are a different thing and are
 // checked by key, not by sender: see ../serverEvents.ts.
@@ -40,13 +43,34 @@ export type ControlWire =
   | { type: 'reaction'; emoji: string }
   | { type: 'spotlight'; userId: string | null };
 
+/** The teacher's Pointer. `sid` names the shared screen it is over: the Daily
+ * session id of the student who is presenting it. `x` and `y` are where it is on
+ * that screen's PICTURE, as a share of its width and height (0 = left / top,
+ * 1 = right / bottom) — so it lands on the same spot on every participant's
+ * screen, whatever the size of their window or the shape of their tile. */
+export type PointerWire =
+  | { type: 'move'; sid: string; x: number; y: number }
+  /** A click: a pulse around that spot, on everyone's screen. */
+  | { type: 'click'; sid: string; x: number; y: number }
+  /** The cursor left the shared picture: hide the dot (the mode is still on). */
+  | { type: 'hide'; sid: string }
+  /** Pointer mode was turned off (or ended): hide everything. */
+  | { type: 'off' };
+
+/** A Pointer message once it is known who sent it. */
+export type PointerMessage = PointerWire & {
+  /** The connection (Daily session) that sent it. */
+  fromSessionId: string;
+};
+
 export type AppPayload =
   | { app: typeof APP; kind: 'chat'; id: string; text: string }
   /** The teacher deleted one message: its author's user id and the message id. */
   | { app: typeof APP; kind: 'chat-remove'; userId: string; id: string }
   /** The teacher cleared the whole chat. */
   | { app: typeof APP; kind: 'chat-clear' }
-  | { app: typeof APP; kind: 'control'; control: ControlWire };
+  | { app: typeof APP; kind: 'control'; control: ControlWire }
+  | { app: typeof APP; kind: 'pointer'; pointer: PointerWire };
 
 export function chatPayload(id: string, text: string): AppPayload {
   return { app: APP, kind: 'chat', id, text };
@@ -78,6 +102,53 @@ export function controlPayload(control: ControlWire): AppPayload {
   return { app: APP, kind: 'control', control };
 }
 
+/** Longest a shared screen's id may be (a Daily session id is a uuid). */
+const MAX_SESSION_ID_CHARS = 64;
+
+/** A position on the wire: a share of the picture, to four decimals (a thousandth
+ * of a 1080p screen is a pixel — more digits only make the message longer). */
+function wireFraction(value: number): number {
+  return Math.round(Math.min(1, Math.max(0, value)) * 10_000) / 10_000;
+}
+
+/** The message for a Pointer signal. Positions are rounded and kept inside the
+ * picture. */
+export function pointerPayload(pointer: PointerWire): AppPayload {
+  if (pointer.type === 'move' || pointer.type === 'click') {
+    return {
+      app: APP,
+      kind: 'pointer',
+      pointer: { type: pointer.type, sid: pointer.sid, x: wireFraction(pointer.x), y: wireFraction(pointer.y) },
+    };
+  }
+  return { app: APP, kind: 'pointer', pointer };
+}
+
+function sessionId(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value.length <= MAX_SESSION_ID_CHARS ? value : null;
+}
+
+function parsePointer(value: unknown): PointerWire | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const p = value as Record<string, unknown>;
+  switch (p.type) {
+    case 'off':
+      return { type: 'off' };
+    case 'hide': {
+      const sid = sessionId(p.sid);
+      return sid ? { type: 'hide', sid } : null;
+    }
+    case 'move':
+    case 'click': {
+      const sid = sessionId(p.sid);
+      if (!sid || typeof p.x !== 'number' || typeof p.y !== 'number') return null;
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
+      return { type: p.type, sid, x: wireFraction(p.x), y: wireFraction(p.y) };
+    }
+  }
+  return null;
+}
+
 function userId(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_USER_ID_CHARS ? value : null;
 }
@@ -103,6 +174,11 @@ export function parseAppPayload(data: unknown): AppPayload | null {
   }
 
   if (msg.kind === 'chat-clear') return chatClearPayload();
+
+  if (msg.kind === 'pointer') {
+    const pointer = parsePointer(msg.pointer);
+    return pointer ? { app: APP, kind: 'pointer', pointer } : null;
+  }
 
   if (msg.kind === 'control') {
     const c = msg.control;
@@ -158,6 +234,15 @@ export function authorizeControl(control: ControlWire, sender: Sender): ControlM
     case 'spotlight':
       return sender.isOwner ? { type: 'spotlight', userId: control.userId } : null;
   }
+}
+
+/** The Pointer signal a message amounts to — with the connection it came from —
+ * or null when the sender may not send it: only the teacher points. (Who the
+ * sender is comes from Daily, not from the message, so a student cannot claim to
+ * be the teacher.) */
+export function authorizePointer(pointer: PointerWire, sender: Sender): PointerMessage | null {
+  if (!sender.isOwner) return null;
+  return { ...pointer, fromSessionId: sender.sessionId };
 }
 
 /** The key of a chat message: its author (a person, not a device — the same on

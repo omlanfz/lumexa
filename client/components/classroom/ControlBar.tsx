@@ -29,18 +29,18 @@ import {
   Square,
   Loader2,
   Award,
+  MousePointer2,
 } from 'lucide-react';
 import IconButton from './IconButton';
 import DeviceMenu from './DeviceMenu';
 import ClassControlsMenu from './ClassControlsMenu';
 import VideoEffectsPanel from './VideoEffectsPanel';
+import type { VideoEffectsPanelProps } from './VideoEffectsPanel';
 import AwardBadgePanel from './AwardBadgePanel';
 import { useClickOutside } from '@/lib/classroom/useClickOutside';
 import type { AwardResponse } from '@/lib/classroom/badgeAward';
 import type { StudentInRoom } from '@/lib/classroom/people';
 import type { ClassroomState } from '@/lib/classroom/types';
-import type { BackgroundEffect } from '@/lib/classroom/backgrounds';
-import type { AppearanceOptions } from '@/lib/classroom/appearanceProcessor';
 
 export type PanelKind = 'chat' | 'participants' | 'lesson' | null;
 type PopoverKind = 'mic' | 'cam' | 'effects' | 'more' | 'badges' | null;
@@ -76,13 +76,8 @@ interface ControlBarProps {
    * button when nothing is being recorded, so they are not forgotten. */
   recordingPending?: number;
 
-  backgroundEffect: BackgroundEffect;
-  onBackgroundChange: (e: BackgroundEffect) => void;
-  lighting: AppearanceOptions;
-  onLightingChange: (l: AppearanceOptions) => void;
-  effectsSupported: boolean;
-  effectsPending: boolean;
-  onUploadImage: (file: File) => void;
+  /** The Video Effects popover (see VideoEffectsPanel). */
+  effects: VideoEffectsPanelProps;
 
   onLeave: () => void;
   onOpenEndClass: () => void;
@@ -102,6 +97,10 @@ interface ControlBarProps {
    * to flip it — shown in the More menu. */
   roomLocked?: boolean;
   onToggleRoomLock?: () => void;
+
+  /** Teacher only: the Pointer button. It is there only while a student is
+   * presenting (`available`); `active` is Pointer mode being on. */
+  pointer?: { available: boolean; active: boolean; onToggle: () => void };
 
   /** Teacher only: the Award Badge button and its popover. */
   awardBadge?: {
@@ -134,13 +133,7 @@ export default function ControlBar({
   onToggleRecording,
   recordingAvailable = true,
   recordingPending = 0,
-  backgroundEffect,
-  onBackgroundChange,
-  lighting,
-  onLightingChange,
-  effectsSupported,
-  effectsPending,
-  onUploadImage,
+  effects,
   onLeave,
   onOpenEndClass,
   endClassDisabledReason,
@@ -148,6 +141,7 @@ export default function ControlBar({
   floating,
   roomLocked,
   onToggleRoomLock,
+  pointer,
   awardBadge,
 }: ControlBarProps) {
   const [openPopover, setOpenPopover] = useState<PopoverKind>(null);
@@ -244,6 +238,28 @@ export default function ControlBar({
     />
   );
 
+  // The Pointer: one cursor button, only while a student is presenting. It slides
+  // in and out (rather than appearing at once) so the rest of the bar glides to its
+  // new place instead of jumping; while it is out it cannot be tabbed to or heard.
+  // Pointer mode being on is shown by the button's quiet "active" look.
+  const pointerButton = isTeacher && pointer && (
+    <div
+      inert={!pointer.available}
+      className={`flex items-center transition-[max-width,margin,opacity] duration-300 ease-out motion-reduce:transition-none ${
+        pointer.available ? 'max-w-[2.75rem] opacity-100' : 'max-w-0 -mr-2 opacity-0 pointer-events-none'
+      }`}
+    >
+      <IconButton
+        icon={MousePointer2}
+        label={pointer.active ? 'Turn off pointer' : 'Pointer: point at the shared screen'}
+        onClick={pointer.onToggle}
+        active={pointer.active}
+        pressed={pointer.active}
+        className="flex-shrink-0"
+      />
+    </div>
+  );
+
   const effectsButton = (
     <div className="relative hidden sm:block">
       <IconButton
@@ -254,15 +270,7 @@ export default function ControlBar({
       />
       {openPopover === 'effects' && (
         <div className="absolute bottom-full mb-2 left-0 bg-[var(--cr-surface)] border border-[var(--cr-border)] rounded-xl shadow-2xl p-4 z-30 cr-fade-in">
-          <VideoEffectsPanel
-            backgroundEffect={backgroundEffect}
-            onBackgroundChange={onBackgroundChange}
-            lighting={lighting}
-            onLightingChange={onLightingChange}
-            supported={effectsSupported}
-            pending={effectsPending}
-            onUploadImage={onUploadImage}
-          />
+          <VideoEffectsPanel {...effects} />
         </div>
       )}
     </div>
@@ -353,6 +361,7 @@ export default function ControlBar({
             {camButton}
             {screenShareButton}
             {recordButton}
+            {pointerButton}
             {effectsButton}
           </div>
           <div className="flex items-center gap-2">{handButton}</div>

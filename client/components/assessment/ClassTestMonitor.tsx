@@ -418,7 +418,7 @@ function LockAllDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4"
+      className="motion-fade fixed inset-0 z-[90] flex items-center justify-center bg-black/55 p-4"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onCancel();
       }}
@@ -428,7 +428,7 @@ function LockAllDialog({
         aria-modal="true"
         aria-labelledby="lock-all-title"
         data-testid="confirm-lock-all"
-        className="w-full max-w-md space-y-3 rounded-2xl border border-[var(--ar-border-strong)] bg-[var(--ar-surface)] p-5 text-[var(--ar-text)] shadow-2xl"
+        className="motion-pop w-full max-w-md space-y-3 rounded-2xl border border-[var(--ar-border-strong)] bg-[var(--ar-surface)] p-5 text-[var(--ar-text)] shadow-2xl"
       >
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-[var(--ar-danger)]/12 text-[var(--ar-danger)]">

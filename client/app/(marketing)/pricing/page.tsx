@@ -6,6 +6,7 @@ import Link from "next/link";
 import { describeRange } from "@/lib/catalog";
 import { ODYSSEY, resolveProgramId, type ProgramKey, type ProgramMeta } from "@/lib/programs";
 import { usePrograms } from "@/lib/usePrograms";
+import Collapse from "@/components/Collapse";
 import {
   BATCH_PRICE_RATIO,
   FORMATS,
@@ -511,11 +512,11 @@ function PricingContent() {
                             ▾
                           </span>
                         </button>
-                        {open && (
+                        <Collapse open={open}>
                           <div className="px-5 pb-4 text-sm text-[#64748B] dark:text-gray-400 leading-relaxed">
                             {faq.a}
                           </div>
-                        )}
+                        </Collapse>
                       </div>
                     );
                   })}

@@ -29,7 +29,7 @@ export default function RequestCreditsModal({ quote, onClose }: Props) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      className="motion-fade fixed inset-0 z-[70] flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
       data-testid="request-credits-modal"
     >
@@ -40,7 +40,7 @@ export default function RequestCreditsModal({ quote, onClose }: Props) {
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="modal-pop relative max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl border border-black/10 bg-white text-gray-900 shadow-2xl outline-none dark:border-white/10 dark:bg-[#0B1026] dark:text-white sm:max-w-md sm:rounded-3xl"
+        className="motion-dialog relative max-h-[92dvh] w-full overflow-y-auto overscroll-contain rounded-t-3xl border border-black/10 bg-white text-gray-900 shadow-2xl outline-none dark:border-white/10 dark:bg-[#0B1026] dark:text-white sm:max-w-md sm:rounded-3xl"
       >
         <button
           type="button"

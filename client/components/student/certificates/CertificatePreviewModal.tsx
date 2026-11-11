@@ -20,7 +20,7 @@ export default function CertificatePreviewModal({
   const panelRef = useModalBehavior(onClose);
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+      className="motion-fade fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6"
       onClick={onClose}
       data-testid="certificate-preview"
     >
@@ -31,7 +31,7 @@ export default function CertificatePreviewModal({
         aria-label={`${cert.programName} certificate`}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-5xl rounded-2xl bg-white p-3 shadow-2xl outline-none dark:bg-[#0B1026] sm:p-4"
+        className="motion-pop relative w-full max-w-5xl rounded-2xl bg-white p-3 shadow-2xl outline-none dark:bg-[#0B1026] sm:p-4"
       >
         <button
           type="button"

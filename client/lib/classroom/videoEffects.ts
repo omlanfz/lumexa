@@ -1,70 +1,72 @@
 // FILE PATH: client/lib/classroom/videoEffects.ts
 //
-// Background blur / virtual backgrounds and the Appearance bundle (lighting,
-// touch-up, auto-framing) for the local camera, on a Daily call. There is one
-// controller per call (effectsFor), so the choice made on the pre-join screen is
-// the very same one the classroom shows and changes afterwards.
+// The video effects (background blur and replacement, lighting adjustment, touch-up,
+// auto-framing) for the local camera on a Daily call, from Daily's side: when the
+// effects take over the camera, when they give it back, and what happens to the
+// camera while they have it. The pictures themselves are made by the pipeline
+// (effects/pipeline.ts). There is one controller per call (effectsFor), so what is
+// chosen on the pre-join screen is the very thing the classroom shows and changes.
 //
-//   - Background blur and virtual backgrounds are Daily's own video processors
-//     (call.updateInputSettings), which Daily keeps applied across camera
-//     off/on. Daily supports them on desktop browsers only.
-//   - The Appearance bundle is ours (appearanceProcessor.ts): a processed copy of
-//     the camera that Daily is told to send instead of its own — its "custom
-//     track". The pipeline owns a CLONE of Daily's camera track; stopping it hands
-//     the camera back to Daily.
+// How the camera is handled — and why it can no longer be switched off by an effect:
 //
-// Only one of the two can be active, as before (picking one clears the other).
-// While the camera is off nothing may hold it, so a running Appearance pipeline is
-// taken down then and started again when the camera comes back on.
+//   - Nothing is changed in Daily until there is something to do (an effect is asked
+//     for while the camera is on). Then a CLONE of Daily's own camera track goes into
+//     the pipeline, and only when the pipeline is producing pictures is Daily told to
+//     send its output (`customTrack`). Daily is then asked whether it really is — if
+//     not, everything is put back.
+//   - From then on, turning effects on and off, changing the blur or the background,
+//     does not touch Daily or the camera at all: it only changes the pipeline's
+//     settings. The track Daily sends stays the same one.
+//   - The camera going off and on (Daily's own button) is followed inside the
+//     pipeline: it lets go of the camera when it goes off (the light goes out) and
+//     opens it again when it comes on. Switching camera is done there too, by
+//     selectCamera: the output carries on without a break. No Daily call is made.
+//   - Only when every effect is off, or something has failed, is the camera given back
+//     to Daily — by naming the camera explicitly, so the person's choice of camera is
+//     kept — and the pipeline is stopped only once Daily has its own camera track
+//     again.
+//   - Anything that goes wrong (a model that cannot load, a pipeline that stalls, a
+//     lost GPU, a handover that does not complete) ends with the camera in Daily's
+//     hands and the control back to Off, with the reason in `error` for the person to
+//     see. Never a camera left off, a black picture, or a control that says On while
+//     nothing is happening.
 //
-// Plain TypeScript with no Daily import and no browser APIs of its own (they come
-// in as `deps`), so the sequencing can be tested with fakes.
+// Plain TypeScript with no Daily import and no browser APIs of its own (they come in as
+// `deps`), so the sequencing can be tested with fakes.
 
 import { DEFAULT_BACKGROUND_EFFECT } from './backgrounds.ts';
 import type { BackgroundEffect } from './backgrounds.ts';
-import type { AppearanceOptions, AppearancePipeline } from './appearanceProcessor.ts';
+import { DEFAULT_SETTINGS, isNeutral } from './effects/options.ts';
+import type { AppearanceOptions, EffectSettings } from './effects/options.ts';
+import type { PipelineEvents, PipelineHandle } from './effects/pipeline.ts';
 import type { ParticipantLike } from './daily/peers.ts';
 
-export const DEFAULT_LIGHTING: AppearanceOptions = {
-  brightness: 1,
-  contrast: 1,
-  touchUp: false,
-  autoFraming: false,
-};
-
-/** Daily's blur strength (0–1, 1 strongest) for each of the two blur choices. */
-export const BLUR_SLIGHT_STRENGTH = 0.35;
-export const BLUR_FULL_STRENGTH = 1;
-
-export function isAppearanceNeutral(o: AppearanceOptions): boolean {
-  return o.brightness === 1 && o.contrast === 1 && !o.touchUp && !o.autoFraming;
-}
+export { DEFAULT_APPEARANCE, DEFAULT_SETTINGS } from './effects/options.ts';
 
 export interface EffectsState {
-  backgroundEffect: BackgroundEffect;
-  lighting: AppearanceOptions;
-  /** Something is being applied. */
-  pending: boolean;
+  /** What the person has asked for, and what is happening (a choice that cannot be
+   * provided is taken back, with the reason in `error`). */
+  settings: EffectSettings;
+  /** Something is being started or switched. */
+  busy: boolean;
+  /** A model or a picture is being loaded (the first use takes a moment). */
+  loading: boolean;
+  /** The effects are running on the camera. (Asked for while the camera is off, they
+   * start when it comes on.) */
+  running: boolean;
   /** The last thing that went wrong, for the person to see; null when all is well. */
   error: string | null;
   /** This browser can do video effects at all. */
   supported: boolean;
-}
-
-/** The video input settings Daily is given. */
-export interface VideoInputSettings {
-  video: {
-    processor?:
-      | { type: 'none' }
-      | { type: 'background-blur'; config: { strength: number } }
-      | { type: 'background-image'; config: { source: string | ArrayBuffer } };
-    settings?: { customTrack: MediaStreamTrack } | Record<string, never>;
-  };
+  /** Why not, when it cannot. */
+  unsupportedReason: string | null;
+  /** The camera in use while the effects have it (Daily cannot say then); else null. */
+  cameraDeviceId: string | null;
 }
 
 /** The part of a Daily call the effects use (a DailyCall fits). */
 export interface EffectsCall {
-  updateInputSettings(settings: VideoInputSettings): Promise<unknown>;
+  updateInputSettings(settings: { video: { settings: { customTrack: MediaStreamTrack } | { deviceId: string } | Record<string, never> } }): Promise<unknown>;
   participants(): Record<string, ParticipantLike>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Daily's handlers are typed per event
   on(event: any, handler: (e: any) => void): unknown;
@@ -72,57 +74,110 @@ export interface EffectsCall {
   off(event: any, handler: (e: any) => void): unknown;
 }
 
-/** What the controller needs from the browser. */
-export interface EffectsDeps {
-  createPipeline(input: MediaStreamTrack, options: AppearanceOptions): AppearancePipeline;
-  /** The image for a virtual background, in the form Daily takes it. */
-  resolveImage(path: string): Promise<string | ArrayBuffer>;
-  /** Whether video effects work in this browser. */
-  supported(): Promise<boolean>;
+/** A camera to open. */
+export interface CameraRequest {
+  deviceId?: string;
+  width?: number;
+  height?: number;
+  frameRate?: number;
 }
 
-type Active = 'background' | 'appearance' | null;
+/** What the controller needs from the browser. */
+export interface EffectsDeps {
+  /** Starts a pipeline on `input` (which it owns from then on); resolves when it is
+   * producing pictures. */
+  startPipeline(input: MediaStreamTrack, settings: EffectSettings, events: PipelineEvents): Promise<PipelineHandle>;
+  /** Opens a camera. */
+  openCamera(request: CameraRequest): Promise<MediaStreamTrack>;
+  /** Whether video effects work in this browser, and if not, why. */
+  support(): Promise<{ supported: boolean; reason: string | null }>;
+}
 
-const APPLY_FAILED = 'Could not apply this on your device.';
-const BACKGROUND_FAILED = 'Could not apply this background on your device.';
+export interface ControllerOptions {
+  /** How long to wait for Daily to take up or let go of the output (ms). */
+  handoffTimeoutMs?: number;
+  /** How often to look while waiting (ms). */
+  pollMs?: number;
+}
+
+/** An error whose message is fit for the person to read. */
+export class EffectsError extends Error {
+  constructor(message: string, readonly cause?: unknown) {
+    super(message);
+    this.name = 'EffectsError';
+  }
+}
+
+const START_FAILED = "Video effects couldn't start on this device. Your camera is unaffected.";
+const STOPPED_WORKING = 'Video effects were turned off because they stopped working. Your camera is still on.';
+const HAND_BACK_FAILED = "Couldn't switch the effects off just now. Your video is unaffected.";
+const TOO_SLOW = "Video effects were turned off because this computer couldn't keep up with them. Your camera is still on.";
+const CAMERA_FAILED = "The camera couldn't be restarted with effects, so they were turned off.";
+
+const NEUTRAL: EffectSettings = DEFAULT_SETTINGS;
+
+interface Installed {
+  pipeline: PipelineHandle;
+  /** The camera the pipeline reads (Daily cannot report it while the output is sent). */
+  deviceId: string | null;
+  /** How to open that camera again. */
+  request: CameraRequest;
+  /** The camera is off: the pipeline has let go of it. */
+  inputPaused: boolean;
+}
 
 export class VideoEffectsController {
   private state: EffectsState = {
-    backgroundEffect: DEFAULT_BACKGROUND_EFFECT,
-    lighting: DEFAULT_LIGHTING,
-    pending: false,
+    settings: NEUTRAL,
+    busy: false,
+    loading: false,
+    running: false,
     error: null,
     supported: false,
+    unsupportedReason: null,
+    cameraDeviceId: null,
   };
   private readonly listeners = new Set<() => void>();
-  private active: Active = null;
-  private pipeline: AppearancePipeline | null = null;
-  /** The person wants the Appearance bundle, even while the camera is off. */
-  private wantsAppearance = false;
-  private queue: Promise<void> = Promise.resolve();
-  private disposed = false;
   private readonly registered: [string, (e: never) => void][] = [];
+
+  /** What the person last asked for. */
+  private desired: EffectSettings = NEUTRAL;
+  /** The camera is in the pipeline's hands. */
+  private installed: Installed | null = null;
+  private queue: Promise<void> = Promise.resolve();
+  private reconcileQueued = false;
+  private inFlight = 0;
+  /** A handover is being made: camera events are looked at again once it is done. */
+  private transitioning = false;
+  private resuming = false;
+  private failure: string | null = null;
+  private drift = 0;
+  private errorTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private disposed = false;
 
   private readonly call: EffectsCall;
   private readonly deps: EffectsDeps;
+  private readonly handoffTimeoutMs: number;
+  private readonly pollMs: number;
 
-  constructor(call: EffectsCall, deps: EffectsDeps) {
+  constructor(call: EffectsCall, deps: EffectsDeps, options: ControllerOptions = {}) {
     this.call = call;
     this.deps = deps;
-    this.listen('participant-updated', () => this.onParticipantUpdated());
-    this.listen('nonfatal-error', (e: { type?: string }) => {
-      // A video processor failing is a background; anything else in the input
-      // settings (the custom camera track) is the appearance bundle.
-      if (e?.type === 'video-processor-error') this.set({ error: BACKGROUND_FAILED });
-      else if (e?.type === 'input-settings-error') this.set({ error: APPLY_FAILED });
-    });
+    this.handoffTimeoutMs = options.handoffTimeoutMs ?? 4_000;
+    this.pollMs = options.pollMs ?? 50;
+    this.listen('participant-updated', () => this.syncCamera());
     // The call is over: nothing may keep holding the camera.
     this.listen('left-meeting', () => this.dispose());
     this.listen('call-instance-destroyed', () => this.dispose());
     void deps
-      .supported()
-      .then((supported) => this.set({ supported }))
-      .catch(() => undefined);
+      .support()
+      .then(({ supported, reason }) => {
+        this.set({ supported, unsupportedReason: supported ? null : reason });
+        // choices made before support was known (a pre-join click) are applied now
+        if (supported && !isNeutral(this.desired)) void this.requestReconcile();
+      })
+      .catch(() => this.set({ supported: false, unsupportedReason: "Video effects aren't available in this browser." }));
   }
 
   /** The call is over (or the controller was told to let go): it does nothing more. */
@@ -142,75 +197,67 @@ export class VideoEffectsController {
   getSnapshot = (): EffectsState => this.state;
 
   /** Resolves when everything asked for so far has been applied (or has failed). */
-  settled(): Promise<void> {
-    return this.queue;
+  async settled(): Promise<void> {
+    let current: Promise<void>;
+    do {
+      current = this.queue;
+      await current;
+    } while (current !== this.queue);
   }
 
   // ─── Choices ────────────────────────────────────────────────────────────
 
-  setBackground(next: BackgroundEffect): Promise<void> {
-    this.set({ backgroundEffect: next, error: null });
-    if (!this.state.supported) return Promise.resolve();
+  setBackground(background: BackgroundEffect): Promise<void> {
+    return this.ask({ ...this.desired, background });
+  }
+
+  setAppearance(appearance: AppearanceOptions): Promise<void> {
+    return this.ask({ ...this.desired, appearance });
+  }
+
+  private ask(next: EffectSettings): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    this.desired = next;
+    this.failure = null;
+    this.clearError();
+    this.set({ settings: next });
+    if (!this.state.supported) return Promise.resolve(); // kept, and applied if support is confirmed
+    return this.requestReconcile();
+  }
+
+  /** Switches the camera. While the effects have the camera, that is done inside the
+   * pipeline and the picture goes on without a break; otherwise `viaDaily` does it. */
+  selectCamera(deviceId: string, viaDaily: () => Promise<unknown>): Promise<void> {
     return this.enqueue(async () => {
-      try {
-        if (next.mode === 'none') {
-          if (this.active === 'background') await this.clearProcessor();
-          return;
-        }
-        // Background and the Appearance bundle share one slot: picking a
-        // background clears any active Appearance settings.
-        await this.stopAppearance();
-        await this.call.updateInputSettings({ video: { processor: await this.backgroundProcessor(next) } });
-        this.active = 'background';
-        this.wantsAppearance = false;
-        this.set({ lighting: DEFAULT_LIGHTING });
-      } catch (err) {
-        console.error('Failed to apply background effect', err);
-        this.set({ error: BACKGROUND_FAILED });
+      const installed = this.installed;
+      if (!installed) {
+        await viaDaily();
+        return;
       }
+      const request = { ...installed.request, deviceId };
+      if (installed.inputPaused || !this.cameraIsOn()) {
+        // the camera is off: it is opened, on this one, when it comes back on
+        installed.request = request;
+        installed.deviceId = deviceId;
+        this.set({ cameraDeviceId: deviceId });
+        return;
+      }
+      const track = await this.deps.openCamera(request); // if it will not open, nothing has changed
+      if (this.installed !== installed || this.disposed) {
+        track.stop();
+        return;
+      }
+      installed.pipeline.swapInput(track);
+      installed.request = request;
+      installed.deviceId = deviceId;
+      this.set({ cameraDeviceId: deviceId });
     });
   }
 
-  setLighting(next: AppearanceOptions): Promise<void> {
-    this.set({ lighting: next, error: null });
-    if (!this.state.supported) return Promise.resolve();
-    return this.enqueue(async () => {
-      try {
-        if (isAppearanceNeutral(next)) {
-          this.wantsAppearance = false;
-          if (this.active === 'appearance') await this.stopAppearance();
-          return;
-        }
-        this.wantsAppearance = true;
-        if (this.active === 'background') await this.clearProcessor();
-        if (this.pipeline) {
-          this.pipeline.update(next);
-        } else if (this.cameraIsOn()) {
-          await this.startAppearance(next);
-        } // else: started when the camera comes on (onParticipantUpdated)
-        this.active = 'appearance';
-        this.set({ backgroundEffect: DEFAULT_BACKGROUND_EFFECT });
-      } catch (err) {
-        console.error('Failed to apply appearance effect', err);
-        this.set({ error: APPLY_FAILED });
-      }
-    });
-  }
-
-  /**
-   * Runs `change` (switching the camera) with the Appearance pipeline out of the
-   * way: it holds a copy of the old camera, and Daily cannot switch devices under
-   * a custom track. The pipeline is rebuilt on the new camera afterwards.
-   */
-  async withCameraSwitch<T>(change: () => Promise<T>): Promise<T> {
-    await this.enqueue(async () => {
-      if (this.pipeline) await this.stopAppearance({ keepWanting: true });
-    });
-    try {
-      return await change();
-    } finally {
-      void this.enqueue(() => this.resumeAppearance());
-    }
+  /** Shows the person a message (for something the effects did not do themselves, like
+   * a picture that was not usable). */
+  reportError(message: string): void {
+    if (!this.disposed) this.showError(message);
   }
 
   dispose(): void {
@@ -218,35 +265,277 @@ export class VideoEffectsController {
     this.disposed = true;
     for (const [event, handler] of this.registered) this.call.off(event, handler as never);
     this.registered.length = 0;
-    this.pipeline?.stop();
-    this.pipeline = null;
+    this.clearError();
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    // The call is over: no more telling Daily anything — just let go of the camera.
+    this.installed?.pipeline.stop();
+    this.installed = null;
     this.listeners.clear();
   }
 
-  // ─── Applying ───────────────────────────────────────────────────────────
+  // ─── Making what was asked for so ───────────────────────────────────────
 
-  private async backgroundProcessor(effect: BackgroundEffect): Promise<NonNullable<VideoInputSettings['video']['processor']>> {
-    if (effect.mode === 'image') {
-      return { type: 'background-image', config: { source: await this.deps.resolveImage(effect.imagePath) } };
+  private requestReconcile(): Promise<void> {
+    if (this.reconcileQueued) return this.queue;
+    this.reconcileQueued = true;
+    return this.enqueue(async () => {
+      this.reconcileQueued = false;
+      await this.reconcile();
+    });
+  }
+
+  /** Brings the camera to what the person last asked for. Reads `desired` when it
+   * runs, so a burst of choices is applied once, as the last of them. */
+  private async reconcile(): Promise<void> {
+    if (this.disposed || !this.state.supported) return;
+    let want = this.desired;
+    try {
+      if (this.failure) {
+        // something broke: effects off, and the reason shown
+        const message = this.failure;
+        this.failure = null;
+        want = this.desired = NEUTRAL;
+        this.set({ settings: NEUTRAL });
+        await this.uninstall();
+        this.showError(message);
+        return;
+      }
+      if (isNeutral(want)) {
+        await this.uninstall();
+        this.set({ settings: want, running: false });
+        return;
+      }
+      if (!this.installed) {
+        if (!this.cameraIsOn()) {
+          // asked for while the camera is off: it starts when the camera comes on
+          this.set({ settings: want });
+          return;
+        }
+        await this.install(want);
+      } else {
+        this.installed.pipeline.update(want);
+      }
+      // What is shown is what was asked for LAST: while the pipeline started, an effect
+      // may have been taken back (its model could not be loaded), or chosen again.
+      this.set({ settings: this.desired, running: this.installed !== null });
+    } catch (error) {
+      console.error('Video effects could not be applied', error);
+      // The camera is as it was. The choice is taken back, and the person told.
+      const message = error instanceof EffectsError ? error.message : START_FAILED;
+      if (this.installed) {
+        // still running (a failed hand-back): effects look off, and the hand-back is retried
+        this.installed.pipeline.update(NEUTRAL);
+        this.scheduleRetry();
+      } else {
+        this.desired = NEUTRAL;
+        this.set({ settings: NEUTRAL, running: false });
+      }
+      this.showError(message);
     }
+  }
+
+  /** Puts the pipeline on the camera and Daily on the pipeline's output. */
+  private async install(want: EffectSettings): Promise<void> {
+    // Daily may still be starting the camera (it is on, but has no track yet).
+    await this.until(() => this.nativeCameraTrack() !== null, 'The camera is not ready yet. Try again in a moment.');
+    const native = this.nativeCameraTrack();
+    if (!native) throw new EffectsError('The camera is not ready yet. Try again in a moment.');
+    const current = native.getSettings?.() ?? {};
+    const request: CameraRequest = {
+      deviceId: current.deviceId,
+      width: current.width,
+      height: current.height,
+      frameRate: current.frameRate,
+    };
+
+    this.transitioning = true;
+    // a copy of the camera: Daily goes on with its own until it is told otherwise
+    const input = native.clone();
+    let pipeline: PipelineHandle | null = null;
+    try {
+      pipeline = await this.deps.startPipeline(input, want, this.pipelineEvents());
+      if (this.disposed) {
+        pipeline.stop();
+        return;
+      }
+      await this.call.updateInputSettings({ video: { settings: { customTrack: pipeline.output } } });
+      await this.until(() => this.outgoingTrack()?.id === pipeline!.output.id, 'Daily did not start sending the effects.');
+      this.installed = { pipeline, deviceId: request.deviceId ?? null, request, inputPaused: false };
+      this.set({ cameraDeviceId: request.deviceId ?? null });
+    } catch (error) {
+      if (pipeline) await this.takeBack(pipeline, request.deviceId ?? null);
+      else input.stop();
+      throw error instanceof EffectsError ? error : new EffectsError(START_FAILED, error);
+    } finally {
+      this.transitioning = false;
+      this.syncCamera();
+    }
+  }
+
+  /** Gives the camera back to Daily, naming it so the person's own choice of camera
+   * is kept, and stops the pipeline once Daily has it. */
+  private async uninstall(): Promise<void> {
+    const installed = this.installed;
+    if (!installed) return;
+    this.transitioning = true;
+    try {
+      const cameraWasOn = this.cameraIsOn();
+      await this.call.updateInputSettings({ video: { settings: installed.deviceId ? { deviceId: installed.deviceId } : {} } });
+      if (cameraWasOn) {
+        await this.until(() => {
+          const track = this.outgoingTrack();
+          return !!track && track.id !== installed.pipeline.output.id && track.readyState === 'live';
+        }, "Daily did not get the camera back.");
+      }
+      this.installed = null;
+      installed.pipeline.stop();
+      this.set({ cameraDeviceId: null, running: false });
+    } catch (error) {
+      // Daily did not take the camera back. If it let go of our output meanwhile, put
+      // the output back, so the picture keeps flowing.
+      if (this.outgoingTrack()?.id !== installed.pipeline.output.id && this.cameraIsOn()) {
+        try {
+          await this.call.updateInputSettings({ video: { settings: { customTrack: installed.pipeline.output } } });
+        } catch {
+          // nothing more can be done from here
+        }
+      }
+      throw new EffectsError(HAND_BACK_FAILED, error);
+    } finally {
+      this.transitioning = false;
+      this.syncCamera();
+    }
+  }
+
+  /** A handover that did not complete: whatever Daily took, give it back. */
+  private async takeBack(pipeline: PipelineHandle, deviceId: string | null): Promise<void> {
+    try {
+      if (this.outgoingTrack()?.id === pipeline.output.id) {
+        await this.call.updateInputSettings({ video: { settings: deviceId ? { deviceId } : {} } });
+        await this.until(() => {
+          const track = this.outgoingTrack();
+          return !!track && track.id !== pipeline.output.id;
+        }, 'Daily did not get the camera back.').catch(() => undefined);
+      }
+    } catch (error) {
+      console.error('Could not put the camera back after a failed start', error);
+    } finally {
+      pipeline.stop();
+    }
+  }
+
+  private pipelineEvents(): PipelineEvents {
     return {
-      type: 'background-blur',
-      config: { strength: effect.mode === 'blur-slight' ? BLUR_SLIGHT_STRENGTH : BLUR_FULL_STRENGTH },
+      onFailure: (failure) => {
+        if (this.disposed) return;
+        console.error('The video effects pipeline failed', failure);
+        this.failure = failure.reason === 'too-slow' ? TOO_SLOW : STOPPED_WORKING;
+        void this.requestReconcile();
+      },
+      onUnavailable: (effect, message) => {
+        if (this.disposed) return;
+        // that one effect is taken back; the others carry on
+        const settings: EffectSettings =
+          effect === 'background'
+            ? { ...this.desired, background: DEFAULT_BACKGROUND_EFFECT }
+            : { ...this.desired, appearance: { ...this.desired.appearance, autoFraming: false } };
+        this.desired = settings;
+        this.set({ settings });
+        this.showError(message);
+        void this.requestReconcile();
+      },
+      onLoading: (loading) => this.set({ loading }),
     };
   }
 
-  private async clearProcessor(): Promise<void> {
-    await this.call.updateInputSettings({ video: { processor: { type: 'none' } } });
-    if (this.active === 'background') this.active = null;
+  // ─── The camera going off and on ────────────────────────────────────────
+
+  /** Looks at what Daily says about the camera and the pipeline, and brings them
+   * together: the camera went off (let go of it), came on (open it, or start the
+   * effects that were waiting), or something other than us changed what Daily
+   * sends. */
+  private syncCamera(): void {
+    if (this.disposed || this.transitioning) return;
+    const on = this.cameraIsOn();
+    const installed = this.installed;
+
+    if (!installed) {
+      this.drift = 0;
+      if (on && this.state.supported && !isNeutral(this.desired)) void this.requestReconcile();
+      return;
+    }
+    if (!on) {
+      this.drift = 0;
+      if (!installed.inputPaused) {
+        installed.pipeline.pauseInput();
+        installed.inputPaused = true;
+      }
+      return;
+    }
+    if (installed.inputPaused) {
+      void this.resumeCamera();
+      return;
+    }
+    // Daily is sending something that is not the output (something else switched the
+    // camera): after a moment, put the output back rather than leave the effects
+    // switched on and doing nothing.
+    const outgoing = this.outgoingTrack();
+    if (outgoing && outgoing.id !== installed.pipeline.output.id) {
+      this.drift += 1;
+      if (this.drift >= 3) {
+        this.drift = 0;
+        void this.enqueue(() => this.reassert());
+      }
+    } else {
+      this.drift = 0;
+    }
   }
 
-  /** The camera track Daily itself holds, if the camera is on. */
-  private ownCameraTrack(): MediaStreamTrack | null {
-    const local = this.local();
-    const video = local?.tracks.video;
-    if (!video || video.state === 'off' || video.state === 'blocked') return null;
-    return video.persistentTrack ?? video.track ?? null;
+  private async resumeCamera(): Promise<void> {
+    const installed = this.installed;
+    if (!installed || this.resuming) return;
+    this.resuming = true;
+    try {
+      await this.enqueue(async () => {
+        if (this.installed !== installed || !installed.inputPaused || !this.cameraIsOn() || this.disposed) return;
+        const track = await this.deps.openCamera(installed.request);
+        if (this.installed !== installed || this.disposed || !this.cameraIsOn()) {
+          track.stop(); // the camera went off again, or the effects ended, while it opened
+          return;
+        }
+        installed.pipeline.resumeInput(track);
+        installed.inputPaused = false;
+      });
+    } catch (error) {
+      console.error('Could not reopen the camera for the effects', error);
+      this.failure = CAMERA_FAILED;
+      void this.requestReconcile();
+    } finally {
+      this.resuming = false;
+      this.syncCamera();
+    }
   }
+
+  /** Daily stopped sending our output: tell it again; if it will not, give the camera back. */
+  private async reassert(): Promise<void> {
+    const installed = this.installed;
+    if (!installed || this.disposed || !this.cameraIsOn() || installed.inputPaused) return;
+    if (this.outgoingTrack()?.id === installed.pipeline.output.id) return;
+    this.transitioning = true;
+    try {
+      await this.call.updateInputSettings({ video: { settings: { customTrack: installed.pipeline.output } } });
+      await this.until(() => this.outgoingTrack()?.id === installed.pipeline.output.id, 'Daily did not start sending the effects.');
+    } catch (error) {
+      console.error('The effects could not be put back on the camera', error);
+      this.failure = STOPPED_WORKING;
+      void this.requestReconcile();
+    } finally {
+      this.transitioning = false;
+    }
+  }
+
+  // ─── What Daily says ────────────────────────────────────────────────────
 
   private local(): ParticipantLike | undefined {
     try {
@@ -257,67 +546,33 @@ export class VideoEffectsController {
     }
   }
 
+  /** The camera is on: not switched off, and not blocked. */
   private cameraIsOn(): boolean {
-    return this.ownCameraTrack() !== null;
+    const video = this.local()?.tracks.video;
+    return !!video && video.state !== 'off' && video.state !== 'blocked';
   }
 
-  private async startAppearance(options: AppearanceOptions): Promise<void> {
-    const own = this.ownCameraTrack();
-    if (!own) return;
-    const pipeline = this.deps.createPipeline(own.clone(), options);
-    try {
-      await this.call.updateInputSettings({ video: { settings: { customTrack: pipeline.output } } });
-    } catch (err) {
-      pipeline.stop();
-      throw err;
-    }
-    this.pipeline = pipeline;
+  /** The track Daily is sending as the camera. */
+  private outgoingTrack(): MediaStreamTrack | null {
+    const video = this.local()?.tracks.video;
+    if (!video || video.state === 'off' || video.state === 'blocked') return null;
+    return video.persistentTrack ?? video.track ?? null;
   }
 
-  /** Takes the Appearance pipeline down and hands the camera back to Daily. */
-  private async stopAppearance(opts: { keepWanting?: boolean } = {}): Promise<void> {
-    const pipeline = this.pipeline;
-    if (!opts.keepWanting) this.wantsAppearance = false;
-    if (!pipeline) {
-      if (this.active === 'appearance' && !opts.keepWanting) this.active = null;
-      return;
-    }
-    this.pipeline = null;
-    try {
-      await this.call.updateInputSettings({ video: { settings: {} } });
-    } finally {
-      pipeline.stop();
-      if (!opts.keepWanting) this.active = null;
-    }
+  /** Daily's own camera track — only meaningful while the effects do not have the camera. */
+  private nativeCameraTrack(): MediaStreamTrack | null {
+    const track = this.outgoingTrack();
+    return track && track.readyState === 'live' ? track : null;
   }
 
-  private async resumeAppearance(): Promise<void> {
-    if (this.disposed || !this.wantsAppearance || this.pipeline || !this.cameraIsOn()) return;
-    try {
-      await this.startAppearance(this.state.lighting);
-    } catch (err) {
-      console.error('Failed to bring the appearance effects back', err);
-      this.set({ error: APPLY_FAILED });
-    }
-  }
-
-  // ─── The camera going off and on ────────────────────────────────────────
-
-  private onParticipantUpdated(): void {
-    if (this.disposed) return;
-    const cameraOn = this.cameraIsOn();
-    if (!cameraOn && this.pipeline) {
-      // Nothing may hold the camera while it is off — and Daily must not be left
-      // pointing at a track that is about to end.
-      void this.enqueue(async () => {
-        try {
-          await this.stopAppearance({ keepWanting: true });
-        } catch (err) {
-          console.error('Failed to let go of the camera', err);
-        }
-      });
-    } else if (cameraOn && this.wantsAppearance && !this.pipeline) {
-      void this.enqueue(() => this.resumeAppearance());
+  /** Waits for `condition`, looking now and every poll; throws `message` when it has
+   * not come true in time. */
+  private async until(condition: () => boolean, message: string): Promise<void> {
+    const deadline = Date.now() + this.handoffTimeoutMs;
+    while (!condition()) {
+      if (this.disposed) throw new EffectsError('The call ended.');
+      if (Date.now() > deadline) throw new EffectsError(message);
+      await new Promise((resolve) => setTimeout(resolve, this.pollMs));
     }
   }
 
@@ -328,21 +583,45 @@ export class VideoEffectsController {
     this.registered.push([event, handler as (e: never) => void]);
   }
 
-  private enqueue(task: () => Promise<void>): Promise<void> {
-    const run = this.queue.then(async () => {
-      if (this.disposed) return;
-      this.set({ pending: true });
-      try {
-        await task();
-      } finally {
-        this.set({ pending: false });
-      }
+  /** Runs `task` after everything before it; one at a time. */
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    this.inFlight += 1;
+    this.set({ busy: true });
+    const run = this.queue.then(task, task);
+    this.queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run.finally(() => {
+      this.inFlight -= 1;
+      if (this.inFlight === 0) this.set({ busy: false });
     });
-    this.queue = run.catch(() => undefined);
-    return run.catch(() => undefined);
+  }
+
+  /** Tries again, once, a little later (a hand-back that did not complete). */
+  private scheduleRetry(): void {
+    if (this.retryTimer !== null || this.disposed) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (!this.disposed && this.installed && isNeutral(this.desired)) void this.requestReconcile();
+    }, 5_000);
+  }
+
+  private showError(message: string): void {
+    this.clearError();
+    this.set({ error: message });
+    // an error is for reading, not for ever
+    this.errorTimer = setTimeout(() => this.set({ error: null }), 12_000);
+  }
+
+  private clearError(): void {
+    if (this.errorTimer !== null) clearTimeout(this.errorTimer);
+    this.errorTimer = null;
+    if (this.state.error !== null) this.set({ error: null });
   }
 
   private set(patch: Partial<EffectsState>): void {
+    if (this.disposed && this.listeners.size === 0) return;
     const next = { ...this.state, ...patch };
     const keys = Object.keys(next) as (keyof EffectsState)[];
     if (keys.every((k) => Object.is(next[k], this.state[k]))) return;
