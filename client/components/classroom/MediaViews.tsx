@@ -6,13 +6,24 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef } from 'react';
+import type { Ref } from 'react';
 import { applySpeaker, useSpeakerId } from '@/lib/classroom/audioOutput';
 
 /** A video track, muted (the sound of a person is played by the audio renderer,
- * once per person, never by each tile). */
-export function VideoView({ track, className }: { track: MediaStreamTrack | null; className?: string }) {
+ * once per person, never by each tile). `videoRef`, when given, is handed the
+ * `<video>` element — for whatever needs the picture's own size. */
+export function VideoView({
+  track,
+  className,
+  videoRef,
+}: {
+  track: MediaStreamTrack | null;
+  className?: string;
+  videoRef?: Ref<HTMLVideoElement>;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
+  useImperativeHandle(videoRef, () => ref.current as HTMLVideoElement, []);
 
   useEffect(() => {
     const el = ref.current;

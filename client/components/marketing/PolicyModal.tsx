@@ -60,7 +60,7 @@ export default function PolicyModal({ doc, onClose }: { doc: PolicyDocId | null;
 
   return (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+      className="motion-fade fixed inset-0 z-[999] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
@@ -68,7 +68,7 @@ export default function PolicyModal({ doc, onClose }: { doc: PolicyDocId | null;
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-2xl max-h-[85vh] bg-[#0D1B2E] border border-gray-700 rounded-2xl shadow-2xl flex flex-col"
+        className="motion-pop relative w-full max-w-2xl max-h-[85vh] bg-[#0D1B2E] border border-gray-700 rounded-2xl shadow-2xl flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 flex-shrink-0">

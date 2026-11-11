@@ -100,11 +100,6 @@ export default function PreJoinScreen({
   const videoEnabled = !!local?.video.on;
   const previewTrack = videoEnabled ? local?.video.track ?? null : null;
 
-  const handleUploadImage = (file: File) => {
-    const url = URL.createObjectURL(file);
-    void effects.setBackground({ mode: 'image', imagePath: url, label: 'Custom' });
-  };
-
   return (
     <div className="cr-root min-h-screen flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-4xl grid md:grid-cols-[1.3fr_1fr] gap-6 items-center">
@@ -156,13 +151,15 @@ export default function PreJoinScreen({
               {effectsOpen && (
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-[var(--cr-surface)] border border-[var(--cr-border)] rounded-xl shadow-2xl p-4 cr-fade-in z-20">
                   <VideoEffectsPanel
-                    backgroundEffect={effects.backgroundEffect}
+                    background={effects.background}
                     onBackgroundChange={(e) => void effects.setBackground(e)}
-                    lighting={effects.lighting}
-                    onLightingChange={(l) => void effects.setLighting(l)}
+                    appearance={effects.appearance}
+                    onAppearanceChange={(a) => void effects.setAppearance(a)}
                     supported={effects.supported}
-                    pending={effects.pending}
-                    onUploadImage={handleUploadImage}
+                    unsupportedReason={effects.unsupportedReason}
+                    loading={effects.loading}
+                    error={effects.error}
+                    onUploadImage={effects.uploadBackground}
                   />
                 </div>
               )}

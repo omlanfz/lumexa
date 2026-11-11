@@ -52,6 +52,7 @@ import EndClassModal from './EndClassModal';
 import ClassAudioRenderer from './ClassAudioRenderer';
 import AwardToast from './AwardToast';
 import BadgeCelebration from './BadgeCelebration';
+import PointerLayer from './PointerLayer';
 import { VideoView } from './MediaViews';
 import { activeScreenShares, listStudents } from '@/lib/classroom/people';
 import { useCall, useCallSnapshot, useLocalPeer, usePeople } from '@/lib/classroom/daily/CallContext';
@@ -61,6 +62,7 @@ import type { BadgeAwardedEvent } from '@/lib/classroom/serverEvents';
 import { useServerEvents } from '@/lib/classroom/useServerEvents';
 import { useClassroomState } from '@/lib/classroom/useClassroomState';
 import { useClassroomControls } from '@/lib/classroom/useClassroomControls';
+import { usePointer } from '@/lib/classroom/usePointer';
 import { useChat } from '@/lib/classroom/useChat';
 import { useLocalMedia } from '@/lib/classroom/useLocalMedia';
 import { useVideoEffects } from '@/lib/classroom/useVideoEffects';
@@ -165,6 +167,11 @@ export default function ClassroomRoom({
   const { raisedHands, reactions, spotlightUserId, setOwnHandRaised, lowerHand, sendReaction, setSpotlight } =
     useClassroomControls();
   const effects = useVideoEffects(call);
+  // The teacher's Pointer can be used on a student's shared screen — never on the
+  // teacher's own (see usePointer).
+  const studentShares = screenShares.filter((p) => !p.isOwner);
+  const pointer = usePointer({ isTeacher, shares: studentShares });
+  const fullscreenVideoRef = useRef<HTMLVideoElement>(null);
 
   const [activePanel, setActivePanel] = useState<PanelKind>(null);
   const [pinnedUserId, setPinnedUserId] = useState<string | null>(null);
@@ -576,8 +583,26 @@ export default function ClassroomRoom({
       <ClassAudioRenderer />
 
       {fullscreenShare && (
-        <div className="fixed inset-0 z-30 bg-black" onDoubleClick={() => setFullscreenSessionId(null)}>
-          <VideoView track={fullscreenShare.screenVideo.track} className="w-full h-full object-contain bg-black" />
+        <div
+          className="fixed inset-0 z-30 bg-black"
+          // While the teacher points, two quick clicks are two highlights, not an
+          // exit from fullscreen (Esc and the button still are).
+          onDoubleClick={pointer.active && !fullscreenShare.isOwner ? undefined : () => setFullscreenSessionId(null)}
+        >
+          <VideoView
+            track={fullscreenShare.screenVideo.track}
+            videoRef={fullscreenVideoRef}
+            className="w-full h-full object-contain bg-black"
+          />
+          {!fullscreenShare.isOwner && (
+            <PointerLayer
+              key={fullscreenShare.sessionId}
+              sessionId={fullscreenShare.sessionId}
+              pointer={pointer}
+              videoRef={fullscreenVideoRef}
+              capturing={pointer.active}
+            />
+          )}
           <div
             className={`absolute top-[72px] right-4 flex items-center gap-2 transition-opacity duration-300 ${
               chromeVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
@@ -709,6 +734,7 @@ export default function ClassroomRoom({
               onForceStopShare={isTeacher ? handleForceStopShare : undefined}
               fullscreenSessionId={fullscreenSessionId}
               onToggleFullscreen={handleToggleFullscreen}
+              pointer={pointer}
             />
             <ReactionsOverlay reactions={reactions} />
           </div>
@@ -838,20 +864,22 @@ export default function ClassroomRoom({
             onToggleRecording={() => (recorder.state === 'recording' ? void recorder.stop() : recorder.start())}
             recordingAvailable={!isTrialClass}
             recordingPending={recorder.pending}
-            backgroundEffect={effects.backgroundEffect}
-            onBackgroundChange={(e) => void effects.setBackground(e)}
-            lighting={effects.lighting}
-            onLightingChange={(l) => void effects.setLighting(l)}
-            effectsSupported={effects.supported}
-            effectsPending={effects.pending}
-            onUploadImage={(file) => {
-              const url = URL.createObjectURL(file);
-              void effects.setBackground({ mode: 'image', imagePath: url, label: 'Custom' });
+            effects={{
+              background: effects.background,
+              onBackgroundChange: (e) => void effects.setBackground(e),
+              appearance: effects.appearance,
+              onAppearanceChange: (a) => void effects.setAppearance(a),
+              supported: effects.supported,
+              unsupportedReason: effects.unsupportedReason,
+              loading: effects.loading,
+              error: effects.error,
+              onUploadImage: effects.uploadBackground,
             }}
             onLeave={leaveClass}
             onOpenEndClass={() => setShowEndClassModal(true)}
             endClassDisabledReason={endClassGate}
             onViewLesson={isLessonFlow ? () => setActivePanel('lesson') : undefined}
+            pointer={isTeacher ? { available: pointer.available, active: pointer.active, onToggle: pointer.toggle } : undefined}
             floating={!!fullscreenShare}
             roomLocked={roomLocked}
             onToggleRoomLock={isTeacher ? () => void handleToggleLock() : undefined}
@@ -913,12 +941,12 @@ export default function ClassroomRoom({
           just before it connected, or the class was already full). */}
       {denied && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+          className="motion-fade fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
           role="alertdialog"
           aria-label="You can't stay in this classroom"
           data-testid="room-denied"
         >
-          <div className="max-w-sm rounded-2xl border border-[var(--cr-border)] bg-[var(--cr-surface)] p-6 text-center shadow-2xl">
+          <div className="motion-pop max-w-sm rounded-2xl border border-[var(--cr-border)] bg-[var(--cr-surface)] p-6 text-center shadow-2xl">
             <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-amber-500/15 text-amber-400">
               <Lock size={20} />
             </div>

@@ -261,7 +261,7 @@ function CertificatesContent() {
       {error && <p className="text-sm text-[var(--a-danger)]">{error}</p>}
 
       {tab === "pending" ? (
-        <Card className="overflow-hidden p-0">
+        <Card key="pending" className="fade-in overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm" data-testid="pending-table">
               <thead>
@@ -369,7 +369,7 @@ function CertificatesContent() {
           </div>
         </Card>
       ) : (
-        <Card className="overflow-hidden p-0">
+        <Card key="issued" className="fade-in overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm" data-testid="issued-table">
               <thead>

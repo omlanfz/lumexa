@@ -80,12 +80,15 @@ describe('the lesson page layout', () => {
     assert.ok(!has(h, /id="lesson-toc"[^>]*inert/), 'the contents are reachable while it is open');
     assert.ok(has(h, 'href="#first-part"') && has(h, 'href="#third-part"'));
     assert.ok(has(h, 'class="lesson-content min-w-0"'));
+    assert.ok(!has(h, 'data-no-sidebar'), 'the layout reserves the sidebar column');
   });
 
   it('has no sidebar, and so no toggle, when there is nothing to navigate', () => {
     const h = renderToStaticMarkup(<LessonStudyView data={data('## Only one part\n\nShort.')} mode="page" isStudent={false} />);
     assert.ok(!has(h, 'data-sidebar-toggle'));
     assert.ok(has(h, 'data-sidebar="open"'));
+    // the stylesheet keys on this: without it the content fell into the 15rem sidebar track
+    assert.ok(has(h, 'data-no-sidebar'), 'the layout is told there is no sidebar column to reserve');
   });
 
   it('keeps the live classroom compact: no sidebar layout and no toggle', () => {

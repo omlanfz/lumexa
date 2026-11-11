@@ -32,13 +32,16 @@
 
 'use client';
 
+import { useRef } from 'react';
 import { Monitor, MonitorOff, Maximize2, Minimize2, MonitorX } from 'lucide-react';
 import ParticipantTile from './ParticipantTile';
 import LessonPanel from './LessonPanel';
+import PointerLayer from './PointerLayer';
 import { VideoView } from './MediaViews';
 import type { LessonDetailsResponse } from '@/components/curriculum/LessonDetailsView';
 import type { Peer } from '@/lib/classroom/daily/peers';
 import type { Person } from '@/lib/classroom/people';
+import type { PointerControls } from '@/lib/classroom/usePointer';
 
 /** Centers content and constrains it to a sensible 16:9-ish frame instead of
  * letting it stretch to fill whatever (often ultra-wide, short) space the
@@ -69,6 +72,7 @@ function ScreenShareTile({
   onToggleFullscreen,
   onForceStopShare,
   onStopOwnShare,
+  pointer,
 }: {
   /** The connection that is sharing. */
   peer: Peer;
@@ -79,16 +83,27 @@ function ScreenShareTile({
   onToggleFullscreen: () => void;
   onForceStopShare?: (userId: string) => void;
   onStopOwnShare?: () => void;
+  /** The teacher's Pointer (see usePointer). */
+  pointer?: PointerControls;
 }) {
   // Shared from THIS device — the only share this tab can stop itself.
   const isLocal = peer.isLocal;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  // Only a student's screen is pointed at — never the teacher's own.
+  const pointable = !!pointer && !peer.isOwner;
+  const pointing = pointable && pointer.active;
 
   return (
     <div
       className="w-full h-full rounded-2xl overflow-hidden bg-black border border-[var(--cr-border)] relative cursor-pointer"
-      onDoubleClick={onToggleFullscreen}
+      // While the teacher points, two quick clicks are two highlights, not a
+      // trip to fullscreen (the ⛶ button still goes there).
+      onDoubleClick={pointing ? undefined : onToggleFullscreen}
     >
-      <VideoView track={peer.screenVideo.track} className="w-full h-full object-contain bg-black" />
+      <VideoView track={peer.screenVideo.track} videoRef={videoRef} className="w-full h-full object-contain bg-black" />
+      {pointable && (
+        <PointerLayer sessionId={peer.sessionId} pointer={pointer} videoRef={videoRef} capturing={pointing} />
+      )}
       <div className="absolute top-3 left-3 flex items-center gap-2">
         <div className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur text-white text-xs font-medium flex items-center gap-1.5">
           <Monitor size={12} /> {isSelf ? 'You are presenting' : `${peer.displayName} is presenting`}
@@ -149,6 +164,8 @@ interface StageProps {
    * fullscreen (or null) — see the file header comment. */
   fullscreenSessionId: string | null;
   onToggleFullscreen: (sessionId: string) => void;
+  /** The teacher's Pointer over a student's shared screen. */
+  pointer?: PointerControls;
 }
 
 export default function Stage({
@@ -165,6 +182,7 @@ export default function Stage({
   onForceStopShare,
   fullscreenSessionId,
   onToggleFullscreen,
+  pointer,
 }: StageProps) {
   // ── 1. Screen share(s) ─────────────────────────────────────────────────
   if (screenShares.length > 0) {
@@ -185,6 +203,7 @@ export default function Stage({
             onToggleFullscreen={() => onToggleFullscreen(peer.sessionId)}
             onForceStopShare={onForceStopShare}
             onStopOwnShare={onStopShare}
+            pointer={pointer}
           />
         ))}
       </div>

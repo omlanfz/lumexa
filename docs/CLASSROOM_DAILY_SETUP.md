@@ -224,6 +224,7 @@ the server made with its status (kept for 3 days), which usually names the probl
 | Remove a student, lock the classroom, end the class | yes (through the server) | no | no |
 | Chat, raise a hand, react | yes | yes (chat: unless locked) | no |
 | Spotlight a person, lower a hand | yes | no | no |
+| Point at a student's shared screen (a dot that follows their cursor, and a pulse where they click) | yes — the **Pointer** button appears while a student is presenting | no (they see it) | sees it |
 | Record the class | yes (not in free trials) | no | no |
 | Counted in the "10 people" limit | yes | yes | no |
 
@@ -239,6 +240,7 @@ everywhere (one tile, one place in the count, one raised hand).
 | "Could not load the video service" | The browser could not load Daily's library from `c.daily.co` | Check the internet connection; an ad blocker, school or office network or firewall may block `*.daily.co` |
 | Joins, but nobody can see or hear each other | A network that blocks WebRTC | Try another network or a phone hotspot; ask the network's admin to allow Daily (<https://docs.daily.co/>: firewall guidance) |
 | "This classroom is no longer open." | The class's room was closed (End Class) or has run out | Open the class again from the dashboard; the server makes a fresh room |
+| An effect switched itself off, with a message in the Video Effects panel | A model could not be loaded (blocked network), or the computer could not keep up | [CLASSROOM_VIDEO_EFFECTS.md](CLASSROOM_VIDEO_EFFECTS.md) section 5; the camera itself is never affected |
 | Camera or microphone "blocked" on the pre-join screen | The browser or the operating system denied it, or another app has it | Allow it in the browser's address-bar icon and the system's privacy settings, close the other app |
 | A student's voice is missing from the **recording** | They were muted (by themselves or the teacher) at that moment — a muted microphone is deliberately not recorded — or the class had no audio from them | Check they were unmuted; record again |
 | The shared tab's sound is missing from the **recording** | The sharer did not tick *Share tab audio* (browsers only offer it for a tab or the whole screen in Chrome/Edge, not for a window) | Share a **Chrome Tab** with sound |
@@ -285,8 +287,10 @@ everywhere (one tile, one place in the count, one raised hand).
 - **Unchanged:** logins, scheduling, curriculum, dashboards, the room lock, the 10-person
   and 3-device limits, knock-to-rejoin, badges, the end-class outcome flow, the browser
   recording, the R2 upload, signed playback, and every URL a person visits.
-- **Behaviour you may notice:** background blur and virtual backgrounds are now Daily's
-  own (desktop browsers only; where a browser cannot do them the effects panel says so); a tile
+- **Behaviour you may notice:** background blur and virtual backgrounds, lighting
+  adjustment, touch-up and auto-framing are now one pipeline of our own that works on the
+  outgoing camera (desktop browsers only; where a browser cannot do them the effects panel
+  says why — see [CLASSROOM_VIDEO_EFFECTS.md](CLASSROOM_VIDEO_EFFECTS.md)); a tile
   shows a connection warning for another person only when Daily reports a network
   quality for them (your own connection is always watched); and a muted microphone is
   deliberately left out of a recording (section 6).

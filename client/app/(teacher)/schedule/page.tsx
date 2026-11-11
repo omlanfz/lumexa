@@ -139,8 +139,8 @@ function TrialInfoModal({ trial, onClose }: { trial: TrialClassItem; onClose: ()
   const finished = trial.status !== "UPCOMING";
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl">
+      <div className="motion-fade absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="motion-pop relative w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl">
         <div className="flex items-center justify-between mb-3">
           <span className="text-xs px-2.5 py-1 rounded-full font-semibold text-white bg-rose-500">Trial Class</span>
           <button onClick={onClose} className="text-[var(--t-text-faint)] hover:text-[var(--t-text)]" aria-label="Close">
@@ -212,9 +212,9 @@ function LessonInfoModal({ lesson, onClose }: { lesson: ScheduledLessonItem; onC
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="motion-fade absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
-        className={`relative w-full ${batch ? "max-w-md" : "max-w-sm"} max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl`}
+        className={`motion-pop relative w-full ${batch ? "max-w-md" : "max-w-sm"} max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--t-surface)] border border-[var(--t-nav-border)] p-5 shadow-xl`}
       >
         <div className="flex items-center justify-between mb-3">
           <span
@@ -387,7 +387,7 @@ function AddSlotModal({ onClose, onAdded, defaultDate }: AddSlotModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+        className="motion-fade absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
       <div className="relative w-full max-w-sm rounded-2xl border shadow-2xl z-10 bg-[var(--t-surface)] border-[var(--t-border)] modal-pop">
@@ -620,7 +620,7 @@ function ManageBookingModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200"
+        className="motion-fade absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
       <div className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10 bg-[var(--t-surface)] border-[var(--t-border)] max-h-[90vh] overflow-y-auto modal-pop">
@@ -872,7 +872,7 @@ function RemoveSlotModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="motion-fade absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-sm rounded-2xl border shadow-2xl z-10 bg-[var(--t-surface)] border-[var(--t-border)] modal-pop p-6">
         <h2 className="text-lg font-bold text-[var(--t-text)] mb-1">Remove Slot</h2>
         <p className="text-sm text-[var(--t-text-muted)] mb-5">

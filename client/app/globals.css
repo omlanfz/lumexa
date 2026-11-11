@@ -18,6 +18,10 @@ html {
   scroll-behavior: smooth;
   color-scheme: light; /* default light; overridden by JS on mount */
 }
+/* Unlayered like the rule above — a layered rule could not override it. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
 html.light { color-scheme: light; }
 html.dark  { color-scheme: dark;  }
 
@@ -27,15 +31,67 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Global smooth theme transitions ─────────────────────────────────────── */
-*, *::before, *::after {
-  transition-property: background-color, border-color, color, fill, stroke;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 200ms;
+/* ── Motion tokens ─────────────────────────────────────────────────────────
+   One set of durations and easings for the whole platform, so a hover, a menu, a
+   modal and a sidebar feel like the same product. Use these in new CSS
+   (`transition: opacity var(--motion-base) var(--ease-standard)`); Tailwind's own
+   `duration-*` / `ease-*` utilities are fine in markup.
+
+   fast  – hover, press, focus: things directly under the pointer
+   base  – colour and small state changes; menus, popovers, modals
+   slow  – panels, sidebars, expanding sections
+   page  – the entrance of a page or a section                                          */
+:root {
+  --motion-fast: 120ms;
+  --motion-base: 200ms;
+  --motion-slow: 320ms;
+  --motion-page: 420ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);   /* things that stay on screen */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);       /* entrances: quick, then settles */
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);           /* exits */
+  --ease-drawer: cubic-bezier(0.45, 0, 0.25, 1);   /* sidebars and drawers: even pace, soft landing, no overshoot */
 }
-/* Faster for interactive elements */
-button, a, [role="button"], input, select, textarea {
-  transition-duration: 120ms;
+
+/* ── Global smooth theme transitions ───────────────────────────────────────
+   Every element fades its colours (theme switch, hover) by default.
+
+   This has to live in the BASE layer. Tailwind v4 puts its utilities, and this file puts
+   the component rules, in cascade layers, and an UNLAYERED rule beats a layered one no
+   matter how specific the layered selector is. Written unlayered, these three lines
+   silently replaced the `transition-property` / `-duration` / `-timing-function` of every
+   `transition-all`, `transition-transform`, `transition-opacity`, `duration-*` and `ease-*`
+   class in the app — they all fell back to "colours only, 200ms" — and the lesson
+   sidebar's own transitions never ran. In the base layer this is only the default, and
+   anything that asks for a different transition gets it. */
+@layer base {
+  *, *::before, *::after {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: var(--ease-standard);
+    transition-duration: var(--motion-base);
+  }
+  /* Faster for interactive elements */
+  button, a, [role="button"], input, select, textarea {
+    transition-duration: var(--motion-fast);
+  }
+
+  /* Reduced motion, for the whole platform in one place: transitions are instant, and
+     animations jump to their end state instead of playing (looping decoration stops; smooth
+     scrolling is switched off next to the html rule above). It sits in the base layer so
+     that, being !important, it also outranks every later layer and unlayered rule — new
+     animations get this without having to remember it. Motion that carries meaning is
+     exempt: a spinner (stopped, it reads as a hung page), the teacher's pointer highlight
+     (it has its own still version) and anything marked data-motion-essential. */
+  @media (prefers-reduced-motion: reduce) {
+    *:not(.animate-spin):not(.cr-pointer-pulse):not([data-motion-essential]),
+    *:not(.animate-spin):not(.cr-pointer-pulse):not([data-motion-essential])::before,
+    *:not(.animate-spin):not(.cr-pointer-pulse):not([data-motion-essential])::after {
+      animation-duration: 0.01ms !important;
+      animation-delay: 0ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
+    }
+  }
 }
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
@@ -117,18 +173,78 @@ html.dark body::-webkit-scrollbar-thumb:active {
 }
 .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
+/* Entrance animations that wrap content use `backwards` fill, never `forwards`. A finished
+   `forwards` animation keeps its last keyframe applied — in Chromium even `transform: none`
+   is held as an identity matrix — and ANY transform makes the element the containing block
+   for `position: fixed` descendants. The dashboards wrap every page in .fade-in, so every
+   modal and drawer rendered inside a page was positioned against the page instead of the
+   window. With `backwards` the element is handed back to its normal style when it is done. */
 @keyframes fade-in {
   from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }
 }
-.fade-in { animation: fade-in 0.35s ease-out forwards; }
+.fade-in { animation: fade-in 0.35s ease-out backwards; }
 
-/* Subtle modal/dropdown entrance — Apple-style: quick, understated, no bounce */
-@keyframes modal-pop {
-  from { opacity: 0; transform: scale(0.97) translateY(4px); }
-  to   { opacity: 1; transform: scale(1) translateY(0); }
+/* Subtle modal/dropdown entrance — quick, understated, no bounce. Older markup uses this
+   name; it is the shared .motion-pop (defined below) so every dialog enters the same way. */
+.modal-pop { animation: motion-pop var(--motion-base) var(--ease-out) backwards; }
+
+/* ── Shared motion utilities ─────────────────────────────────────────────────
+   The vocabulary for anything that appears: build with these rather than ad-hoc keyframes so
+   a menu, a dialog and a banner all move the same way. Keyframes only say where an element
+   STARTS; it ends in whatever its own styles are, and (see the note on .fade-in) the fill is
+   `backwards`, so a finished animation leaves no transform behind.
+
+   .motion-fade    backdrops and overlays
+   .motion-pop     menus, popovers, dropdowns, small dialogs (scale + rise)
+   .motion-sheet   a panel sliding up from the bottom edge
+   .motion-dialog  a dialog that is a bottom sheet on a phone and a centred card from `sm` up
+   .motion-rise    a section or card arriving; set --motion-delay to stagger siblings
+   .motion-collapse  an expand / collapse region (see components/Collapse.tsx)            */
+@keyframes motion-fade  { from { opacity: 0; } }
+@keyframes motion-pop   { from { opacity: 0; transform: scale(0.96) translateY(6px); } }
+@keyframes motion-sheet { from { opacity: 0; transform: translateY(32px); } }
+@keyframes motion-rise  { from { opacity: 0; transform: translateY(8px); } }
+.motion-fade   { animation: motion-fade var(--motion-base) var(--ease-standard) backwards; }
+.motion-pop    { animation: motion-pop var(--motion-base) var(--ease-out) backwards; }
+.motion-sheet  { animation: motion-sheet var(--motion-slow) var(--ease-out) backwards; }
+.motion-rise   { animation: motion-rise var(--motion-page) var(--ease-out) var(--motion-delay, 0ms) backwards; }
+.motion-dialog { animation: motion-sheet var(--motion-slow) var(--ease-out) backwards; }
+@media (min-width: 640px) {
+  .motion-dialog { animation: motion-pop var(--motion-base) var(--ease-out) backwards; }
 }
-.modal-pop { animation: modal-pop 0.18s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* Error and success messages arrive instead of snapping in. Every inline message in the app is
+   role="alert" or role="status", so one rule covers them all (they are mounted when the
+   message appears, which is when this plays). Spinners that carry role="status" keep their
+   own animation: a Tailwind utility outranks this component-layer rule. */
+@layer components {
+  [role='alert'], [role='status'] { animation: motion-rise var(--motion-base) var(--ease-out) backwards; }
+}
+
+/* Expand / collapse without measuring: a one-row grid whose row animates between 0fr and 1fr.
+   The closed region is invisible and (via `inert` on the element) unreachable by keyboard and
+   assistive tech, and its height really is zero, so nothing below it is pushed around. */
+.motion-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    grid-template-rows var(--motion-slow) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard),
+    visibility 0s linear var(--motion-slow);
+}
+.motion-collapse[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  transition:
+    grid-template-rows var(--motion-slow) var(--ease-standard),
+    opacity var(--motion-base) var(--ease-standard) 60ms,
+    visibility 0s;
+}
+.motion-collapse > .motion-collapse-inner { min-height: 0; overflow: hidden; }
 
 @keyframes badge-glow-purple {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
@@ -220,9 +336,9 @@ html.dark body::-webkit-scrollbar-thumb:active {
 
 @keyframes section-fade-up {
   from { opacity: 0; transform: translateY(20px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }
 }
-.section-fade-up { animation: section-fade-up 0.45s ease-out forwards; }
+.section-fade-up { animation: section-fade-up 0.45s ease-out backwards; }
 
 @keyframes output-appear {
   from { opacity: 0; transform: scale(0.95); }
@@ -905,9 +1021,9 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
 
 @keyframes cr-fade-in {
   from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }
 }
-.cr-fade-in { animation: cr-fade-in 0.2s ease-out forwards; }
+.cr-fade-in { animation: cr-fade-in 0.2s ease-out backwards; }
 
 @keyframes cr-float-up {
   0%   { opacity: 0; transform: translateY(0) scale(0.6); }
@@ -922,6 +1038,63 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
   100% { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0); }
 }
 .cr-hand-pulse { animation: cr-pulse-ring 1.8s ease-out infinite; }
+
+/* ── The teacher's Pointer ────────────────────────────────────────────────────
+   A dot that follows the teacher's cursor over a student's shared screen, and a
+   ring that pulses where they click (see components/classroom/PointerLayer.tsx).
+   The layer covers the shared screen but never takes the mouse: buttons, links
+   and double-click behind it work as they always did. A saturated pink with a
+   white edge reads on dark and light shared content alike. */
+.cr-pointer-layer {
+  --cr-pointer: #FF3D71;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cr-pointer-dot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 9999px;
+  background: var(--cr-pointer);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 2px 12px rgba(255, 61, 113, 0.7);
+  /* 25 updates a second, eased into a smooth glide */
+  transition: transform 70ms linear;
+  will-change: transform;
+}
+.cr-pointer-pulse {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border-radius: 9999px;
+  border: 3px solid var(--cr-pointer);
+  box-shadow: 0 0 14px rgba(255, 61, 113, 0.55), inset 0 0 12px rgba(255, 61, 113, 0.25);
+  opacity: 0;
+  /* two quick pulses, then gone (PULSE_MS in lib/classroom/pointer.ts) */
+  animation: cr-pointer-pulse 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) 2 forwards;
+}
+@keyframes cr-pointer-pulse {
+  0%   { transform: scale(0.3); opacity: 0.95; }
+  75%  { opacity: 0.6; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+/* Where the teacher is pointing, the cursor is a crosshair. */
+[data-pointer='on'] { cursor: crosshair; }
+@media (prefers-reduced-motion: reduce) {
+  .cr-pointer-dot { transition: none; }
+  /* no growing ring: a still ring that fades out */
+  .cr-pointer-pulse { animation: cr-pointer-pulse-still 1.1s linear 1 forwards; }
+  @keyframes cr-pointer-pulse-still {
+    0%   { transform: none; opacity: 0.95; }
+    100% { transform: none; opacity: 0; }
+  }
+}
 
 .cr-live-dot {
   animation: pulse-dot 1.6s ease-in-out infinite;
@@ -1330,6 +1503,15 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
    Text keeps a ~72-character measure; code, tables, figures and visuals may be
    wider than the text and scroll on their own.
    ═══════════════════════════════════════════════════════════════════════════ */
+/* The lesson sidebar's open (1) ↔ hidden (0) state. Registered so the browser can animate it
+   (an ordinary custom property is an untyped token stream and flips at once), and inherited
+   because the blocks inside the layout read it for their widths. See "Lesson page layout". */
+@property --lesson-sb {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 1;
+}
+
 @layer components {
   .lesson-prose {
     --lp-text: #1f2937;
@@ -1502,53 +1684,92 @@ html.dark .student-scroll-dark::-webkit-scrollbar-thumb:hover {
      Open:   [ contents | content ] — the reading column is capped at 56rem.
      Hidden: the sidebar collapses to a slim rail that keeps the toggle button exactly where
              it was, and the content takes the freed space — wider blocks (cards, visuals,
-             code, tables), a slightly longer reading measure and a one-row progress strip. */
+             code, tables) and a slightly longer reading measure.
+
+     ONE number drives every measurement: --lesson-sb (1 = open, 0 = hidden). It is a
+     registered, typed custom property — see the @property rule above this layer — so the
+     browser animates it, and every width below is a calc() of it. The sidebar column, the
+     gap, the content cap, the reading measure and the visuals therefore all move on the
+     same clock: nothing snaps at the start or the end of the transition, and the text
+     re-wraps gradually as the column grows, like dragging the window edge. Where @property
+     is not supported the value simply changes at once — the same layout, without the
+     animation.
+
+     (The design is also why nothing here uses `display: none` or a different grid for the
+     hidden state: neither can be animated, and both made the content jump.) */
   .lesson-layout { display: block; }
   .lesson-content { max-width: 56rem; }
   .lesson-quiz { max-width: 56rem; }
-  /* The four study-progress chips: one column, two from the small breakpoint (as before). */
+  /* The four study-progress chips: one column, two from the small breakpoint. They keep that
+     shape with the sidebar hidden too — re-flowing them into one row would move everything
+     below them in a single step. */
   .lesson-progress-grid { display: grid; gap: 0.5rem; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 640px) { .lesson-progress-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   @media (min-width: 1024px) {
     .lesson-layout {
+      --lesson-sb: 1;
       display: grid;
-      grid-template-columns: 15rem minmax(0, 1fr);
-      column-gap: 2rem;
-      transition: grid-template-columns 0.24s ease, column-gap 0.24s ease;
+      grid-template-columns: calc(2.25rem + 12.75rem * var(--lesson-sb)) minmax(0, 1fr); /* 15rem open · 2.25rem rail */
+      column-gap: calc(1rem + 1rem * var(--lesson-sb));                                    /* 2rem open · 1rem rail */
+      transition: --lesson-sb var(--motion-slow) var(--ease-drawer);
     }
-    .lesson-layout[data-sidebar='hidden'] { grid-template-columns: 2.25rem minmax(0, 1fr); column-gap: 1rem; }
-    .lesson-content { transition: max-width 0.24s ease; }
-    .lesson-layout[data-sidebar='hidden'] .lesson-content { max-width: 78rem; }
+    .lesson-layout[data-sidebar='hidden'] { --lesson-sb: 0; }
+    /* A lesson with nothing to navigate has no sidebar column to reserve. */
+    .lesson-layout[data-no-sidebar] { display: block; }
 
-    /* overflow-x: clip, not hidden — a scroll container would stop the sticky sidebar sticking */
+    .lesson-content { max-width: calc(78rem - 22rem * var(--lesson-sb)); }                /* 56rem open · 78rem hidden */
+
+    /* overflow-x: clip, not hidden — a scroll container would stop the sticky sidebar sticking.
+       The sticky panel keeps its 15rem width, so the column simply closes over it like a drawer
+       (and the text inside never re-wraps while it moves). */
     .lesson-sidebar { min-width: 0; overflow-x: clip; }
     .lesson-sidebar-sticky { position: sticky; top: 6rem; display: flex; flex-direction: column; width: 15rem; max-height: calc(100vh - 7rem); }
     .lesson-sidebar-head { display: flex; align-items: center; gap: 0.5rem; flex-shrink: 0; margin-bottom: 0.5rem; }
-    .lesson-sidebar-title { font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #6b7280; white-space: nowrap; }
+    /* The label fades out with the sidebar and is taken out of the accessibility tree once it
+       has (visibility flips at the end of the close, and at once on the way back). */
+    .lesson-sidebar-title {
+      font-size: 0.75rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: #6b7280; white-space: nowrap;
+      opacity: var(--lesson-sb);
+      transition: visibility 0s linear 0s;
+    }
     :where(.dark) .lesson-sidebar-title { color: #9ca3af; }
-    .lesson-sidebar-body { min-height: 0; overflow-y: auto; padding-right: 0.5rem; opacity: 1; transition: opacity 0.18s ease 0.06s; }
-    .lesson-layout[data-sidebar='hidden'] .lesson-sidebar-title { display: none; }
-    .lesson-layout[data-sidebar='hidden'] .lesson-sidebar-body { visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 0.12s ease, visibility 0s linear 0.12s; }
+    .lesson-layout[data-sidebar='hidden'] .lesson-sidebar-title { visibility: hidden; transition: visibility 0s linear var(--motion-slow); }
+    /* The list fades in a beat after the column has started to open, and out before it closes. */
+    .lesson-sidebar-body {
+      min-height: 0; overflow-y: auto; padding-right: 0.5rem;
+      opacity: 1;
+      transition: opacity var(--motion-base) var(--ease-standard) 90ms;
+    }
+    .lesson-layout[data-sidebar='hidden'] .lesson-sidebar-body {
+      visibility: hidden; opacity: 0; pointer-events: none;
+      transition: opacity var(--motion-fast) var(--ease-standard), visibility 0s linear var(--motion-fast);
+    }
 
-    /* The freed width goes to the reading experience. */
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose p,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose ul,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose ol,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose blockquote,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-callout,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-h2,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-h3,
-    .lesson-layout[data-sidebar='hidden'] .lesson-prose .lesson-h4 { max-width: 86ch; }
-    .lesson-layout[data-sidebar='hidden'] .lesson-progress-grid { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
-    /* Pictures and diagrams stay a sensible size in the wider column: centred, and never
-       blown up past ~1.15x their natural size (but never smaller than with the sidebar open). */
-    .lesson-layout[data-sidebar='hidden'] .lesson-visual { max-width: 66rem; margin-inline: auto; }
-    .lesson-layout[data-sidebar='hidden'] .lesson-visual svg { max-width: max(calc(var(--natural, 100%) * 1.15), 54rem); margin-inline: auto; }
+    /* The freed width goes to the reading experience: the text measure grows from 72ch to 86ch… */
+    .lesson-layout .lesson-prose p,
+    .lesson-layout .lesson-prose ul,
+    .lesson-layout .lesson-prose ol,
+    .lesson-layout .lesson-prose blockquote,
+    .lesson-layout .lesson-prose .lesson-callout,
+    .lesson-layout .lesson-prose .lesson-h2,
+    .lesson-layout .lesson-prose .lesson-h3,
+    .lesson-layout .lesson-prose .lesson-h4 { max-width: calc(86ch - 14ch * var(--lesson-sb)); }
+    /* …and pictures and diagrams stay a sensible size in the wider column: centred, and never
+       blown up past ~1.15x their natural size (but never smaller than with the sidebar open).
+       Each is a blend of its open and hidden value — open: the whole column; hidden: 66rem. */
+    .lesson-layout .lesson-visual {
+      max-width: calc(100% * var(--lesson-sb) + 66rem * (1 - var(--lesson-sb)));
+      margin-inline: auto;
+    }
+    .lesson-layout .lesson-visual svg {
+      max-width: calc(100% * var(--lesson-sb) + max(calc(var(--natural, 100%) * 1.15), 54rem) * (1 - var(--lesson-sb)));
+      margin-inline: auto;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .lesson-layout, .lesson-content, .lesson-sidebar-body { transition: none; }
+    .lesson-layout, .lesson-sidebar-title, .lesson-sidebar-body { transition: none; }
     .lesson-visual-skeleton { animation: none; }
     .lesson-prose *, .lesson-visual * { scroll-behavior: auto; }
   }

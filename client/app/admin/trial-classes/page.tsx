@@ -97,11 +97,13 @@ export default function TrialClassesPage() {
         ))}
       </div>
 
-      {tab === "appointments" ? (
-        <AppointmentsPanel version={version} onChanged={bump} />
-      ) : (
-        <AvailabilityPanel onChanged={bump} />
-      )}
+      <div key={tab} className="fade-in">
+        {tab === "appointments" ? (
+          <AppointmentsPanel version={version} onChanged={bump} />
+        ) : (
+          <AvailabilityPanel onChanged={bump} />
+        )}
+      </div>
     </div>
   );
 }

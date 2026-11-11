@@ -14,6 +14,8 @@ interface IconButtonProps {
   label: string;
   onClick?: () => void;
   active?: boolean;
+  /** A toggle: whether it is on, for assistive technology (`active` is how it looks). */
+  pressed?: boolean;
   off?: boolean;
   disabled?: boolean;
   size?: 'sm' | 'md' | 'lg';
@@ -30,7 +32,7 @@ const SIZE_MAP = {
 
 const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
   (
-    { icon: Icon, label, onClick, active, off, disabled, size = 'md', tooltipPos = 'top', badge, className = '' },
+    { icon: Icon, label, onClick, active, pressed, off, disabled, size = 'md', tooltipPos = 'top', badge, className = '' },
     ref,
   ) => {
     const dims = SIZE_MAP[size];
@@ -41,6 +43,7 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
         onClick={onClick}
         disabled={disabled}
         aria-label={label}
+        aria-pressed={pressed}
         data-tooltip={label}
         data-tooltip-pos={tooltipPos}
         className={`cr-icon-btn relative ${dims.box} ${active ? 'is-active' : ''} ${off ? 'is-off' : ''} ${className}`}

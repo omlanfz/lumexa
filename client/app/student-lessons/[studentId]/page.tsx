@@ -301,10 +301,10 @@ function LessonsContent() {
       {reviewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="motion-fade absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setReviewModal(null)}
           />
-          <div className="relative w-full max-w-md rounded-2xl border shadow-2xl z-10 bg-[var(--s-surface)] border-[var(--s-border)]">
+          <div className="motion-pop relative w-full max-w-md rounded-2xl border shadow-2xl z-10 bg-[var(--s-surface)] border-[var(--s-border)]">
             <div className="p-6">
               <h2 className={`text-lg font-bold mb-4 ${txtp}`}>
                 Rate this lesson

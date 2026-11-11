@@ -95,7 +95,7 @@ export default function RecordingPlayerModal({
   // of the screen (and cut off when the page is short).
   return createPortal(
     <div
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6"
+      className="motion-fade fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm sm:p-6"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -105,7 +105,7 @@ export default function RecordingPlayerModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="max-h-full w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl dark:border-gray-700 dark:bg-gray-900 sm:p-5"
+        className="motion-pop max-h-full w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-4 shadow-2xl dark:border-gray-700 dark:bg-gray-900 sm:p-5"
       >
         <div className="mb-3 flex items-start gap-3">
           <div className="min-w-0 flex-1">

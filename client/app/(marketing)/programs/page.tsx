@@ -15,6 +15,7 @@ import {
   type ProgramMeta,
 } from "@/lib/programs";
 import { usePrograms } from "@/lib/usePrograms";
+import Collapse from "@/components/Collapse";
 
 // Shown on the card of the program most families start with.
 const MOST_POPULAR: ProgramId = "ai";
@@ -271,7 +272,7 @@ function CourseRow({
         </div>
       </button>
 
-      {isOpen && (
+      <Collapse open={isOpen}>
         <ol className="px-5 pb-5 pt-4 border-t border-[#E2E8F0] dark:border-gray-800/60 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
           {module.lessons.map((lesson) => {
             if (lesson.type !== "LEARNING") {
@@ -298,7 +299,7 @@ function CourseRow({
             );
           })}
         </ol>
-      )}
+      </Collapse>
     </div>
   );
 }
@@ -318,7 +319,7 @@ function ProgramDetail({
 }) {
   const learning = course.learningLessons;
   return (
-    <div id={`program-${program.id}`} className="scroll-mt-24 mt-8 rounded-3xl border border-[#E2E8F0] dark:border-gray-700/60 bg-[#F8FAFF] dark:bg-gray-900/30 p-5 sm:p-8">
+    <div id={`program-${program.id}`} className="motion-rise scroll-mt-24 mt-8 rounded-3xl border border-[#E2E8F0] dark:border-gray-700/60 bg-[#F8FAFF] dark:bg-gray-900/30 p-5 sm:p-8">
       <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-6 pb-6 border-b ${program.border}`}>
         <div className="flex items-center gap-4 flex-1 min-w-0">
           <div className="text-4xl sm:text-5xl">{program.emoji}</div>

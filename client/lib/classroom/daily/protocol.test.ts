@@ -4,6 +4,8 @@ import {
   MAX_CHAT_CHARS,
   acceptChat,
   authorizeControl,
+  authorizePointer,
+  pointerPayload,
   chatClearPayload,
   chatKey,
   chatPayload,
@@ -159,4 +161,56 @@ test('deleting a message or clearing the chat is read from the wire, and only th
   }
   assert.equal(mayRemoveChat(teacher), true);
   assert.equal(mayRemoveChat(student), false);
+});
+
+// ─── The teacher's Pointer ──────────────────────────────────────────────────
+
+test('what is sent for the Pointer is what is read', () => {
+  const sent = [
+    pointerPayload({ type: 'move', sid: 's-sharer', x: 0.25, y: 0.75 }),
+    pointerPayload({ type: 'click', sid: 's-sharer', x: 0, y: 1 }),
+    pointerPayload({ type: 'hide', sid: 's-sharer' }),
+    pointerPayload({ type: 'off' }),
+  ];
+  for (const payload of sent) {
+    assert.deepEqual(parseAppPayload(JSON.parse(JSON.stringify(payload))), payload);
+  }
+});
+
+test('a position is kept inside the picture and rounded to four decimals', () => {
+  assert.deepEqual(pointerPayload({ type: 'move', sid: 's', x: 0.123456789, y: -0.2 }), {
+    app: 'lumexa',
+    kind: 'pointer',
+    pointer: { type: 'move', sid: 's', x: 0.1235, y: 0 },
+  });
+  const read = parseAppPayload({ app: 'lumexa', kind: 'pointer', pointer: { type: 'click', sid: 's', x: 7, y: 0.5 } });
+  assert.deepEqual(read, { app: 'lumexa', kind: 'pointer', pointer: { type: 'click', sid: 's', x: 1, y: 0.5 } });
+});
+
+test('a malformed Pointer message is ignored', () => {
+  const junk: unknown[] = [
+    { app: 'lumexa', kind: 'pointer' },
+    { app: 'lumexa', kind: 'pointer', pointer: 'move' },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', x: 0.1, y: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: '', x: 0.1, y: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: 's'.repeat(65), x: 0.1, y: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: 's', x: '0.1', y: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: 's', x: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'move', sid: 's', x: Number.NaN, y: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'click', sid: 's', x: Infinity, y: 0.1 } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'hide' } },
+    { app: 'lumexa', kind: 'pointer', pointer: { type: 'draw', sid: 's', x: 0.1, y: 0.1 } },
+  ];
+  for (const data of junk) assert.equal(parseAppPayload(data), null, `should reject ${JSON.stringify(data)}`);
+});
+
+test('only the teacher’s word moves the Pointer, and it is attributed to the connection that sent it', () => {
+  const wire = { type: 'move', sid: 's-sharer', x: 0.5, y: 0.5 } as const;
+  assert.deepEqual(authorizePointer(wire, teacher), { ...wire, fromSessionId: 's-t' });
+  assert.deepEqual(authorizePointer({ type: 'off' }, teacher), { type: 'off', fromSessionId: 's-t' });
+  // a student cannot point, hide the teacher's dot or switch it off
+  assert.equal(authorizePointer(wire, student), null);
+  assert.equal(authorizePointer({ type: 'click', sid: 's-sharer', x: 0.1, y: 0.1 }, student), null);
+  assert.equal(authorizePointer({ type: 'hide', sid: 's-sharer' }, student), null);
+  assert.equal(authorizePointer({ type: 'off' }, student), null);
 });
