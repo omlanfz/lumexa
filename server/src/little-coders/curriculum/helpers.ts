@@ -17,7 +17,11 @@ export function sc(
   id: string,
   title: string,
   lines: string[],
-  extra: { intro?: string; sprite?: string; notes?: Record<string, string> } = {},
+  extra: {
+    intro?: string;
+    sprite?: string;
+    notes?: Record<string, string>;
+  } = {},
 ): LcStack {
   return { id, title, language: 'scratch', lines, ...extra };
 }
@@ -32,14 +36,23 @@ export function py(
   return { id, title, language: 'edublocks', lines, ...extra };
 }
 
-export const concept = (emoji: string, title: string, text: string, reveal: string): LcConcept => ({
+export const concept = (
+  emoji: string,
+  title: string,
+  text: string,
+  reveal: string,
+): LcConcept => ({
   emoji,
   title,
   text,
   reveal,
 });
 
-export const tip = (title: string, text: string): LcTip => ({ kind: 'tip', title, text });
+export const tip = (title: string, text: string): LcTip => ({
+  kind: 'tip',
+  title,
+  text,
+});
 
 export const mistake = (title: string, text: string, fix: string): LcTip => ({
   kind: 'mistake',
@@ -48,7 +61,12 @@ export const mistake = (title: string, text: string, fix: string): LcTip => ({
   fix,
 });
 
-export const aiClass = (name: string, emoji: string, collect: string, minExamples = 20): LcAiClass => ({
+export const aiClass = (
+  name: string,
+  emoji: string,
+  collect: string,
+  minExamples = 20,
+): LcAiClass => ({
   name,
   emoji,
   collect,
@@ -81,7 +99,12 @@ interface Beats {
  * `curiosity` is what the opening must make a child wonder about; `leadsInto` is the
  * project the video hands over to — it never shows the finished solution.
  */
-export function vid(title: string, curiosity: string, leadsInto: string, beats: Beats): LcVideoBrief {
+export function vid(
+  title: string,
+  curiosity: string,
+  leadsInto: string,
+  beats: Beats,
+): LcVideoBrief {
   const scenes: LcVideoScene[] = TIMINGS.map((t) => {
     const [visual, narration, onScreen] = beats[t.key];
     return { time: t.time, beat: t.beat, visual, narration, onScreen };

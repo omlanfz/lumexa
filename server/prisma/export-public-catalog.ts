@@ -9,7 +9,10 @@
  * live endpoint, using the seed's own structure rules: every specialized
  * path is 3 modules x (8 lessons + a course test) + a final test, and
  * Odyssey is 3 stages of 3 such modules, each closed by a stage test, plus a
- * final test (see curriculum-catalog.seed.ts).
+ * final test (see curriculum-catalog.seed.ts). Little Coders is the one
+ * exception: it is five independent courses (8 lessons + a course assessment
+ * each) + a final assessment, read from src/little-coders rather than from
+ * the older three-module JSON (which Odyssey still reuses).
  *
  * Re-run it after changing the source curriculum or the catalog:
  *   npm run export:public-catalog        (from server/)
@@ -20,6 +23,16 @@ import * as path from 'path';
 import { COURSE_CATALOG } from '../src/courses/course-catalog.seed';
 import { PATHWAY_SLUGS } from '../src/courses/curriculum-source';
 import { ODYSSEY_STAGES } from '../src/courses/curriculum-catalog.seed';
+import { LC_LESSON_SPECS } from '../src/little-coders/curriculum';
+import {
+  LC_COURSE_SLUG,
+  LC_COURSES,
+  LC_FINAL_ASSESSMENT_ORDER,
+  LC_FINAL_ASSESSMENT_TITLE,
+  lcCourseAssessmentOrder,
+  lcCourseAssessmentTitle,
+  lcLessonOrder,
+} from '../src/little-coders/lc.constants';
 import {
   buildPublicCatalog,
   lessonIdsNeedingHeading,
@@ -134,6 +147,52 @@ for (const course of COURSE_CATALOG) {
       moduleId: null,
       title: 'Lumexa Odyssey — Final Test',
       order,
+      type: 'FINAL_TEST',
+    });
+  } else if (course.slug === LC_COURSE_SLUG) {
+    // Little Coders v2: five independent courses of eight lessons, each closed by
+    // its own course assessment, then one final assessment (46 classes).
+    for (const meta of LC_COURSES) {
+      const moduleId = `${course.slug}:${meta.slug}`;
+      modules.push({
+        id: moduleId,
+        courseId: course.slug,
+        slug: meta.slug,
+        title: meta.title,
+        order: meta.number,
+        stageNumber: null,
+      });
+      for (const spec of LC_LESSON_SPECS.filter((l) => l.course === meta.number).sort(
+        (a, b) => a.lesson - b.lesson,
+      )) {
+        const lessonOrder = lcLessonOrder(meta.number, spec.lesson);
+        const id = `${moduleId}:${lessonOrder}`;
+        lessons.push({
+          id,
+          courseId: course.slug,
+          moduleId,
+          title: spec.title,
+          order: lessonOrder,
+          type: 'LEARNING',
+        });
+        // Titles are authored, never generic: no markdown heading is needed.
+        markdownByLessonId.set(id, null);
+      }
+      lessons.push({
+        id: `${moduleId}:test`,
+        courseId: course.slug,
+        moduleId,
+        title: lcCourseAssessmentTitle(meta),
+        order: lcCourseAssessmentOrder(meta.number),
+        type: 'COURSE_TEST',
+      });
+    }
+    lessons.push({
+      id: `${course.slug}:final`,
+      courseId: course.slug,
+      moduleId: null,
+      title: LC_FINAL_ASSESSMENT_TITLE,
+      order: LC_FINAL_ASSESSMENT_ORDER,
       type: 'FINAL_TEST',
     });
   } else {

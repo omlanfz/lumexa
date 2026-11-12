@@ -12,7 +12,12 @@
 // boot-time safety net (bank.sync.ts) — the SQL migration does the same for
 // lessons imported before this existed.
 
-import { AssessmentFormat, Prisma, PrismaClient, SessionType } from '@prisma/client';
+import {
+  AssessmentFormat,
+  Prisma,
+  PrismaClient,
+  SessionType,
+} from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 

@@ -8,7 +8,12 @@
 // Nothing here invents a URL or a video: projectUrl / copyUrl / videoUrl / posterUrl /
 // captionsUrl start empty and are managed from the admin dashboard.
 
-import { DEFAULT_PLATFORM_BUTTON_LABEL, type LcPlatformKey, lcCourseBySlug, LC_COURSES } from '../lc.constants';
+import {
+  DEFAULT_PLATFORM_BUTTON_LABEL,
+  type LcPlatformKey,
+  lcCourseBySlug,
+  LC_COURSES,
+} from '../lc.constants';
 import type {
   LcExperience,
   LcHomeworkCard,
@@ -33,7 +38,12 @@ export interface LcLessonPatch {
   homework: string;
   teacherNotes: string;
   checkpoint: string;
-  codeSnippets: { label: string; language: string; code: string; part: string }[];
+  codeSnippets: {
+    label: string;
+    language: string;
+    code: string;
+    part: string;
+  }[];
   experience: LcExperience;
   previewVideo: LcPreviewVideo;
   projectCard: LcProjectCard;
@@ -48,14 +58,18 @@ const button = (platform: LcPlatformKey): LcPlatformButton => ({
 });
 
 /** The coding platforms a lesson's project opens, in the order they are used. */
-export function projectPlatforms(spec: Pick<LcLessonSpec, 'platform' | 'ai'>): LcPlatformKey[] {
+export function projectPlatforms(
+  spec: Pick<LcLessonSpec, 'platform' | 'ai'>,
+): LcPlatformKey[] {
   // AI lessons: train the model first, then build in Stretch3.
   if (spec.ai) return ['TEACHABLE_MACHINE', 'STRETCH3'];
   return [spec.platform];
 }
 
 /** Homework reuses the model trained in class, so an AI homework only opens Stretch3. */
-export function homeworkPlatforms(spec: Pick<LcLessonSpec, 'platform' | 'ai' | 'homeworkPlatforms'>): LcPlatformKey[] {
+export function homeworkPlatforms(
+  spec: Pick<LcLessonSpec, 'platform' | 'ai' | 'homeworkPlatforms'>,
+): LcPlatformKey[] {
   if (spec.homeworkPlatforms?.length) return spec.homeworkPlatforms;
   if (spec.ai) return ['STRETCH3'];
   return [spec.platform];
@@ -67,7 +81,8 @@ function projectHelper(spec: LcLessonSpec): string {
       ? 'First train and test your sound model, copy its share link, then build in Stretch3 and paste the link into the sound model block.'
       : 'First train and test your image model, copy its share link, then build in Stretch3 and paste the link into the image model block.';
   }
-  if (spec.platform === 'EDUBLOCKS') return 'Opens a new, empty EduBlocks project in a new tab. Nothing is filled in for you.';
+  if (spec.platform === 'EDUBLOCKS')
+    return 'Opens a new, empty EduBlocks project in a new tab. Nothing is filled in for you.';
   return 'Opens a new, empty Scratch project in a new tab. Nothing is filled in for you.';
 }
 
@@ -123,13 +138,28 @@ export function fallbackMarkdown(spec: FallbackSource): string {
   out.push('', `## Project: ${spec.project.name}`, '', spec.project.goal, '');
   spec.project.steps.forEach((s, i) => out.push(`${i + 1}. ${s.text}`));
   out.push('', '## Tips and common mistakes', '');
-  for (const t of spec.tips) out.push(`- **${t.title}** — ${t.text}${t.fix ? ` Fix: ${t.fix}` : ''}`);
+  for (const t of spec.tips)
+    out.push(`- **${t.title}** — ${t.text}${t.fix ? ` Fix: ${t.fix}` : ''}`);
   return out.join('\n');
 }
 
-export function homeworkMarkdown(spec: { homework: { name: string; instructions: string; deliverable: string; hint?: string } }): string {
+export function homeworkMarkdown(spec: {
+  homework: {
+    name: string;
+    instructions: string;
+    deliverable: string;
+    hint?: string;
+  };
+}): string {
   const h = spec.homework;
-  return [`## ${h.name}`, '', h.instructions, '', `**Hand in:** ${h.deliverable}`, ...(h.hint ? ['', `**Hint:** ${h.hint}`] : [])].join('\n');
+  return [
+    `## ${h.name}`,
+    '',
+    h.instructions,
+    '',
+    `**Hand in:** ${h.deliverable}`,
+    ...(h.hint ? ['', `**Hint:** ${h.hint}`] : []),
+  ].join('\n');
 }
 
 /** The plain-text code snippets of a lesson's project scripts. */
@@ -137,7 +167,10 @@ export const snippetsFromStacks = snippetsOf;
 
 function trackOf(spec: LcLessonSpec): LcExperience['track'] {
   const course = LC_COURSES.find((c) => c.number === spec.course);
-  return course?.track ?? (spec.ai ? 'ai' : spec.platform === 'EDUBLOCKS' ? 'python' : 'scratch');
+  return (
+    course?.track ??
+    (spec.ai ? 'ai' : spec.platform === 'EDUBLOCKS' ? 'python' : 'scratch')
+  );
 }
 
 /** Builds (and validates) the stored fields of one lesson. Throws with every problem listed. */
@@ -172,7 +205,8 @@ export function buildLessonPatch(spec: LcLessonSpec): LcLessonPatch {
     brief: spec.video,
   };
   const video = validatePreviewVideo(previewInput);
-  if (!video.value) throw new Error(`${label} video: ${video.errors.join(' | ')}`);
+  if (!video.value)
+    throw new Error(`${label} video: ${video.errors.join(' | ')}`);
 
   const card = validateProjectCard({
     title: spec.project.name,
@@ -184,16 +218,20 @@ export function buildLessonPatch(spec: LcLessonSpec): LcLessonPatch {
     helper: spec.projectHelper ?? projectHelper(spec),
     teacherInstructions: teacherInstructions(spec),
   });
-  if (!card.value) throw new Error(`${label} project card: ${card.errors.join(' | ')}`);
+  if (!card.value)
+    throw new Error(`${label} project card: ${card.errors.join(' | ')}`);
 
   const hw = validateHomeworkCard({
     title: spec.homework.name,
     instructions: spec.homework.instructions,
     deliverable: spec.homework.deliverable,
     platforms: homeworkPlatforms(spec).map(button),
-    helper: spec.ai ? 'Use the model you trained in class — you do not need to train it again.' : '',
+    helper: spec.ai
+      ? 'Use the model you trained in class — you do not need to train it again.'
+      : '',
   });
-  if (!hw.value) throw new Error(`${label} homework card: ${hw.errors.join(' | ')}`);
+  if (!hw.value)
+    throw new Error(`${label} homework card: ${hw.errors.join(' | ')}`);
 
   const course = LC_COURSES.find((c) => c.number === spec.course)!;
   return {
@@ -215,7 +253,10 @@ export function buildLessonPatch(spec: LcLessonSpec): LcLessonPatch {
     previewVideo: video.value,
     projectCard: card.value,
     homeworkCard: hw.value,
-    project: { title: spec.project.name, description: `${course.title} · lesson ${spec.lesson}: ${spec.project.goal}` },
+    project: {
+      title: spec.project.name,
+      description: `${course.title} · lesson ${spec.lesson}: ${spec.project.goal}`,
+    },
   };
 }
 

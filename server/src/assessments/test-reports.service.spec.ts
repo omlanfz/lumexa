@@ -978,9 +978,21 @@ describe('TestReportsService — Little Coders practical', () => {
   /** A Course Assessment report: 15 objective marks + a 25-mark practical, every criterion marked. */
   function lcReport(over: Row = {}): Row {
     const rubric: RubricScore[] = [
-      { criterion: 'Required functionality works correctly', maxPoints: 10, score: 8 },
-      { criterion: 'Correct selection and use of blocks', maxPoints: 6, score: 5 },
-      { criterion: 'Logical sequence and programming flow', maxPoints: 5, score: 4 },
+      {
+        criterion: 'Required functionality works correctly',
+        maxPoints: 10,
+        score: 8,
+      },
+      {
+        criterion: 'Correct selection and use of blocks',
+        maxPoints: 6,
+        score: 5,
+      },
+      {
+        criterion: 'Logical sequence and programming flow',
+        maxPoints: 5,
+        score: 4,
+      },
       { criterion: 'Testing and debugging', maxPoints: 3, score: 2 },
       { criterion: 'Project completed and submitted', maxPoints: 1, score: 1 },
     ];
@@ -1030,7 +1042,10 @@ describe('TestReportsService — Little Coders practical', () => {
 
   it('shows the teacher what was handed in: links, note, files and the brief', async () => {
     const files = filesService();
-    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const { service } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+      files,
+    });
     const d = await service.get('rep-1', TEACHER);
 
     expect(d.littleCoders).toBe(true);
@@ -1056,10 +1071,19 @@ describe('TestReportsService — Little Coders practical', () => {
         .fn()
         .mockResolvedValue([{ ...FILE, status: 'DELETED', removed: true }]),
     });
-    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const { service } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+      files,
+    });
     const d = await service.get('rep-1', TEACHER);
     expect(d.coding?.lc?.files).toEqual([
-      { id: 'f1', name: 'rocket.sb3', size: 1200, kind: 'DOWNLOAD', removed: true },
+      {
+        id: 'f1',
+        name: 'rocket.sb3',
+        size: 1200,
+        kind: 'DOWNLOAD',
+        removed: true,
+      },
     ]);
     expect(d.coding?.lc?.filesRemoved).toBe(true);
   });
@@ -1070,7 +1094,10 @@ describe('TestReportsService — Little Coders practical', () => {
         .fn()
         .mockResolvedValue([FILE, { ...FILE, id: 'f2', status: 'UPLOADED' }]),
     });
-    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const { service } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+      files,
+    });
     const d = await service.get('rep-1', TEACHER);
     expect(d.coding?.lc?.files.map((f) => f.id)).toEqual(['f1']);
   });
@@ -1084,7 +1111,9 @@ describe('TestReportsService — Little Coders practical', () => {
   });
 
   it('the list labels Little Coders reports as assessments', async () => {
-    const { service, prisma } = setup(lcReport(), { assessments: LC_ASSESSMENT });
+    const { service, prisma } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+    });
     prisma.testReport.findMany.mockResolvedValue([
       {
         id: 'rep-1',
@@ -1118,18 +1147,25 @@ describe('TestReportsService — Little Coders practical', () => {
   it('approving marks the files in the SAME transaction as the final score, then removes them', async () => {
     const files = filesService();
     const order: string[] = [];
-    const { service, prisma, db } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
-    prisma.testReport.updateMany.mockImplementationOnce(async ({ data }: Row) => {
-      order.push('score');
-      Object.assign(db.report, data);
-      return { count: 1 };
+    const { service, prisma, db } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+      files,
     });
-    files.finaliseAttempt.mockImplementation(async (tx: unknown, attemptId: string) => {
-      order.push('mark');
-      expect(tx).toBe(prisma); // inside the transaction callback
-      expect(attemptId).toBe('att-1');
-      return ['f1'];
-    });
+    prisma.testReport.updateMany.mockImplementationOnce(
+      async ({ data }: Row) => {
+        order.push('score');
+        Object.assign(db.report, data);
+        return { count: 1 };
+      },
+    );
+    files.finaliseAttempt.mockImplementation(
+      async (tx: unknown, attemptId: string) => {
+        order.push('mark');
+        expect(tx).toBe(prisma); // inside the transaction callback
+        expect(attemptId).toBe('att-1');
+        return ['f1'];
+      },
+    );
     files.removeMarked.mockImplementation(async (ids: string[]) => {
       order.push('remove');
       expect(ids).toEqual(['f1']);
@@ -1145,7 +1181,10 @@ describe('TestReportsService — Little Coders practical', () => {
 
   it('a failed approval (someone else changed the report) neither marks nor removes any file', async () => {
     const files = filesService();
-    const { service, prisma } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const { service, prisma } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+      files,
+    });
     prisma.testReport.updateMany.mockResolvedValueOnce({ count: 0 });
     await expect(service.approve('rep-1', TEACHER)).rejects.toBeInstanceOf(
       ConflictException,
@@ -1160,11 +1199,27 @@ describe('TestReportsService — Little Coders practical', () => {
       status: TestReportStatus.PENDING_CODE_EVALUATION,
       codingScore: null,
       codingRubricScores: [
-        { criterion: 'Required functionality works correctly', maxPoints: 10, score: null },
-        { criterion: 'Correct selection and use of blocks', maxPoints: 6, score: 5 },
-        { criterion: 'Logical sequence and programming flow', maxPoints: 5, score: 4 },
+        {
+          criterion: 'Required functionality works correctly',
+          maxPoints: 10,
+          score: null,
+        },
+        {
+          criterion: 'Correct selection and use of blocks',
+          maxPoints: 6,
+          score: 5,
+        },
+        {
+          criterion: 'Logical sequence and programming flow',
+          maxPoints: 5,
+          score: 4,
+        },
         { criterion: 'Testing and debugging', maxPoints: 3, score: 2 },
-        { criterion: 'Project completed and submitted', maxPoints: 1, score: 1 },
+        {
+          criterion: 'Project completed and submitted',
+          maxPoints: 1,
+          score: 1,
+        },
       ],
     });
     const { service } = setup(unmarked, { assessments: LC_ASSESSMENT, files });
@@ -1177,7 +1232,10 @@ describe('TestReportsService — Little Coders practical', () => {
 
   it('opening the report never marks or removes anything', async () => {
     const files = filesService();
-    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const { service } = setup(lcReport(), {
+      assessments: LC_ASSESSMENT,
+      files,
+    });
     await service.get('rep-1', TEACHER);
     await service.get('rep-1', TEACHER);
     expect(files.finaliseAttempt).not.toHaveBeenCalled();

@@ -10,7 +10,9 @@ import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/Projec
 import QuizEditor, { toDraftQuestion, type DraftQuestion } from '@/components/admin/lesson-editor/QuizEditor';
 import VisualsEditor, { type VisualTypeInfo } from '@/components/admin/lesson-editor/VisualsEditor';
 import LessonPreview, { usePreview, type Draft } from '@/components/admin/lesson-editor/LessonPreview';
+import LcLessonPanel, { type LcDraft } from '@/components/admin/lesson-editor/LcLessonPanel';
 import type { LessonVisualData } from '@/lib/lesson/types';
+import type { LcEditorData } from '@/lib/littleCoders/types';
 import '@/components/lesson/visuals';
 
 interface EditorResponse {
@@ -31,6 +33,8 @@ interface EditorResponse {
     projectLinks: ProjectLink[] | null;
     contentReview: { kind: string; detail: string; excerpt?: string }[];
   };
+  /** Little Coders lessons only: the interactive page, video record and cards exactly as stored. */
+  littleCoders?: LcEditorData;
 }
 
 const TEXTAREA = 'w-full px-4 py-3 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-[var(--a-text)] text-sm font-mono leading-relaxed a-focus resize-y';
@@ -61,6 +65,9 @@ export default function AdminLessonEditPage() {
   const [projectLinks, setProjectLinks] = useState<ProjectLink[]>([]);
   const [visualTypes, setVisualTypes] = useState<Record<string, VisualTypeInfo>>({});
   const [previewMode, setPreviewMode] = useState<'off' | 'student' | 'presentation'>('off');
+  // A redesigned Little Coders lesson is drawn from its own structured page, not from Markdown, a quiz or visuals.
+  const [lc, setLc] = useState<LcEditorData | null>(null);
+  const [lcDraft, setLcDraft] = useState<LcDraft>({});
   const [saving, setSaving] = useState(false);
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
@@ -85,6 +92,7 @@ export default function AdminLessonEditPage() {
       setContentReview(l.contentReview ?? []);
       setCodeSnippetCount(l.codeSnippets?.length ?? 0);
       setProjectLinks(l.projectLinks ?? []);
+      setLc(res.data.littleCoders ?? null);
       setVisualTypes(types.data);
       setLoading(false);
     });
@@ -95,8 +103,8 @@ export default function AdminLessonEditPage() {
 
   const objectiveList = useMemo(() => objectives.split('\n').map((s) => s.trim()).filter(Boolean), [objectives]);
   const draft: Draft = useMemo(
-    () => ({ lessonId: params.lessonId, courseId, courseTitle, title, objectives: objectiveList, contentMarkdown, homework, checkpoint, teacherNotes, miniQuiz, visuals, projectLinks }),
-    [params.lessonId, courseId, courseTitle, title, objectiveList, contentMarkdown, homework, checkpoint, teacherNotes, miniQuiz, visuals, projectLinks],
+    () => ({ lessonId: params.lessonId, courseId, courseTitle, title, objectives: objectiveList, contentMarkdown, homework, checkpoint, teacherNotes, miniQuiz, visuals, projectLinks, ...(lc ? { lc: lcDraft } : {}) }),
+    [params.lessonId, courseId, courseTitle, title, objectiveList, contentMarkdown, homework, checkpoint, teacherNotes, miniQuiz, visuals, projectLinks, lc, lcDraft],
   );
   const { result, failed } = usePreview(draft, !loading);
 
@@ -124,17 +132,23 @@ export default function AdminLessonEditPage() {
     setSaveErrors([]);
     setSaved(false);
     try {
-      await api.patch(`/curriculum/lessons/${params.lessonId}/content`, {
-        title,
-        objectives: objectiveList,
-        contentMarkdown,
-        homework,
-        checkpoint,
-        teacherNotes,
-        miniQuiz,
-        visuals,
-        projectLinks: projectLinks.map((p) => ({ title: p.title.trim(), url: p.url.trim() })).filter((p) => p.title && p.url),
-      });
+      await api.patch(
+        `/curriculum/lessons/${params.lessonId}/content`,
+        lc
+          ? // A Little Coders lesson's page, video and cards are saved from their own panel; only its plain fields go here.
+            { title, objectives: objectiveList, homework, checkpoint, teacherNotes }
+          : {
+              title,
+              objectives: objectiveList,
+              contentMarkdown,
+              homework,
+              checkpoint,
+              teacherNotes,
+              miniQuiz,
+              visuals,
+              projectLinks: projectLinks.map((p) => ({ title: p.title.trim(), url: p.url.trim() })).filter((p) => p.title && p.url),
+            },
+      );
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err: unknown) {
@@ -266,6 +280,9 @@ export default function AdminLessonEditPage() {
         </div>
       </Section>
 
+      {lc && <LcLessonPanel lessonId={params.lessonId} data={lc} onDraft={setLcDraft} />}
+
+      {!lc && (
       <Section
         title="Lesson Material"
         hint="Markdown — headings, lists, tables, code blocks, links, images and > [!TIP] callouts. Raw HTML is shown as text, never run. Reference another lesson with [Lesson 3](lumexa:lesson/<module-slug>/3)."
@@ -306,6 +323,10 @@ export default function AdminLessonEditPage() {
         </div>
       </Section>
 
+      )}
+
+      {!lc && (
+        <>
       <Section title="Visuals & Interactive Blocks" hint="Diagrams and demos drawn from data. Each needs alt text and a caption. Place one in the lesson material with the button on its card.">
         <VisualsEditor value={visuals} onChange={setVisuals} types={visualTypes} errors={visualErrors} onInsert={insertVisual} />
       </Section>
@@ -313,8 +334,13 @@ export default function AdminLessonEditPage() {
       <Section title="Mini Quiz" hint="Learners answer one question at a time and see the result straight away. Answers are checked on the server; the answer key is never sent to the learner’s screen.">
         <QuizEditor value={miniQuiz} onChange={setMiniQuiz} errors={quizErrors} />
       </Section>
+        </>
+      )}
 
-      <Section title="Homework / Practice" hint="Markdown. This is the only place homework lives — don’t repeat it in the lesson material.">
+      <Section
+        title={lc ? 'Homework text' : 'Homework / Practice'}
+        hint={lc ? 'The plain-text version of the homework (kept in step with the homework card above, and shown where the interactive page cannot be).' : 'Markdown. This is the only place homework lives — don’t repeat it in the lesson material.'}
+      >
         <div className="grid md:grid-cols-2 gap-4">
           <textarea value={homework} onChange={(e) => setHomework(e.target.value)} rows={10} className={TEXTAREA} />
           <div className="rounded-lg border border-[var(--a-border)] p-4 overflow-y-auto max-h-64 bg-[var(--a-surface)]">
@@ -338,6 +364,7 @@ export default function AdminLessonEditPage() {
         )}
       </Section>
 
+      {!lc && (
       <Section
         title="💻 Project"
         hint='Buttons ("Open Project" / "Copy Link") shown on the lesson page in place of the Code section. Leave empty to keep showing the Code section below instead. Add more than one entry (e.g. a recap session) to show each project under its own heading.'
@@ -376,8 +403,9 @@ export default function AdminLessonEditPage() {
           </div>
         </div>
       </Section>
+      )}
 
-      {codeSnippetCount > 0 && (
+      {!lc && codeSnippetCount > 0 && (
         <p className="text-xs text-[var(--a-text-faint)]">
           {codeSnippetCount} code snippet(s) attached to this lesson — imported from source content; not editable from this page yet.
           {projectLinks.filter((p) => p.title.trim() && p.url.trim()).length > 0 && ' Currently hidden on the lesson page because a Project section above is set.'}

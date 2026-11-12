@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import api from '@/lib/axios';
 import { Card, Modal } from '@/components/admin/AdminUI';
+import LcPracticalEditor, { type PracticalForEdit } from '@/components/admin/LcPracticalEditor';
+import type { LcPracticalSpec } from '@/lib/littleCoders/types';
 
 type Kind = 'MCQ' | 'TRUE_FALSE';
 
@@ -27,6 +29,9 @@ interface PracticalQuestion {
   maxScore: number;
   isPublished: boolean;
   rubric: { criterion: string; maxPoints: number; lookFor?: string }[] | null;
+  /** Little Coders: the structured project, and which version of it this is. */
+  spec?: LcPracticalSpec | null;
+  variantKey?: string | null;
 }
 interface AssessmentAdmin {
   id: string;
@@ -37,6 +42,10 @@ interface AssessmentAdmin {
   randomizeOptions: boolean;
   passScorePct: number;
   isPublished: boolean;
+  /** STANDARD, or LITTLE_CODERS_V2 (10 MCQs + 5 True/False + a 25-mark practical). */
+  format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+  /** Little Coders Final Assessment: the version of the practical given by default. */
+  activeVariant?: string | null;
   mcqQuestions: MCQQuestion[];
   practicalQuestions: PracticalQuestion[];
   lesson: { title: string; courseId: string; course: { title: string } };
@@ -62,18 +71,27 @@ export default function AssessmentAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [editingQ, setEditingQ] = useState<MCQQuestion | 'new' | null>(null);
+  const [editingProject, setEditingProject] = useState<PracticalForEdit | null>(null);
 
+  // The first fetch starts from the initial state (loading, no error); only a reload resets them.
+  const fetchBank = useCallback(
+    () =>
+      api
+        .get(`/assessments/${params.assessmentId}/admin`)
+        .then((res) => setData(res.data))
+        .catch((err) => setError(err?.response?.data?.message ?? 'Could not load this question bank.'))
+        .finally(() => setLoading(false)),
+    [params.assessmentId],
+  );
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    api
-      .get(`/assessments/${params.assessmentId}/admin`)
-      .then((res) => setData(res.data))
-      .catch((err) => setError(err?.response?.data?.message ?? 'Could not load this question bank.'))
-      .finally(() => setLoading(false));
-  }, [params.assessmentId]);
+    void fetchBank();
+  }, [fetchBank]);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => {
+    void fetchBank();
+  }, [fetchBank]);
 
   if (loading && !data) return <p className="text-sm text-[var(--a-text-muted)]">Loading…</p>;
   if (error || !data) {
@@ -109,6 +127,7 @@ export default function AssessmentAdminPage() {
     }
   }
 
+  const isLc = data.format === 'LITTLE_CODERS_V2';
   const mcqs = data.mcqQuestions.filter((q) => q.questionType === 'MCQ');
   const tfs = data.mcqQuestions.filter((q) => q.questionType === 'TRUE_FALSE');
   const std = data.standard;
@@ -154,8 +173,8 @@ export default function AssessmentAdminPage() {
       >
         {std.meets ? (
           <p>
-            ✓ Meets the Lumexa test standard: {std.counts.mcq} multiple-choice + {std.counts.trueFalse} True/False
-            {std.expectedCodingProject ? ' + 1 coding project' : ''} · {std.expectedTotalMarks} marks.
+            ✓ Meets the {isLc ? 'Little Coders assessment' : 'Lumexa test'} standard: {std.counts.mcq} multiple-choice + {std.counts.trueFalse} True/False
+            {std.expectedCodingProject ? (isLc ? ' + one 25-mark practical project' : ' + 1 coding project') : ''} · {std.expectedTotalMarks} marks.
           </p>
         ) : (
           <>
@@ -180,6 +199,31 @@ export default function AssessmentAdminPage() {
           {data.bank.linkedCount} other test{data.bank.linkedCount === 1 ? '' : 's'} (in custom curricula) read their questions from this bank, so
           an edit here applies to them as well.
         </div>
+      )}
+
+      {isLc && data.type === 'FINAL_TEST' && (
+        <Card>
+          <h2 className="font-semibold text-[var(--a-text)] mb-1">Which practical version is given</h2>
+          <p className="text-xs text-[var(--a-text-faint)] mb-3">
+            The Final Assessment has a Scratch / AI version (Stretch3) and a Python version (EduBlocks). This is the version every class is given unless a single class is set apart in the class monitor. A student who has already started keeps the version they were given.
+          </p>
+          <select
+            value={data.activeVariant ?? 'SCRATCH_AI'}
+            aria-label="Practical version"
+            onChange={async (e) => {
+              try {
+                await api.patch(`/assessments/${params.assessmentId}/variant`, { variant: e.target.value });
+                load();
+              } catch (err) {
+                setError((err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Could not change the version.');
+              }
+            }}
+            className="a-input !w-auto"
+          >
+            <option value="SCRATCH_AI">Scratch / AI — built in Stretch3</option>
+            <option value="PYTHON">Python — built in EduBlocks</option>
+          </select>
+        </Card>
       )}
 
       <Card>
@@ -239,16 +283,34 @@ export default function AssessmentAdminPage() {
 
       <Card className="p-0 overflow-hidden">
         <div className="px-4 py-3 border-b border-[var(--a-border)]">
-          <h2 className="font-semibold text-[var(--a-text)]">Coding project{data.practicalQuestions.length === 1 ? '' : 's'}</h2>
+          <h2 className="font-semibold text-[var(--a-text)]">{isLc ? 'Practical project' : 'Coding project'}{data.practicalQuestions.length === 1 ? '' : 's'}</h2>
           <p className="text-xs text-[var(--a-text-faint)]">Marked by the teacher against the rubric — never run or graded automatically.</p>
         </div>
         <div className="divide-y divide-[var(--a-border)]">
           {data.practicalQuestions.map((q) => (
             <div key={q.id} className="px-4 py-3">
-              <p className="text-sm font-medium text-[var(--a-text)]">
-                {q.title} <span className="text-xs text-[var(--a-text-faint)]">({q.language}, {q.maxScore} marks){!q.isPublished && ' · unpublished'}</span>
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-medium text-[var(--a-text)]">
+                  {q.title} <span className="text-xs text-[var(--a-text-faint)]">({q.language}, {q.maxScore} marks){!q.isPublished && ' · unpublished'}</span>
+                  {q.variantKey && <span className="ml-2 rounded-full border border-[var(--a-border)] px-2 py-0.5 text-[11px]">{q.variantKey === 'PYTHON' ? 'Python · EduBlocks' : 'Scratch / AI · Stretch3'}</span>}
+                  {q.spec?.adminEdited && <span className="ml-2 text-[11px] text-[var(--a-text-faint)]">edited by an admin</span>}
+                </p>
+                {isLc && q.spec && (
+                  <button
+                    onClick={() => setEditingProject({ id: q.id, title: q.title, spec: q.spec as LcPracticalSpec, rubric: q.rubric, variantKey: q.variantKey })}
+                    className="text-xs text-[var(--a-accent)] hover:underline flex-shrink-0"
+                  >
+                    Edit project
+                  </button>
+                )}
+              </div>
               <p className="text-xs text-[var(--a-text-muted)] mt-1 whitespace-pre-line">{q.instructions}</p>
+              {isLc && q.spec?.starter.required && (
+                <p className="text-xs text-[var(--a-text-muted)] mt-1">
+                  Prepared {q.spec.starter.kind === 'MODEL_URL' ? 'model' : 'starter'}:{' '}
+                  {q.spec.starter.url ? <a href={q.spec.starter.url} target="_blank" rel="noopener noreferrer" className="underline text-[var(--a-accent)]">{q.spec.starter.url}</a> : <strong className="text-[var(--a-warning-text)]">no address added yet — add it by editing the project</strong>}
+                </p>
+              )}
               {q.rubric && q.rubric.length > 0 && (
                 <ul className="mt-2 text-xs text-[var(--a-text-muted)] space-y-0.5">
                   {q.rubric.map((r) => (
@@ -267,6 +329,17 @@ export default function AssessmentAdminPage() {
           )}
         </div>
       </Card>
+
+      {editingProject && (
+        <LcPracticalEditor
+          practical={editingProject}
+          onClose={() => setEditingProject(null)}
+          onSaved={() => {
+            setEditingProject(null);
+            load();
+          }}
+        />
+      )}
 
       {editingQ && (
         <MCQEditModal

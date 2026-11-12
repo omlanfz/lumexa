@@ -23,7 +23,14 @@
 
 import type { EduBlocksCategory, ScratchCategory } from '../lc.types';
 
-export type BlockShape = 'hat' | 'stack' | 'c' | 'else' | 'cap' | 'reporter' | 'boolean';
+export type BlockShape =
+  | 'hat'
+  | 'stack'
+  | 'c'
+  | 'else'
+  | 'cap'
+  | 'reporter'
+  | 'boolean';
 
 interface Entry {
   t: string;
@@ -274,7 +281,8 @@ export const EDUBLOCKS_ALLOWED_METHODS = new Set([
 ]);
 
 /** The only import blocks the lessons use: the random library and the Turtle. */
-export const EDUBLOCKS_ALLOWED_IMPORT = /^(?:import (?:random|turtle)|from turtle import \*)$/;
+export const EDUBLOCKS_ALLOWED_IMPORT =
+  /^(?:import (?:random|turtle)|from turtle import \*)$/;
 
 /** Python the EduBlocks toolbox cannot build — kept out of the lessons. */
 export const EDUBLOCKS_FORBIDDEN: { name: string; re: RegExp }[] = [

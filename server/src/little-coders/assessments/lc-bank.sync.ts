@@ -15,12 +15,25 @@
 //   * Validated first — a bank that fails the standard is never written.
 //   * Multi-instance safe — the write phase holds a Postgres advisory lock.
 
-import { AssessmentFormat, Prisma, PrismaClient, SessionType } from '@prisma/client';
+import {
+  AssessmentFormat,
+  Prisma,
+  PrismaClient,
+  SessionType,
+} from '@prisma/client';
 import { lcAssessmentInstructions } from './lc-instructions';
-import { LC_BANK_VERSION, LC_COURSE_SLUG, isLittleCodersSlug } from '../lc.constants';
+import {
+  LC_BANK_VERSION,
+  LC_COURSE_SLUG,
+  isLittleCodersSlug,
+} from '../lc.constants';
 import { allLcBanks, LC_COURSE_BANKS, LC_FINAL_BANK } from './index';
 import { materializeLcBank } from './lc-bank.materialize';
-import { formatLcProblems, validateAcrossLcBanks, validateLcBank } from './lc-bank.validate';
+import {
+  formatLcProblems,
+  validateAcrossLcBanks,
+  validateLcBank,
+} from './lc-bank.validate';
 import type { LcBank } from './lc-bank.types';
 
 interface Logger {
@@ -41,14 +54,29 @@ export interface LcSyncReport {
 }
 
 /** Which authored bank a Little Coders test lesson maps to (or null). */
-export function resolveLcBank(lesson: { type: SessionType; module: { slug: string } | null }): LcBank | null {
+export function resolveLcBank(lesson: {
+  type: SessionType;
+  module: { slug: string } | null;
+}): LcBank | null {
   if (lesson.type === SessionType.FINAL_TEST) return LC_FINAL_BANK;
-  if (lesson.type === SessionType.COURSE_TEST && lesson.module) return LC_COURSE_BANKS[lesson.module.slug] ?? null;
+  if (lesson.type === SessionType.COURSE_TEST && lesson.module)
+    return LC_COURSE_BANKS[lesson.module.slug] ?? null;
   return null;
 }
 
-export async function syncLittleCodersBanks(prisma: PrismaClient, logger: Logger = console): Promise<LcSyncReport> {
-  const report: LcSyncReport = { synced: 0, upToDate: 0, created: 0, updated: 0, retired: 0, deleted: 0, invalidBanks: [] };
+export async function syncLittleCodersBanks(
+  prisma: PrismaClient,
+  logger: Logger = console,
+): Promise<LcSyncReport> {
+  const report: LcSyncReport = {
+    synced: 0,
+    upToDate: 0,
+    created: 0,
+    updated: 0,
+    retired: 0,
+    deleted: 0,
+    invalidBanks: [],
+  };
 
   const banks = allLcBanks();
   const invalid = new Set<string>();
@@ -56,12 +84,16 @@ export async function syncLittleCodersBanks(prisma: PrismaClient, logger: Logger
     const problems = validateLcBank(b);
     if (problems.length) {
       invalid.add(b.id);
-      logger.warn(`[lc-bank-sync] ${b.id} fails the Little Coders assessment standard and was NOT applied:\n${formatLcProblems(problems)}`);
+      logger.warn(
+        `[lc-bank-sync] ${b.id} fails the Little Coders assessment standard and was NOT applied:\n${formatLcProblems(problems)}`,
+      );
     }
   }
   for (const p of validateAcrossLcBanks(banks)) {
     invalid.add(p.bankId);
-    logger.warn(`[lc-bank-sync] ${p.bankId} · ${p.where}: ${p.message} — bank NOT applied`);
+    logger.warn(
+      `[lc-bank-sync] ${p.bankId} · ${p.where}: ${p.message} — bank NOT applied`,
+    );
   }
   report.invalidBanks = [...invalid];
 
@@ -74,7 +106,13 @@ export async function syncLittleCodersBanks(prisma: PrismaClient, logger: Logger
     select: {
       id: true,
       bankVersion: true,
-      lesson: { select: { type: true, module: { select: { slug: true } }, course: { select: { slug: true } } } },
+      lesson: {
+        select: {
+          type: true,
+          module: { select: { slug: true } },
+          course: { select: { slug: true } },
+        },
+      },
     },
   });
 
@@ -95,7 +133,9 @@ export async function syncLittleCodersBanks(prisma: PrismaClient, logger: Logger
       report.retired += applied.retired;
       report.deleted += applied.deleted;
     } catch (err) {
-      logger.warn(`[lc-bank-sync] could not apply ${bank.id} to assessment ${owner.id}: ${(err as Error).message}`);
+      logger.warn(
+        `[lc-bank-sync] could not apply ${bank.id} to assessment ${owner.id}: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -119,21 +159,35 @@ interface Applied {
   deleted: number;
 }
 
-async function applyLcBank(prisma: PrismaClient, assessmentId: string, bank: LcBank): Promise<Applied | null> {
+async function applyLcBank(
+  prisma: PrismaClient,
+  assessmentId: string,
+  bank: LcBank,
+): Promise<Applied | null> {
   const mat = materializeLcBank(bank);
   return prisma.$transaction(
     async (tx) => {
-      const [{ locked }] = await tx.$queryRaw<{ locked: boolean }[]>(Prisma.sql`SELECT pg_try_advisory_xact_lock(${LC_SYNC_LOCK_KEY}) AS locked`);
+      const [{ locked }] = await tx.$queryRaw<{ locked: boolean }[]>(
+        Prisma.sql`SELECT pg_try_advisory_xact_lock(${LC_SYNC_LOCK_KEY}) AS locked`,
+      );
       if (!locked) return null;
       const out: Applied = { created: 0, updated: 0, retired: 0, deleted: 0 };
 
       // ── Objective questions ──
       const existing = await tx.mCQQuestion.findMany({
         where: { assessmentId },
-        select: { id: true, bankKey: true, editedByAdmin: true, isPublished: true, _count: { select: { answers: true } } },
+        select: {
+          id: true,
+          bankKey: true,
+          editedByAdmin: true,
+          isPublished: true,
+          _count: { select: { answers: true } },
+        },
       });
       const desired = new Set(mat.questions.map((q) => q.bankKey));
-      const byKey = new Map(existing.filter((q) => q.bankKey).map((q) => [q.bankKey as string, q]));
+      const byKey = new Map(
+        existing.filter((q) => q.bankKey).map((q) => [q.bankKey as string, q]),
+      );
       const toDelete: string[] = [];
       const toRetire: string[] = [];
       for (const q of existing) {
@@ -150,7 +204,10 @@ async function applyLcBank(prisma: PrismaClient, assessmentId: string, bank: LcB
         out.deleted += toDelete.length;
       }
       if (toRetire.length) {
-        await tx.mCQQuestion.updateMany({ where: { id: { in: toRetire } }, data: { isPublished: false } });
+        await tx.mCQQuestion.updateMany({
+          where: { id: { in: toRetire } },
+          data: { isPublished: false },
+        });
         out.retired += toRetire.length;
       }
       const toCreate = mat.questions.filter((q) => !byKey.has(q.bankKey));
@@ -196,14 +253,23 @@ async function applyLcBank(prisma: PrismaClient, assessmentId: string, bank: LcB
       // ── Practical project(s) ──
       const practicals = await tx.practicalQuestion.findMany({
         where: { assessmentId },
-        select: { id: true, bankKey: true, isPublished: true, spec: true, _count: { select: { submissions: true } } },
+        select: {
+          id: true,
+          bankKey: true,
+          isPublished: true,
+          spec: true,
+          _count: { select: { submissions: true } },
+        },
       });
       const wanted = new Set(mat.practicals.map((p) => p.bankKey));
       for (const p of practicals) {
         if (p.bankKey && wanted.has(p.bankKey)) continue;
         if (p._count.submissions > 0) {
           if (p.isPublished) {
-            await tx.practicalQuestion.update({ where: { id: p.id }, data: { isPublished: false } });
+            await tx.practicalQuestion.update({
+              where: { id: p.id },
+              data: { isPublished: false },
+            });
             out.retired++;
           }
         } else {
@@ -232,7 +298,9 @@ async function applyLcBank(prisma: PrismaClient, assessmentId: string, bank: LcB
           await tx.practicalQuestion.update({ where: { id: have.id }, data });
           out.updated++;
         } else {
-          await tx.practicalQuestion.create({ data: { assessmentId, bankKey: p.bankKey, ...data } });
+          await tx.practicalQuestion.create({
+            data: { assessmentId, bankKey: p.bankKey, ...data },
+          });
           out.created++;
         }
       }
@@ -256,8 +324,20 @@ async function applyLcBank(prisma: PrismaClient, assessmentId: string, bank: LcB
 /** Linked assessments (a custom curriculum's imported Little Coders test) mirror their bank's format. */
 async function refreshLinkedLcAssessments(prisma: PrismaClient): Promise<void> {
   const stale = await prisma.assessment.findMany({
-    where: { sourceAssessmentId: { not: null }, format: AssessmentFormat.STANDARD, sourceAssessment: { format: AssessmentFormat.LITTLE_CODERS_V2, bankVersion: { gte: LC_BANK_VERSION } } },
-    select: { id: true, sourceAssessment: { select: { instructions: true, bankVersion: true, activeVariant: true } } },
+    where: {
+      sourceAssessmentId: { not: null },
+      format: AssessmentFormat.STANDARD,
+      sourceAssessment: {
+        format: AssessmentFormat.LITTLE_CODERS_V2,
+        bankVersion: { gte: LC_BANK_VERSION },
+      },
+    },
+    select: {
+      id: true,
+      sourceAssessment: {
+        select: { instructions: true, bankVersion: true, activeVariant: true },
+      },
+    },
   });
   for (const a of stale) {
     if (!a.sourceAssessment) continue;

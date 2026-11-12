@@ -106,14 +106,14 @@ export default function StudentTestLauncher({ scheduledLessonId }: { scheduledLe
           <p className="text-sm">Your teacher can see this too — please let them know so Lumexa Operations can set the test up.</p>
         </section>
       ) : attempt?.status === 'GRADED' ? (
-        <Card icon={<CheckCircle2 size={34} className="text-[var(--ar-success)]" />} title="Your result is ready" subtitle={testTypeLabel(a.type)}>
+        <Card icon={<CheckCircle2 size={34} className="text-[var(--ar-success)]" />} title="Your result is ready" subtitle={testTypeLabel(a.type, a.format)}>
           <p className="text-sm text-[var(--ar-muted)]">Your teacher has reviewed your test and shared your result.</p>
           <OpenTestButton label="View my result" onClick={() => openTest(false)} />
           <BlockedNote blocked={blocked} href={testTabUrl(scheduledLessonId)} />
         </Card>
       ) : attempt?.status === 'SUBMITTED' ? (
         attempt.lockedByTeacher ? (
-          <Card icon={<Lock size={30} className="text-[var(--ar-warning)]" />} title="Your teacher locked the test" subtitle={testTypeLabel(a.type)}>
+          <Card icon={<Lock size={30} className="text-[var(--ar-warning)]" />} title="Your teacher locked the test" subtitle={testTypeLabel(a.type, a.format)}>
             <p className="text-sm text-[var(--ar-text)]">
               Time was up, so your teacher locked the test. The <strong>{attempt.answered} answer{attempt.answered === 1 ? '' : 's'}</strong> you had saved
               (of {attempt.total}) were submitted automatically — nothing you saved was lost.
@@ -121,7 +121,7 @@ export default function StudentTestLauncher({ scheduledLessonId }: { scheduledLe
             <p className="text-xs text-[var(--ar-muted)]">Your teacher will review your test and share your result. You can stop sharing your screen now if your teacher says so.</p>
           </Card>
         ) : (
-          <Card icon={<CheckCircle2 size={34} className="text-[var(--ar-success)]" />} title="Test submitted" subtitle={testTypeLabel(a.type)}>
+          <Card icon={<CheckCircle2 size={34} className="text-[var(--ar-success)]" />} title="Test submitted" subtitle={testTypeLabel(a.type, a.format)}>
             <p className="text-sm text-[var(--ar-text)]">
               Your {attempt.answered} answer{attempt.answered === 1 ? '' : 's'} (of {attempt.total}) were saved and graded automatically.
             </p>
@@ -129,7 +129,7 @@ export default function StudentTestLauncher({ scheduledLessonId }: { scheduledLe
           </Card>
         )
       ) : attempt?.status === 'IN_PROGRESS' ? (
-        <Card icon={<Timer size={30} className="text-[var(--ar-accent)]" />} title="Your test is in progress" subtitle={testTypeLabel(a.type)}>
+        <Card icon={<Timer size={30} className="text-[var(--ar-accent)]" />} title="Your test is in progress" subtitle={testTypeLabel(a.type, a.format)}>
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-sm">
               <span className="tabular-nums">
@@ -170,11 +170,11 @@ export default function StudentTestLauncher({ scheduledLessonId }: { scheduledLe
           <KeepSharing />
         </Card>
       ) : status?.closedAt ? (
-        <Card icon={<Lock size={30} className="text-[var(--ar-warning)]" />} title="Your teacher closed this test" subtitle={testTypeLabel(a.type)}>
+        <Card icon={<Lock size={30} className="text-[var(--ar-warning)]" />} title="Your teacher closed this test" subtitle={testTypeLabel(a.type, a.format)}>
           <p className="text-sm text-[var(--ar-muted)]">The test can no longer be started. If you think this is a mistake, please tell your teacher.</p>
         </Card>
       ) : (
-        <Card icon={<ClipboardList size={30} className="text-[var(--ar-accent)]" />} title="Start your test" subtitle={testTypeLabel(a.type)}>
+        <Card icon={<ClipboardList size={30} className="text-[var(--ar-accent)]" />} title="Start your test" subtitle={testTypeLabel(a.type, a.format)}>
           {objective === 0 ? (
             <p role="alert" className="rounded-lg border border-[var(--ar-warning)]/40 bg-[var(--ar-warning)]/10 px-3 py-2 text-sm">
               This test has no questions yet. Please tell your teacher so Lumexa Operations can fix it.
@@ -184,7 +184,8 @@ export default function StudentTestLauncher({ scheduledLessonId }: { scheduledLe
               <ul className="space-y-1.5 text-sm">
                 <li>
                   📝 <strong>{objective} questions</strong> — {a.counts.mcq} multiple-choice and {a.counts.trueFalse} True/False
-                  {a.counts.practical > 0 ? ', plus one small coding project your teacher marks' : ''}.
+                  {a.counts.practical > 0 ? (a.lc ? `, plus one practical project (${a.lc.sections.find((s) => s.key === 'practical')?.marks ?? 25} marks) you build and hand in for your teacher to mark` : ', plus one small coding project your teacher marks') : ''}.
+                  {a.lc ? ` ${a.lc.brand} · ${a.lc.minutes} minutes · ${a.lc.marks} marks.` : ''}
                 </li>
                 <li>
                   🖥️ The test opens in a <strong>new tab</strong>. Keep sharing your <strong>entire screen</strong> so your teacher can follow along.

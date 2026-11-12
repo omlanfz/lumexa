@@ -38,6 +38,9 @@ const pricingHref = (id: string) => `/pricing?program=${id}#prices`;
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+/** Little Coders calls its tests "assessments" (a quiz plus a build-it project); every other program says "test". */
+const isAssessment = (title: string) => /\bassessment\b/i.test(title);
+
 // ── Odyssey: a simple overview of its stages, no lesson-by-lesson detail ────
 
 function OdysseySection({ course }: { course: CatalogCourse }) {
@@ -244,7 +247,8 @@ function CourseRow({
   const outcome = courseOutcome(module);
   const hasTest = module.lessonCount > module.learningCount;
   const teachingLessons = module.lessons.filter((l) => l.type === "LEARNING");
-  const lessonSummary = `${module.learningCount} lessons${hasTest ? " + test" : ""}`;
+  const testWord = module.lessons.some((l) => l.type !== "LEARNING" && isAssessment(l.title)) ? "assessment" : "test";
+  const lessonSummary = `${module.learningCount} lessons${hasTest ? ` + ${testWord}` : ""}`;
 
   return (
     <div className={`border rounded-2xl overflow-hidden ${program.border} bg-white dark:bg-gray-900/40`}>
@@ -283,9 +287,11 @@ function CourseRow({
                 >
                   <span aria-hidden>✓</span>
                   <span>
-                    Course Test
+                    {isAssessment(lesson.title) ? "Course Assessment" : "Course Test"}
                     <span className="font-normal text-[#64748B] dark:text-gray-400">
-                      {" "}· a check of everything covered in this course
+                      {isAssessment(lesson.title)
+                        ? " · a quick quiz and a hands-on project covering this course"
+                        : " · a check of everything covered in this course"}
                     </span>
                   </span>
                 </li>
@@ -377,8 +383,9 @@ function ProgramDetail({
             <div>
               <p className="text-[#0F172A] dark:text-white font-bold text-base">{test.title}</p>
               <p className="text-[#64748B] dark:text-gray-400 text-sm leading-relaxed mt-0.5">
-                A practical challenge and a short live viva with the teacher. Passing it earns your child a completion
-                certificate.
+                {isAssessment(test.title)
+                  ? "A quiz across every course plus a final build-it project, marked by the teacher. Passing it earns your child a completion certificate."
+                  : "A practical challenge and a short live viva with the teacher. Passing it earns your child a completion certificate."}
               </p>
             </div>
           </div>

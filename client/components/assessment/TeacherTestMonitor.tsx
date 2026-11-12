@@ -101,7 +101,7 @@ export default function TeacherTestMonitor({
           <section className="space-y-3 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">{testTypeLabel(a.type)} · you are running this test</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">{testTypeLabel(a.type, a.format)} · you are running this test</p>
                 <h2 className="text-lg font-bold leading-tight">{a.title}</h2>
               </div>
               {a.meetsStandard ? (
@@ -116,7 +116,7 @@ export default function TeacherTestMonitor({
             </div>
             <p className="text-sm text-[var(--ar-muted)]">
               {a.counts.mcq} multiple-choice + {a.counts.trueFalse} True/False = {objective} questions
-              {a.counts.practical > 0 ? ' + 1 coding project' : ''} · {formatMarks(a.totalMarks)} marks
+              {a.counts.practical > 0 ? (a.format === 'LITTLE_CODERS_V2' ? ' + 1 practical project' : ' + 1 coding project') : ''} · {formatMarks(a.totalMarks)} marks
             </p>
             <p className="text-xs text-[var(--ar-muted)]">
               Students take the test in their own tab while sharing their entire screen. There&apos;s no fixed time limit — you end it with{' '}
@@ -216,8 +216,51 @@ export default function TeacherTestMonitor({
                 ))}
                 {preview.codingProjects.map((p) => (
                   <li key={p.id} className="rounded-lg border border-[var(--ar-border)] bg-[var(--ar-bg)] p-3 text-sm">
-                    <p className="font-semibold">💻 Coding project · {p.title} ({p.maxScore} marks)</p>
-                    <QuestionText text={p.instructions} className="mt-1 text-xs text-[var(--ar-muted)]" />
+                    <p className="font-semibold">
+                      💻 {p.spec ? 'Practical project' : 'Coding project'} · {p.title} ({p.maxScore} marks)
+                      {p.variantKey && (
+                        <span className="ml-2 rounded-full border border-[var(--ar-border-strong)] px-2 py-0.5 text-[11px] font-semibold">
+                          {p.variantKey === 'PYTHON' ? 'Python · EduBlocks version' : 'Scratch / AI · Stretch3 version'}
+                        </span>
+                      )}
+                    </p>
+                    {p.spec ? (
+                      <div className="mt-2 space-y-2 text-xs text-[var(--ar-muted)]">
+                        <p>
+                          <strong className="text-[var(--ar-text)]">Brief:</strong> {p.spec.brief.join(' ')}
+                        </p>
+                        <p>
+                          <strong className="text-[var(--ar-text)]">Blocks to find:</strong> {p.spec.blocks.map((g) => `${g.category}: ${g.blocks.join(', ')}`).join(' · ')}
+                        </p>
+                        <div>
+                          <strong className="text-[var(--ar-text)]">Build requirements</strong>
+                          <ol className="ml-4 list-decimal">
+                            {p.spec.requirements.map((r, i) => (
+                              <li key={i}>{r}</li>
+                            ))}
+                          </ol>
+                        </div>
+                        {p.spec.starter.required && (
+                          <p>
+                            <strong className="text-[var(--ar-text)]">Prepared {p.spec.starter.kind === 'MODEL_URL' ? 'model' : 'starter'}:</strong> {p.spec.starter.url || 'no link has been added yet (an admin adds it)'}
+                          </p>
+                        )}
+                        {showKey && p.rubric.length > 0 && (
+                          <div>
+                            <strong className="text-[var(--ar-text)]">Marking guide</strong>
+                            <ul className="ml-4 list-disc">
+                              {p.rubric.map((r) => (
+                                <li key={r.criterion}>
+                                  {r.criterion} ({r.maxPoints}){r.lookFor ? ` — ${r.lookFor}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <QuestionText text={p.instructions} className="mt-1 text-xs text-[var(--ar-muted)]" />
+                    )}
                   </li>
                 ))}
               </ol>

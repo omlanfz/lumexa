@@ -5,6 +5,7 @@
 // free of string-built paths.
 
 import api from '@/lib/axios';
+import type { LcAssessmentFile } from '../littleCoders/types.ts';
 import { clockOffsetMs } from './clock.ts';
 import type {
   AttemptState,
@@ -70,8 +71,43 @@ export const saveCode = (attemptId: string, questionId: string, code: string) =>
 
 export const submitAttempt = (
   attemptId: string,
-  payload: { answers: { questionId: string; selectedIndex: number | null }[]; practical?: { questionId: string; code: string }[] },
+  payload: {
+    answers: { questionId: string; selectedIndex: number | null }[];
+    practical?: { questionId: string; code: string }[];
+    /** Little Coders: the latest links and note travel with the submission (the files are already uploaded). */
+    project?: { questionId: string; links: string[]; note?: string };
+  },
 ) => api.post<SubmitResponse>(`/assessments/attempts/${attemptId}/submit`, payload).then((r) => r.data);
+
+// ── Little Coders practical: links, note and files ──────────────────────────
+
+export const savePractical = (attemptId: string, body: { questionId: string; links: string[]; note?: string }) =>
+  api.post<{ saved: boolean; savedAt: string; links: string[]; note: string | null }>(`/assessments/attempts/${attemptId}/practical`, body).then((r) => r.data);
+
+/** Uploads project files (all of them or none). Progress is reported 0–100. */
+export const uploadPracticalFiles = (attemptId: string, files: File[], onProgress?: (percent: number) => void) => {
+  const form = new FormData();
+  for (const f of files) form.append('files', f);
+  return api
+    .post<LcAssessmentFile[]>(`/assessments/attempts/${attemptId}/files`, form, {
+      onUploadProgress: (e) => {
+        if (onProgress && e.total) onProgress(Math.round((e.loaded / e.total) * 100));
+      },
+    })
+    .then((r) => r.data);
+};
+
+/** Takes a file back before submitting; returns the files that remain. */
+export const removePracticalFile = (attemptId: string, fileId: string) =>
+  api.delete<LcAssessmentFile[]>(`/assessments/attempts/${attemptId}/files/${fileId}`).then((r) => r.data);
+
+/** Little Coders Final Assessment (admin): which version of the practical is given by default. */
+export const setAssessmentVariant = (assessmentId: string, variant: 'SCRATCH_AI' | 'PYTHON' | null) =>
+  api.patch<{ assessmentId: string; activeVariant: string | null }>(`/assessments/${assessmentId}/variant`, { variant }).then((r) => r.data);
+
+/** …or for one class (admin). */
+export const setClassVariant = (scheduledLessonId: string, variant: 'SCRATCH_AI' | 'PYTHON' | null) =>
+  api.patch<{ updated: number; variant: string | null }>(`/assessments/scheduled-lessons/${scheduledLessonId}/variant`, { variant }).then((r) => r.data);
 
 // ── Teacher ──────────────────────────────────────────────────────────────────
 
@@ -99,8 +135,19 @@ export interface TestPreview {
   counts: { mcq: number; trueFalse: number; practical: number };
   totalMarks: number;
   meetsStandard: boolean;
+  format?: 'STANDARD' | 'LITTLE_CODERS_V2';
   questions: { id: string; order: number; kind: 'MCQ' | 'TRUE_FALSE'; text: string; options: string[]; correctIndex?: number; explanation?: string | null }[];
-  codingProjects: { id: string; title: string; instructions: string; language: string; maxScore: number; rubric: { criterion: string; maxPoints: number; lookFor?: string }[] }[];
+  codingProjects: {
+    id: string;
+    title: string;
+    instructions: string;
+    language: string;
+    maxScore: number;
+    rubric: { criterion: string; maxPoints: number; lookFor?: string }[];
+    /** Little Coders: the structured project and which version it is (staff only). */
+    spec?: import('../littleCoders/types.ts').LcPracticalSpec | null;
+    variantKey?: string | null;
+  }[];
 }
 
 export const getTestPreview = (assessmentId: string, withAnswers: boolean) =>

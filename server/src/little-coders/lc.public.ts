@@ -50,7 +50,9 @@ export interface PlatformDirectoryEntry {
   isActive: boolean;
 }
 
-export type PlatformDirectory = Partial<Record<LcPlatformKey, PlatformDirectoryEntry>>;
+export type PlatformDirectory = Partial<
+  Record<LcPlatformKey, PlatformDirectoryEntry>
+>;
 
 /** A platform button as the browser receives it: where it opens, or null when it is switched off. */
 export interface LcResolvedButton {
@@ -62,7 +64,10 @@ export interface LcResolvedButton {
   url: string | null;
 }
 
-export type LcProjectCardShared = Omit<LcProjectCard, 'teacherInstructions' | 'platforms'> & {
+export type LcProjectCardShared = Omit<
+  LcProjectCard,
+  'teacherInstructions' | 'platforms'
+> & {
   platforms: LcResolvedButton[];
 };
 
@@ -84,7 +89,10 @@ export interface LcTeacherPrep {
   teacherInstructions: string;
 }
 
-export function resolveButtons(buttons: LcPlatformButton[], directory: PlatformDirectory): LcResolvedButton[] {
+export function resolveButtons(
+  buttons: LcPlatformButton[],
+  directory: PlatformDirectory,
+): LcResolvedButton[] {
   return buttons.map((b) => {
     const entry = directory[b.platform];
     return {
@@ -122,7 +130,10 @@ export function isLcLessonRow(row: LcRow): boolean {
 }
 
 /** The shared payload of a Little Coders lesson, or null for every other lesson. */
-export function readLcShared(row: LcRow, directory: PlatformDirectory): LcSharedLesson | null {
+export function readLcShared(
+  row: LcRow,
+  directory: PlatformDirectory,
+): LcSharedLesson | null {
   if (!isLcLessonRow(row)) return null;
   const experience = readExperience(row.experience);
   if (!experience) return null; // broken data: the page falls back to the Markdown text
@@ -139,7 +150,12 @@ export function readLcShared(row: LcRow, directory: PlatformDirectory): LcShared
           return { ...rest, platforms: resolveButtons(platforms, directory) };
         })()
       : null,
-    homeworkCard: homework ? { ...homework, platforms: resolveButtons(homework.platforms, directory) } : null,
+    homeworkCard: homework
+      ? {
+          ...homework,
+          platforms: resolveButtons(homework.platforms, directory),
+        }
+      : null,
   };
 }
 
@@ -156,10 +172,16 @@ export function readLcTeacherPrep(row: LcRow): LcTeacherPrep | null {
 }
 
 /** Builds the directory the resolver needs from CodingPlatform rows. */
-export function directoryOf(rows: { key: string; name: string; startUrl: string; isActive: boolean }[]): PlatformDirectory {
+export function directoryOf(
+  rows: { key: string; name: string; startUrl: string; isActive: boolean }[],
+): PlatformDirectory {
   const out: PlatformDirectory = {};
   for (const r of rows) {
-    out[r.key as LcPlatformKey] = { name: r.name, startUrl: r.startUrl, isActive: r.isActive };
+    out[r.key as LcPlatformKey] = {
+      name: r.name,
+      startUrl: r.startUrl,
+      isActive: r.isActive,
+    };
   }
   return out;
 }

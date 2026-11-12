@@ -19,7 +19,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, Lock, RefreshCw, Users, X } from 'lucide-react';
-import { errorMessage, getClassStatus, lockClassTests, lockStudentTest, reopenStudentTest } from '@/lib/assessment/api';
+import { errorMessage, getClassStatus, lockClassTests, lockStudentTest, reopenStudentTest, setClassVariant } from '@/lib/assessment/api';
+import { getStoredRole } from '@/lib/storage';
 import {
   describeLockAll,
   describeLockOne,
@@ -160,6 +161,28 @@ export default function ClassTestMonitor({
     });
   };
 
+  // Little Coders Final Assessment: which version of the practical this class is given. An admin can set a
+  // class apart from the default; everyone else just sees which one it is.
+  const [role, setRole] = useState<string | null>(null);
+  useEffect(() => {
+    setRole(getStoredRole());
+  }, []);
+  const lcFinal = overview?.assessment?.format === 'LITTLE_CODERS_V2' && overview.assessment.type === 'FINAL_TEST';
+  const variantName = (v: string | null | undefined) => (v === 'PYTHON' ? 'Python · EduBlocks' : 'Scratch / AI · Stretch3');
+  const changeVariant = async (value: string) => {
+    setBusy('variant');
+    setNotice(null);
+    try {
+      await setClassVariant(scheduledLessonId, value === '' ? null : (value as 'SCRATCH_AI' | 'PYTHON'));
+      showNotice({ tone: 'success', text: 'Saved. Learners who have not started yet get this version; anyone already in the test keeps theirs.', failures: [] });
+      await refresh(true);
+    } catch (err) {
+      showNotice({ tone: 'warning', text: errorMessage(err, 'The version could not be changed. Please try again.'), failures: [] });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const students: ClassTestStudent[] = overview?.students ?? [];
   const summary = summarizeClass(students);
   const hasCoding = (overview?.assessment?.counts.practical ?? 0) > 0;
@@ -278,6 +301,29 @@ export default function ClassTestMonitor({
                 <RefreshCw size={11} className="animate-spin" /> Can’t reach Lumexa — retrying…
               </span>
             )}
+            {lcFinal && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ar-muted)]" data-testid="practical-version">
+                <span aria-hidden="true">🧩</span>
+                {role === 'ADMIN' ? (
+                  <label className="inline-flex items-center gap-1.5">
+                    Practical
+                    <select
+                      value={overview?.assessment?.classVariant ?? ''}
+                      disabled={busy !== null}
+                      onChange={(e) => void changeVariant(e.target.value)}
+                      aria-label="Which practical version this class is given"
+                      className="rounded-md border border-[var(--ar-border-strong)] bg-[var(--ar-bg)] px-1.5 py-0.5 text-[11px] text-[var(--ar-text)]"
+                    >
+                      <option value="">Default ({variantName(overview?.assessment?.activeVariant)})</option>
+                      <option value="SCRATCH_AI">Scratch / AI · Stretch3</option>
+                      <option value="PYTHON">Python · EduBlocks</option>
+                    </select>
+                  </label>
+                ) : (
+                  <span>Practical: {variantName(overview?.assessment?.classVariant ?? overview?.assessment?.activeVariant)}</span>
+                )}
+              </span>
+            )}
             {lockAllButton}
             {layout !== 'page' && (
               <button
@@ -360,6 +406,7 @@ export default function ClassTestMonitor({
                       now={now}
                       clockOffsetMs={overview.clockOffsetMs}
                       hasCoding={hasCoding}
+                      littleCoders={overview?.assessment?.format === 'LITTLE_CODERS_V2'}
                       canLock={canLock}
                       roomy={roomy}
                       busy={busy === s.scheduledLessonId}

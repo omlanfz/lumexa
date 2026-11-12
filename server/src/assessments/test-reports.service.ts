@@ -79,7 +79,9 @@ const LC_TYPE_LABEL: Record<string, string> = {
 };
 
 function typeLabelFor(type: string, littleCoders: boolean): string {
-  return (littleCoders ? LC_TYPE_LABEL[type] : undefined) ?? TYPE_LABEL[type] ?? type;
+  return (
+    (littleCoders ? LC_TYPE_LABEL[type] : undefined) ?? TYPE_LABEL[type] ?? type
+  );
 }
 
 /** What the student handed in for a Little Coders practical, frozen on the report when they submitted. */
@@ -758,7 +760,7 @@ export class TestReportsService {
         },
       });
       if (releaseFiles) {
-        marked = await this.files!.finaliseAttempt(tx, report.attemptId);
+        marked = await this.files.finaliseAttempt(tx, report.attemptId);
       }
     });
     // After the commit (the score is stored): take the files out of R2. This never throws — a file
@@ -919,6 +921,9 @@ export class TestReportsService {
           report.hasCodingProject && report.codingScore !== null
             ? { score: report.codingScore, max: report.codingMaxScore ?? 0 }
             : null,
+        ...(isLittleCoders
+          ? { codingLabel: 'Practical project (marked by the teacher)' }
+          : {}),
         total: report.totalScore,
         totalMax: report.totalMaxScore,
         percentage: report.percentage,

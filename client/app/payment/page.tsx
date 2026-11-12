@@ -92,8 +92,10 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
   ],
   little: [
     { code: "Course 1", name: "Scratch Adventures" },
-    { code: "Course 2", name: "Python for Young Builders" },
+    { code: "Course 2", name: "Scratch Game Studio" },
     { code: "Course 3", name: "AI for Kids: Smart Projects" },
+    { code: "Course 4", name: "Python Explorers" },
+    { code: "Course 5", name: "Python Creative Lab" },
   ],
   data: [
     { code: "Course 1", name: "Python for Data" },
@@ -108,7 +110,7 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
   "game-creator":        [{ code: "Course 1", name: "Roblox World Builder" }, { code: "Course 2", name: "Python Arcade Games" }, { code: "Course 3", name: "Advanced Game Design" }],
   "ai-builder":          [{ code: "Course 1", name: "Python and AI Foundations" }, { code: "Course 2", name: "Computer Vision Projects" }, { code: "Course 3", name: "Language Models and Chatbots" }],
   "web-developer":       [{ code: "Course 1", name: "HTML and CSS Mastery" }, { code: "Course 2", name: "JavaScript and Interactivity" }, { code: "Course 3", name: "React and Full-Stack Web" }],
-  "little-coders":       [{ code: "Course 1", name: "Scratch Adventures" }, { code: "Course 2", name: "Python for Young Builders" }, { code: "Course 3", name: "AI for Kids: Smart Projects" }],
+  "little-coders":       [{ code: "Course 1", name: "Scratch Adventures" }, { code: "Course 2", name: "Scratch Game Studio" }, { code: "Course 3", name: "AI for Kids: Smart Projects" }, { code: "Course 4", name: "Python Explorers" }, { code: "Course 5", name: "Python Creative Lab" }],
   "data-scientist":      [{ code: "Course 1", name: "Python for Data" }, { code: "Course 2", name: "Data Visualisation" }, { code: "Course 3", name: "Machine Learning Projects" }],
   "digital-independence":[{ code: "Course 1", name: "Build Your Professional Identity" }, { code: "Course 2", name: "Skills That Pay" }, { code: "Course 3", name: "Professional Presence & Opportunity Building" }],
 };

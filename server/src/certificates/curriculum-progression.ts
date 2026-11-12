@@ -37,7 +37,7 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
     slug: 'little-coders',
     title: 'Little Coders',
     blurb:
-      'A gentle, project-driven introduction to computing and a first taste of AI.',
+      'Five hands-on courses: Scratch animations and games, AI-powered projects, and first block-based Python.',
     pdfFile: 'little-coders-path-curriculum.pdf',
   },
   'game-creator': {

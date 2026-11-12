@@ -26,7 +26,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, CloudOff, Loader2, ListChecks, MonitorUp, Send, Timer } from 'lucide-react';
 import { AnswerQueue, QueueSnapshot } from '@/lib/assessment/answerQueue';
-import { errorMessage, getAttempt, httpStatus, isNetworkError, saveAnswer, saveCode, submitAttempt } from '@/lib/assessment/api';
+import {
+  errorMessage,
+  getAttempt,
+  httpStatus,
+  isNetworkError,
+  removePracticalFile,
+  saveAnswer,
+  saveCode,
+  savePractical,
+  submitAttempt,
+  uploadPracticalFiles,
+} from '@/lib/assessment/api';
 import { elapsedMs } from '@/lib/assessment/clock';
 import {
   countAnswered,
@@ -37,7 +48,10 @@ import {
   splitSections,
   unansweredQuestions,
 } from '@/lib/assessment/progress';
+import { checkSelectedFiles, cleanLinks } from '@/lib/assessment/lcPractical';
 import type { AttemptQuestion, AttemptView, CodingProject } from '@/lib/assessment/types';
+import type { LcAssessmentFile } from '@/lib/littleCoders/types';
+import LcPracticalCard from './LcPracticalCard';
 import QuestionText, { OptionText } from './QuestionText';
 
 const CODE_AUTOSAVE_MS = 1200;
@@ -47,6 +61,10 @@ interface Mirror {
   answers: Record<string, number | null>;
   code?: string;
   codeAt?: number;
+  /** Little Coders: the project links and note typed so far. */
+  links?: string[];
+  note?: string;
+  practicalAt?: number;
 }
 
 function readMirror(attemptId: string): Mirror | null {
@@ -81,6 +99,9 @@ export default function TestTakingView({
 }) {
   const questions = attempt.questions;
   const project = attempt.codingProject;
+  // Little Coders: the practical is handed in as links, a note and files instead of typed code.
+  const lcPractical = attempt.assessment.format === 'LITTLE_CODERS_V2' && project?.lc ? project.lc : null;
+  const lcMeta = attempt.assessment.lc ?? null;
   const total = questions.length;
   const codingStep = project ? total : -1;
   const reviewStep = total + (project ? 1 : 0);
@@ -109,12 +130,30 @@ export default function TestTakingView({
         codeFromBackup = true;
       }
     }
-    return { selections, restoredFromBackup, code, codeFromBackup };
+    // Little Coders: the links and note — the server's copy, unless this device has a newer one.
+    let links = lcPractical?.links ?? [];
+    let note = lcPractical?.note ?? '';
+    let practicalFromBackup = false;
+    if (lcPractical && mirror?.practicalAt && (mirror.links || mirror.note !== undefined)) {
+      const serverAt = project?.savedAt ? new Date(project.savedAt).getTime() : 0;
+      if (mirror.practicalAt > serverAt) {
+        links = mirror.links ?? links;
+        note = mirror.note ?? note;
+        practicalFromBackup = true;
+      }
+    }
+    return { selections, restoredFromBackup, code, codeFromBackup, links, note, practicalFromBackup };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt.id]);
 
   const [selections, setSelections] = useState<Record<string, number | null>>(initial.selections);
   const [code, setCode] = useState(initial.code);
+  const [links, setLinks] = useState<string[]>(initial.links);
+  const [note, setNote] = useState(initial.note);
+  const [files, setFiles] = useState<LcAssessmentFile[]>(lcPractical?.files ?? []);
+  const [uploading, setUploading] = useState<{ names: string[]; percent: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [practicalSave, setPracticalSave] = useState<CodeSave>('idle');
   // Coming back to a test in progress (a refresh, a dropped connection): pick
   // up at the first question that has no answer yet, not at question 1.
   const [step, setStep] = useState(() => {
@@ -136,6 +175,12 @@ export default function TestTakingView({
   const codeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const codeRef = useRef(code);
   codeRef.current = code;
+  const linksRef = useRef(links);
+  linksRef.current = links;
+  const noteRef = useRef(note);
+  noteRef.current = note;
+  const practicalDirty = useRef(initial.practicalFromBackup);
+  const practicalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const onClosedRef = useRef(onClosed);
   onClosedRef.current = onClosed;
@@ -181,14 +226,14 @@ export default function TestTakingView({
   // Warn before leaving with answers that have not reached the server.
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (queueSnap.unsaved > 0 || codeSave === 'saving' || codeSave === 'error') {
+      if (queueSnap.unsaved > 0 || codeSave === 'saving' || codeSave === 'error' || practicalSave === 'saving' || practicalSave === 'error' || !!uploading) {
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [queueSnap.unsaved, codeSave]);
+  }, [queueSnap.unsaved, codeSave, practicalSave, uploading]);
 
   // ── Coding project autosave ────────────────────────────────────────────────
   const flushCode = useCallback(async () => {
@@ -224,6 +269,87 @@ export default function TestTakingView({
     codeTimer.current = setTimeout(() => void flushCode(), CODE_AUTOSAVE_MS);
   };
 
+  // ── Little Coders practical: links, note and files ────────────────────────
+  const maxLinks = lcPractical?.limits.maxLinks ?? 5;
+  const flushPractical = useCallback(async () => {
+    if (!lcPractical || !project || !practicalDirty.current) return;
+    practicalDirty.current = false;
+    setPracticalSave('saving');
+    try {
+      await savePractical(attempt.id, { questionId: project.id, links: cleanLinks(linksRef.current, maxLinks), note: noteRef.current });
+      setPracticalSave('saved');
+    } catch (err) {
+      practicalDirty.current = true;
+      setPracticalSave('error');
+      if (httpStatus(err) === 409) onClosedRef.current(); // the test is closed
+      if (!isNetworkError(err) && httpStatus(err) !== undefined && httpStatus(err)! < 500) return; // not retryable
+      practicalTimer.current = setTimeout(() => void flushPractical(), 4000);
+    }
+  }, [attempt.id, project, lcPractical, maxLinks]);
+
+  useEffect(() => {
+    if (initial.practicalFromBackup) void flushPractical();
+    return () => {
+      if (practicalTimer.current) clearTimeout(practicalTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const touchPractical = (nextLinks: string[], nextNote: string) => {
+    practicalDirty.current = true;
+    setPracticalSave('saving');
+    writeMirror(attempt.id, { answers: selectionsRef.current, code: codeRef.current, links: nextLinks, note: nextNote, practicalAt: Date.now() });
+    if (practicalTimer.current) clearTimeout(practicalTimer.current);
+    practicalTimer.current = setTimeout(() => void flushPractical(), CODE_AUTOSAVE_MS);
+  };
+  const onLinksChange = (next: string[]) => {
+    setLinks(next);
+    linksRef.current = next;
+    touchPractical(next, noteRef.current);
+  };
+  const onNoteChange = (next: string) => {
+    setNote(next);
+    noteRef.current = next;
+    touchPractical(linksRef.current, next);
+  };
+
+  const onUploadFiles = async (picked: File[]) => {
+    if (!lcPractical) return;
+    const problem = checkSelectedFiles(
+      picked.map((f) => ({ name: f.name, size: f.size })),
+      { existing: files.filter((f) => !f.removed).length, maxFiles: lcPractical.limits.maxFiles, maxFileMb: lcPractical.limits.maxFileMb },
+    );
+    if (problem) {
+      setUploadError(problem);
+      return;
+    }
+    setUploadError(null);
+    setUploading({ names: picked.map((f) => f.name), percent: 0 });
+    try {
+      const created = await uploadPracticalFiles(attempt.id, picked, (percent) => setUploading((u) => (u ? { ...u, percent } : u)));
+      setFiles((prev) => [...prev, ...created]);
+    } catch (err) {
+      if (httpStatus(err) === 409) onClosedRef.current(); // maybe the teacher locked the test: find out
+      setUploadError(
+        isNetworkError(err)
+          ? "We couldn't reach Lumexa, so nothing was uploaded. Check your connection and choose the files again."
+          : errorMessage(err, 'Your files could not be uploaded. Please try again.'),
+      );
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const onRemoveFile = async (fileId: string) => {
+    setUploadError(null);
+    try {
+      setFiles(await removePracticalFile(attempt.id, fileId));
+    } catch (err) {
+      if (httpStatus(err) === 409) onClosedRef.current();
+      setUploadError(isNetworkError(err) ? "We couldn't reach Lumexa, so the file was not removed. Please try again." : errorMessage(err, 'The file could not be removed.'));
+    }
+  };
+
   // ── Answers ────────────────────────────────────────────────────────────────
   const choose = (questionId: string, index: number | null) => {
     const next = { ...selectionsRef.current, [questionId]: index };
@@ -250,9 +376,12 @@ export default function TestTakingView({
     setSubmitError(null);
     try {
       if (codeTimer.current) clearTimeout(codeTimer.current);
+      if (practicalTimer.current) clearTimeout(practicalTimer.current);
       await submitAttempt(attempt.id, {
         answers: questions.map((q) => ({ questionId: q.id, selectedIndex: selections[q.id] ?? null })),
-        practical: project ? [{ questionId: project.id, code }] : undefined,
+        // Little Coders hands in links, a note and files (already uploaded); every other test sends its code.
+        practical: project && !lcPractical ? [{ questionId: project.id, code }] : undefined,
+        project: project && lcPractical ? { questionId: project.id, links: cleanLinks(links, maxLinks), note } : undefined,
       });
       try {
         localStorage.removeItem(mirrorKey(attempt.id));
@@ -271,17 +400,24 @@ export default function TestTakingView({
     }
   };
 
-  const sections = useMemo(() => splitSections(questions), [questions]);
+  const sections = useMemo(
+    () => splitSections(questions, lcPractical ? { MCQ: lcMeta?.sections.find((x) => x.key === 'mcq')?.label ?? '01 · Think in Blocks', TRUE_FALSE: lcMeta?.sections.find((x) => x.key === 'trueFalse')?.label ?? '02 · Quick Check' } : undefined),
+    [questions, lcPractical, lcMeta],
+  );
   const elapsed = elapsedMs(attempt.startedAt, now, attempt.clockOffsetMs);
   const current = step < total ? questions[step] : null;
-  const codeWritten = !!project && !!code.trim() && code.trim() !== (project.starterCode ?? '').trim();
+  const liveFiles = files.filter((f) => !f.removed);
+  const codeWritten = lcPractical
+    ? cleanLinks(links, maxLinks).length > 0 || liveFiles.length > 0
+    : !!project && !!code.trim() && code.trim() !== (project.starterCode ?? '').trim();
+  const practicalLabel = lcPractical ? (lcMeta?.sections.find((x) => x.key === 'practical')?.label ?? '03 · Build It!') : 'Coding project';
   const pct = total ? (answered / total) * 100 : 0;
 
   const saveBadge = queueSnap.fatal ? (
     <Badge tone="danger" icon={<CloudOff size={13} />}>This test can no longer be changed</Badge>
-  ) : queueSnap.hasError ? (
+  ) : queueSnap.hasError || practicalSave === 'error' ? (
     <Badge tone="danger" icon={<CloudOff size={13} />}>Not saved yet — retrying…</Badge>
-  ) : queueSnap.unsaved > 0 || codeSave === 'saving' ? (
+  ) : queueSnap.unsaved > 0 || codeSave === 'saving' || practicalSave === 'saving' || !!uploading ? (
     <Badge tone="muted" icon={<Loader2 size={13} className="animate-spin" />}>Saving…</Badge>
   ) : (
     <Badge tone="ok" icon={<Check size={13} />}>All answers saved</Badge>
@@ -293,7 +429,10 @@ export default function TestTakingView({
       <header className="sticky top-0 z-30 border-b border-[var(--ar-border)] bg-[var(--ar-surface)]/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-[2200px] items-center gap-3 px-3 py-2 @4xl:px-6">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">{attempt.assessment.courseTitle}</p>
+            <p className="truncate text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">
+              {lcMeta ? `${lcMeta.brand} · ${lcMeta.title}` : attempt.assessment.courseTitle}
+              {lcMeta ? ` · ${lcMeta.minutes} min · ${lcMeta.marks} marks` : ''}
+            </p>
             <h1 className="truncate text-sm font-bold leading-tight text-[var(--ar-text)] @4xl:text-base">{attempt.assessment.title}</h1>
           </div>
 
@@ -302,7 +441,7 @@ export default function TestTakingView({
               <span className="tabular-nums">
                 <strong className="text-[var(--ar-text)]">{answered}</strong> of {total} answered
               </span>
-              {project && <span>+ coding</span>}
+              {project && <span>{lcPractical ? '+ project' : '+ coding'}</span>}
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-[var(--ar-surface-2)]">
               <div className="h-full rounded-full bg-[var(--ar-accent)] transition-all" style={{ width: `${pct}%` }} />
@@ -390,7 +529,7 @@ export default function TestTakingView({
                 step === codingStep ? 'border-[var(--ar-accent)] bg-[var(--ar-accent-soft)]' : 'border-[var(--ar-border-strong)] hover:bg-[var(--ar-surface-2)]'
               }`}
             >
-              💻 Coding project {codeWritten ? '✓' : ''}
+              💻 {practicalLabel} {codeWritten ? '✓' : ''}
             </button>
           )}
           <button
@@ -434,7 +573,24 @@ export default function TestTakingView({
             />
           )}
 
-          {step === codingStep && project && (
+          {step === codingStep && project && lcPractical && (
+            <LcPracticalCard
+              project={project}
+              lc={lcPractical}
+              links={links}
+              note={note}
+              files={files}
+              uploading={uploading}
+              uploadError={uploadError}
+              save={practicalSave}
+              onLinks={onLinksChange}
+              onNote={onNoteChange}
+              onUpload={(picked) => void onUploadFiles(picked)}
+              onRemove={(id) => void onRemoveFile(id)}
+              headingRef={headingRef}
+            />
+          )}
+          {step === codingStep && project && !lcPractical && (
             <CodingCard project={project} code={code} codeSave={codeSave} onChange={onCodeChange} headingRef={headingRef} />
           )}
 
@@ -446,10 +602,11 @@ export default function TestTakingView({
               questions={questions}
               project={project}
               codeWritten={codeWritten}
+              lcHandIn={lcPractical ? { links: cleanLinks(links, maxLinks).length, files: liveFiles.length, uploading: !!uploading } : null}
               confirming={confirming}
               submitting={submitting}
               submitError={submitError}
-              disabled={queueSnap.fatal}
+              disabled={queueSnap.fatal || !!uploading}
               onGoTo={goTo}
               onAsk={() => setConfirming(true)}
               onCancel={() => {
@@ -515,8 +672,8 @@ export default function TestTakingView({
               ))}
               {project && (
                 <li className="flex justify-between">
-                  <span>Coding project</span>
-                  <span className="text-[var(--ar-text)]">{codeWritten ? 'Started ✓' : 'Not started'}</span>
+                  <span>{practicalLabel}</span>
+                  <span className="text-[var(--ar-text)]">{codeWritten ? (lcPractical ? 'Handed in ✓' : 'Started ✓') : 'Not started'}</span>
                 </li>
               )}
             </ul>
@@ -736,6 +893,7 @@ function ReviewCard({
   questions,
   project,
   codeWritten,
+  lcHandIn,
   confirming,
   submitting,
   submitError,
@@ -752,6 +910,8 @@ function ReviewCard({
   questions: AttemptQuestion[];
   project: CodingProject | null;
   codeWritten: boolean;
+  /** Little Coders: what has been handed in (null for every other test). */
+  lcHandIn: { links: number; files: number; uploading: boolean } | null;
   confirming: boolean;
   submitting: boolean;
   submitError: string | null;
@@ -777,10 +937,22 @@ function ReviewCard({
             {unanswered.length === 0 ? <Check size={15} className="text-[var(--ar-success)]" /> : <AlertTriangle size={15} className="text-[var(--ar-warning)]" />}
             {answered} of {total} questions answered
           </li>
-          {project && (
+          {project && !lcHandIn && (
             <li className="flex items-center gap-2">
               {codeWritten ? <Check size={15} className="text-[var(--ar-success)]" /> : <AlertTriangle size={15} className="text-[var(--ar-warning)]" />}
               {codeWritten ? 'Coding project written' : "You haven't written any code for the coding project yet"}
+            </li>
+          )}
+          {project && lcHandIn && (
+            <li className="flex items-start gap-2">
+              {lcHandIn.uploading ? <Loader2 size={15} className="mt-0.5 animate-spin text-[var(--ar-muted)]" /> : codeWritten ? <Check size={15} className="mt-0.5 text-[var(--ar-success)]" /> : <AlertTriangle size={15} className="mt-0.5 text-[var(--ar-warning)]" />}
+              <span>
+                {lcHandIn.uploading
+                  ? 'Your files are still uploading — wait a moment'
+                  : codeWritten
+                    ? `Project handed in: ${[lcHandIn.links ? `${lcHandIn.links} link${lcHandIn.links === 1 ? '' : 's'}` : '', lcHandIn.files ? `${lcHandIn.files} file${lcHandIn.files === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')}`
+                    : "You haven't handed in a link or a file for your project yet — your teacher can't mark it without one"}
+              </span>
             </li>
           )}
         </ul>
@@ -823,7 +995,7 @@ function ReviewCard({
           <div role="alertdialog" aria-labelledby="confirm-title" className="space-y-3 rounded-xl border border-[var(--ar-border-strong)] bg-[var(--ar-bg)] p-4">
             <p id="confirm-title" className="text-sm font-semibold text-[var(--ar-text)]">Submit your test now?</p>
             <p className="text-xs text-[var(--ar-muted)]">
-              You can&apos;t change your answers after submitting.
+              You can&apos;t change your answers{lcHandIn ? ' or your project' : ''} after submitting.
               {unanswered.length > 0 && ` ${unanswered.length} unanswered question${unanswered.length === 1 ? '' : 's'} will count as incorrect.`}
             </p>
             {submitError && (

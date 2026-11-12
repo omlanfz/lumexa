@@ -268,7 +268,7 @@ function Intro({
       <div className="flex items-start gap-3">
         <ClipboardList size={28} className="mt-0.5 flex-shrink-0 text-[var(--ar-accent)]" />
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">{testTypeLabel(a.type)}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">{testTypeLabel(a.type, a.format)}</p>
           <h2 className="text-lg font-bold leading-tight text-[var(--ar-text)]">{a.title}</h2>
         </div>
       </div>
@@ -279,13 +279,38 @@ function Intro({
         </p>
       ) : (
         <>
+          {a.lc && (
+            <div className="rounded-xl border border-violet-300/50 bg-gradient-to-br from-violet-600 to-teal-500 p-4 text-white" data-testid="lc-intro">
+              <p className="text-[11px] font-bold uppercase tracking-widest text-white/80">{a.lc.brand}</p>
+              <p className="text-xl font-extrabold leading-tight">{a.lc.title}</p>
+              <p className="mt-1 text-sm font-medium text-white/90">
+                {a.lc.minutes} minutes · {a.lc.marks} marks{a.lc.negativeMarking ? '' : ' · no negative marking'}
+              </p>
+              <ul className="mt-3 space-y-1.5 text-sm" aria-label="The sections of this assessment">
+                {a.lc.sections.map((s) => (
+                  <li key={s.key} className="flex items-start justify-between gap-3 rounded-lg bg-white/15 px-3 py-1.5">
+                    <span className="min-w-0">
+                      <strong>{s.label}</strong>
+                      <span className="block text-xs text-white/85">{s.detail}</span>
+                    </span>
+                    <span className="flex-shrink-0 text-right text-xs font-semibold tabular-nums">
+                      {s.marks !== null ? `${s.marks} marks · ` : ''}
+                      {s.minutes} min
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <ul className="space-y-1.5 text-sm text-[var(--ar-text)]">
             <li>
               📝 <strong>{objective} questions</strong> — {parts.join(' and ')}. Each is worth 1 mark.
             </li>
             {a.counts.practical > 0 && (
               <li>
-                💻 Plus <strong>one small coding project</strong> (about 15 minutes) that your teacher marks.
+                💻 Plus <strong>one small {a.lc ? 'practical project' : 'coding project'}</strong>
+                {a.lc ? ` (about ${a.lc.sections.find((s) => s.key === 'practical')?.minutes ?? 20} minutes, ${a.lc.sections.find((s) => s.key === 'practical')?.marks ?? 25} marks)` : ' (about 15 minutes)'} that your teacher marks
+                {a.lc ? '. You build it in Stretch3 or EduBlocks and hand in a link and/or your project file.' : '.'}
               </li>
             )}
             <li>

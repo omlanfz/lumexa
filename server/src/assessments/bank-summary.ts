@@ -5,7 +5,12 @@
 // assessments service (classroom status, admin page) and the lesson-details
 // endpoint, so every screen reports the same numbers.
 
-import { AssessmentFormat, PrismaClient, QuestionKind, SessionType } from '@prisma/client';
+import {
+  AssessmentFormat,
+  PrismaClient,
+  QuestionKind,
+  SessionType,
+} from '@prisma/client';
 import { MARKS_PER_QUESTION, TEST_SHAPES } from './bank/bank.constants';
 import { rootBankId } from './linked-assessment';
 import { LC_ASSESSMENT } from '../little-coders/lc.constants';
@@ -36,7 +41,10 @@ export async function getBankSummary(
     prisma.practicalQuestion.count({
       where: { assessmentId: rootId, isPublished: true },
     }),
-    prisma.assessment.findUnique({ where: { id: rootId }, select: { format: true } }),
+    prisma.assessment.findUnique({
+      where: { id: rootId },
+      select: { format: true },
+    }),
   ]);
   const mcq =
     byKind.find((k) => k.questionType === QuestionKind.MCQ)?._count._all ?? 0;
@@ -49,8 +57,13 @@ export async function getBankSummary(
     const wantPractical = assessment.type === SessionType.FINAL_TEST ? 2 : 1;
     return {
       counts: { mcq, trueFalse, practical },
-      totalMarks: (mcq + trueFalse) * MARKS_PER_QUESTION + (practical > 0 ? LC_ASSESSMENT.practical.marks : 0),
-      meetsStandard: mcq === LC_ASSESSMENT.mcq.count && trueFalse === LC_ASSESSMENT.trueFalse.count && practical === wantPractical,
+      totalMarks:
+        (mcq + trueFalse) * MARKS_PER_QUESTION +
+        (practical > 0 ? LC_ASSESSMENT.practical.marks : 0),
+      meetsStandard:
+        mcq === LC_ASSESSMENT.mcq.count &&
+        trueFalse === LC_ASSESSMENT.trueFalse.count &&
+        practical === wantPractical,
       format: AssessmentFormat.LITTLE_CODERS_V2,
     };
   }

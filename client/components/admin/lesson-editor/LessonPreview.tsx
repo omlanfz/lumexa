@@ -33,6 +33,8 @@ export interface Draft {
   miniQuiz: unknown[];
   visuals: unknown[];
   projectLinks: { title: string; url: string }[];
+  /** Little Coders: the drafts of the page, video and cards (checked by the server's own validators). */
+  lc?: { experience?: unknown; previewVideo?: unknown; projectCard?: unknown; homeworkCard?: unknown };
 }
 
 /** Sends the draft to the server (debounced) and returns what a learner would get, plus every problem. */
@@ -55,6 +57,7 @@ export function usePreview(draft: Draft, enabled: boolean) {
           miniQuiz: draft.miniQuiz,
           visuals: draft.visuals,
           projectLinks: draft.projectLinks.filter((p) => p.title.trim() && p.url.trim()),
+          ...(draft.lc ?? {}),
         })
         .then((res) => {
           if (cancelled) return;

@@ -24,15 +24,19 @@ export interface LcSourceRefs {
   [k: string]: unknown;
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const isObj = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v);
 
-export function readLcRefs(sourceRefs: unknown): NonNullable<LcSourceRefs['lcV2']> | null {
+export function readLcRefs(
+  sourceRefs: unknown,
+): NonNullable<LcSourceRefs['lcV2']> | null {
   if (!isObj(sourceRefs) || !isObj(sourceRefs.lcV2)) return null;
-  const v = sourceRefs.lcV2 as Record<string, unknown>;
+  const v = sourceRefs.lcV2;
   return {
     key: typeof v.key === 'string' ? v.key : '',
     version: typeof v.version === 'number' ? v.version : 0,
-    edited: Array.isArray(v.edited) ? (v.edited.filter((x) => typeof x === 'string') as LcEditableField[]) : [],
+    edited: Array.isArray(v.edited)
+      ? (v.edited.filter((x) => typeof x === 'string') as LcEditableField[])
+      : [],
   };
 }
-

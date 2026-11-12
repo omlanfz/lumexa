@@ -3,6 +3,8 @@
 // Shapes of the assessment + report-card APIs (server/src/assessments). Types
 // only — no runtime code lives here.
 
+import type { LcAssessmentFile, LcAssessmentMeta, LcPracticalSpec } from '../littleCoders/types.ts';
+
 export type QuestionKind = 'MCQ' | 'TRUE_FALSE';
 export type AttemptStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'GRADED';
 export type TestType = 'COURSE_TEST' | 'STAGE_TEST' | 'FINAL_TEST';
@@ -28,6 +30,18 @@ export interface RubricItem {
   lookFor?: string;
 }
 
+/** Little Coders: what the practical screen needs on top of the plain coding project. */
+export interface PracticalLc {
+  /** The brief, the blocks to find and the build requirements (the student's version of the specification). */
+  spec: LcPracticalSpec | null;
+  /** Where "Start Coding" opens (admin-managed), or null when the platform is unknown. */
+  platform: { key: string; name: string; startUrl: string; isActive: boolean } | null;
+  files: LcAssessmentFile[];
+  links: string[];
+  note: string | null;
+  limits: { maxFiles: number; maxFileMb: number; maxLinks: number; maxNote: number };
+}
+
 export interface CodingProject {
   id: string;
   title: string;
@@ -39,6 +53,8 @@ export interface CodingProject {
   code: string;
   savedAt: string | null;
   hasSavedCode: boolean;
+  /** Little Coders only. */
+  lc?: PracticalLc;
 }
 
 export interface AttemptResult {
@@ -74,6 +90,10 @@ export interface AttemptView {
     mcqCount: number;
     trueFalseCount: number;
     totalMarks: number;
+    /** STANDARD, or LITTLE_CODERS_V2 (10 MCQs + 5 True/False + a 25-mark practical project). */
+    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    /** Little Coders: the standardized header and sections. */
+    lc?: LcAssessmentMeta | null;
   };
   student: { id: string; fullName: string };
   questions: AttemptQuestion[];
@@ -119,6 +139,8 @@ export interface LessonTestStatus {
     counts: { mcq: number; trueFalse: number; practical: number };
     totalMarks: number;
     meetsStandard: boolean;
+    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    lc?: LcAssessmentMeta;
   } | null;
   /** The teacher closed this class's test before the student started it. */
   closedAt: string | null;
@@ -175,6 +197,10 @@ export interface ClassTestOverview {
     counts: { mcq: number; trueFalse: number; practical: number };
     totalMarks: number;
     meetsStandard: boolean;
+    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    /** Little Coders: the version of the practical this assessment gives by default, and this class's own choice. */
+    activeVariant?: string | null;
+    classVariant?: string | null;
   } | null;
   students: ClassTestStudent[];
 }
@@ -227,11 +253,22 @@ export interface ReportRubricScore {
   score: number | null;
 }
 
+/** Little Coders: what the student handed in, as the teacher reviews it. */
+export interface ReportLc {
+  spec: Omit<LcPracticalSpec, 'adminEdited'> | null;
+  links: string[];
+  note: string | null;
+  files: { id: string; name: string; size: number; kind: LcAssessmentFile['kind']; removed: boolean }[];
+  /** Every file was removed from storage (the review was finalised). */
+  filesRemoved: boolean;
+}
+
 export interface ReportDetail {
   id: string;
   attemptId: string;
   status: ReportStatus;
   assessmentType: TestType;
+  littleCoders?: boolean;
   typeLabel: string;
   testTitle: string;
   courseTitle: string;
@@ -256,6 +293,8 @@ export interface ReportDetail {
     feedback: string | null;
     evaluatedAt: string | null;
     hasCode: boolean;
+    /** Little Coders only (null for every other program). */
+    lc?: ReportLc | null;
   } | null;
   totals: { total: number | null; totalMax: number; percentage: number | null; passed: boolean | null };
   feedback: string | null;
@@ -293,6 +332,7 @@ export interface ReportListItem {
   status: ReportStatus;
   testTitle: string;
   assessmentType: TestType;
+  littleCoders?: boolean;
   typeLabel: string;
   courseTitle: string;
   submittedAt: string;

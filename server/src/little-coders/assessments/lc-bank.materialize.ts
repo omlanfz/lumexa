@@ -9,13 +9,21 @@
 import { balancedPositions } from '../../assessments/bank/bank.materialize';
 import { TRUE_FALSE_OPTIONS } from '../../assessments/bank/bank.constants';
 import { questionText } from './lc-bank.helpers';
-import type { LcBank, LcMaterializedBank, LcMaterializedPractical, LcPracticalDef } from './lc-bank.types';
+import type {
+  LcBank,
+  LcMaterializedBank,
+  LcMaterializedPractical,
+  LcPracticalDef,
+} from './lc-bank.types';
 
-export const lcBankKey = (bankId: string, key: string) => `LC2:${bankId}#${key}`;
+export const lcBankKey = (bankId: string, key: string) =>
+  `LC2:${bankId}#${key}`;
 
 /** The plain-text form of the three practical sections (for screens that only know `instructions`). */
 export function practicalInstructions(p: LcPracticalDef): string {
-  const blocks = p.spec.blocks.map((g) => `- ${g.category}: ${g.blocks.join('; ')}`).join('\n');
+  const blocks = p.spec.blocks
+    .map((g) => `- ${g.category}: ${g.blocks.join('; ')}`)
+    .join('\n');
   const reqs = p.spec.requirements.map((r, i) => `${i + 1}. ${r}`).join('\n');
   return [
     `Project brief\n${p.spec.brief.join('\n')}`,
@@ -54,13 +62,20 @@ export function materializeLcBank(bank: LcBank): LcMaterializedBank {
       correctIndex: q.answer ? 0 : 1,
       explanation: q.explanation,
       difficulty: q.difficulty,
-      tags: [`topic:${q.topic}`, 'kind:true-false', ...(q.code ? ['code'] : [])],
+      tags: [
+        `topic:${q.topic}`,
+        'kind:true-false',
+        ...(q.code ? ['code'] : []),
+      ],
       order: questions.length,
     });
   });
 
   const practicals: LcMaterializedPractical[] = bank.practicals.map((p, i) => ({
-    bankKey: lcBankKey(bank.id, `P${String(i + 1).padStart(2, '0')}${p.variant ? `-${p.variant}` : ''}`),
+    bankKey: lcBankKey(
+      bank.id,
+      `P${String(i + 1).padStart(2, '0')}${p.variant ? `-${p.variant}` : ''}`,
+    ),
     variantKey: p.variant,
     title: p.title,
     instructions: practicalInstructions(p),

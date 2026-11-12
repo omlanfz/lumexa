@@ -5,6 +5,7 @@
 // until the server returns one in response to a submitted answer.
 
 import type { HomeworkFileRef } from '@/lib/homeworkFiles';
+import type { LcAssessmentMeta, LcSharedLesson, LcTeacherPrep } from '@/lib/littleCoders/types';
 
 export type Viewer = 'student' | 'teacher' | 'admin';
 
@@ -130,6 +131,8 @@ export interface LessonPayload {
   project: { id: string; title: string; description: string | null } | null;
   quiz?: PublicQuiz | null;
   visuals?: LessonVisualData[];
+  /** Little Coders: the interactive page, the Learning Preview video record and the project / homework cards. */
+  littleCoders?: LcSharedLesson;
 }
 
 export interface LessonDetailsResponse {
@@ -157,6 +160,10 @@ export interface LessonDetailsResponse {
     counts?: { mcq: number; trueFalse: number; practical: number };
     totalMarks?: number;
     meetsStandard?: boolean;
+    /** STANDARD, or LITTLE_CODERS_V2 (10 MCQs + 5 True/False + a 25-mark practical). */
+    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    /** Little Coders: the standardized header and sections. */
+    lc?: LcAssessmentMeta;
   } | null;
   submission?: SubmissionInfo | null;
   viewer?: Viewer;
@@ -173,6 +180,8 @@ export interface TeacherPrep {
   reviewNotes: string | null;
   /** The whole quiz with answers — for the teacher only. */
   answerKey: AnswerKeyQuestion[];
+  /** Little Coders: the video production brief and the project card's teacher instructions. */
+  littleCoders?: LcTeacherPrep;
 }
 
 export interface AnswerKeyQuestion {

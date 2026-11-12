@@ -44,7 +44,12 @@ export const LC_PROGRAM_KEY = 'little-coders';
 
 // ─── Coding platforms ───────────────────────────────────────────────────────
 
-export const LC_PLATFORM_KEYS = ['SCRATCH', 'STRETCH3', 'TEACHABLE_MACHINE', 'EDUBLOCKS'] as const;
+export const LC_PLATFORM_KEYS = [
+  'SCRATCH',
+  'STRETCH3',
+  'TEACHABLE_MACHINE',
+  'EDUBLOCKS',
+] as const;
 export type LcPlatformKey = (typeof LC_PLATFORM_KEYS)[number];
 
 export interface DefaultPlatform {
@@ -69,7 +74,8 @@ export const DEFAULT_PLATFORMS: DefaultPlatform[] = [
     key: 'STRETCH3',
     name: 'Stretch3',
     startUrl: 'https://stretch3.github.io/',
-    description: 'A Scratch-compatible editor with the TM2Scratch extension for AI projects.',
+    description:
+      'A Scratch-compatible editor with the TM2Scratch extension for AI projects.',
     sortOrder: 2,
   },
   {
@@ -258,13 +264,22 @@ export function lcCourseBySlug(slug: string): LcCourseMeta | undefined {
 }
 
 /** Session numbers (Lesson.order). Course n occupies 9(n-1)+1 … 9(n-1)+9: eight lessons, then its assessment. */
-export function lcLessonOrder(courseNumber: number, lessonNumber: number): number {
+export function lcLessonOrder(
+  courseNumber: number,
+  lessonNumber: number,
+): number {
   return (courseNumber - 1) * (LC_LESSONS_PER_COURSE + 1) + lessonNumber;
 }
 export function lcCourseAssessmentOrder(courseNumber: number): number {
   return courseNumber * (LC_LESSONS_PER_COURSE + 1);
 }
 export const LC_FINAL_ASSESSMENT_ORDER = LC_SESSIONS_TOTAL;
+
+/** Titles of the assessment sessions (Lesson.title) — one definition for the migration, the
+ *  seed and the public catalog snapshot. */
+export const lcCourseAssessmentTitle = (course: Pick<LcCourseMeta, 'title'>) =>
+  `${course.title} — Course Assessment`;
+export const LC_FINAL_ASSESSMENT_TITLE = 'Little Coders — Final Assessment';
 
 /** The public blurb of the whole program (course row description). The previous seed text
  *  is recognised by DEPRECATED_PROGRAM_DESCRIPTIONS and replaced only while an admin has
@@ -311,7 +326,11 @@ export const LC_MCQ_KIND_COUNTS = {
 } as const;
 export type LcMcqKind = keyof typeof LC_MCQ_KIND_COUNTS;
 
-export const LC_MCQ_DIFFICULTY_COUNTS = { EASY: 3, MEDIUM: 4, HARD: 3 } as const;
+export const LC_MCQ_DIFFICULTY_COUNTS = {
+  EASY: 3,
+  MEDIUM: 4,
+  HARD: 3,
+} as const;
 export const LC_TF_DIFFICULTY_COUNTS = { EASY: 2, MEDIUM: 2, HARD: 1 } as const;
 /** At least this many MCQs per assessment must carry a block script. */
 export const LC_MIN_MCQ_WITH_CODE = 4;

@@ -55,7 +55,9 @@ const OPEN: Record<string, { close: string; kind: Slot['kind'] }> = {
 };
 
 /** Replaces every top-level slot by a placeholder; null when the brackets do not balance. */
-export function templateOf(text: string): { template: string; slots: Slot[] } | null {
+export function templateOf(
+  text: string,
+): { template: string; slots: Slot[] } | null {
   let template = '';
   const slots: Slot[] = [];
   let i = 0;
@@ -89,7 +91,10 @@ export function templateOf(text: string): { template: string; slots: Slot[] } | 
 }
 
 const catalogIndex = (() => {
-  const byTemplate = new Map<string, { category: ScratchCategory; shape: BlockShape }[]>();
+  const byTemplate = new Map<
+    string,
+    { category: ScratchCategory; shape: BlockShape }[]
+  >();
   for (const category of SCRATCH_CATEGORIES) {
     for (const e of SCRATCH_CATALOG[category]) {
       const list = byTemplate.get(e.t) ?? [];
@@ -108,7 +113,10 @@ const isPlainValue = (s: string) => {
 };
 
 /** Problems with the Scratch block lines (empty list = fine). */
-export function validateScratchLines(lines: string[], where = 'stack'): string[] {
+export function validateScratchLines(
+  lines: string[],
+  where = 'stack',
+): string[] {
   const problems: string[] = [];
   let prevDepth = -1;
   lines.forEach((raw, idx) => {
@@ -122,16 +130,23 @@ export function validateScratchLines(lines: string[], where = 'stack'): string[]
       problems.push(`${at}: unknown Scratch category "${p.category}"`);
       return;
     }
-    if (p.depth > prevDepth + 1) problems.push(`${at}: indented more than one level deeper than the line above`);
+    if (p.depth > prevDepth + 1)
+      problems.push(
+        `${at}: indented more than one level deeper than the line above`,
+      );
     prevDepth = p.depth;
     const tpl = templateOf(p.text);
     if (!tpl) {
       problems.push(`${at}: unbalanced brackets in "${p.text}"`);
       return;
     }
-    const entries = catalogIndex.get(tpl.template)?.filter((e) => e.category === p.category);
+    const entries = catalogIndex
+      .get(tpl.template)
+      ?.filter((e) => e.category === p.category);
     if (!entries || entries.length === 0) {
-      problems.push(`${at}: "${p.text}" is not a ${p.category} block (template "${tpl.template}")`);
+      problems.push(
+        `${at}: "${p.text}" is not a ${p.category} block (template "${tpl.template}")`,
+      );
       return;
     }
     // Nested expressions must be real reporter / boolean blocks (or plain values).
@@ -151,18 +166,27 @@ function checkSlot(slot: Slot, at: string, problems: string[]): void {
   }
   const entries = catalogIndex.get(tpl.template);
   const wantBool = slot.kind === 'bool';
-  const ok = entries?.some((e) => (wantBool ? e.shape === 'boolean' : e.shape === 'reporter' || e.shape === 'boolean'));
+  const ok = entries?.some((e) =>
+    wantBool
+      ? e.shape === 'boolean'
+      : e.shape === 'reporter' || e.shape === 'boolean',
+  );
   if (!ok) {
     // a variable written as "{ready}" or a bare name is accepted in a boolean slot
     if (wantBool && isPlainValue(inner)) return;
-    problems.push(`${at}: "${inner}" is not a known ${wantBool ? 'true/false' : 'value'} block`);
+    problems.push(
+      `${at}: "${inner}" is not a known ${wantBool ? 'true/false' : 'value'} block`,
+    );
     return;
   }
   for (const s of tpl.slots) checkSlot(s, at, problems);
 }
 
 /** Problems with EduBlocks (Python) lines. Execution is checked separately in the tests. */
-export function validateEduBlocksLines(lines: string[], where = 'stack'): string[] {
+export function validateEduBlocksLines(
+  lines: string[],
+  where = 'stack',
+): string[] {
   const problems: string[] = [];
   let prevDepth = -1;
   lines.forEach((raw, idx) => {
@@ -176,14 +200,25 @@ export function validateEduBlocksLines(lines: string[], where = 'stack'): string
       problems.push(`${at}: unknown EduBlocks group "${p.category}"`);
       return;
     }
-    if (p.depth > prevDepth + 1) problems.push(`${at}: indented more than one level deeper than the line above`);
+    if (p.depth > prevDepth + 1)
+      problems.push(
+        `${at}: indented more than one level deeper than the line above`,
+      );
     prevDepth = p.depth;
     for (const f of EDUBLOCKS_FORBIDDEN) {
-      if (f.re.test(p.text)) problems.push(`${at}: ${f.name} is not available in EduBlocks ("${p.text}")`);
+      if (f.re.test(p.text))
+        problems.push(
+          `${at}: ${f.name} is not available in EduBlocks ("${p.text}")`,
+        );
     }
     // The Imports group offers libraries; these lessons use only random and the Turtle.
-    if (/^(?:import|from)\s/.test(p.text) && !EDUBLOCKS_ALLOWED_IMPORT.test(p.text)) {
-      problems.push(`${at}: only the random and turtle libraries are used here ("${p.text}")`);
+    if (
+      /^(?:import|from)\s/.test(p.text) &&
+      !EDUBLOCKS_ALLOWED_IMPORT.test(p.text)
+    ) {
+      problems.push(
+        `${at}: only the random and turtle libraries are used here ("${p.text}")`,
+      );
     }
     // Every called name must be one the toolbox can build.
     const code = p.text.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
@@ -192,10 +227,13 @@ export function validateEduBlocksLines(lines: string[], where = 'stack'): string
       if (/^(if|elif|while|for|def|return|and|or|not|in)$/.test(name)) continue;
       if (EDUBLOCKS_ALLOWED_CALLS.has(name)) continue;
       const parts = name.split('.');
-      if (parts.length === 2 && EDUBLOCKS_ALLOWED_METHODS.has(parts[1])) continue;
+      if (parts.length === 2 && EDUBLOCKS_ALLOWED_METHODS.has(parts[1]))
+        continue;
       if (parts.length === 1 && p.category === 'functions') continue; // the learner's own function
       if (parts.length === 1 && isDefinedLater(lines, name)) continue;
-      problems.push(`${at}: "${name}(" is not an EduBlocks block ("${p.text}")`);
+      problems.push(
+        `${at}: "${name}(" is not an EduBlocks block ("${p.text}")`,
+      );
     }
   });
   return problems;
@@ -205,8 +243,14 @@ function isDefinedLater(lines: string[], name: string): boolean {
   return lines.some((l) => new RegExp(`\\|\\s*def\\s+${name}\\s*\\(`).test(l));
 }
 
-export function validateLines(language: LcBlockLanguage, lines: string[], where?: string): string[] {
-  return language === 'scratch' ? validateScratchLines(lines, where) : validateEduBlocksLines(lines, where);
+export function validateLines(
+  language: LcBlockLanguage,
+  lines: string[],
+  where?: string,
+): string[] {
+  return language === 'scratch'
+    ? validateScratchLines(lines, where)
+    : validateEduBlocksLines(lines, where);
 }
 
 /** The Python program an EduBlocks stack stands for (two-space levels become four). */
@@ -238,7 +282,8 @@ export function scratchBlockName(text: string): string {
 export function pythonBlockName(code: string): string {
   const t = code.trim();
   const assign = /^([A-Za-z_]\w*)\s*(\+=|-=|=)\s*(.*)$/.exec(t);
-  if (assign && !/^(==)/.test(assign[3])) return `${assign[1]} ${assign[2]} ( )`;
+  if (assign && !/^(==)/.test(assign[3]))
+    return `${assign[1]} ${assign[2]} ( )`;
   const m = /^(.*?\()(.*)(\)(?::)?)$/.exec(t);
   if (m) return `${m[1]} ${m[3]}`.replace(/\(\s+\)/, '( )');
   if (/:$/.test(t)) return t.replace(/^(if|elif|while)\b.*:$/, '$1 …:');
@@ -254,7 +299,10 @@ export function toolboxOf(
     for (const raw of s.lines) {
       const p = parseLine(raw);
       if (!p) continue;
-      const name = s.language === 'scratch' ? scratchBlockName(p.text) : pythonBlockName(p.text);
+      const name =
+        s.language === 'scratch'
+          ? scratchBlockName(p.text)
+          : pythonBlockName(p.text);
       const list = out.get(p.category) ?? [];
       if (!list.includes(name)) list.push(name);
       out.set(p.category, list);

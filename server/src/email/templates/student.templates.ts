@@ -276,6 +276,8 @@ export interface TestReportEmailParams {
     trueFalse: { correct: number; total: number };
   };
   coding: { score: number; max: number } | null;
+  /** How the practical's row is named (Little Coders: "Practical project …"). Defaults to the coding project wording. */
+  codingLabel?: string;
   total: number;
   totalMax: number;
   percentage: number;
@@ -331,7 +333,7 @@ export function testReportEmail(params: TestReportEmailParams) {
             )}
             ${row('Multiple-choice correct', `${params.objective.mcq.correct} / ${params.objective.mcq.total}`)}
             ${row('True/False correct', `${params.objective.trueFalse.correct} / ${params.objective.trueFalse.total}`)}
-            ${params.coding ? row('Coding project (marked by the teacher)', `${fmt(params.coding.score)} / ${fmt(params.coding.max)}`) : ''}
+            ${params.coding ? row(params.codingLabel ?? 'Coding project (marked by the teacher)', `${fmt(params.coding.score)} / ${fmt(params.coding.max)}`) : ''}
             ${row('Total', `${fmt(params.total)} / ${fmt(params.totalMax)}`)}
             <tr><td style="padding: 12px 0 8px; font-weight: 700;">Percentage</td><td style="padding: 12px 0 8px; text-align: right; font-size: 20px; font-weight: 800; color: ${resultColor};">${fmt(params.percentage)}%</td></tr>
           </table>

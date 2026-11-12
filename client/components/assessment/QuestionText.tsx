@@ -5,6 +5,7 @@
 // those three things, and everything is rendered as React text (no HTML
 // injection), so question content can never execute anything.
 
+import BlockStack from '@/components/little-coders/BlockStack';
 import { parseQuestionText } from '@/lib/assessment/progress';
 
 export default function QuestionText({ text, className = '' }: { text: string; className?: string }) {
@@ -13,6 +14,10 @@ export default function QuestionText({ text, className = '' }: { text: string; c
     <div className={`whitespace-pre-wrap break-words leading-relaxed ${className}`}>
       {segments.map((seg, i) => {
         if (seg.type === 'block') {
+          // A Little Coders question shows its script as real blocks (Scratch / Stretch3 or EduBlocks).
+          if (seg.lang === 'scratch' || seg.lang === 'edublocks') {
+            return <BlockStack key={i} lines={seg.value.split("\n")} language={seg.lang} plain className="my-2 whitespace-normal" />;
+          }
           return (
             <pre
               key={i}

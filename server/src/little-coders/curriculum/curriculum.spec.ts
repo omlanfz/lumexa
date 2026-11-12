@@ -6,7 +6,13 @@
 
 import { pythonAvailable, runPython } from '../../assessments/bank/bank.verify';
 import { toPythonSource } from '../blocks/block-dsl';
-import { LC_COURSES, LC_LESSONS_PER_COURSE, LC_LEARNING_TOTAL, LC_SESSIONS_TOTAL, lcLessonOrder } from '../lc.constants';
+import {
+  LC_COURSES,
+  LC_LESSONS_PER_COURSE,
+  LC_LEARNING_TOTAL,
+  LC_SESSIONS_TOTAL,
+  lcLessonOrder,
+} from '../lc.constants';
 import { narrationWords } from '../lc.validate';
 import { pythonProgram, syntaxCheckProgram } from '../testing/python-stub';
 import { LC_LESSON_SPECS, lcLessonPatches, lcPatchFor } from './index';
@@ -69,25 +75,56 @@ const AI_CLASSES: Record<number, string[]> = {
 
 /** Course 3: the built-in Scratch sprites and costumes of each lesson, exactly as finalized. */
 const AI_SPRITES: Record<number, Record<string, string[]>> = {
-  1: { Giga: ['Giga-a', 'Giga-b', 'Giga-c', 'Giga-d'], Apple: ['Apple'], Bananas: ['Bananas'], Bread: ['Bread'] },
+  1: {
+    Giga: ['Giga-a', 'Giga-b', 'Giga-c', 'Giga-d'],
+    Apple: ['Apple'],
+    Bananas: ['Bananas'],
+    Bread: ['Bread'],
+  },
   2: {
     Pico: ['Pico-a', 'Pico-b', 'Pico-c', 'Pico-d'],
     Key: ['Key'],
     Pencil: ['Pencil-a', 'Pencil-b'],
     Ball: ['Ball-a', 'Ball-b', 'Ball-c', 'Ball-d', 'Ball-e'],
-    Rocketship: ['Rocketship-a', 'Rocketship-b', 'Rocketship-c', 'Rocketship-d', 'Rocketship-e'],
+    Rocketship: [
+      'Rocketship-a',
+      'Rocketship-b',
+      'Rocketship-c',
+      'Rocketship-d',
+      'Rocketship-e',
+    ],
   },
-  3: { Robot: ['Robot-a', 'Robot-b', 'Robot-c', 'Robot-d'], Bowl: ['Bowl-a'], Star: ['Star'] },
-  4: { Pico: ['Pico-a', 'Pico-b', 'Pico-c', 'Pico-d'], Lightning: ['Lightning'], Star: ['Star'] },
+  3: {
+    Robot: ['Robot-a', 'Robot-b', 'Robot-c', 'Robot-d'],
+    Bowl: ['Bowl-a'],
+    Star: ['Star'],
+  },
+  4: {
+    Pico: ['Pico-a', 'Pico-b', 'Pico-c', 'Pico-d'],
+    Lightning: ['Lightning'],
+    Star: ['Star'],
+  },
   5: {
     Tera: ['Tera-a', 'Tera-b', 'Tera-c', 'Tera-d'],
     Shirt: ['Shirt-a'],
     Shoes: ['Shoes-a', 'Shoes-b', 'Shoes-c', 'Shoes-d'],
     'Glass Water': ['Glass Water-a', 'Glass Water-b'],
-    Rocketship: ['Rocketship-a', 'Rocketship-b', 'Rocketship-c', 'Rocketship-d', 'Rocketship-e'],
+    Rocketship: [
+      'Rocketship-a',
+      'Rocketship-b',
+      'Rocketship-c',
+      'Rocketship-d',
+      'Rocketship-e',
+    ],
   },
   6: {
-    Rocketship: ['Rocketship-a', 'Rocketship-b', 'Rocketship-c', 'Rocketship-d', 'Rocketship-e'],
+    Rocketship: [
+      'Rocketship-a',
+      'Rocketship-b',
+      'Rocketship-c',
+      'Rocketship-d',
+      'Rocketship-e',
+    ],
     Robot: ['Robot-a', 'Robot-b', 'Robot-c', 'Robot-d'],
   },
   7: {
@@ -100,7 +137,8 @@ const AI_SPRITES: Record<number, Record<string, string[]>> = {
   8: { Giga: ['Giga-a', 'Giga-b', 'Giga-c', 'Giga-d'], Star: ['Star'] },
 };
 
-const specOf = (course: number, lesson: number) => LC_LESSON_SPECS.find((s) => s.course === course && s.lesson === lesson)!;
+const specOf = (course: number, lesson: number) =>
+  LC_LESSON_SPECS.find((s) => s.course === course && s.lesson === lesson)!;
 
 describe('Little Coders — program structure', () => {
   it('is five independent courses of eight lessons: 40 lessons, 5 course assessments, 1 final = 46 classes', () => {
@@ -110,7 +148,9 @@ describe('Little Coders — program structure', () => {
     expect(LC_SESSIONS_TOTAL).toBe(46);
     expect(LC_LESSON_SPECS).toHaveLength(40);
     for (const course of LC_COURSES) {
-      expect(LC_LESSON_SPECS.filter((s) => s.course === course.number)).toHaveLength(8);
+      expect(
+        LC_LESSON_SPECS.filter((s) => s.course === course.number),
+      ).toHaveLength(8);
     }
   });
 
@@ -122,9 +162,19 @@ describe('Little Coders — program structure', () => {
       'Python Explorers',
       'Python Creative Lab',
     ]);
-    expect(LC_COURSES.map((c) => c.track)).toEqual(['scratch', 'scratch', 'ai', 'python', 'python']);
-    expect(JSON.stringify(LC_COURSES)).not.toMatch(/Python for Young Builders/i);
-    expect(JSON.stringify(LC_LESSON_SPECS)).not.toMatch(/Python for Young Builders/i);
+    expect(LC_COURSES.map((c) => c.track)).toEqual([
+      'scratch',
+      'scratch',
+      'ai',
+      'python',
+      'python',
+    ]);
+    expect(JSON.stringify(LC_COURSES)).not.toMatch(
+      /Python for Young Builders/i,
+    );
+    expect(JSON.stringify(LC_LESSON_SPECS)).not.toMatch(
+      /Python for Young Builders/i,
+    );
   });
 
   it('numbers the sessions 9 per course: 8 lessons, then that course’s assessment; the final is 46', () => {
@@ -134,11 +184,14 @@ describe('Little Coders — program structure', () => {
     expect(lcLessonOrder(5, 8)).toBe(44);
   });
 
-  it.each(EXPECTED)('course %i lesson %i is “%s”', (course, lesson, title, project) => {
-    const spec = specOf(course, lesson);
-    expect(spec.title).toBe(title);
-    if (project) expect(spec.project.name).toBe(project);
-  });
+  it.each(EXPECTED)(
+    'course %i lesson %i is “%s”',
+    (course, lesson, title, project) => {
+      const spec = specOf(course, lesson);
+      expect(spec.title).toBe(title);
+      if (project) expect(spec.project.name).toBe(project);
+    },
+  );
 });
 
 describe('Little Coders — every lesson builds and validates', () => {
@@ -148,31 +201,36 @@ describe('Little Coders — every lesson builds and validates', () => {
     expect(patches.size).toBe(40);
   });
 
-  it.each(EXPECTED)('course %i lesson %i has the full lesson page', (course, lesson) => {
-    const p = lcPatchFor(course, lesson);
-    const e = p.experience;
-    // The structure the brief asks for: a mission, big ideas, a live demo, real examples, tips and a common
-    // mistake, a challenge, the in-class project and a homework.
-    expect(e.mission.hook.length).toBeGreaterThan(10);
-    expect(e.concepts.length).toBeGreaterThanOrEqual(3);
-    expect(e.demo.kind).toMatch(/scratch-stage|python-run|ai-image|ai-voice/);
-    expect(e.examples.length).toBeGreaterThanOrEqual(1);
-    expect(e.tips.some((t) => t.kind === 'mistake' && !!t.fix)).toBe(true);
-    expect(['choose', 'order']).toContain(e.challenge.kind);
-    expect(e.project.steps.length).toBeGreaterThanOrEqual(4);
-    expect(e.project.checklist.length).toBeGreaterThanOrEqual(3);
-    expect(e.homework.deliverable.length).toBeGreaterThan(5);
-    expect(e.toolbox.length).toBeGreaterThan(0);
-    expect(p.teacherNotes.length).toBeGreaterThan(40);
-    expect(p.contentMarkdown).toContain(`# ${p.title}`);
-    expect(p.checkpoint).toContain(e.project.name);
-  });
+  it.each(EXPECTED)(
+    'course %i lesson %i has the full lesson page',
+    (course, lesson) => {
+      const p = lcPatchFor(course, lesson);
+      const e = p.experience;
+      // The structure the brief asks for: a mission, big ideas, a live demo, real examples, tips and a common
+      // mistake, a challenge, the in-class project and a homework.
+      expect(e.mission.hook.length).toBeGreaterThan(10);
+      expect(e.concepts.length).toBeGreaterThanOrEqual(3);
+      expect(e.demo.kind).toMatch(/scratch-stage|python-run|ai-image|ai-voice/);
+      expect(e.examples.length).toBeGreaterThanOrEqual(1);
+      expect(e.tips.some((t) => t.kind === 'mistake' && !!t.fix)).toBe(true);
+      expect(['choose', 'order']).toContain(e.challenge.kind);
+      expect(e.project.steps.length).toBeGreaterThanOrEqual(4);
+      expect(e.project.checklist.length).toBeGreaterThanOrEqual(3);
+      expect(e.homework.deliverable.length).toBeGreaterThan(5);
+      expect(e.toolbox.length).toBeGreaterThan(0);
+      expect(p.teacherNotes.length).toBeGreaterThan(40);
+      expect(p.contentMarkdown).toContain(`# ${p.title}`);
+      expect(p.checkpoint).toContain(e.project.name);
+    },
+  );
 
   it('every lesson’s demo, examples and project are in the language of its course', () => {
     for (const spec of LC_LESSON_SPECS) {
       const lang = spec.platform === 'EDUBLOCKS' ? 'edublocks' : 'scratch';
-      for (const s of [...spec.examples, ...spec.project.stacks]) expect(s.language).toBe(lang);
-      if (spec.platform === 'EDUBLOCKS') expect(spec.demo.kind).toBe('python-run');
+      for (const s of [...spec.examples, ...spec.project.stacks])
+        expect(s.language).toBe(lang);
+      if (spec.platform === 'EDUBLOCKS')
+        expect(spec.demo.kind).toBe('python-run');
       else if (spec.ai) expect(spec.demo.kind).toMatch(/^ai-/);
       else expect(spec.demo.kind).toBe('scratch-stage');
     }
@@ -180,29 +238,48 @@ describe('Little Coders — every lesson builds and validates', () => {
 });
 
 describe('Little Coders — Course 3 (AI for Kids: Smart Projects), as finalized', () => {
-  it.each(Object.keys(AI_CLASSES).map(Number))('lesson %i trains exactly its three agreed classes', (lesson) => {
-    const ai = specOf(3, lesson).ai!;
-    expect(ai.classes.map((c) => c.name)).toEqual(AI_CLASSES[lesson]);
-    expect(ai.classes).toHaveLength(3);
-    expect(ai.kind).toBe(lesson <= 5 ? 'image' : 'sound');
-    // A background-noise class only for sound models.
-    expect(ai.background).toBe(lesson > 5);
-    expect(ai.classes.every((c) => c.minExamples >= 5)).toBe(true);
-  });
+  it.each(Object.keys(AI_CLASSES).map(Number))(
+    'lesson %i trains exactly its three agreed classes',
+    (lesson) => {
+      const ai = specOf(3, lesson).ai!;
+      expect(ai.classes.map((c) => c.name)).toEqual(AI_CLASSES[lesson]);
+      expect(ai.classes).toHaveLength(3);
+      expect(ai.kind).toBe(lesson <= 5 ? 'image' : 'sound');
+      // A background-noise class only for sound models.
+      expect(ai.background).toBe(lesson > 5);
+      expect(ai.classes.every((c) => c.minExamples >= 5)).toBe(true);
+    },
+  );
 
-  it.each(Object.keys(AI_SPRITES).map(Number))('lesson %i uses exactly the built-in sprites and costumes of the brief', (lesson) => {
-    const assets = specOf(3, lesson).project.assets ?? [];
-    const got = Object.fromEntries(assets.map((a) => [a.name, a.costumes ?? []]));
-    expect(got).toEqual(AI_SPRITES[lesson]);
-  });
+  it.each(Object.keys(AI_SPRITES).map(Number))(
+    'lesson %i uses exactly the built-in sprites and costumes of the brief',
+    (lesson) => {
+      const assets = specOf(3, lesson).project.assets ?? [];
+      const got = Object.fromEntries(
+        assets.map((a) => [a.name, a.costumes ?? []]),
+      );
+      expect(got).toEqual(AI_SPRITES[lesson]);
+    },
+  );
 
   it('there are five image-classification lessons, then three spoken-word lessons', () => {
-    expect([1, 2, 3, 4, 5, 6, 7, 8].map((l) => specOf(3, l).ai!.kind)).toEqual(['image', 'image', 'image', 'image', 'image', 'sound', 'sound', 'sound']);
+    expect([1, 2, 3, 4, 5, 6, 7, 8].map((l) => specOf(3, l).ai!.kind)).toEqual([
+      'image',
+      'image',
+      'image',
+      'image',
+      'image',
+      'sound',
+      'sound',
+      'sound',
+    ]);
   });
 
   it('uses the webcam / microphone for everyday objects and words — no pose, gesture or hand tracking', () => {
     for (let lesson = 1; lesson <= 8; lesson++) {
-      const text = JSON.stringify(lcPatchFor(3, lesson).experience).toLowerCase();
+      const text = JSON.stringify(
+        lcPatchFor(3, lesson).experience,
+      ).toLowerCase();
       expect(text).not.toMatch(/pose|gesture|hand.?track|body.?track|skeleton/);
     }
   });
@@ -210,32 +287,50 @@ describe('Little Coders — Course 3 (AI for Kids: Smart Projects), as finalized
   it('every lesson trains in Teachable Machine and builds in Stretch3, and homework reuses the model', () => {
     for (let lesson = 1; lesson <= 8; lesson++) {
       const p = lcPatchFor(3, lesson);
-      expect(p.projectCard.platforms.map((b) => b.platform)).toEqual(['TEACHABLE_MACHINE', 'STRETCH3']);
-      expect(p.projectCard.platforms.map((b) => b.label)).toEqual(['Train AI Model', 'Build in Stretch3']);
-      expect(p.homeworkCard.platforms.map((b) => b.platform)).toEqual(['STRETCH3']);
+      expect(p.projectCard.platforms.map((b) => b.platform)).toEqual([
+        'TEACHABLE_MACHINE',
+        'STRETCH3',
+      ]);
+      expect(p.projectCard.platforms.map((b) => b.label)).toEqual([
+        'Train AI Model',
+        'Build in Stretch3',
+      ]);
+      expect(p.homeworkCard.platforms.map((b) => b.platform)).toEqual([
+        'STRETCH3',
+      ]);
       expect(p.homeworkCard.helper).toMatch(/model you trained/i);
     }
   });
 });
 
 describe('Little Coders — "Your Learning Preview" video of every lesson', () => {
-  it.each(EXPECTED)('course %i lesson %i has a complete 90-second script and storyboard', (course, lesson) => {
-    const v = lcPatchFor(course, lesson).previewVideo;
-    expect(v.title).toBe('Your Learning Preview');
-    expect(v.brief.targetSeconds).toBe(90);
-    // hook · concept · visuals · example · tip · challenge + close
-    expect(v.brief.scenes.map((s) => s.time)).toEqual(['0:00–0:08', '0:08–0:20', '0:20–0:50', '0:50–1:10', '1:10–1:20', '1:20–1:30']);
-    for (const s of v.brief.scenes) {
-      expect(s.visual.length).toBeGreaterThan(10);
-      expect(s.narration.length).toBeGreaterThan(10);
-      expect(s.onScreen.length).toBeGreaterThan(1);
-    }
-    const words = narrationWords(v);
-    expect(words).toBeGreaterThanOrEqual(100);
-    expect(words).toBeLessThanOrEqual(135);
-    expect(v.brief.tip.length).toBeGreaterThan(5);
-    expect(v.brief.challenge.length).toBeGreaterThan(5);
-  });
+  it.each(EXPECTED)(
+    'course %i lesson %i has a complete 90-second script and storyboard',
+    (course, lesson) => {
+      const v = lcPatchFor(course, lesson).previewVideo;
+      expect(v.title).toBe('Your Learning Preview');
+      expect(v.brief.targetSeconds).toBe(90);
+      // hook · concept · visuals · example · tip · challenge + close
+      expect(v.brief.scenes.map((s) => s.time)).toEqual([
+        '0:00–0:08',
+        '0:08–0:20',
+        '0:20–0:50',
+        '0:50–1:10',
+        '1:10–1:20',
+        '1:20–1:30',
+      ]);
+      for (const s of v.brief.scenes) {
+        expect(s.visual.length).toBeGreaterThan(10);
+        expect(s.narration.length).toBeGreaterThan(10);
+        expect(s.onScreen.length).toBeGreaterThan(1);
+      }
+      const words = narrationWords(v);
+      expect(words).toBeGreaterThanOrEqual(100);
+      expect(words).toBeLessThanOrEqual(135);
+      expect(v.brief.tip.length).toBeGreaterThan(5);
+      expect(v.brief.challenge.length).toBeGreaterThan(5);
+    },
+  );
 
   it('never claims a video exists: every address starts empty for an admin to add', () => {
     for (const spec of LC_LESSON_SPECS) {
@@ -260,10 +355,16 @@ describe('Little Coders — project and homework cards', () => {
   });
 
   it('puts the right platform buttons on each course, in order, with the agreed labels', () => {
-    const labels = (course: number, lesson: number) => lcPatchFor(course, lesson).projectCard.platforms.map((b) => `${b.platform}:${b.label}`);
+    const labels = (course: number, lesson: number) =>
+      lcPatchFor(course, lesson).projectCard.platforms.map(
+        (b) => `${b.platform}:${b.label}`,
+      );
     expect(labels(1, 1)).toEqual(['SCRATCH:Start Coding in Scratch']);
     expect(labels(2, 8)).toEqual(['SCRATCH:Start Coding in Scratch']);
-    expect(labels(3, 1)).toEqual(['TEACHABLE_MACHINE:Train AI Model', 'STRETCH3:Build in Stretch3']);
+    expect(labels(3, 1)).toEqual([
+      'TEACHABLE_MACHINE:Train AI Model',
+      'STRETCH3:Build in Stretch3',
+    ]);
     expect(labels(4, 1)).toEqual(['EDUBLOCKS:Start Coding in EduBlocks']);
     expect(labels(5, 8)).toEqual(['EDUBLOCKS:Start Coding in EduBlocks']);
   });
@@ -293,12 +394,22 @@ describe('Little Coders — the Python lessons (courses 4 and 5) are real Python
     };
     for (const spec of pythonSpecs) {
       const at = `${spec.course}.${spec.lesson}`;
-      for (const s of [...spec.examples, ...spec.project.stacks, ...(spec.homework.stack ? [spec.homework.stack] : [])]) add(`${at} ${s.id}`, s.lines);
+      for (const s of [
+        ...spec.examples,
+        ...spec.project.stacks,
+        ...(spec.homework.stack ? [spec.homework.stack] : []),
+      ])
+        add(`${at} ${s.id}`, s.lines);
       if (spec.demo.kind === 'python-run') add(`${at} demo`, spec.demo.lines);
-      if (spec.challenge.kind === 'choose' && spec.challenge.code) add(`${at} challenge code`, spec.challenge.code.lines);
+      if (spec.challenge.kind === 'choose' && spec.challenge.code)
+        add(`${at} challenge code`, spec.challenge.code.lines);
       // An ordering challenge may show a loop / function HEADER block on its own (the learner orders the
       // blocks, they do not run the pile) — only a pile of complete statements is a program.
-      if (spec.challenge.kind === 'order' && !spec.challenge.lines.some((l) => /:\s*$/.test(l))) add(`${at} order challenge`, spec.challenge.lines);
+      if (
+        spec.challenge.kind === 'order' &&
+        !spec.challenge.lines.some((l) => /:\s*$/.test(l))
+      )
+        add(`${at} order challenge`, spec.challenge.lines);
     }
     expect(sources.length).toBeGreaterThanOrEqual(55);
     const out = runPython(syntaxCheckProgram(sources));
@@ -310,17 +421,26 @@ describe('Little Coders — the Python lessons (courses 4 and 5) are real Python
     expect({ ok: out.ok, problems }).toEqual({ ok: true, problems: [] });
   });
 
-  itPython.each(pythonSpecs.map((s) => [`${s.course}.${s.lesson} ${s.title}`, s] as const))('the live demo of %s runs the way the lesson says', (_name, spec) => {
-    if (spec.demo.kind !== 'python-run') throw new Error('a Python lesson needs a Python demo');
-    const out = runPython(pythonProgram(spec.demo.lines, spec.demo.inputs ?? []));
+  itPython.each(
+    pythonSpecs.map((s) => [`${s.course}.${s.lesson} ${s.title}`, s] as const),
+  )('the live demo of %s runs the way the lesson says', (_name, spec) => {
+    if (spec.demo.kind !== 'python-run')
+      throw new Error('a Python lesson needs a Python demo');
+    const out = runPython(
+      pythonProgram(spec.demo.lines, spec.demo.inputs ?? []),
+    );
     if (spec.demo.expectError) {
       // A debugging lesson: the demo is MEANT to stop with a Python error.
       expect(out.ok).toBe(false);
       expect(out.stderr).toMatch(/Error/);
     } else {
-      expect({ ok: out.ok, err: out.ok ? '' : out.stderr.trim().split('\n').pop() }).toEqual({ ok: true, err: '' });
+      expect({
+        ok: out.ok,
+        err: out.ok ? '' : out.stderr.trim().split('\n').pop(),
+      }).toEqual({ ok: true, err: '' });
       // A Turtle demo draws instead of printing; every other demo shows its output in the console.
-      if (!spec.demo.lines.some((l) => /turtle/.test(l))) expect(out.stdout.trim().length).toBeGreaterThan(0);
+      if (!spec.demo.lines.some((l) => /turtle/.test(l)))
+        expect(out.stdout.trim().length).toBeGreaterThan(0);
     }
   });
 });

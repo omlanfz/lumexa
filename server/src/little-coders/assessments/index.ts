@@ -24,4 +24,11 @@ export function allLcBanks(): LcBank[] {
   return [...LC_COURSES.map((c) => LC_COURSE_BANKS[c.slug]), LC_FINAL_BANK];
 }
 
-export { course1Bank, course2Bank, course3Bank, course4Bank, course5Bank, finalBank };
+export {
+  course1Bank,
+  course2Bank,
+  course3Bank,
+  course4Bank,
+  course5Bank,
+  finalBank,
+};

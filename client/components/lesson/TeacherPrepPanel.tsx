@@ -14,6 +14,7 @@ import type { LessonLink, TeacherPrep } from '@/lib/lesson/types';
 import { LessonRenderContext, useLessonRender } from './LessonContext';
 import LessonMarkdown from './LessonMarkdown';
 import InlineMarkdown from './InlineMarkdown';
+import LcTeacherPrepSection from '@/components/little-coders/LcTeacherPrep';
 
 type Prep = TeacherPrep & { refs?: Record<string, LessonLink | null> };
 
@@ -94,7 +95,8 @@ export default function TeacherPrepPanel({ lessonId }: { lessonId: string }) {
                 </ol>
               </div>
             )}
-            {!prep.teacherNotes && !prep.reviewNotes && prep.answerKey.length === 0 && (
+            {prep.littleCoders && <LcTeacherPrepSection prep={prep.littleCoders} />}
+            {!prep.teacherNotes && !prep.reviewNotes && prep.answerKey.length === 0 && !prep.littleCoders && (
               <p className="text-sm text-gray-600 dark:text-gray-300">There are no preparation notes for this lesson yet.</p>
             )}
           </LessonRenderContext.Provider>

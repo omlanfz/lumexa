@@ -11,7 +11,13 @@ import { COURSE_3 } from './course3';
 import { COURSE_4 } from './course4';
 import { COURSE_5 } from './course5';
 
-export const LC_LESSON_SPECS: LcLessonSpec[] = [...COURSE_1, ...COURSE_2, ...COURSE_3, ...COURSE_4, ...COURSE_5];
+export const LC_LESSON_SPECS: LcLessonSpec[] = [
+  ...COURSE_1,
+  ...COURSE_2,
+  ...COURSE_3,
+  ...COURSE_4,
+  ...COURSE_5,
+];
 
 export const lcKey = (course: number, lesson: number) => `c${course}l${lesson}`;
 
@@ -29,8 +35,12 @@ export function lcLessonPatches(): Map<string, LcLessonPatch> {
     }
   }
   const expected = LC_COURSES.length * LC_LESSONS_PER_COURSE;
-  if (out.size !== expected && problems.length === 0) problems.push(`expected ${expected} lessons, built ${out.size}`);
-  if (problems.length > 0) throw new Error(`Little Coders curriculum is invalid:\n${problems.join('\n')}`);
+  if (out.size !== expected && problems.length === 0)
+    problems.push(`expected ${expected} lessons, built ${out.size}`);
+  if (problems.length > 0)
+    throw new Error(
+      `Little Coders curriculum is invalid:\n${problems.join('\n')}`,
+    );
   cache = out;
   return out;
 }
