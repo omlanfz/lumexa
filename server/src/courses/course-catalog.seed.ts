@@ -38,6 +38,8 @@ import { PrismaClient } from '@prisma/client';
 import { seedCurriculumContent } from './curriculum-catalog.seed';
 import { legacyCourseSlug } from './course-slug';
 import { syncAssessmentBanks } from '../assessments/bank/bank.sync';
+import { LC_PROGRAM_DESCRIPTION, LC_SESSIONS_TOTAL, isLittleCodersSlug } from '../little-coders/lc.constants';
+import { syncLittleCodersBanks } from '../little-coders/assessments/lc-bank.sync';
 
 interface CourseSeed {
   slug: string;
@@ -67,14 +69,15 @@ export const COURSE_CATALOG: CourseSeed[] = [
   {
     slug: 'little-coders',
     title: 'Little Coders',
-    description:
-      'A gentle, hands-on introduction to computing for young learners. Students move from colorful visual blocks to real Python code and even a first taste of AI — building genuine, shareable projects the whole way, at a pace made for ages 6–11. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.',
+    // The text, and the 46-class structure, are owned by the Little Coders curriculum
+    // (server/src/little-coders) — see LC_PROGRAM_DESCRIPTION / LC_SESSIONS_TOTAL.
+    description: LC_PROGRAM_DESCRIPTION,
     emoji: '✦',
     category: 'Little Coders',
     level: 'BEGINNER',
     ageMin: 6,
     ageMax: 11,
-    sessions: 28,
+    sessions: LC_SESSIONS_TOTAL,
   },
   {
     slug: 'game-creator',
@@ -190,9 +193,11 @@ export async function seedCourseCatalog(
     // site follows whatever Operations sets. Two exceptions keep the catalog
     // sound: the session count tracks the curriculum, and a row still on the
     // retired "-path" naming is moved to the new names once.
-    const data: { sessions: number; slug?: string; title?: string } = {
-      sessions: seed.sessions,
-    };
+    // Little Coders owns its own session count: it only changes inside the Little Coders
+    // migration, together with the lessons (never ahead of them).
+    const data: { sessions?: number; slug?: string; title?: string } = isLittleCodersSlug(seed.slug)
+      ? {}
+      : { sessions: seed.sessions };
     if (existing.slug === legacyCourseSlug(seed.slug)) {
       const taken = await prisma.course.findUnique({
         where: { slug: seed.slug },
@@ -201,7 +206,7 @@ export async function seedCourseCatalog(
       if (!taken) data.slug = seed.slug;
     }
     if (existing.title === `${seed.title} Path`) data.title = seed.title;
-    await prisma.course.update({ where: { id: existing.id }, data });
+    if (Object.keys(data).length > 0) await prisma.course.update({ where: { id: existing.id }, data });
     results.push({ slug: data.slug ?? existing.slug, title: seed.title, created: false });
   }
 
@@ -211,6 +216,8 @@ export async function seedCourseCatalog(
   // (and keep custom curricula linked to them). Idempotent — a no-op once an
   // assessment is on the current bank version.
   await syncAssessmentBanks(prisma, logger);
+  // The redesigned Little Coders assessments (10 MCQ + 5 True/False + a 25-mark practical).
+  await syncLittleCodersBanks(prisma, logger);
 
   return results;
 }

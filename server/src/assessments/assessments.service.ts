@@ -37,8 +37,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
+  AssessmentFormat,
   AttemptStatus,
   LessonStatus,
   Prisma,
@@ -71,6 +73,7 @@ import {
   RecordVivaDto,
   SaveAnswerDto,
   SaveCodeDto,
+  SavePracticalDto,
   SubmitAttemptDto,
 } from './dto/assessment.dto';
 import {
@@ -84,6 +87,23 @@ import {
   SubmittedCoding,
   buildReportCreateData,
 } from './test-report.builder';
+import { AssessmentFilesService } from './assessment-files.service';
+import {
+  cleanNote,
+  lcAssessmentMeta,
+  normalizeLinks,
+  pickPractical,
+  pickVariant,
+  readPracticalSpec,
+  studentPracticalSpec,
+} from '../little-coders/assessments/lc-attempt';
+import { listPlatforms } from '../little-coders/lc.platforms';
+import {
+  LC_ASSESSMENT,
+  LC_FILE_LIMITS,
+  LC_VARIANTS,
+} from '../little-coders/lc.constants';
+import { validatePracticalSpec } from '../little-coders/lc.validate';
 
 export interface Requester {
   userId: string;
@@ -142,7 +162,37 @@ export class AssessmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly alerts: AlertsService,
+    // Handles the files of a Little Coders practical (R2). Provided by AssessmentsModule; only the
+    // Little Coders format needs it, so a bare unit-test instance can leave it out.
+    @Optional() private readonly files?: AssessmentFilesService,
   ) {}
+
+  /** The format of the bank a test is taken from (a linked test mirrors its root). */
+  private async isLittleCoders(
+    a: {
+      id: string;
+      sourceAssessmentId: string | null;
+      format?: AssessmentFormat;
+    },
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<boolean> {
+    if (a.format === AssessmentFormat.LITTLE_CODERS_V2) return true;
+    const rootId = rootBankId(a);
+    if (rootId === a.id && a.format !== undefined) return false;
+    const root = await db.assessment.findUnique({
+      where: { id: rootId },
+      select: { format: true },
+    });
+    return root?.format === AssessmentFormat.LITTLE_CODERS_V2;
+  }
+
+  private requireFiles(): AssessmentFilesService {
+    if (!this.files)
+      throw new ConflictException(
+        'File uploads are not available on this server.',
+      );
+    return this.files;
+  }
 
   // ═══ Student: start / resume ═══════════════════════════════════════════════
 
@@ -160,6 +210,8 @@ export class AssessmentsService {
         randomizeQuestions: true,
         randomizeOptions: true,
         sourceAssessmentId: true,
+        format: true,
+        activeVariant: true,
       },
     });
     if (!assessment) throw new NotFoundException('Assessment not found');
@@ -176,6 +228,7 @@ export class AssessmentsService {
         lessonNumber: true,
         lessonId: true,
         testLockedAt: true,
+        practicalVariant: true,
       },
     });
     if (!sl || sl.studentUserId !== studentUserId)
@@ -239,6 +292,25 @@ export class AssessmentsService {
 
     // The whole published bank is the test — multiple-choice first, then
     // True/False. Order is shuffled within each section per student.
+    // Little Coders: a class gets ONE practical — for the Final Assessment, the version the admin
+    // assigned (the class's own override, else the assessment's). It is frozen on the attempt below.
+    let assigned = practicals;
+    if (await this.isLittleCoders(assessment)) {
+      const rootRow =
+        rootId === assessment.id
+          ? assessment
+          : await this.prisma.assessment.findUniqueOrThrow({
+              where: { id: rootId },
+              select: { activeVariant: true },
+            });
+      const variant = pickVariant({
+        classVariant: sl.practicalVariant,
+        assessmentVariant: rootRow.activeVariant,
+      });
+      const chosen = pickPractical(practicals, variant);
+      assigned = chosen ? [chosen] : [];
+    }
+
     const mcqs = questions.filter((q) => q.questionType === QuestionKind.MCQ);
     const tfs = questions.filter(
       (q) => q.questionType === QuestionKind.TRUE_FALSE,
@@ -269,12 +341,19 @@ export class AssessmentsService {
             startedAt: new Date(),
             mcqQuestionIds: ordered.map((q) => q.id),
             mcqMaxScore: ordered.length * MARKS_PER_QUESTION,
-            practicalMaxScore: practicals.reduce(
-              (sum, p) => sum + p.maxScore,
-              0,
-            ),
+            practicalMaxScore: assigned.reduce((sum, p) => sum + p.maxScore, 0),
           },
         });
+        if (assigned !== practicals && assigned.length > 0) {
+          // Freeze which practical this student was given (an admin may re-assign the version later).
+          await tx.practicalSubmission.create({
+            data: {
+              attemptId: created.id,
+              questionId: assigned[0].id,
+              code: '',
+            },
+          });
+        }
         await tx.mCQAnswer.createMany({
           data: ordered.map((q) => {
             const n = (q.options as unknown as string[]).length;
@@ -338,6 +417,8 @@ export class AssessmentsService {
             instructions: true,
             passScorePct: true,
             sourceAssessmentId: true,
+            format: true,
+            activeVariant: true,
             lesson: {
               select: {
                 courseId: true,
@@ -356,7 +437,12 @@ export class AssessmentsService {
             assignedTeacher: { select: { userId: true } },
           },
         },
-        scheduledLesson: { select: { teacher: { select: { userId: true } } } },
+        scheduledLesson: {
+          select: {
+            practicalVariant: true,
+            teacher: { select: { userId: true } },
+          },
+        },
         report: true,
       },
     });
@@ -424,9 +510,36 @@ export class AssessmentsService {
       where: { assessmentId: rootId, isPublished: true },
       orderBy: { order: 'asc' },
     });
-    const practicalQs = new Map(bankPracticals.map((p) => [p.id, p]));
-    for (const s of attempt.practicalSubmissions)
-      practicalQs.set(s.questionId, s.question);
+    const lc = await this.isLittleCoders(attempt.assessment);
+    const practicalQs = new Map<string, (typeof bankPracticals)[number]>();
+    if (lc) {
+      // Little Coders: the practical this student was GIVEN (frozen when the attempt started);
+      // only an attempt without one falls back to the version the class is assigned.
+      for (const s of attempt.practicalSubmissions)
+        practicalQs.set(s.questionId, s.question);
+      if (practicalQs.size === 0) {
+        const rootRow =
+          rootId === attempt.assessment.id
+            ? attempt.assessment
+            : await this.prisma.assessment.findUniqueOrThrow({
+                where: { id: rootId },
+                select: { activeVariant: true },
+              });
+        const chosen = pickPractical(
+          bankPracticals,
+          pickVariant({
+            classVariant: attempt.scheduledLesson?.practicalVariant,
+            assessmentVariant: rootRow.activeVariant,
+          }),
+        );
+        if (chosen) practicalQs.set(chosen.id, chosen);
+      }
+    } else {
+      for (const p of bankPracticals) practicalQs.set(p.id, p);
+      for (const s of attempt.practicalSubmissions)
+        practicalQs.set(s.questionId, s.question);
+    }
+    const practicalRow = [...practicalQs.values()][0] ?? null;
     const coding =
       [...practicalQs.values()].slice(0, 1).map((p) => {
         const sub = attempt.practicalSubmissions.find(
@@ -540,10 +653,27 @@ export class AssessmentsService {
         ).length,
         totalMarks:
           orderedAnswers.length * MARKS_PER_QUESTION + (coding?.maxScore ?? 0),
+        format: lc
+          ? AssessmentFormat.LITTLE_CODERS_V2
+          : AssessmentFormat.STANDARD,
+        lc: lc ? this.lcMeta(attempt.assessment.type) : null,
       },
       student: { id: attempt.student.id, fullName: attempt.student.fullName },
       questions,
-      codingProject: coding,
+      codingProject:
+        coding && lc && practicalRow
+          ? {
+              ...coding,
+              lc: await this.lcPracticalPayload(
+                attempt.id,
+                practicalRow,
+                attempt.practicalSubmissions.find(
+                  (x) => x.questionId === practicalRow.id,
+                ) ?? null,
+                isStudent,
+              ),
+            }
+          : coding,
       answeredCount: orderedAnswers.filter((a) => a.selectedIndex !== null)
         .length,
       startedAt: attempt.startedAt,
@@ -557,6 +687,48 @@ export class AssessmentsService {
       serverTime: new Date(),
       report: report ? { id: report.id, status: report.status } : null,
       result: result ?? legacyResult,
+    };
+  }
+
+  // ═══ Little Coders helpers ═════════════════════════════════════════════════
+
+  /** The standardized header and sections of a Little Coders assessment. */
+  private lcMeta(type: SessionType) {
+    return lcAssessmentMeta(type);
+  }
+
+  /** What the practical screen needs: the specification (staff see the starter note too), the
+   *  platform's current start address, and what has been handed in so far. */
+  private async lcPracticalPayload(
+    attemptId: string,
+    practical: { id: string; spec: Prisma.JsonValue },
+    submission: { links: string[]; note: string | null } | null,
+    isStudent: boolean,
+  ) {
+    const spec = readPracticalSpec(practical.spec);
+    const platforms = await listPlatforms(this.prisma);
+    const platform = spec
+      ? (platforms.find((p) => p.key === spec.platform) ?? null)
+      : null;
+    return {
+      spec: spec ? (isStudent ? studentPracticalSpec(spec) : spec) : null,
+      platform: platform
+        ? {
+            key: platform.key,
+            name: platform.name,
+            startUrl: platform.startUrl,
+            isActive: platform.isActive,
+          }
+        : null,
+      files: this.files ? await this.files.listFor(attemptId) : [],
+      links: submission?.links ?? [],
+      note: submission?.note ?? null,
+      limits: {
+        maxFiles: LC_FILE_LIMITS.maxFiles,
+        maxFileMb: Math.round(LC_FILE_LIMITS.maxFileBytes / 1024 / 1024),
+        maxLinks: LC_FILE_LIMITS.maxLinks,
+        maxNote: LC_FILE_LIMITS.maxNoteLength,
+      },
     };
   }
 
@@ -719,6 +891,51 @@ export class AssessmentsService {
     );
   }
 
+  /** Little Coders: autosave of the practical's links and note. Saving never grades anything. */
+  async savePractical(
+    attemptId: string,
+    dto: SavePracticalDto,
+    studentUserId: string,
+  ) {
+    const checked = normalizeLinks(dto.links);
+    if (checked.error) throw new BadRequestException(checked.error);
+    return this.withEditableAttempt(
+      attemptId,
+      studentUserId,
+      async (tx, row) => {
+        const a = await tx.assessment.findUnique({
+          where: { id: row.assessmentId },
+          select: { id: true, sourceAssessmentId: true, format: true },
+        });
+        if (!a || !(await this.isLittleCoders(a, tx)))
+          throw new BadRequestException(
+            'This test does not take project links.',
+          );
+        await this.assertPracticalBelongs(tx, row.assessmentId, dto.questionId);
+        const note = cleanNote(dto.note);
+        const saved = await tx.practicalSubmission.upsert({
+          where: {
+            attemptId_questionId: { attemptId, questionId: dto.questionId },
+          },
+          create: {
+            attemptId,
+            questionId: dto.questionId,
+            code: '',
+            links: checked.links,
+            note,
+          },
+          update: { links: checked.links, note },
+        });
+        return {
+          saved: true,
+          savedAt: saved.updatedAt,
+          links: saved.links,
+          note: saved.note,
+        };
+      },
+    );
+  }
+
   private async assertPracticalBelongs(
     tx: Prisma.TransactionClient,
     assessmentId: string,
@@ -748,12 +965,23 @@ export class AssessmentsService {
   ) {
     const pre = await this.prisma.assessmentAttempt.findUnique({
       where: { id: attemptId },
-      select: { studentUserId: true, status: true },
+      select: {
+        studentUserId: true,
+        status: true,
+        assessment: {
+          select: { id: true, sourceAssessmentId: true, format: true },
+        },
+      },
     });
     if (!pre) throw new NotFoundException('Attempt not found');
     if (pre.studentUserId !== studentUserId) throw new ForbiddenException();
     if (pre.status !== AttemptStatus.IN_PROGRESS)
       return this.submissionSummary(attemptId, true);
+    // Little Coders: every uploaded file must really be in storage, at its full size, before the
+    // project is handed in (the teacher's own "Lock & submit" cannot wait for this and skips it).
+    if (this.files && (await this.isLittleCoders(pre.assessment))) {
+      await this.files.assertUploadsStored(attemptId);
+    }
     return this.finalizeSubmission(attemptId, studentUserId, dto, null);
   }
 
@@ -817,6 +1045,8 @@ export class AssessmentsService {
                 passScorePct: true,
                 sourceAssessmentId: true,
                 lessonId: true,
+                format: true,
+                activeVariant: true,
                 lesson: {
                   select: {
                     courseId: true,
@@ -827,7 +1057,9 @@ export class AssessmentsService {
             },
             mcqAnswers: { include: { question: true } },
             practicalSubmissions: true,
-            scheduledLesson: { select: { id: true, teacherId: true } },
+            scheduledLesson: {
+              select: { id: true, teacherId: true, practicalVariant: true },
+            },
             student: { select: { assignedTeacherId: true } },
           },
         });
@@ -878,10 +1110,31 @@ export class AssessmentsService {
 
         // 3. Final code for the coding project.
         const rootId = rootBankId(attempt.assessment);
-        const bankPractical = await tx.practicalQuestion.findFirst({
-          where: { assessmentId: rootId, isPublished: true },
-          orderBy: { order: 'asc' },
-        });
+        const lc = await this.isLittleCoders(attempt.assessment, tx);
+        let bankPractical: Awaited<
+          ReturnType<typeof tx.practicalQuestion.findFirst>
+        > = null;
+        if (lc) {
+          // The practical this student was given (frozen when the attempt started).
+          const frozen = attempt.practicalSubmissions[0]?.questionId;
+          bankPractical = frozen
+            ? await tx.practicalQuestion.findUnique({ where: { id: frozen } })
+            : pickPractical(
+                await tx.practicalQuestion.findMany({
+                  where: { assessmentId: rootId, isPublished: true },
+                  orderBy: { order: 'asc' },
+                }),
+                pickVariant({
+                  classVariant: attempt.scheduledLesson?.practicalVariant,
+                  assessmentVariant: attempt.assessment.activeVariant,
+                }),
+              );
+        } else {
+          bankPractical = await tx.practicalQuestion.findFirst({
+            where: { assessmentId: rootId, isPublished: true },
+            orderBy: { order: 'asc' },
+          });
+        }
         let coding: SubmittedCoding | null = null;
         if (bankPractical) {
           const incomingCode = dto.practical?.find(
@@ -924,6 +1177,57 @@ export class AssessmentsService {
             code: sub?.code ?? '',
             savedAt: sub?.updatedAt ?? null,
           };
+          if (lc) {
+            // The latest links / note travel with the submission; the uploaded files become part
+            // of it (ATTACHED) in this very transaction; the report freezes what was handed in.
+            if (dto.project) {
+              if (dto.project.questionId !== bankPractical.id) {
+                throw new BadRequestException(
+                  'One of the submitted projects is not part of this test.',
+                );
+              }
+              const checked = normalizeLinks(dto.project.links);
+              if (checked.error) throw new BadRequestException(checked.error);
+              sub = await tx.practicalSubmission.upsert({
+                where: {
+                  attemptId_questionId: {
+                    attemptId,
+                    questionId: bankPractical.id,
+                  },
+                },
+                create: {
+                  attemptId,
+                  questionId: bankPractical.id,
+                  code: '',
+                  links: checked.links,
+                  note: cleanNote(dto.project.note),
+                },
+                update: {
+                  links: checked.links,
+                  note: cleanNote(dto.project.note),
+                },
+              });
+            }
+            await tx.assessmentFile.updateMany({
+              where: { attemptId, status: 'UPLOADED' },
+              data: { status: 'ATTACHED', attachedAt: new Date() },
+            });
+            const handedIn = await tx.assessmentFile.findMany({
+              where: { attemptId, status: 'ATTACHED' },
+              orderBy: { createdAt: 'asc' },
+              select: { id: true, originalName: true, sizeBytes: true },
+            });
+            coding.submission = {
+              links: sub?.links ?? [],
+              note: sub?.note ?? null,
+              files: handedIn.map((f) => ({
+                id: f.id,
+                name: f.originalName,
+                size: f.sizeBytes,
+              })),
+            };
+            coding.spec = readPracticalSpec(bankPractical.spec);
+          }
         }
 
         // 4. Grade the objective part and build the report card.
@@ -1107,6 +1411,7 @@ export class AssessmentsService {
 
     const assessment = sl.lesson?.assessment ?? null;
     const attempt = sl.assessmentAttempt;
+    const summary = assessment ? await this.bankSummary(assessment) : null;
     return {
       scheduledLessonId: sl.id,
       studentName: sl.student.fullName,
@@ -1116,7 +1421,11 @@ export class AssessmentsService {
             type: assessment.type,
             title: assessment.title,
             isPublished: assessment.isPublished,
-            ...(await this.bankSummary(assessment)),
+            ...summary,
+            // Little Coders: the standardized header (40 minutes · 40 marks) and its sections.
+            ...(summary?.format === AssessmentFormat.LITTLE_CODERS_V2
+              ? { lc: this.lcMeta(assessment.type) }
+              : {}),
           }
         : null,
       // The teacher closed this class's test before the student started it.
@@ -1194,12 +1503,16 @@ export class AssessmentsService {
         orderBy: { order: 'asc' },
       }),
     ]);
+    const summary = await this.bankSummary(assessment);
     return {
       id: assessment.id,
       type: assessment.type,
       title: assessment.title,
       instructions: assessment.instructions,
-      ...(await this.bankSummary(assessment)),
+      ...summary,
+      ...(summary.format === AssessmentFormat.LITTLE_CODERS_V2
+        ? { lc: this.lcMeta(assessment.type) }
+        : {}),
       questions: questions.map((q, i) => ({
         id: q.id,
         order: i + 1,
@@ -1217,6 +1530,10 @@ export class AssessmentsService {
         language: p.language,
         maxScore: p.maxScore,
         rubric: parseRubric(p.rubric),
+        // Little Coders: the structured project and which version it is (staff see it all).
+        ...(p.spec
+          ? { spec: readPracticalSpec(p.spec), variantKey: p.variantKey }
+          : {}),
       })),
     };
   }
@@ -1479,8 +1796,9 @@ export class AssessmentsService {
         }),
         this.bankSummary(assessment),
       ]);
+    const lcTest = await this.isLittleCoders(assessment);
     const shape =
-      assessment.type === SessionType.LEARNING
+      assessment.type === SessionType.LEARNING || lcTest
         ? null
         : TEST_SHAPES[assessment.type];
     const issues: string[] = [];
@@ -1514,17 +1832,56 @@ export class AssessmentsService {
           assessment.sourceAssessment?.lesson.course.title ?? null,
         linkedCount,
       },
-      standard: {
-        expectedMcq: shape?.mcq ?? 0,
-        expectedTrueFalse: shape?.trueFalse ?? 0,
-        expectedCodingProject: shape?.codingProject ?? false,
-        expectedTotalMarks: shape
-          ? expectedTotalMarks(assessment.type as BankTestType)
-          : 0,
-        counts: summary.counts,
-        meets: summary.meetsStandard,
-        issues,
-      },
+      standard: lcTest
+        ? this.lcStandard(assessment.type, summary)
+        : {
+            expectedMcq: shape?.mcq ?? 0,
+            expectedTrueFalse: shape?.trueFalse ?? 0,
+            expectedCodingProject: shape?.codingProject ?? false,
+            expectedTotalMarks: shape
+              ? expectedTotalMarks(assessment.type as BankTestType)
+              : 0,
+            counts: summary.counts,
+            meets: summary.meetsStandard,
+            issues,
+          },
+    };
+  }
+
+  /** The Little Coders standard (10 multiple-choice + 5 True/False + one 25-mark practical = 40 marks),
+   *  measured against what the bank holds. The Final Assessment keeps one practical per version. */
+  private lcStandard(
+    type: SessionType,
+    summary: {
+      counts: { mcq: number; trueFalse: number; practical: number };
+      meetsStandard: boolean;
+    },
+  ) {
+    const wantPractical = type === SessionType.FINAL_TEST ? 2 : 1;
+    const issues: string[] = [];
+    if (summary.counts.mcq !== LC_ASSESSMENT.mcq.count)
+      issues.push(
+        `Expected ${LC_ASSESSMENT.mcq.count} multiple-choice questions, found ${summary.counts.mcq}.`,
+      );
+    if (summary.counts.trueFalse !== LC_ASSESSMENT.trueFalse.count)
+      issues.push(
+        `Expected ${LC_ASSESSMENT.trueFalse.count} True/False questions, found ${summary.counts.trueFalse}.`,
+      );
+    if (summary.counts.practical !== wantPractical) {
+      issues.push(
+        wantPractical === 2
+          ? `The Final Assessment needs two published practical projects (Scratch / AI and Python), found ${summary.counts.practical}.`
+          : `A course assessment needs exactly one practical project, found ${summary.counts.practical}.`,
+      );
+    }
+    return {
+      expectedMcq: LC_ASSESSMENT.mcq.count,
+      expectedTrueFalse: LC_ASSESSMENT.trueFalse.count,
+      expectedCodingProject: true,
+      expectedTotalMarks: LC_ASSESSMENT.marks,
+      counts: summary.counts,
+      meets: summary.meetsStandard,
+      issues,
     };
   }
 
@@ -1696,6 +2053,21 @@ export class AssessmentsService {
     dto: Record<string, unknown>,
   ) {
     const rootId = await this.rootIdFor(assessmentId);
+    if (await this.isLittleCodersRoot(rootId)) {
+      const data = this.lcPracticalFields(dto, null);
+      const last = await this.prisma.practicalQuestion.aggregate({
+        where: { assessmentId: rootId },
+        _max: { order: true },
+      });
+      return this.prisma.practicalQuestion.create({
+        data: {
+          ...data,
+          assessmentId: rootId,
+          order:
+            (dto.order as number | undefined) ?? (last._max.order ?? -1) + 1,
+        } as never,
+      });
+    }
     return this.prisma.practicalQuestion.create({
       data: { ...dto, assessmentId: rootId } as never,
     });
@@ -1704,10 +2076,118 @@ export class AssessmentsService {
   async updatePracticalQuestion(id: string, dto: Record<string, unknown>) {
     const q = await this.prisma.practicalQuestion.findUnique({ where: { id } });
     if (!q) throw new NotFoundException('Question not found');
+    if (await this.isLittleCodersRoot(q.assessmentId)) {
+      return this.prisma.practicalQuestion.update({
+        where: { id },
+        data: this.lcPracticalFields(dto, q) as never,
+      });
+    }
     return this.prisma.practicalQuestion.update({
       where: { id },
       data: dto as never,
     });
+  }
+
+  private async isLittleCodersRoot(rootId: string): Promise<boolean> {
+    const root = await this.prisma.assessment.findUnique({
+      where: { id: rootId },
+      select: { format: true },
+    });
+    return root?.format === AssessmentFormat.LITTLE_CODERS_V2;
+  }
+
+  /**
+   * A Little Coders practical is a structured project (brief, blocks to find, build requirements,
+   * the prepared starter), not free text. Whatever an admin saves must pass the same validation as
+   * the shipped projects, keep the standard 25-mark rubric, and is then marked `adminEdited` so a
+   * later release of the question bank leaves it exactly as written.
+   */
+  private lcPracticalFields(
+    dto: Record<string, unknown>,
+    existing: {
+      spec: Prisma.JsonValue;
+      rubric: Prisma.JsonValue;
+    } | null,
+  ): Record<string, unknown> {
+    const rawSpec =
+      dto.spec !== undefined ? dto.spec : (existing?.spec ?? undefined);
+    const checked = validatePracticalSpec(rawSpec);
+    if (!checked.value) {
+      throw new BadRequestException(
+        `This project cannot be saved: ${checked.errors.slice(0, 3).join(' ')}`,
+      );
+    }
+    const rubric = parseRubric(
+      (dto.rubric !== undefined ? dto.rubric : existing?.rubric) as
+        | Prisma.JsonValue
+        | undefined,
+    );
+    const total = rubric.reduce((sum, r) => sum + r.maxPoints, 0);
+    if (total !== LC_ASSESSMENT.practical.marks) {
+      throw new BadRequestException(
+        `The rubric must add up to ${LC_ASSESSMENT.practical.marks} marks (it adds up to ${total}).`,
+      );
+    }
+    if (
+      dto.maxScore !== undefined &&
+      Number(dto.maxScore) !== LC_ASSESSMENT.practical.marks
+    ) {
+      throw new BadRequestException(
+        `The practical project is worth ${LC_ASSESSMENT.practical.marks} marks.`,
+      );
+    }
+    if (
+      dto.variantKey !== undefined &&
+      (typeof dto.variantKey !== 'string' ||
+        !(LC_VARIANTS as readonly string[]).includes(dto.variantKey))
+    ) {
+      throw new BadRequestException(
+        'The version must be SCRATCH_AI or PYTHON.',
+      );
+    }
+    return {
+      ...dto,
+      spec: {
+        ...checked.value,
+        adminEdited: true,
+      } as unknown as Prisma.InputJsonValue,
+      rubric: rubric as unknown as Prisma.InputJsonValue,
+      maxScore: LC_ASSESSMENT.practical.marks,
+      language:
+        typeof dto.language === 'string' && dto.language.trim()
+          ? dto.language
+          : checked.value.platform === 'EDUBLOCKS'
+            ? 'python'
+            : 'scratch',
+      // This workflow marks by rubric; there is no starter code or automatic test.
+      starterCode: null,
+      testCases: Prisma.DbNull,
+    };
+  }
+
+  /**
+   * Admin: which version of a Little Coders practical (Scratch / AI, or Python) is given by default.
+   * Set on the question bank and on every assessment that reads from it. null = the first version.
+   */
+  async setAssessmentVariant(
+    assessmentId: string,
+    variant: (typeof LC_VARIANTS)[number] | null,
+  ) {
+    const a = await this.prisma.assessment.findUnique({
+      where: { id: assessmentId },
+      select: { id: true, sourceAssessmentId: true, format: true },
+    });
+    if (!a) throw new NotFoundException('Assessment not found');
+    if (!(await this.isLittleCoders(a)))
+      throw new BadRequestException(
+        'Only a Little Coders assessment has practical versions.',
+      );
+    const rootId = rootBankId(a);
+    await this.prisma.assessment.updateMany({
+      where: { OR: [{ id: rootId }, { sourceAssessmentId: rootId }] },
+      data: { activeVariant: variant },
+    });
+    return { assessmentId: rootId, activeVariant: variant };
   }
 
   async deletePracticalQuestion(id: string) {

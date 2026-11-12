@@ -23,13 +23,14 @@ export interface Section {
   questions: AttemptQuestion[];
 }
 
-/** Multiple-choice first, then True/False — each numbered continuously. */
-export function splitSections(questions: AttemptQuestion[]): Section[] {
+/** Multiple-choice first, then True/False — each numbered continuously. `labels` renames the two
+ *  sections (Little Coders: "01 · Think in Blocks", "02 · Quick Check"). */
+export function splitSections(questions: AttemptQuestion[], labels?: { MCQ: string; TRUE_FALSE: string }): Section[] {
   const mcq = questions.filter((q) => q.kind === 'MCQ');
   const tf = questions.filter((q) => q.kind === 'TRUE_FALSE');
   const out: Section[] = [];
-  if (mcq.length) out.push({ key: 'MCQ', title: 'Multiple choice', questions: mcq });
-  if (tf.length) out.push({ key: 'TRUE_FALSE', title: 'True or False', questions: tf });
+  if (mcq.length) out.push({ key: 'MCQ', title: labels?.MCQ ?? 'Multiple choice', questions: mcq });
+  if (tf.length) out.push({ key: 'TRUE_FALSE', title: labels?.TRUE_FALSE ?? 'True or False', questions: tf });
   return out;
 }
 
@@ -37,7 +38,12 @@ export function kindLabel(kind: QuestionKind): string {
   return kind === 'TRUE_FALSE' ? 'True / False' : 'Multiple choice';
 }
 
-export function testTypeLabel(type: TestType | string): string {
+export function testTypeLabel(type: TestType | string, format?: string): string {
+  // Little Coders calls its tests "assessments".
+  if (format === 'LITTLE_CODERS_V2') {
+    if (type === 'COURSE_TEST') return 'Course Assessment';
+    if (type === 'FINAL_TEST') return 'Final Assessment';
+  }
   switch (type) {
     case 'COURSE_TEST':
       return 'Course Test';

@@ -6,14 +6,14 @@ const tracks = [
     emoji: "⭐",
     name: "Little Coders",
     tagline: "Star Cadets",
-    ages: "Ages 6–10",
+    ages: "Ages 6–11",
     description:
-      "Visual coding, Scratch animations, and logic games. Build a love of technology through play.",
+      "Five independent courses: Scratch animations and games, AI-powered projects, and first block-based Python. Build a love of technology through play.",
     color: "from-blue-600/20 to-blue-900/10",
     border: "border-blue-700/30 hover:border-blue-500/50",
     badge: "bg-blue-900/50 text-blue-300 border-blue-700",
     accent: "text-blue-400",
-    courses: ["Scratch Basics", "Animation World", "Code Stories", "Math Games"],
+    courses: ["Scratch Adventures", "Scratch Game Studio", "AI for Kids", "Python Explorers", "Python Creative Lab"],
   },
   {
     id: "explorers",

@@ -1039,9 +1039,9 @@
       "ageMin": 6,
       "ageMax": 11,
       "kind": "specialized",
-      "totalLessons": 28,
-      "learningLessons": 24,
-      "assessmentLessons": 4,
+      "totalLessons": 46,
+      "learningLessons": 40,
+      "assessmentLessons": 6,
       "modules": [
         {
           "slug": "scratch-adventures",
@@ -1053,53 +1053,53 @@
             {
               "order": 1,
               "type": "LEARNING",
-              "title": "What Is Coding, Anyway?"
+              "title": "Welcome to Scratch!"
             },
             {
               "order": 2,
               "type": "LEARNING",
-              "title": "Meet Scratch and Your First Sprite"
+              "title": "Let's Make Things Move!"
             },
             {
               "order": 3,
               "type": "LEARNING",
-              "title": "Motion, Looks, and Sound — Your Sprite's 3 Superpowers"
+              "title": "Give Your Characters a Personality"
             },
             {
               "order": 4,
               "type": "LEARNING",
-              "title": "Events and Broadcasting — Sprites That React!"
+              "title": "Making Things Interactive"
             },
             {
               "order": 5,
               "type": "LEARNING",
-              "title": "Loops — Do It Again (and Again)!"
+              "title": "Sounds, Music & Effects"
             },
             {
               "order": 6,
               "type": "LEARNING",
-              "title": "If This, Then That — Sprites That Decide!"
+              "title": "The Magic of Repetition"
             },
             {
               "order": 7,
               "type": "LEARNING",
-              "title": "Build Your Own Interactive Story"
+              "title": "Bringing Characters to Life"
             },
             {
               "order": 8,
               "type": "LEARNING",
-              "title": "Final Project — Build Your Own Game!"
+              "title": "My First Animated Story"
             },
             {
               "order": 9,
               "type": "COURSE_TEST",
-              "title": "Scratch Adventures — Course Test"
+              "title": "Scratch Adventures — Course Assessment"
             }
           ]
         },
         {
-          "slug": "python-for-young-builders",
-          "title": "Python for Young Builders",
+          "slug": "scratch-game-studio",
+          "title": "Scratch Game Studio",
           "order": 2,
           "lessonCount": 9,
           "learningCount": 8,
@@ -1107,47 +1107,47 @@
             {
               "order": 10,
               "type": "LEARNING",
-              "title": "From Blocks to Words — Hello, Python!"
+              "title": "Game Controls & Movement"
             },
             {
               "order": 11,
               "type": "LEARNING",
-              "title": "Variables and User Input"
+              "title": "Making Sprites Interact"
             },
             {
               "order": 12,
               "type": "LEARNING",
-              "title": "Printing and String Formatting"
+              "title": "Keeping Score!"
             },
             {
               "order": 13,
               "type": "LEARNING",
-              "title": "If/Else Decisions"
+              "title": "Making Decisions with Code"
             },
             {
               "order": 14,
               "type": "LEARNING",
-              "title": "While Loops and For Loops"
+              "title": "Randomness & Game Challenges"
             },
             {
               "order": 15,
               "type": "LEARNING",
-              "title": "Lists and Simple Data"
+              "title": "Timers, Lives & Survival"
             },
             {
               "order": 16,
               "type": "LEARNING",
-              "title": "Building a Mini Quiz App"
+              "title": "Multiple Levels & Game Scenes"
             },
             {
               "order": 17,
               "type": "LEARNING",
-              "title": "Final Project — Our Own Mini Game!"
+              "title": "Clones & Arcade Games"
             },
             {
               "order": 18,
               "type": "COURSE_TEST",
-              "title": "Python for Young Builders — Course Test"
+              "title": "Scratch Game Studio — Course Assessment"
             }
           ]
         },
@@ -1161,47 +1161,155 @@
             {
               "order": 19,
               "type": "LEARNING",
-              "title": "What Is AI?"
+              "title": "Giga's AI Snack Buddy"
             },
             {
               "order": 20,
               "type": "LEARNING",
-              "title": "Training Your First Image Recognition Model"
+              "title": "Pico's AI Space Rescue Scanner"
             },
             {
               "order": 21,
               "type": "LEARNING",
-              "title": "Connecting AI to Scratch with ML4Kids"
+              "title": "AI Recycling Rangers"
             },
             {
               "order": 22,
               "type": "LEARNING",
-              "title": "Building an AI Rock-Paper-Scissors Game"
+              "title": "AI Superhero Power-Up Lab"
             },
             {
               "order": 23,
               "type": "LEARNING",
-              "title": "Training a Sound Recognizer"
+              "title": "AI Space Explorer Packing Mission"
             },
             {
               "order": 24,
               "type": "LEARNING",
-              "title": "Voice-Activated Story"
+              "title": "AI Voice-Controlled Rocket Mission"
             },
             {
               "order": 25,
               "type": "LEARNING",
-              "title": "Facial Expression Recognition and Virtual Pets"
+              "title": "The Wizard's Magic Spellbook"
             },
             {
               "order": 26,
               "type": "LEARNING",
-              "title": "Showcase Day!"
+              "title": "The AI Quiz Show Challenge"
             },
             {
               "order": 27,
               "type": "COURSE_TEST",
-              "title": "AI for Kids: Smart Projects — Course Test"
+              "title": "AI for Kids: Smart Projects — Course Assessment"
+            }
+          ]
+        },
+        {
+          "slug": "python-explorers",
+          "title": "Python Explorers",
+          "order": 4,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 28,
+              "type": "LEARNING",
+              "title": "Welcome to Python!"
+            },
+            {
+              "order": 29,
+              "type": "LEARNING",
+              "title": "Drawing with Python"
+            },
+            {
+              "order": 30,
+              "type": "LEARNING",
+              "title": "Repeat Magic in Python"
+            },
+            {
+              "order": 31,
+              "type": "LEARNING",
+              "title": "Variables & Calculations"
+            },
+            {
+              "order": 32,
+              "type": "LEARNING",
+              "title": "Let the User Join In!"
+            },
+            {
+              "order": 33,
+              "type": "LEARNING",
+              "title": "Making Decisions in Python"
+            },
+            {
+              "order": 34,
+              "type": "LEARNING",
+              "title": "Randomness & Smart Decisions"
+            },
+            {
+              "order": 35,
+              "type": "LEARNING",
+              "title": "My First Python Game"
+            },
+            {
+              "order": 36,
+              "type": "COURSE_TEST",
+              "title": "Python Explorers — Course Assessment"
+            }
+          ]
+        },
+        {
+          "slug": "python-creative-lab",
+          "title": "Python Creative Lab",
+          "order": 5,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 37,
+              "type": "LEARNING",
+              "title": "Working with Lists"
+            },
+            {
+              "order": 38,
+              "type": "LEARNING",
+              "title": "Loops & Collections"
+            },
+            {
+              "order": 39,
+              "type": "LEARNING",
+              "title": "Creating Your Own Functions"
+            },
+            {
+              "order": 40,
+              "type": "LEARNING",
+              "title": "Functions with Superpowers"
+            },
+            {
+              "order": 41,
+              "type": "LEARNING",
+              "title": "Keep Going Until It Works!"
+            },
+            {
+              "order": 42,
+              "type": "LEARNING",
+              "title": "Loops Inside Loops"
+            },
+            {
+              "order": 43,
+              "type": "LEARNING",
+              "title": "Finding & Fixing Bugs"
+            },
+            {
+              "order": 44,
+              "type": "LEARNING",
+              "title": "My Python Capstone"
+            },
+            {
+              "order": 45,
+              "type": "COURSE_TEST",
+              "title": "Python Creative Lab — Course Assessment"
             }
           ]
         }
@@ -1209,9 +1317,9 @@
       "stages": [],
       "closingAssessments": [
         {
-          "order": 28,
+          "order": 46,
           "type": "FINAL_TEST",
-          "title": "Little Coders — Final Test"
+          "title": "Little Coders — Final Assessment"
         }
       ]
     },
@@ -2430,6 +2538,6 @@
   ],
   "totals": {
     "programs": 7,
-    "courses": 23
+    "courses": 25
   }
 }

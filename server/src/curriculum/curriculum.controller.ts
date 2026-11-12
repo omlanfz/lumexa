@@ -29,6 +29,8 @@ import {
   PreviewLessonDto,
   QuizCheckDto,
   SaveProgressDto,
+  UpdateCodingPlatformDto,
+  UpdateLcLessonDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -283,5 +285,39 @@ export class CurriculumController {
     @Body() dto: UpdateLessonContentDto,
   ) {
     return this.curriculum.updateLessonContent(id, dto);
+  }
+
+  // ── Admin: Little Coders ───────────────────────────────────────────────────
+
+  /** The Little Coders parts of one lesson: the interactive page, the Learning Preview video
+   *  record, the project card (addresses, platform buttons, labels, teacher instructions) and the
+   *  homework card. Validated in full; what is saved here is never overwritten by a later release. */
+  @Patch('lessons/:id/little-coders')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  updateLittleCodersLesson(
+    @Param('id') id: string,
+    @Body() dto: UpdateLcLessonDto,
+  ) {
+    return this.curriculum.updateLittleCodersLesson(id, dto);
+  }
+
+  /** The coding platforms "Start Coding" opens (MIT Scratch, Stretch3, Teachable Machine, EduBlocks). */
+  @Get('coding-platforms')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  listCodingPlatforms() {
+    return this.curriculum.listCodingPlatforms();
+  }
+
+  /** Changes where a platform opens, renames it, or switches it off. */
+  @Patch('coding-platforms/:key')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  updateCodingPlatform(
+    @Param('key') key: string,
+    @Body() dto: UpdateCodingPlatformDto,
+  ) {
+    return this.curriculum.updateCodingPlatform(key, dto);
   }
 }

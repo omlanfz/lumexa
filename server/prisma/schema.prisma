@@ -796,6 +796,9 @@ model ScheduledLesson {
   // with what was saved. See AssessmentsService.lockStudentTest.
   testLockedAt       DateTime?
   testLockedByUserId String?
+  // Little Coders Final Assessment only: the practical-project version assigned to
+  // THIS class (null = the assessment's own activeVariant). See Assessment.activeVariant.
+  practicalVariant   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1082,6 +1085,25 @@ model Lesson {
   projectLinks    Json?
   homework        String?
   sourceRefs      Json? // traceability: source repo file paths this content was imported from
+  // ─── Little Coders interactive lessons (server/src/little-coders) ───────────
+  // All four are optional and only ever set on a Little Coders lesson, so every other
+  // program's lessons keep rendering exactly as before (LessonStudyView only switches
+  // to the interactive experience when `experience` is present).
+  //
+  // `experience`   the visual, interactive lesson itself: mission, concept cards, a live
+  //                demonstration, block / code examples, tips, a challenge, the in-class
+  //                project steps and the homework brief. Validated data, never markup.
+  // `previewVideo` "Your Learning Preview": the admin-managed video address, poster and
+  //                subtitles, plus the production brief (script / storyboard) that is
+  //                served to staff only.
+  // `projectCard`  the in-class project card: title, Open Project / Copy Link addresses
+  //                (empty until an admin adds them), the coding platforms to open and
+  //                their button labels, optional teacher instructions.
+  // `homeworkCard` the same for the homework: title, deliverable and platform buttons.
+  experience      Json?
+  previewVideo    Json?
+  projectCard     Json?
+  homeworkCard    Json?
 
   scheduledLessons ScheduledLesson[]
   batchSessions    BatchSession[]
@@ -1658,6 +1680,13 @@ enum QuestionKind {
   TRUE_FALSE // options are always ["True", "False"]
 }
 
+// How an assessment is built and handed in. STANDARD is the original engine every
+// program uses; LITTLE_CODERS_V2 is the standardized Little Coders assessment.
+enum AssessmentFormat {
+  STANDARD
+  LITTLE_CODERS_V2
+}
+
 model Assessment {
   id                 String      @id @default(uuid())
   lessonId           String      @unique
@@ -1683,6 +1712,13 @@ model Assessment {
   // Version of the maintained bank content (server/src/assessments/bank)
   // last applied to this assessment; 0 = never synced (legacy generated bank).
   bankVersion        Int          @default(0)
+  // STANDARD is every existing test (and every other program's). LITTLE_CODERS_V2 is the
+  // Little Coders assessment: 10 MCQ + 5 True/False + one 25-mark practical project handed in
+  // as files and/or links, with files kept temporarily in R2 (see AssessmentFile).
+  format             AssessmentFormat @default(STANDARD)
+  // Little Coders Final Assessment: which practical-project version students are given
+  // ('SCRATCH_AI' | 'PYTHON'), chosen by an admin before the assessment. null elsewhere.
+  activeVariant      String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
@@ -1737,6 +1773,11 @@ model PracticalQuestion {
   order        Int        @default(0)
   isPublished  Boolean    @default(true)
   bankKey      String? // see MCQQuestion.bankKey
+  // Little Coders: the structured project description (brief, blocks to find, build
+  // requirements, platform, starter project, bonus challenges). Admin-editable.
+  spec         Json?
+  // Little Coders Final Assessment: 'SCRATCH_AI' | 'PYTHON'. null for every other question.
+  variantKey   String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -1784,6 +1825,7 @@ model AssessmentAttempt {
   practicalSubmissions PracticalSubmission[]
   vivaRecord           VivaRecord?
   report               TestReport?
+  files                AssessmentFile[]
 
   @@index([studentUserId])
   @@index([assessmentId])
@@ -1823,6 +1865,10 @@ model PracticalSubmission {
   aiEvaluation        Json? // { score, strengths: [], issues: [], feedback, provider, model } | { error }
   aiEvaluatedAt       DateTime?
   score               Float?
+  // Little Coders practical: shareable project links (https only) and an optional
+  // note from the student. The files themselves are AssessmentFile rows.
+  links               String[]          @default([])
+  note                String?
   submittedAt         DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -1941,6 +1987,81 @@ model TestReport {
   @@index([teacherId, status])
   @@index([studentUserId])
   @@index([status, createdAt])
+}
+
+// ─── Assessment practical files (temporary R2 storage) ──────────────────────
+//
+// A practical project handed in as files during an assessment (Little Coders: .sb3,
+// .py, screenshots, …). The bytes live in the PRIVATE homework bucket
+// (HOMEWORK_R2_BUCKET = lumexa-homework) under a prefix of their own,
+//   assessments/<program>/<assessmentId>/<studentId>/<attemptId>/<fileId>-<name>
+// so they can never be confused with homework (`homework/…`) or class recordings
+// (a different bucket). The row is the only record of the object.
+//
+//   UPLOADED        stored while the test is in progress (the student may still remove it)
+//   ATTACHED        part of a submitted attempt, waiting for / being used by the teacher's review
+//   DELETE_PENDING  the teacher finalised the review (or the student removed the file): the
+//                   object must go; a sweep retries until R2 confirms
+//   DELETED         the object is gone — this row (name, size, times) stays as history
+//
+// Opening or previewing a file never changes its status; only a finalised review, an
+// explicit removal by the student or an orphaned upload does. See AssessmentFilesService.
+enum AssessmentFileStatus {
+  UPLOADED
+  ATTACHED
+  DELETE_PENDING
+  DELETED
+}
+
+enum AssessmentFileDeleteReason {
+  REVIEW_FINALISED // the teacher completed the practical evaluation and approved the report
+  REMOVED_BY_STUDENT // the student took the file back before submitting
+  ORPHANED // its attempt no longer exists
+}
+
+model AssessmentFile {
+  id                  String                      @id @default(uuid())
+  attemptId           String
+  attempt             AssessmentAttempt           @relation(fields: [attemptId], references: [id])
+  // Plain ids (snapshots), not foreign keys: a file's life must never block anything else.
+  assessmentId        String
+  studentUserId       String
+  // Which assessment workflow owns it (the object-key namespace), e.g. 'little-coders'.
+  programKey          String
+  objectKey           String                      @unique
+  originalName        String
+  contentType         String
+  sizeBytes           Int
+  status              AssessmentFileStatus        @default(UPLOADED)
+  deleteReason        AssessmentFileDeleteReason?
+  deleteAttempts      Int                         @default(0)
+  lastDeleteError     String?
+  lastDeleteAttemptAt DateTime?
+  createdAt           DateTime                    @default(now())
+  attachedAt          DateTime?
+  deleteRequestedAt   DateTime?
+  deletedAt           DateTime?
+
+  @@index([attemptId])
+  @@index([studentUserId])
+  @@index([status, createdAt])
+  @@index([status, lastDeleteAttemptAt])
+}
+
+// ─── External coding platforms (Little Coders) ───────────────────────────────
+//
+// Where "Start Coding" opens. Never hard-coded in the client: an admin can change a
+// platform's start address (or switch it off) without a deploy. Seeded once at boot
+// (see server/src/little-coders/platforms.ts); an admin's edit is never overwritten.
+model CodingPlatform {
+  key         String   @id // 'SCRATCH' | 'STRETCH3' | 'TEACHABLE_MACHINE' | 'EDUBLOCKS'
+  name        String
+  startUrl    String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 // ─── Centralized email notification system ───────────────────────────────────

@@ -57,7 +57,15 @@ export function SubmittedPanel({ attempt }: { attempt: AttemptView }) {
         {a.hasCodingProject && (
           <li className="flex gap-2">
             <Clock size={16} className="mt-0.5 flex-shrink-0 text-[var(--ar-warning)]" />
-            <span>{locked ? 'The code you had saved for your coding project was sent to your teacher to mark.' : 'Your coding project was sent to your teacher to mark.'}</span>
+            <span>
+              {a.format === 'LITTLE_CODERS_V2'
+                ? locked
+                  ? 'The project links and files you had handed in were sent to your teacher to mark. Your files are kept safely until marking is finished, then removed.'
+                  : 'Your project (links and files) was sent to your teacher to mark. Your files are kept safely until marking is finished, then removed.'
+                : locked
+                  ? 'The code you had saved for your coding project was sent to your teacher to mark.'
+                  : 'Your coding project was sent to your teacher to mark.'}
+            </span>
           </li>
         )}
         <li className="flex gap-2">
@@ -79,6 +87,8 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
   }
   const mcqCorrect = attempt.questions.filter((q) => q.kind === 'MCQ' && q.isCorrect).length;
   const tfCorrect = attempt.questions.filter((q) => q.kind === 'TRUE_FALSE' && q.isCorrect).length;
+  const lc = a.format === 'LITTLE_CODERS_V2' ? a.lc : null;
+  const sectionLabel = (key: string, fallback: string) => lc?.sections.find((s) => s.key === key)?.label ?? fallback;
 
   return (
     <div className="space-y-4 @4xl:grid @4xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] @4xl:items-start @4xl:gap-6 @4xl:space-y-0">
@@ -94,16 +104,16 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
         </p>
         <dl className="mx-auto mt-4 grid max-w-md grid-cols-2 gap-2 text-left text-xs">
           <div className="rounded-lg bg-[var(--ar-bg)] p-2.5">
-            <dt className="text-[var(--ar-faint)]">Multiple choice</dt>
+            <dt className="text-[var(--ar-faint)]">{sectionLabel('mcq', 'Multiple choice')}</dt>
             <dd className="font-bold text-[var(--ar-text)]">{mcqCorrect} / {r.objective.mcqTotal}</dd>
           </div>
           <div className="rounded-lg bg-[var(--ar-bg)] p-2.5">
-            <dt className="text-[var(--ar-faint)]">True / False</dt>
+            <dt className="text-[var(--ar-faint)]">{sectionLabel('trueFalse', 'True / False')}</dt>
             <dd className="font-bold text-[var(--ar-text)]">{tfCorrect} / {r.objective.trueFalseTotal}</dd>
           </div>
           {r.coding && (
             <div className="col-span-2 rounded-lg bg-[var(--ar-bg)] p-2.5">
-              <dt className="text-[var(--ar-faint)]">Coding project (marked by your teacher)</dt>
+              <dt className="text-[var(--ar-faint)]">{lc ? `${sectionLabel('practical', 'Build It!')} (marked by your teacher)` : 'Coding project (marked by your teacher)'}</dt>
               <dd className="font-bold text-[var(--ar-text)]">{formatMarks(r.coding.score)} / {formatMarks(r.coding.max)}</dd>
             </div>
           )}
@@ -123,7 +133,7 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
 
         {r.coding && (r.coding.feedback || (r.coding.rubric && r.coding.rubric.length > 0)) && (
           <section className="space-y-2 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-4 text-sm">
-            <h3 className="font-semibold text-[var(--ar-text)]">Coding project feedback</h3>
+            <h3 className="font-semibold text-[var(--ar-text)]">{lc ? 'Practical project feedback' : 'Coding project feedback'}</h3>
             {r.coding.rubric && (
               <ul className="space-y-0.5 text-xs text-[var(--ar-muted)]">
                 {r.coding.rubric.map((c) => (

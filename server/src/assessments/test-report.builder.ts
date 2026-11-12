@@ -38,6 +38,14 @@ export interface SubmittedCoding {
   rubric: { criterion: string; maxPoints: number; lookFor?: string }[];
   code: string;
   savedAt: Date | null;
+  /** Little Coders: what the student handed in (file names are kept after the files are removed). */
+  submission?: {
+    links: string[];
+    note: string | null;
+    files: { id: string; name: string; size: number }[];
+  };
+  /** Little Coders: the practical's specification as the student saw it, frozen. */
+  spec?: unknown;
 }
 
 export interface BuildReportInput {
@@ -132,6 +140,10 @@ export function buildReportCreateData(
           savedAt: input.coding!.savedAt
             ? input.coding!.savedAt.toISOString()
             : null,
+          ...(input.coding!.submission
+            ? { submission: input.coding!.submission }
+            : {}),
+          ...(input.coding!.spec ? { spec: input.coding!.spec } : {}),
         } as unknown as Prisma.InputJsonValue)
       : Prisma.DbNull,
     codingMaxScore: hasCoding ? input.coding!.maxScore : null,

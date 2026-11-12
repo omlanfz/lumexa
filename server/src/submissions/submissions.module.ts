@@ -17,6 +17,8 @@ import { HomeworkStorageService } from './homework-storage.service';
     HomeworkStorageService,
     { provide: HOMEWORK_STORAGE, useExisting: HomeworkStorageService },
   ],
-  exports: [SubmissionsService, HomeworkFilesService],
+  // HOMEWORK_STORAGE is shared with the assessment-files service (same private bucket, its own
+  // `assessments/` key prefix).
+  exports: [SubmissionsService, HomeworkFilesService, HOMEWORK_STORAGE],
 })
 export class SubmissionsModule {}

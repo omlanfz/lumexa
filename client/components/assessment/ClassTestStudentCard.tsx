@@ -27,6 +27,7 @@ export default function ClassTestStudentCard({
   now,
   clockOffsetMs,
   hasCoding,
+  littleCoders,
   canLock,
   busy,
   confirming,
@@ -38,8 +39,10 @@ export default function ClassTestStudentCard({
   student: ClassTestStudent;
   now: number;
   clockOffsetMs: number;
-  /** The test has a coding project (Final Test). */
+  /** The test has a coding project (Final Test) or a Little Coders practical. */
   hasCoding: boolean;
+  /** Little Coders: the project is handed in as links and files, not typed code. */
+  littleCoders?: boolean;
   canLock: boolean;
   /** A lock/close/reopen for this learner is in flight. */
   busy: boolean;
@@ -105,7 +108,7 @@ export default function ClassTestStudentCard({
             <span className="tabular-nums">
               <strong className="text-[var(--ar-text)]">{a.answered}</strong> of {a.total} answered
             </span>
-            {hasCoding && <span>{a.codingSaved ? '💻 Code started' : '💻 No code yet'}</span>}
+            {hasCoding && (littleCoders ? <span>{a.codingSaved ? '💻 Project started' : '💻 No project yet'}</span> : <span>{a.codingSaved ? '💻 Code started' : '💻 No code yet'}</span>)}
           </div>
         </div>
       ) : (

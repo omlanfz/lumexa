@@ -24,6 +24,7 @@ import { objectivePreview, rubricTotal, totalsPreview, validateMark } from '@/li
 import type { ReportDetail, ReportQuestion } from '@/lib/assessment/types';
 import QuestionText from '@/components/assessment/QuestionText';
 import { themeVars } from '@/components/assessment/theme';
+import LcProjectReview from './LcProjectReview';
 import ReportStatusBadge from './ReportStatusBadge';
 
 interface Draft {
@@ -445,12 +446,13 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
       {report.coding && (
         <section className="t-card space-y-4 p-5" aria-labelledby="coding-title">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="coding-title" className="font-semibold text-[var(--t-text)]">Coding project{report.coding.project ? ` · ${report.coding.project.title}` : ''}</h2>
+            <h2 id="coding-title" className="font-semibold text-[var(--t-text)]">{report.coding.lc ? 'Practical project' : 'Coding project'}{report.coding.project ? ` · ${report.coding.project.title}` : ''}</h2>
             <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${codingUnmarked ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-400'}`}>
               {codingUnmarked ? 'Pending manual evaluation' : 'Evaluated'}
             </span>
           </div>
-          {report.coding.project && (
+          {report.coding.lc && <LcProjectReview lc={report.coding.lc} finalised={report.status === 'READY_TO_SHARE' || report.status === 'SHARED_WITH_PARENTS'} />}
+          {report.coding.project && !report.coding.lc && (
             <>
               <details className="rounded-xl border border-[var(--t-border)] p-3 text-sm">
                 <summary className="cursor-pointer font-medium text-[var(--t-text)]">The task the student was given</summary>
@@ -518,7 +520,7 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
               </tbody>
               <tfoot>
                 <tr className="border-t border-[var(--t-border)]">
-                  <td className="py-2 font-semibold text-[var(--t-text)]">Coding project total</td>
+                  <td className="py-2 font-semibold text-[var(--t-text)]">{report.coding.lc ? 'Practical project total' : 'Coding project total'}</td>
                   <td className="py-2 text-right font-bold tabular-nums text-[var(--t-text)]">
                     {preview.codingScore === null ? '—' : formatMarks(preview.codingScore)} / {formatMarks(report.coding.max)}
                   </td>
@@ -528,7 +530,7 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
           </div>
 
           <div>
-            <label htmlFor="coding-feedback" className="mb-1 block text-xs font-semibold text-[var(--t-text)]">Feedback on the coding project</label>
+            <label htmlFor="coding-feedback" className="mb-1 block text-xs font-semibold text-[var(--t-text)]">{report.coding.lc ? 'Feedback on the practical project' : 'Feedback on the coding project'}</label>
             <textarea
               id="coding-feedback"
               value={draft.codingFeedback}
@@ -575,9 +577,9 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
 
         {editable && (
           <>
-            {final && codingUnmarked && (
+            {codingUnmarked && (
               <p className="flex items-start gap-2 text-xs text-[var(--t-warning)]">
-                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> Mark every rubric criterion of the coding project to complete this report card.
+                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> Mark every rubric criterion of the {report.coding?.lc ? 'practical' : 'coding'} project to complete this report card.
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -595,12 +597,17 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
                   title={codingUnmarked ? 'Mark every rubric criterion first' : undefined}
                   className="inline-flex items-center gap-2 rounded-lg bg-[var(--t-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--t-accent-hover)] disabled:opacity-50"
                 >
-                  <CheckCircle2 size={15} /> {final ? 'Complete report card' : 'Approve report'}
+                  <CheckCircle2 size={15} /> {final || report.coding?.lc ? 'Complete report card' : 'Approve report'}
                 </button>
               ) : (
                 <div role="alertdialog" aria-label="Confirm approval" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--t-border-strong)] bg-[var(--t-surface-2)] p-2 text-xs text-[var(--t-text)]">
                   <span>
                     Approving {edit ? 'saves your changes and ' : ''}releases the result to {report.student.fullName}. You can still reopen it until it is shared.
+                    {report.coding?.lc && report.coding.lc.files.some((f) => !f.removed) && (
+                      <strong className="mt-1 block font-semibold">
+                        It also removes the student&apos;s project files from storage (the marks, feedback, links and file names are kept). Download anything you still need first.
+                      </strong>
+                    )}
                   </span>
                   <button onClick={() => void approve()} disabled={busy !== null} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--t-accent)] px-3 py-1.5 font-semibold text-white disabled:opacity-60">
                     {busy === 'approve' && <Loader2 size={13} className="animate-spin" />} Yes, approve

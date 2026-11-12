@@ -72,7 +72,7 @@ const OPTIONS: Option[] = [
     emoji: "🌟",
     label: "Young Learners",
     sub: "Scratch, basics, fun",
-    callout: "A friendly first step: animated stories, quiz games and drawing robots, created from the very first lesson.",
+    callout: "A friendly first step: animated stories, arcade games, AI-powered projects and first Python programs, created from the very first lesson.",
     ring: "ring-amber-300 dark:ring-amber-500/60",
     activeBg: "bg-amber-50 dark:bg-amber-900/20",
     activeBorder: "border-amber-300 dark:border-amber-500/60",

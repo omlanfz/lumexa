@@ -14,6 +14,13 @@ import { normalizeQuiz, gradedCount, toPublicQuiz } from './quiz';
 import { extractRefKeys } from './refs';
 import { normalizeVisuals } from './visuals';
 import type { LessonVisual, McqQuestion, PublicQuizQuestion } from './types';
+import {
+  readLcShared,
+  readLcTeacherPrep,
+  type LcSharedLesson,
+  type LcTeacherPrep,
+  type PlatformDirectory,
+} from '../../little-coders/lc.public';
 
 export type Viewer = 'student' | 'teacher' | 'admin';
 
@@ -34,6 +41,11 @@ export interface LessonRow {
   checkpoint: string | null;
   codeSnippets: unknown;
   projectLinks: unknown;
+  /** Little Coders (redesigned lessons only; null on every other lesson). */
+  experience?: unknown;
+  previewVideo?: unknown;
+  projectCard?: unknown;
+  homeworkCard?: unknown;
   module?: { id: string; title: string; stageNumber: number | null } | null;
   project?: { id: string; title: string; description: string | null } | null;
 }
@@ -60,6 +72,8 @@ export interface SharedLesson {
   project: { id: string; title: string; description: string | null } | null;
   quiz: PublicQuiz | null;
   visuals: LessonVisual[];
+  /** Little Coders: the interactive lesson page, video record and project cards. Absent on every other lesson. */
+  littleCoders?: LcSharedLesson;
 }
 
 /** The lesson's quiz as stored — and only the questions that obey the rule (four-option multiple choice). */
@@ -73,9 +87,15 @@ export function readVisuals(raw: unknown): LessonVisual[] {
 
 export function buildSharedLesson(
   row: LessonRow,
-  opts: { contentMarkdown?: string | null; projectLinks?: unknown },
+  opts: {
+    contentMarkdown?: string | null;
+    projectLinks?: unknown;
+    /** Where each coding platform button opens (Little Coders lessons only). */
+    platforms?: PlatformDirectory;
+  },
 ): SharedLesson {
   const questions = readQuiz(row.miniQuiz);
+  const littleCoders = readLcShared(row, opts.platforms ?? {});
   return {
     id: row.id,
     title: row.title,
@@ -94,6 +114,7 @@ export function buildSharedLesson(
         ? { questions: toPublicQuiz(questions, row.id), gradedCount: gradedCount(questions) }
         : null,
     visuals: readVisuals(row.visuals),
+    ...(littleCoders ? { littleCoders } : {}),
   };
 }
 
@@ -103,22 +124,32 @@ export interface TeacherPrep {
   reviewNotes: string | null;
   /** The whole quiz, answers and explanations included. */
   answerKey: McqQuestion[];
+  /** Little Coders: the video production brief and the project card's teacher instructions. */
+  littleCoders?: LcTeacherPrep;
 }
 
 /** Served only to an assigned teacher or an admin. */
 export function buildTeacherPrep(row: LessonRow): TeacherPrep {
+  const littleCoders = readLcTeacherPrep(row);
   return {
     lessonId: row.id,
     teacherNotes: row.teacherNotes && row.teacherNotes.trim() !== '' ? row.teacherNotes : null,
     reviewNotes: row.reviewNotes && row.reviewNotes.trim() !== '' ? row.reviewNotes : null,
     answerKey: readQuiz(row.miniQuiz),
+    ...(littleCoders ? { littleCoders } : {}),
   };
 }
 
 /** True when a teacher has anything in the prep panel (so the UI can offer it). */
 export function hasTeacherPrep(row: LessonRow): boolean {
   const p = buildTeacherPrep(row);
-  return !!p.teacherNotes || !!p.reviewNotes || p.answerKey.length > 0;
+  return (
+    !!p.teacherNotes ||
+    !!p.reviewNotes ||
+    p.answerKey.length > 0 ||
+    !!p.littleCoders?.videoBrief ||
+    !!p.littleCoders?.teacherInstructions
+  );
 }
 
 // ─── Numbering, navigation and references ───────────────────────────────────

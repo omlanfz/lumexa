@@ -50,23 +50,30 @@ function download(url: string): void {
  * A new tab is opened straight away, inside the click, so a pop-up blocker does
  * not mistake the later navigation for an unrequested pop-up.
  */
-export async function openHomeworkFile(file: HomeworkFileRef): Promise<void> {
+export async function openHomeworkFile(file: HomeworkFileRef, opts: { scope?: 'homework' | 'assessment' } = {}): Promise<void> {
+  // A Little Coders assessment's project files are opened the same way, from their own endpoints.
+  const assessment = opts.scope === 'assessment';
+  const accessPath = (id: string) => (assessment ? `/assessments/files/${id}/access` : `/submissions/files/${id}/access`);
+  const viewerPath = (id: string) => (assessment ? `/homework-viewer/${id}?scope=assessment` : `/homework-viewer/${id}`);
+
   if (file.url && !file.id) {
     window.open(file.url, '_blank', 'noopener,noreferrer');
     return;
   }
   if (!file.id) throw new Error('This file cannot be opened.');
-  if (file.removed) throw new Error('This file was removed because the program was completed.');
+  if (file.removed) {
+    throw new Error(assessment ? 'This file was removed after the teacher finished marking the project. The marks and feedback are kept.' : 'This file was removed because the program was completed.');
+  }
 
   // Code and notebooks: the viewer page does the rest (it asks the server for the text).
   if (file.kind === 'SOURCE' || file.kind === 'NOTEBOOK') {
-    window.open(`/homework-viewer/${file.id}`, '_blank', 'noopener,noreferrer');
+    window.open(viewerPath(file.id), '_blank', 'noopener,noreferrer');
     return;
   }
 
   // Formats a browser cannot show: no tab needed.
   if (file.kind === 'DOWNLOAD') {
-    const res = await api.get<AccessResponse>(`/submissions/files/${file.id}/access`);
+    const res = await api.get<AccessResponse>(accessPath(file.id));
     if (!res.data.url) throw new Error('This file cannot be downloaded right now.');
     download(res.data.url);
     return;
@@ -75,7 +82,7 @@ export async function openHomeworkFile(file: HomeworkFileRef): Promise<void> {
   // PDFs and images: a tab for the browser's own viewer.
   const tab = window.open('about:blank', '_blank');
   try {
-    const res = await api.get<AccessResponse>(`/submissions/files/${file.id}/access`);
+    const res = await api.get<AccessResponse>(accessPath(file.id));
     if (!res.data.url) throw new Error('This file cannot be opened right now.');
     if (tab) {
       tab.opener = null;

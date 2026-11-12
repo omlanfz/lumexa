@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -50,6 +51,26 @@ export class SaveCodeDto {
   code: string;
 }
 
+/** The Little Coders practical, handed in as links and a note (the files are uploaded
+ *  separately, see AssessmentFilesService). Links must be https addresses. */
+export class SavePracticalDto {
+  @IsString()
+  @MinLength(1)
+  questionId: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  @MaxLength(600, { each: true })
+  links?: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  note?: string;
+}
+
 /** Final submit. `answers`/`practical` carry the student's complete latest
  *  state, so a submission can never lose an answer whose autosave request
  *  failed or arrived late. Both are optional: omitted = use what is saved. */
@@ -67,6 +88,19 @@ export class SubmitAttemptDto {
   @ValidateNested({ each: true })
   @Type(() => SaveCodeDto)
   practical?: SaveCodeDto[];
+
+  /** Little Coders: the latest links / note of the practical project, saved with the submission. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SavePracticalDto)
+  project?: SavePracticalDto;
+}
+
+/** Admin: which practical-project version a Little Coders Final Assessment class is given. */
+export class SetVariantDto {
+  @IsOptional()
+  @IsIn(['SCRATCH_AI', 'PYTHON'])
+  variant?: 'SCRATCH_AI' | 'PYTHON' | null;
 }
 
 export class RecordVivaDto {

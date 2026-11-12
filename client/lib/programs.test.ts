@@ -45,6 +45,23 @@ test('titles and ages shown on a card come from the catalog', () => {
   assert.equal(little.meta.ages, 'Ages 6–11');
 });
 
+test('Little Coders is five independent courses and 46 classes in the public catalog', () => {
+  const little = course('little-coders');
+  assert.equal(little.totalLessons, 46);
+  assert.equal(little.learningLessons, 40);
+  assert.equal(little.assessmentLessons, 6);
+  assert.deepEqual(
+    little.modules.map((m) => m.title),
+    ['Scratch Adventures', 'Scratch Game Studio', 'AI for Kids: Smart Projects', 'Python Explorers', 'Python Creative Lab'],
+  );
+  for (const m of little.modules) {
+    assert.equal(m.learningCount, 8, `${m.title} has eight lessons`);
+    assert.equal(m.lessonCount, 9, `${m.title} ends with its course assessment`);
+  }
+  assert.deepEqual(little.closingAssessments.map((l) => l.type), ['FINAL_TEST']);
+  assert.ok(!little.modules.some((m) => /Young Builders/i.test(m.title)), 'the retired course name is gone');
+});
+
 test('an admin re-slugging a program keeps its card, look and price', () => {
   const catalog = withCourse({ slug: 'ai-engineer-track' }, 'ai-builder');
   const programs = buildPrograms(catalog).specialized;

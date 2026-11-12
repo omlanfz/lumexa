@@ -35,6 +35,7 @@ import {
 } from '@/lib/lesson/markdown';
 import { emptyProgress, lessonCompletion, mergeProgress, parseStored, type LocalProgress } from '@/lib/lesson/progress';
 import type { LessonDetailsResponse, LessonLink, LessonMode, ProgressView, SubmissionInfo, Viewer } from '@/lib/lesson/types';
+import LittleCodersLesson, { LC_ACTIVITIES, lcSections } from '@/components/little-coders/LittleCodersLesson';
 import { LessonRenderContext } from './LessonContext';
 import LessonHeader from './LessonHeader';
 import LessonMarkdown from './LessonMarkdown';
@@ -132,10 +133,19 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
     return m;
   }, [parsed.headings]);
 
-  const coreIds = useMemo(() => sections.filter((s) => s.kind === 'core' && !s.hasQuizBlock).map((s) => s.id), [sections]);
+  // A redesigned Little Coders lesson is drawn from its own structured page, not from Markdown.
+  const lc = lesson.littleCoders ?? null;
+  const lcList = useMemo(() => (lc ? lcSections(lc, !!lesson.homework) : null), [lc, lesson.homework]);
+  const coreIds = useMemo(
+    () => (lcList ? lcList.filter((s) => s.core).map((s) => s.id) : sections.filter((s) => s.kind === 'core' && !s.hasQuizBlock).map((s) => s.id)),
+    [lcList, sections],
+  );
   const activityIds = useMemo(
-    () => extractVisualIds(markdown).filter((id, i, a) => a.indexOf(id) === i && !!VISUAL_RENDERERS[visualsById[id]?.type]?.interactive),
-    [markdown, visualsById],
+    () =>
+      lcList
+        ? LC_ACTIVITIES
+        : extractVisualIds(markdown).filter((id, i, a) => a.indexOf(id) === i && !!VISUAL_RENDERERS[visualsById[id]?.type]?.interactive),
+    [lcList, markdown, visualsById],
   );
 
   // ── Table of contents ─────────────────────────────────────────────────────
@@ -143,6 +153,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
   const hasProject = !!lesson.project || !!lesson.checkpoint;
   const showProjectCard = (lesson.projectLinks && lesson.projectLinks.length > 0) || lesson.codeSnippets?.length > 0;
   const toc: TocItem[] = useMemo(() => {
+    if (lcList) return lcList.map((s) => ({ id: s.id, text: s.title, level: 2 as const }));
     const items: TocItem[] = [];
     if (hasObjectives) items.push({ id: 'lesson-objectives', text: 'Learning objectives', level: 2 });
     for (const s of sections) {
@@ -154,7 +165,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
     if (showProjectCard) items.push({ id: 'lesson-project', text: 'Project', level: 2 });
     if (lesson.homework) items.push({ id: 'lesson-homework', text: 'Homework / practice', level: 2 });
     return items.slice(0, 40);
-  }, [hasObjectives, sections, parsed.headings, showProjectCard, lesson.homework]);
+  }, [lcList, hasObjectives, sections, parsed.headings, showProjectCard, lesson.homework]);
   const tocIds = useMemo(() => toc.map((t) => t.id), [toc]);
   const activeId = useActiveHeading(tocIds, !isClassroom && !presenting);
 
@@ -209,7 +220,6 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
     } catch {
       /* private mode: progress simply is not remembered locally */
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetches the saved progress once on mount
     refresh();
   }, [trackable, storageKey, refresh]);
 
@@ -277,7 +287,25 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
     </div>
   ) : null;
 
-  const renderBody = (presentation: boolean): ReactNode => (
+  const renderBody = (presentation: boolean): ReactNode =>
+    lc ? (
+      <LessonRenderContext.Provider
+        value={{ lessonId: lesson.id, mode, presentation, viewer, refs: data.refs ?? {}, visuals: visualsById, renderQuiz: null, onActivityDone: markActivity }}
+      >
+        <LittleCodersLesson
+          lc={lc}
+          lessonId={lesson.id}
+          title={lesson.title}
+          onActivity={markActivity}
+          hasHomework={!!lesson.homework}
+          homeworkSlot={
+            !presentation && isStudent && scheduledLessonId ? (
+              <HomeworkSubmission scheduledLessonId={scheduledLessonId} submission={data.submission ?? null} onSubmitted={(s) => onSubmissionChange?.(s)} />
+            ) : null
+          }
+        />
+      </LessonRenderContext.Provider>
+    ) : (
     <LessonRenderContext.Provider
       value={{ lessonId: lesson.id, mode, presentation, viewer, refs: data.refs ?? {}, visuals: visualsById, renderQuiz: quizNode ? () => quizNode : null, onActivityDone: markActivity }}
     >
@@ -393,7 +421,7 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
         </section>
       )}
     </LessonRenderContext.Provider>
-  );
+    );
 
   // ── Presentation Mode: the shared screen. Nothing private is rendered. ────
   if (presenting) {

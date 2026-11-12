@@ -12,7 +12,12 @@
 // boot-time safety net (bank.sync.ts) — the SQL migration does the same for
 // lessons imported before this existed.
 
-import { Prisma, PrismaClient, SessionType } from '@prisma/client';
+import {
+  AssessmentFormat,
+  Prisma,
+  PrismaClient,
+  SessionType,
+} from '@prisma/client';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -28,6 +33,9 @@ export interface BankOwnerRef {
   vivaMaxScore: number;
   isPublished: boolean;
   bankVersion: number;
+  /** How the test is taken: STANDARD everywhere except Little Coders (LITTLE_CODERS_V2). */
+  format: AssessmentFormat;
+  activeVariant: string | null;
 }
 
 /** The root bank an assessment's questions live on: itself, or — if it is
@@ -57,6 +65,8 @@ export function linkedAssessmentData(
     isPublished: source.isPublished,
     sourceAssessmentId: rootBankId(source),
     bankVersion: source.bankVersion,
+    format: source.format,
+    activeVariant: source.activeVariant,
   };
 }
 
@@ -98,4 +108,6 @@ export const BANK_OWNER_SELECT = {
   vivaMaxScore: true,
   isPublished: true,
   bankVersion: true,
+  format: true,
+  activeVariant: true,
 } as const;

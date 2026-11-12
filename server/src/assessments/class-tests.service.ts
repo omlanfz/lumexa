@@ -22,6 +22,7 @@
 // the only place that knows.
 
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -30,6 +31,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AssessmentFormat,
   AttemptStatus,
   LessonStatus,
   Prisma,
@@ -38,6 +40,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { AssessmentsService, Requester } from './assessments.service';
+import type { LcVariant } from '../little-coders/lc.constants';
 
 export type ClassTestStudentState =
   | 'NOT_STARTED'
@@ -145,7 +148,12 @@ export class ClassTestsService {
             lockedAt: true,
             mcqQuestionIds: true,
             mcqAnswers: { select: { selectedIndex: true } },
-            practicalSubmissions: { select: { code: true } },
+            // A Little Coders project is handed in as links and files, not as code.
+            practicalSubmissions: { select: { code: true, links: true } },
+            files: {
+              where: { status: { in: ['UPLOADED', 'ATTACHED'] } },
+              select: { id: true },
+            },
             report: { select: { id: true, status: true } },
           },
         },
@@ -178,9 +186,10 @@ export class ClassTestsService {
               total: a.mcqQuestionIds.length,
               answered: a.mcqAnswers.filter((x) => x.selectedIndex !== null)
                 .length,
-              codingSaved: a.practicalSubmissions.some(
-                (p) => p.code.trim().length > 0,
-              ),
+              codingSaved:
+                a.practicalSubmissions.some(
+                  (p) => p.code.trim().length > 0 || p.links.length > 0,
+                ) || a.files.length > 0,
               report: a.report,
             }
           : null,
@@ -199,6 +208,10 @@ export class ClassTestsService {
             title: assessment.title,
             isPublished: assessment.isPublished,
             ...(await this.assessments.bankSummary(assessment)),
+            // Little Coders: which version of the practical this class is given.
+            format: assessment.format,
+            activeVariant: assessment.activeVariant,
+            classVariant: anchor.practicalVariant,
           }
         : null,
       students,
@@ -290,6 +303,42 @@ export class ClassTestsService {
     return { reopened: false };
   }
 
+  // ═══ Little Coders: which practical version a class is given ═══════════════
+
+  /**
+   * Admin: choose which version of the practical (Scratch / AI or Python) this class is given, for
+   * everyone who sits the test together. A learner who has already started keeps the version they
+   * were given (it is frozen when the test starts). null = back to the assessment's default.
+   */
+  async setClassVariant(
+    scheduledLessonId: string,
+    variant: LcVariant | null,
+    requester: Requester,
+  ) {
+    if (requester.role !== Role.ADMIN) {
+      throw new ForbiddenException(
+        'Only an admin chooses which version of the practical a class is given.',
+      );
+    }
+    const anchor = await this.loadClass(scheduledLessonId, requester);
+    const test = anchor.lesson?.assessment;
+    if (!test) throw new BadRequestException('This class has no test.');
+    const root = await this.prisma.assessment.findUnique({
+      where: { id: test.sourceAssessmentId ?? test.id },
+      select: { format: true },
+    });
+    if (root?.format !== AssessmentFormat.LITTLE_CODERS_V2) {
+      throw new BadRequestException(
+        'Only a Little Coders assessment has practical versions.',
+      );
+    }
+    const updated = await this.prisma.scheduledLesson.updateMany({
+      where: classGroupWhere(anchor),
+      data: { practicalVariant: variant },
+    });
+    return { updated: updated.count, variant };
+  }
+
   // ═══ internals ═════════════════════════════════════════════════════════════
 
   private async loadClass(scheduledLessonId: string, requester: Requester) {
@@ -303,6 +352,7 @@ export class ClassTestsService {
         start: true,
         end: true,
         batchSessionId: true,
+        practicalVariant: true,
         teacher: { select: { userId: true } },
         lesson: {
           select: {
@@ -313,6 +363,8 @@ export class ClassTestsService {
                 title: true,
                 isPublished: true,
                 sourceAssessmentId: true,
+                format: true,
+                activeVariant: true,
               },
             },
           },

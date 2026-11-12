@@ -91,11 +91,18 @@ export default function HomeworkViewerPage() {
   const [file, setFile] = useState<FileText | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  // ?scope=assessment: a Little Coders assessment's project file (everything else is homework).
+  const [base, setBase] = useState<string | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reads the address once on the client
+    setBase(new URLSearchParams(window.location.search).get('scope') === 'assessment' ? '/assessments/files' : '/submissions/files');
+  }, []);
 
   useEffect(() => {
+    if (!base) return;
     let cancelled = false;
     api
-      .get<FileText>(`/submissions/files/${fileId}/text`)
+      .get<FileText>(`${base}/${fileId}/text`)
       .then((res) => {
         if (!cancelled) setFile(res.data);
       })
@@ -105,7 +112,7 @@ export default function HomeworkViewerPage() {
     return () => {
       cancelled = true;
     };
-  }, [fileId]);
+  }, [fileId, base]);
 
   const notebook = useMemo(
     () => (file?.kind === 'NOTEBOOK' && file.text ? parseNotebook(file.text) : null),
@@ -115,7 +122,7 @@ export default function HomeworkViewerPage() {
   const downloadFile = async () => {
     setDownloadError(null);
     try {
-      const res = await api.get<{ url: string }>(`/submissions/files/${fileId}/access`, { params: { download: 1 } });
+      const res = await api.get<{ url: string }>(`${base ?? '/submissions/files'}/${fileId}/access`, { params: { download: 1 } });
       const a = document.createElement('a');
       a.href = res.data.url;
       document.body.appendChild(a);

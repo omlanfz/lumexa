@@ -47,7 +47,10 @@ function PendingBadge({ count }: { count: number }) {
   );
 }
 
-const DROPDOWN_ITEMS = [{ href: "/admin/courses", label: "Manage Courses" }];
+const DROPDOWN_ITEMS = [
+  { href: "/admin/courses", label: "Manage Courses" },
+  { href: "/admin/coding-platforms", label: "Coding Platforms" },
+];
 
 export default function AdminTopNav({ adminName }: AdminTopNavProps) {
   const router = useRouter();
