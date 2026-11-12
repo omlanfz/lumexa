@@ -22,6 +22,7 @@ import * as path from 'path';
 import { factsForCourse } from '../../src/courses/program-facts';
 import { PROGRAMS, problemsWith } from './content';
 import { PAGE_H, PAGE_W } from './design';
+import { LAYOUT_LIMITS, layoutProblems } from './layout-check';
 import { buildProgramHtml, expectedPageCount } from './pages';
 import { prepareLogo, prepareSnapshots } from './snapshots';
 
@@ -107,63 +108,9 @@ async function main() {
         await page.setContent(html, { waitUntil: 'load' });
         await page.evaluate(() => document.fonts.ready.then(() => undefined));
 
-        // Nothing may spill out of a page, and no text may be cut off by the box it sits in:
-        // a long title that wraps, a list that grew, a caption longer than its card.
-        const overflow = await page.evaluate(() => {
-          const found: string[] = [];
-          const boxes =
-            '.hero,.banner,.apanel,.stagehead,.testbox,.card,.quest,.perk,.node,.tk,.qc,.jrow,.lane,.af,.out,.snap,.stat,.tile,.finalbar,.cta,.sc,.stagecol,.who>div,.hud,.opt,.part,.track';
-          const decorative = (el: Element) =>
-            !!el.closest('svg, .stars, .art, .trophy') || el.tagName === 'IMG';
-          document.querySelectorAll<HTMLElement>('.page').forEach((pg, i) => {
-            const page = i + 1;
-            const edge = pg.getBoundingClientRect();
-            if (pg.scrollHeight > pg.clientHeight + 1)
-              found.push(
-                `page ${page} is ${pg.scrollHeight - pg.clientHeight}px too tall`,
-              );
-            const leaves = [...pg.querySelectorAll<HTMLElement>('*')].filter(
-              (el) =>
-                el.childElementCount === 0 &&
-                !decorative(el) &&
-                (el.textContent ?? '').trim(),
-            );
-            for (const el of leaves) {
-              const r = el.getBoundingClientRect();
-              if (r.width === 0 || r.height === 0) continue;
-              const text = (el.textContent ?? '').trim().slice(0, 40);
-              if (r.right > edge.right - 8 || r.bottom > edge.bottom - 6)
-                found.push(`page ${page}: "${text}" runs past the page edge`);
-            }
-            pg.querySelectorAll<HTMLElement>(boxes).forEach((box) => {
-              const b = box.getBoundingClientRect();
-              const name =
-                box.className.toString().split(' ')[0] ||
-                box.tagName.toLowerCase();
-              for (const el of box.querySelectorAll<HTMLElement>('*')) {
-                if (
-                  el.childElementCount > 0 ||
-                  decorative(el) ||
-                  !(el.textContent ?? '').trim()
-                )
-                  continue;
-                const r = el.getBoundingClientRect();
-                if (r.width === 0 || r.height === 0) continue;
-                if (
-                  r.bottom > b.bottom + 1 ||
-                  r.right > b.right + 1 ||
-                  r.top < b.top - 1 ||
-                  r.left < b.left - 1
-                ) {
-                  found.push(
-                    `page ${page}: "${(el.textContent ?? '').trim().slice(0, 40)}" is cut off by its ${name}`,
-                  );
-                }
-              }
-            });
-          });
-          return found;
-        });
+        // Geometry: nothing touches the margins, spills out of its box, hugs a card edge, overlaps other
+        // text or the artwork, or leaves two blocks touching (layout-check.ts).
+        const overflow = await page.evaluate(layoutProblems, LAYOUT_LIMITS);
         if (overflow.length)
           failures.push(
             `${content.slug}:\n    ${[...new Set(overflow)].join('\n    ')}`,

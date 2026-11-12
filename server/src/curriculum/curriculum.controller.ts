@@ -9,9 +9,11 @@ import {
   Patch,
   Post,
   Put,
+  Optional,
   Query,
   Req,
   Response,
+  ServiceUnavailableException,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
@@ -25,7 +27,10 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurriculumService } from './curriculum.service';
 import { CurriculumDocumentsService } from './curriculum-documents.service';
-import { LessonVideosService, type UploadedFile } from '../little-coders/videos/lesson-videos.service';
+import {
+  LessonVideosService,
+  type UploadedFile,
+} from '../little-coders/videos/lesson-videos.service';
 import { MAX_VIDEO_BYTES } from '../little-coders/videos/video-keys';
 import {
   CreateModuleDto,
@@ -49,8 +54,17 @@ export class CurriculumController {
   constructor(
     private readonly curriculum: CurriculumService,
     private readonly documents: CurriculumDocumentsService,
-    private readonly lessonVideos: LessonVideosService,
+    // Optional so the many specs that build this controller on its own need not know about video storage.
+    @Optional() private readonly lessonVideoService?: LessonVideosService,
   ) {}
+
+  private lessonVideos(): LessonVideosService {
+    if (!this.lessonVideoService)
+      throw new ServiceUnavailableException(
+        'Lesson video storage is not available.',
+      );
+    return this.lessonVideoService;
+  }
 
   // ── Lesson Details (student sees own; teacher/admin see any assigned course) ──
 
@@ -116,7 +130,11 @@ export class CurriculumController {
     @Query('inClassroom') inClassroom: string | undefined,
     @Req() req: any,
   ) {
-    return this.curriculum.getProgress(id, req.user, inClassroom === '1' || inClassroom === 'true');
+    return this.curriculum.getProgress(
+      id,
+      req.user,
+      inClassroom === '1' || inClassroom === 'true',
+    );
   }
 
   @Put('scheduled-lessons/:id/progress')
@@ -335,10 +353,16 @@ export class CurriculumController {
   uploadPreviewVideo(
     @Param('id') id: string,
     @UploadedFiles()
-    files: { video?: UploadedFile[]; poster?: UploadedFile[]; captions?: UploadedFile[] },
+    files: {
+      video?: UploadedFile[];
+      poster?: UploadedFile[];
+      captions?: UploadedFile[];
+    },
     @Body() dto: UploadPreviewVideoDto,
   ) {
-    return this.lessonVideos.upload(id, files ?? {}, { chapters: dto.chapters });
+    return this.lessonVideos().upload(id, files ?? {}, {
+      chapters: dto.chapters,
+    });
   }
 
   /** Admin: is lesson-video storage set up, and how many lessons show a video? */
@@ -346,7 +370,7 @@ export class CurriculumController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   lessonVideoStatus() {
-    return this.lessonVideos.status();
+    return this.lessonVideos().status();
   }
 
   /** Admin: look in the bucket for the finished videos and switch on the ones that are there. */
@@ -354,7 +378,7 @@ export class CurriculumController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   attachLessonVideos() {
-    return this.lessonVideos.attachPublished();
+    return this.lessonVideos().attachPublished();
   }
 
   /** The lesson stops showing its stored video. The files stay in the bucket (nothing is ever deleted). */
@@ -362,7 +386,7 @@ export class CurriculumController {
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
   detachPreviewVideo(@Param('id') id: string) {
-    return this.lessonVideos.detach(id);
+    return this.lessonVideos().detach(id);
   }
 
   /** The coding platforms "Start Coding" opens (MIT Scratch, Stretch3, Teachable Machine, EduBlocks). */

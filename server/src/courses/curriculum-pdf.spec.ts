@@ -197,7 +197,9 @@ describe('the curriculum PDFs: what a page says', () => {
       expect(has('Level-Up Checkpoints')).toBe(true); // the highlighted assessment page
       expect(has('A TASTE OF A TEST')).toBe(true);
       expect(has('FINAL')).toBe(true);
-      expect(has(`${totals(content).tests} TESTS`)).toBe(true);
+      expect(
+        has(`${totals(content).tests} ${totals(content).unit.toUpperCase()}`),
+      ).toBe(true);
       // the hands-on project pictures: one per course page (two where a course has two), all present
       for (const c of content.courses)
         for (const s of c.snapshots)
@@ -266,6 +268,22 @@ describe('the curriculum PDFs: what a page says', () => {
     );
     expect(has(lc, '25-mark project') && has(lc, '40 minutes')).toBe(true);
     expect(has(lc, '30 multiple-choice')).toBe(false);
+  });
+
+  it('uses each program’s own word for its tests', () => {
+    for (const p of PROGRAMS) {
+      const out = html(p.slug);
+      const unit = totals(p).unit;
+      expect(unit).toBe(p.slug === 'little-coders' ? 'assessments' : 'tests');
+      const wrong = unit === 'tests' ? 'ASSESSMENTS' : 'TESTS';
+      expect(
+        out.includes(`HOW STUDENTS ARE TESTED · ${totals(p).tests} ${wrong}`),
+      ).toBe(false);
+      expect(
+        out.includes(`${totals(p).tests} ${unit} along the way`) ||
+          out.includes(`${totals(p).tests} ${unit} &nbsp;`),
+      ).toBe(true);
+    }
   });
 
   it('is HTML-safe: nothing from the content can break a page', () => {

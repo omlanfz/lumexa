@@ -15,6 +15,9 @@ import type {
 } from '../types';
 import { PERK_BUILD } from './shared';
 
+const lowerFirst = (s: string): string =>
+  s.charAt(0).toLowerCase() + s.slice(1);
+
 const lessonsOf = (course: number) =>
   LC_LESSON_SPECS.filter((s) => s.course === course).sort(
     (a, b) => a.lesson - b.lesson,
@@ -80,14 +83,15 @@ const courses: CourseContent[] = LC_COURSES.map((c) => {
     title: c.title,
     subtitle: c.description,
     tools: toolsOf(c),
-    overview: `${c.focus}. ${c.outcomes.slice(0, 2).join('; ')} — and more.`,
+    overview: `${c.focus}. Students learn to ${lowerFirst(c.outcomes[0])} and ${lowerFirst(c.outcomes[1])} — and more.`,
     projects: lessons.map((l) => l.project.name),
     why: WHY[c.number],
     lessons: lessons.map((l) => l.title),
     snapshots: [SNAPSHOT[c.number]],
     snapshotNote: NOTE[c.number],
     testTitle: `${c.title} — Course Assessment`,
-    testBlurb: `A friendly check on what you built in ${c.title}: think in blocks, a quick check, then build a project. Taken after lesson 8.`,
+    testBlurb:
+      'A friendly check on what you built in this course: think in blocks, a quick check, then build a project. Taken after lesson 8.',
     teaser: c.focus,
   };
 });

@@ -20,6 +20,8 @@ export interface SnapshotRef {
   title: string;
   /** "Roblox · Lua" */
   tech: string;
+  /** Which part of the picture a narrow crop keeps (CSS object-position); the top left by default. */
+  focus?: string;
 }
 
 export interface CourseContent {

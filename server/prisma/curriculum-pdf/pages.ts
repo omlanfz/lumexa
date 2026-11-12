@@ -50,7 +50,14 @@ export function totals(c: ProgramContent) {
   const courseTests = c.courses.length;
   const stageTests = c.stages ? c.stages.length : 0;
   const tests = courseTests + stageTests + 1;
+  // Little Coders calls them assessments; every other program calls them tests.
+  const unit: 'tests' | 'assessments' = /ASSESSMENT/i.test(
+    c.assessments.courseTest.name,
+  )
+    ? 'assessments'
+    : 'tests';
   return {
+    unit,
     courses: c.courses.length,
     lessons,
     courseTests,
@@ -86,14 +93,14 @@ function footer(ctx: BuildContext, page: number, left?: string): string {
   const t = totals(ctx.content);
   const text =
     left ??
-    `${LESSONS_PER_COURSE} lessons per course &nbsp;•&nbsp; Live instructor-led classes &nbsp;•&nbsp; ${t.tests} tests along the way`;
+    `${LESSONS_PER_COURSE} lessons per course &nbsp;•&nbsp; Live instructor-led classes &nbsp;•&nbsp; ${t.tests} ${t.unit} along the way`;
   return `<footer class="foot"><span>${text}</span><span><b>Lumexa ${esc(ctx.content.shortName)}</b> · Ages ${esc(ageRange(ctx.facts))} · ${page}</span></footer>`;
 }
 
 function snapshotImg(ctx: BuildContext, ref: SnapshotRef): string {
   const uri = ctx.snapshots[ref.id];
   if (!uri) throw new Error(`Snapshot "${ref.id}" was not prepared`);
-  return `<img src="${uri}" alt="${esc(ref.title)}"/>`;
+  return `<img src="${uri}" alt="${esc(ref.title)}"${ref.focus ? ` style="object-position:${esc(ref.focus)}"` : ''}/>`;
 }
 
 function testTags(k: TestKind): string {
@@ -123,7 +130,7 @@ function showcase(ctx: BuildContext, t: Theme): string {
     .map((ci) => {
       const ref = ctx.content.courses[ci].snapshots[0];
       const g = gradientOf(t, ci);
-      return `<div class="sc" style="${vars(g)}"><div class="im">${snapshotImg(ctx, ref)}<span class="no">${String(ci + 1).padStart(2, '0')}</span></div><div class="tx"><b>${esc(ref.title)}</b><small>${esc(ref.tech)}</small></div></div>`;
+      return `<div class="sc" style="${vars(g)}"><div class="im">${snapshotImg(ctx, ref)}</div><div class="tx"><b><span class="no">${String(ci + 1).padStart(2, '0')}</span>${esc(ref.title)}</b><small>${esc(ref.tech)}</small></div></div>`;
     })
     .join('')}</div>`;
 }
@@ -146,7 +153,7 @@ function coverPage(ctx: BuildContext, t: Theme): string {
               return `<li><span class="n" style="background:linear-gradient(135deg,${cg[0]},${cg[1]})">${ci + 1}</span>${esc(content.courses[ci].title)}</li>`;
             })
             .join('');
-          return `${si ? '<span class="arrow">›</span>' : ''}<div class="stagecol"><h5 style="background:linear-gradient(120deg,${g[0]},${g[1]})">Stage ${stage.number} · ${esc(stage.name)}</h5><p style="font-size:8.8px;color:var(--muted);line-height:1.4;margin-bottom:6px">${esc(stage.blurb)}</p><ul>${rows}</ul></div>`;
+          return `${si ? '<span class="arrow">›</span>' : ''}<div class="stagecol"><h5 style="background:linear-gradient(120deg,${g[0]},${g[1]})">Stage ${stage.number} · ${esc(stage.name)}</h5><ul>${rows}</ul></div>`;
         })
         .join('')}</div>`
     : `<div class="path" style="padding-top:22px">${content.courses
@@ -178,8 +185,8 @@ function coverPage(ctx: BuildContext, t: Theme): string {
     ${who}
     <div><div class="section">${content.stages ? 'THE ODYSSEY JOURNEY' : 'LEARNING PROGRESSION'}</div>${progression}</div>
     <div class="trio">${content.highlights.map((h) => `<div class="perk"><b>${esc(h.title)}</b><p>${esc(h.body)}</p></div>`).join('')}</div>
-    <div><div class="section">HANDS-ON PROJECTS STUDENTS BUILD</div>${showcase(ctx, t)}</div>
-    ${footer(ctx, 1, `${totalsOf.courses} courses &nbsp;•&nbsp; ${totalsOf.lessons} lessons &nbsp;•&nbsp; ${totalsOf.tests} tests &nbsp;•&nbsp; Live instructor-led classes`)}
+    <div><div class="section">SAMPLE HANDS-ON PROJECTS STUDENTS BUILD</div>${showcase(ctx, t)}</div>
+    ${footer(ctx, 1, `${totalsOf.courses} courses &nbsp;•&nbsp; ${totalsOf.lessons} lessons &nbsp;•&nbsp; ${totalsOf.tests} ${totalsOf.unit} &nbsp;•&nbsp; Live instructor-led classes`)}
   </section>`;
 }
 
@@ -199,8 +206,9 @@ function coursePage(
   const shots = c.snapshots;
   const shotBlock =
     shots.length > 1
-      ? `<div class="shot">${shots.map((s) => `<div class="half">${snapshotImg(ctx, s)}</div>`).join('')}<span class="tag">SAMPLE PROJECTS</span></div>`
-      : `<div class="shot">${snapshotImg(ctx, shots[0])}<span class="tag">SAMPLE PROJECT</span></div>`;
+      ? `<div class="shot">${shots.map((s) => `<div class="half">${snapshotImg(ctx, s)}</div>`).join('')}</div>`
+      : `<div class="shot">${snapshotImg(ctx, shots[0])}</div>`;
+  const projectList = `<ul${c.projects.length > 4 ? ' class="two"' : ''}>${c.projects.map((p) => `<li class="proj"><i></i>${esc(p)}</li>`).join('')}</ul>`;
   const captionTitle = shots.map((s) => s.title).join(' · ');
   const captionTech = [...new Set(shots.map((s) => s.tech))].join('  |  ');
 
@@ -216,17 +224,18 @@ function coursePage(
     <div class="cols">
       <aside class="side">
         <div class="card tint"><h4>Overview</h4><p>${esc(c.overview)}</p></div>
-        <div class="card"><h4>${icon('rocket', 11, g[0])} Portfolio projects</h4><ul>${c.projects.map((p) => `<li class="proj"><i></i>${esc(p)}</li>`).join('')}</ul></div>
+        <div class="card"><h4>${icon('rocket', 11, g[0])} ${c.projects.length > 4 ? 'Projects you build' : 'Portfolio projects'}</h4>${projectList}</div>
         <div class="card"><h4>Why it matters</h4><p>${esc(c.why)}</p></div>
+        <div class="minihud"><div><b>${LESSONS_PER_COURSE}</b><span>lessons</span></div><div><b>${c.projects.length}</b><span>projects</span></div><div><b>1</b><span>${esc(kind.name.toLowerCase())}</span></div></div>
       </aside>
       <main class="card lessons"><h4>${icon('book', 11, g[0])} Lesson breakdown</h4>
         ${c.lessons.map((l, i) => `<div class="lesson"><span class="n">${i + 1}</span><b>${esc(l)}</b></div>`).join('')}
         <div class="xpwrap">${LESSONS_PER_COURSE} LESSONS ${xpBar(LESSONS_PER_COURSE, LESSONS_PER_COURSE, g[0])} <span style="color:#b27a00">TEST UNLOCKS</span></div>
       </main>
     </div>
-    <div class="bottom">
+    <div class="bottom${shots.length > 1 ? ' tall' : ''}">
       <figure class="card snap">${shotBlock}
-        <figcaption class="cap"><span class="k">Hands-on project</span><b>${esc(captionTitle)}</b><small>${esc(captionTech)}</small><p>${esc(c.snapshotNote)}</p></figcaption>
+        <figcaption class="cap"><span class="k">${shots.length > 1 ? 'Sample hands-on projects' : 'Sample hands-on project'}</span><b>${esc(captionTitle)}</b><small>${esc(captionTech)}</small><p>${esc(c.snapshotNote)}</p></figcaption>
       </figure>
       <div class="testbox"><span class="k">${testIcon('course', 12)} ${esc(kind.name)}</span><b>${esc(c.testTitle)}</b><p>${esc(c.testBlurb)}</p><div class="tags">${testTags(kind)}</div></div>
     </div>
@@ -261,7 +270,7 @@ function stagePage(
         <div class="qh">${levelBadge(String(ci + 1).padStart(2, '0'), 'rgba(255,255,255,.4)', 'rgba(255,255,255,.12)', 38, `qb${ci}`)}<div class="k">COURSE ${String(ci + 1).padStart(2, '0')} · LESSONS ${ci * LESSONS_PER_COURSE + 1}–${(ci + 1) * LESSONS_PER_COURSE}</div><h3>${esc(c.title)}</h3></div>
         <div class="qb"><p>${esc(c.overview)}</p><div class="qtools">${c.tools.map((x) => `<span>${esc(x)}</span>`).join('')}</div>
           <ol>${c.lessons.map((l, i) => `<li><i>${i + 1}</i>${esc(l)}</li>`).join('')}</ol></div>
-        <div class="qs">${snapshotImg(ctx, shot)}<span class="tag">SAMPLE PROJECT</span><div class="cap">${esc(shot.title)} · ${esc(shot.tech)}</div></div>
+        <div class="qs">${snapshotImg(ctx, shot)}<div class="cap">Sample project · ${esc(shot.title)}</div></div>
         <div class="qt">${testIcon('course', 11)} ${esc(c.testTitle)}</div>
       </div>`;
     })
@@ -380,23 +389,17 @@ function assessmentPage(ctx: BuildContext, t: Theme, page: number): string {
     testCard(
       a.courseTest,
       'course',
-      `${a.courseTest.name} · after every ${LESSONS_PER_COURSE} lessons`,
+      `${a.courseTest.name} · every ${LESSONS_PER_COURSE} lessons`,
     ),
     ...(a.stageTest
-      ? [
-          testCard(
-            a.stageTest,
-            'stage',
-            `${a.stageTest.name} · after every stage`,
-          ),
-        ]
+      ? [testCard(a.stageTest, 'stage', `${a.stageTest.name} · every stage`)]
       : []),
     testCard(a.finalTest, 'final', `${a.finalTest.name} · the finish line`),
   ];
   return `<section class="page assess">
     ${topBar(ctx, page, false)}
     <div class="apanel">${starfield(4242 + page, 60, 800, 200)}${trophyArt()}
-      <div class="eyebrow">HOW STUDENTS ARE TESTED · ${totals(content).tests} TESTS</div>
+      <div class="eyebrow">HOW STUDENTS ARE TESTED · ${totals(content).tests} ${totals(content).unit.toUpperCase()}</div>
       <h2>${esc(a.title)}</h2><p>${esc(a.intro)}</p>
     </div>
     ${checkpointPath(ctx, t)}
@@ -408,7 +411,7 @@ function assessmentPage(ctx: BuildContext, t: Theme, page: number): string {
           `<div class="af"><span class="ic">${icon(['check', 'chart', 'medal'][i % 3], 14)}</span><div><b>${esc(x.title)}</b><p>${esc(x.body)}</p></div></div>`,
       )
       .join('')}</div></div>
-    ${footer(ctx, page, `${totals(content).courseTests} course tests${content.stages ? ` &nbsp;•&nbsp; ${totals(content).stageTests} stage tests` : ''} &nbsp;•&nbsp; 1 final test &nbsp;•&nbsp; Every test is part of the program`)}
+    ${footer(ctx, page, `${totals(content).courseTests} ${a.courseTest.name.toLowerCase()}s${content.stages ? ` &nbsp;•&nbsp; ${totals(content).stageTests} ${a.stageTest!.name.toLowerCase()}s` : ''} &nbsp;•&nbsp; 1 ${a.finalTest.name.toLowerCase()} &nbsp;•&nbsp; Every one is part of the program`)}
   </section>`;
 }
 
@@ -463,7 +466,7 @@ function journeyPage(ctx: BuildContext, t: Theme, page: number): string {
     ${topBar(ctx, page, false)}
     <div><h2 class="jh">The Complete Journey</h2><p class="jp">${esc(content.journeyIntro)}</p></div>
     <div><div class="section">${content.courses.length} COURSES · ${tt.lessons} LESSONS</div>${content.stages ? lanes : `<div class="jlist">${rows}</div>`}</div>
-    <div><div class="section">HOW STUDENTS ARE TESTED · ${tt.tests} TESTS</div>
+    <div><div class="section">HOW STUDENTS ARE TESTED · ${tt.tests} ${tt.unit.toUpperCase()}</div>
       <div class="tiles" style="grid-template-columns:repeat(${compact ? 5 : Math.min(content.courses.length, 5)},1fr)">${courseTiles}</div>
       ${stageTiles ? `<div class="tiles" style="grid-template-columns:repeat(${content.stages!.length},1fr)">${stageTiles}</div>` : ''}
       <div class="finalbar"><span class="ft">FINAL TEST</span><div><b>${esc(finalKind.headline)}</b><small>${esc(finalKind.blurb)}</small></div></div></div>

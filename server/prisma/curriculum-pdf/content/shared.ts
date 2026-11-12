@@ -110,7 +110,8 @@ export function withTest(
   return {
     ...c,
     testTitle: `${c.title} — ${testWord}`,
-    testBlurb: `Checks what you built and learned in ${c.title}. Taken after lesson 8, before the next course begins.`,
+    testBlurb:
+      'Checks what you built and learned in this course. Taken after lesson 8, before the next course begins.',
   };
 }
 

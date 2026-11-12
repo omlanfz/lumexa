@@ -94,6 +94,7 @@ export const DATA_SCIENTIST: ProgramContent = {
           id: 'market-trends',
           title: 'Market Trends Forecast',
           tech: 'Python · Matplotlib',
+          focus: 'left 62%',
         },
       ],
       snapshotNote:

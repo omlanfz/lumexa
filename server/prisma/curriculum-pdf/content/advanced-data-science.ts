@@ -171,6 +171,7 @@ export const ADVANCED_DATA_SCIENCE: ProgramContent = {
           id: 'market-trends',
           title: 'Market Trends Forecast',
           tech: 'Python · Matplotlib',
+          focus: 'left 62%',
         },
       ],
       snapshotNote:

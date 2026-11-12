@@ -109,6 +109,7 @@ export const AI_BUILDER: ProgramContent = {
           id: 'study-planner',
           title: 'Smart Study Planner',
           tech: 'Python · OpenAI API',
+          focus: 'left 40%',
         },
       ],
       snapshotNote:
