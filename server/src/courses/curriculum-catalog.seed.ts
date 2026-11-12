@@ -44,6 +44,8 @@ import {
   type RawModule,
   type RawPathway,
 } from './curriculum-source';
+import { isLittleCodersSlug } from '../little-coders/lc.constants';
+import { ensureLittleCodersCurriculum } from '../little-coders/migrate/little-coders.migrate';
 
 // ── Project-checkpoint assignment: the standard 8-lesson shape ─────────────
 // L1 intro · L2-3 Project1 · L4-5 Project2 · L6-7 Project3 · L8 review
@@ -550,6 +552,9 @@ export async function seedCurriculumContent(
   });
 
   for (const course of courses) {
+    // Little Coders is the redesigned five-course program: it is built (or restructured in
+    // place) by its own migration just below, never by the generic pathway builder.
+    if (isLittleCodersSlug(course.slug)) continue;
     const moduleCount = await prisma.courseModule.count({ where: { courseId: course.id } });
     const lessonCount = await prisma.lesson.count({ where: { courseId: course.id } });
     const expectedSessions = course.sessions;
@@ -583,6 +588,14 @@ export async function seedCurriculumContent(
     // No lessons at all yet — brand new course, fresh build.
     const total = await buildFreshStructure(prisma, course);
     logger.log(`[curriculum-seed] ${course.slug} seeded: ${total} sessions.`);
+  }
+
+  try {
+    await ensureLittleCodersCurriculum(prisma, logger, reconcile);
+  } catch (err) {
+    // Never stop the rest of the boot seed; the migration is a single transaction, so a
+    // failure leaves Little Coders exactly as it was and it is retried on the next boot.
+    logger.warn(`[little-coders] curriculum migration failed (nothing was changed; will retry on the next boot): ${(err as Error).message}`);
   }
 
   await backfillProjectLinks(prisma, logger, 'ai-builder');

@@ -26,8 +26,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
+  AssessmentFormat,
   AttemptStatus,
   Prisma,
   Role,
@@ -36,6 +38,8 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AssessmentFilesService } from './assessment-files.service';
+import { viewKindFor } from '../submissions/homework-file-types';
 import {
   QuestionResult,
   ReportValidationError,
@@ -68,9 +72,27 @@ const TYPE_LABEL: Record<string, string> = {
   FINAL_TEST: 'Final Test',
 };
 
+/** Little Coders calls its tests "assessments" (see the six standardised assessments). */
+const LC_TYPE_LABEL: Record<string, string> = {
+  COURSE_TEST: 'Course Assessment',
+  FINAL_TEST: 'Final Assessment',
+};
+
+function typeLabelFor(type: string, littleCoders: boolean): string {
+  return (littleCoders ? LC_TYPE_LABEL[type] : undefined) ?? TYPE_LABEL[type] ?? type;
+}
+
+/** What the student handed in for a Little Coders practical, frozen on the report when they submitted. */
+interface FrozenLcSubmission {
+  links?: string[];
+  note?: string | null;
+  files?: { id: string; name: string; size: number }[];
+}
+
 /** Columns the list needs — deliberately not the big per-question JSON. */
 const LIST_SELECT = {
   id: true,
+  assessmentId: true,
   status: true,
   testTitle: true,
   assessmentType: true,
@@ -112,7 +134,33 @@ export class TestReportsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    // The temporary R2 files of a Little Coders practical. Only that format needs it, so a bare
+    // unit-test instance (and every other program's report) works without it.
+    @Optional() private readonly files?: AssessmentFilesService,
   ) {}
+
+  /** Which of these assessments are Little Coders ones (their own, or the bank they read from). */
+  private async littleCodersAssessmentIds(ids: string[]): Promise<Set<string>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Set();
+    const rows = await this.prisma.assessment.findMany({
+      where: { id: { in: unique } },
+      select: {
+        id: true,
+        format: true,
+        sourceAssessment: { select: { format: true } },
+      },
+    });
+    return new Set(
+      rows
+        .filter(
+          (r) =>
+            r.format === AssessmentFormat.LITTLE_CODERS_V2 ||
+            r.sourceAssessment?.format === AssessmentFormat.LITTLE_CODERS_V2,
+        )
+        .map((r) => r.id),
+    );
+  }
 
   // ─── Access ───────────────────────────────────────────────────────────────
 
@@ -216,17 +264,22 @@ export class TestReportsService {
       take: 300,
     });
     const items = await Promise.all(rows.map((r) => this.reconcileShare(r)));
+    const littleCoders = await this.littleCodersAssessmentIds(
+      items.map((r) => r.assessmentId),
+    );
     // Work that needs the teacher first, then newest first.
     items.sort((a, b) => {
       const ap = PENDING.includes(a.status) ? 0 : 1;
       const bp = PENDING.includes(b.status) ? 0 : 1;
       return ap - bp || b.submittedAt.getTime() - a.submittedAt.getTime();
     });
-    return items.map(({ shareEmailLogId: _log, ...r }) => {
+    return items.map(({ shareEmailLogId: _log, assessmentId, ...r }) => {
       void _log;
+      const lc = littleCoders.has(assessmentId);
       return {
         ...r,
-        typeLabel: TYPE_LABEL[r.assessmentType] ?? r.assessmentType,
+        littleCoders: lc,
+        typeLabel: typeLabelFor(r.assessmentType, lc),
         needsAction: PENDING.includes(r.status),
       };
     });
@@ -302,6 +355,54 @@ export class TestReportsService {
       : { email: student.email, kind: 'STUDENT_ACCOUNT' as const };
   }
 
+  /**
+   * What the teacher reviews for a Little Coders practical: the practical's brief, the links and
+   * note the student handed in, and their files. The file list is read live so it shows which files
+   * are still kept and which were removed once the review was finalised; the links, the note and
+   * the file NAMES stay on the report for good (only the contents are removed).
+   */
+  private async lcReview(
+    attemptId: string,
+    submission: FrozenLcSubmission | undefined,
+    spec: unknown,
+  ) {
+    const handedIn = submission?.files ?? [];
+    const live = this.files ? await this.files.listFor(attemptId) : null;
+    const files = live
+      ? live
+          // A file the student was still preparing is not part of what was handed in.
+          .filter((f) => f.status !== 'UPLOADED')
+          .map((f) => ({
+            id: f.id,
+            name: f.name,
+            size: f.size,
+            kind: f.kind,
+            removed: f.removed,
+          }))
+      : handedIn.map((f) => ({
+          id: f.id,
+          name: f.name,
+          size: f.size,
+          kind: viewKindFor(f.name),
+          removed: false,
+        }));
+    // The brief as the student saw it. `adminEdited` is bookkeeping, not part of the brief.
+    const brief =
+      spec && typeof spec === 'object'
+        ? (({ adminEdited: _edited, ...rest }) => {
+            void _edited;
+            return rest;
+          })(spec as Record<string, unknown>)
+        : null;
+    return {
+      spec: brief,
+      links: submission?.links ?? [],
+      note: submission?.note ?? null,
+      files,
+      filesRemoved: files.length > 0 && files.every((f) => f.removed),
+    };
+  }
+
   private async toDetail(
     report: Awaited<ReturnType<TestReportsService['loadFull']>>,
   ) {
@@ -310,20 +411,44 @@ export class TestReportsService {
     const objective = summarizeObjective(results);
     const rubric =
       (report.codingRubricScores as unknown as RubricScore[] | null) ?? [];
-    const project = report.codingProject as unknown as {
+    const frozen = report.codingProject as unknown as {
       questionId: string;
       title: string;
       instructions: string;
       language: string;
       code: string;
       savedAt: string | null;
+      submission?: FrozenLcSubmission;
+      spec?: unknown;
     } | null;
+    // The submission and the specification belong to the Little Coders review (below), not to the
+    // plain project block every program shares.
+    let project: {
+      questionId: string;
+      title: string;
+      instructions: string;
+      language: string;
+      code: string;
+      savedAt: string | null;
+    } | null = null;
+    if (frozen) {
+      const { submission: _submission, spec: _spec, ...plain } = frozen;
+      void _submission;
+      void _spec;
+      project = plain;
+    }
+    const lcSubmission = frozen?.submission;
+    const lcSpec = frozen?.spec;
+    const isLittleCoders = (
+      await this.littleCodersAssessmentIds([report.assessmentId])
+    ).has(report.assessmentId);
     return {
       id: report.id,
       attemptId: report.attemptId,
       status: report.status,
       assessmentType: report.assessmentType,
-      typeLabel: TYPE_LABEL[report.assessmentType] ?? report.assessmentType,
+      littleCoders: isLittleCoders,
+      typeLabel: typeLabelFor(report.assessmentType, isLittleCoders),
       testTitle: report.testTitle,
       courseTitle: report.courseTitle,
       student: {
@@ -358,6 +483,11 @@ export class TestReportsService {
             feedback: report.codingFeedback,
             evaluatedAt: report.codingEvaluatedAt,
             hasCode: !!project?.code?.trim(),
+            // Little Coders: the project as handed in — links, note and files — and the practical's
+            // brief, so the teacher marks against exactly what the student was asked to build.
+            lc: isLittleCoders
+              ? await this.lcReview(report.attemptId, lcSubmission, lcSpec)
+              : null,
           }
         : null,
       totals: {
@@ -581,6 +711,16 @@ export class TestReportsService {
     }
 
     const now = new Date();
+    // Little Coders: the practical's files are only needed until the review is final. They are
+    // marked for removal in THIS transaction — the same one that stores the final score — so a
+    // file is never marked before the score is safely saved, and never kept once it is.
+    const releaseFiles =
+      report.hasCodingProject &&
+      !!this.files &&
+      (await this.littleCodersAssessmentIds([report.assessmentId])).has(
+        report.assessmentId,
+      );
+    let marked: string[] = [];
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.testReport.updateMany({
         where: { id, status: { in: PENDING }, updatedAt: report.updatedAt },
@@ -617,7 +757,13 @@ export class TestReportsService {
           passed: totals.passed,
         },
       });
+      if (releaseFiles) {
+        marked = await this.files!.finaliseAttempt(tx, report.attemptId);
+      }
     });
+    // After the commit (the score is stored): take the files out of R2. This never throws — a file
+    // that cannot be removed right now stays DELETE_PENDING and the scheduled sweep retries it.
+    if (marked.length > 0) await this.files!.removeMarked(marked);
 
     // An approved Final Test report does not issue a certificate by itself:
     // certificates are approved by an admin after the student's final class
@@ -743,6 +889,9 @@ export class TestReportsService {
     const results =
       (report.questionResults as unknown as QuestionResult[]) ?? [];
     const objective = summarizeObjective(results);
+    const isLittleCoders = (
+      await this.littleCodersAssessmentIds([report.assessmentId])
+    ).has(report.assessmentId);
     let sent: Awaited<
       ReturnType<NotificationsService['sendTestReportToParent']>
     >;
@@ -755,8 +904,7 @@ export class TestReportsService {
         teacherName: report.teacher.user.fullName,
         courseTitle: report.courseTitle,
         testTitle: report.testTitle,
-        testTypeLabel:
-          TYPE_LABEL[report.assessmentType] ?? report.assessmentType,
+        testTypeLabel: typeLabelFor(report.assessmentType, isLittleCoders),
         submittedAt: report.submittedAt,
         objective: {
           score: objective.score,

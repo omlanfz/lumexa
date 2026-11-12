@@ -22,6 +22,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  AssessmentFormat,
   ClassroomAdmissionStatus,
   Lesson,
   LessonStatus,
@@ -46,6 +47,33 @@ import {
 } from '../courses/curriculum-catalog.seed';
 import { canonicalCourseSlug } from '../courses/course-slug';
 import { getBankSummary } from '../assessments/bank-summary';
+import { lcAssessmentMeta } from '../little-coders/assessments/lc-attempt';
+import { listPlatforms } from '../little-coders/lc.platforms';
+import {
+  directoryOf,
+  isLcLessonRow,
+  type PlatformDirectory,
+} from '../little-coders/lc.public';
+import {
+  DEFAULT_PLATFORMS,
+  LC_LESSON_CONTENT_VERSION,
+} from '../little-coders/lc.constants';
+import {
+  isPlatformKey,
+  platformUpdateProblems,
+} from '../little-coders/lc.platforms';
+import {
+  validateExperience,
+  validateHomeworkCard,
+  validatePreviewVideo,
+  validateProjectCard,
+} from '../little-coders/lc.validate';
+import {
+  fallbackMarkdown,
+  homeworkMarkdown,
+  snippetsFromStacks,
+} from '../little-coders/curriculum/build-lesson';
+import { readLcRefs, type LcEditableField } from '../little-coders/lc.refs';
 import {
   PRESENTABLE_FILE_SELECT,
   presentFiles,
@@ -62,6 +90,8 @@ import {
   PreviewLessonDto,
   QuizCheckDto,
   SaveProgressDto,
+  UpdateCodingPlatformDto,
+  UpdateLcLessonDto,
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
@@ -127,6 +157,15 @@ function dhakaDateStrOf(date: Date): string {
 @Injectable()
 export class CurriculumService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Where each coding platform button opens. Read only for a Little Coders lesson (every other
+   *  lesson returns undefined without touching the database). */
+  private async lcPlatforms(row: {
+    experience?: unknown;
+  }): Promise<PlatformDirectory | undefined> {
+    if (!isLcLessonRow(row)) return undefined;
+    return directoryOf(await listPlatforms(this.prisma));
+  }
 
   // ── QA demo classroom (see DEMO_ROOM_NAME in classroom.service.ts) ───────
 
@@ -201,6 +240,7 @@ export class CurriculumService {
           lesson.order,
           lesson.projectLinks,
         ),
+        platforms: await this.lcPlatforms(lesson),
       }),
       assessment: await this.describeAssessment(lesson.assessment),
       viewer: 'student' as Viewer,
@@ -348,6 +388,7 @@ export class CurriculumService {
       lesson: buildSharedLesson(row, {
         contentMarkdown: markdown,
         projectLinks: this.resolveProjectLinks(lesson.course.slug, lesson.order, lesson.projectLinks),
+        platforms: await this.lcPlatforms(lesson),
       }),
       assessment: await this.describeAssessment(lesson.assessment),
       viewer,
@@ -525,6 +566,7 @@ export class CurriculumService {
       lesson: buildSharedLesson(row, {
         contentMarkdown: markdown,
         projectLinks: this.resolveProjectLinks(sl.course.slug, lesson.order, lesson.projectLinks),
+        platforms: await this.lcPlatforms(lesson),
       }),
       assessment: await this.describeAssessment(lesson.assessment),
       // Homework hand-ins are each student's own. A batch class's lesson page
@@ -563,7 +605,18 @@ export class CurriculumService {
   async getTeacherPrep(lessonId: string, requester: Requester) {
     const lesson = await this.prisma.lesson.findUnique({
       where: { id: lessonId },
-      select: { id: true, courseId: true, type: true, teacherNotes: true, reviewNotes: true, miniQuiz: true },
+      select: {
+        id: true,
+        courseId: true,
+        type: true,
+        teacherNotes: true,
+        reviewNotes: true,
+        miniQuiz: true,
+        // Little Coders: the video production brief and the project card's teacher instructions.
+        experience: true,
+        previewVideo: true,
+        projectCard: true,
+      },
     });
     if (!lesson) throw new NotFoundException('Lesson not found');
     await this.assertTeachesOrAdmin(lesson.courseId, requester, 'Teacher preparation notes are for teachers.');
@@ -775,6 +828,20 @@ export class CurriculumService {
         module: lesson.module ? { id: lesson.module.id, title: lesson.module.title, stageNumber: lesson.module.stageNumber } : null,
         project: lesson.project ? { id: lesson.project.id, title: lesson.project.title, description: lesson.project.description } : null,
       },
+      // Little Coders: the four stored documents exactly as stored (the editor shows what is there,
+      // even if it could not be validated), which parts an admin has edited, and the platforms.
+      ...(isLcLessonRow(lesson)
+        ? {
+            littleCoders: {
+              experience: lesson.experience,
+              previewVideo: lesson.previewVideo,
+              projectCard: lesson.projectCard,
+              homeworkCard: lesson.homeworkCard,
+              edited: readLcRefs(lesson.sourceRefs)?.edited ?? [],
+              platforms: await listPlatforms(this.prisma),
+            },
+          }
+        : {}),
     };
   }
 
@@ -798,7 +865,17 @@ export class CurriculumService {
       projectLinks: dto.projectLinks,
       codeSnippets: dto.codeSnippets,
     });
+    // Little Coders: a draft of the interactive page / video / cards is checked by the same
+    // validators that guard a save, and shown exactly as it would be served.
+    const lcErrors: string[] = [];
+    const lcDraft = {
+      experience: dto.experience !== undefined ? this.lcDraft(dto.experience, validateExperience, lcErrors) : (existing?.experience ?? null),
+      previewVideo: dto.previewVideo !== undefined ? this.lcDraft(dto.previewVideo, validatePreviewVideo, lcErrors) : (existing?.previewVideo ?? null),
+      projectCard: dto.projectCard !== undefined ? this.lcDraft(dto.projectCard, validateProjectCard, lcErrors) : (existing?.projectCard ?? null),
+      homeworkCard: dto.homeworkCard !== undefined ? this.lcDraft(dto.homeworkCard, validateHomeworkCard, lcErrors) : (existing?.homeworkCard ?? null),
+    };
     const draft: LessonRow = {
+      ...lcDraft,
       id: existing?.id ?? 'draft',
       title: dto.title ?? existing?.title ?? 'Untitled lesson',
       type: 'LEARNING',
@@ -827,11 +904,21 @@ export class CurriculumService {
         })
       : { numbering: null, navigation: null, refs: {} };
     return {
-      lesson: buildSharedLesson(draft, {}),
+      lesson: buildSharedLesson(draft, { platforms: await this.lcPlatforms(draft) }),
       teacherPrep: buildTeacherPrep(draft),
       ...context,
-      validation: { errors: check.errors, warnings: check.warnings },
+      validation: { errors: [...check.errors, ...lcErrors], warnings: check.warnings },
     };
+  }
+
+  /** Validates one Little Coders draft document; its problems are collected, the stored value is returned when valid. */
+  private lcDraft<T>(raw: unknown, validate: (v: unknown) => { errors: string[]; value: T | null }, errors: string[]): unknown {
+    const result = validate(raw);
+    if (!result.value) {
+      errors.push(...result.errors);
+      return null;
+    }
+    return result.value;
   }
 
   /** The visual kinds the editor can offer (and the server accepts). */
@@ -920,7 +1007,15 @@ export class CurriculumService {
     if (!assessment) return null;
     const { sourceAssessmentId: _source, ...visible } = assessment;
     void _source;
-    return { ...visible, ...(await getBankSummary(this.prisma, assessment)) };
+    const summary = await getBankSummary(this.prisma, assessment);
+    return {
+      ...visible,
+      ...summary,
+      // Little Coders: the standardized header and sections (40 minutes · 40 marks) the launcher shows.
+      ...(summary.format === AssessmentFormat.LITTLE_CODERS_V2
+        ? { lc: lcAssessmentMeta(assessment.type) }
+        : {}),
+    };
   }
 
   private baseSessionInfo(sl: {
@@ -1373,7 +1468,10 @@ export class CurriculumService {
    * full list so the editor can show every problem at once.
    */
   async updateLessonContent(lessonId: string, dto: UpdateLessonContentDto) {
-    await this.ensure(this.prisma.lesson, lessonId, 'Lesson');
+    const existing = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!existing) throw new NotFoundException('Lesson not found');
+    const littleCoders = isLcLessonRow(existing);
+    if (littleCoders) this.assertLcStructureUnchanged(existing, dto);
     const check = validateLessonContent({
       title: dto.title,
       objectives: dto.objectives,
@@ -1409,10 +1507,192 @@ export class CurriculumService {
         ...(check.quiz ? { miniQuiz: check.quiz as unknown as Prisma.InputJsonValue } : {}),
         ...(check.visuals ? { visuals: check.visuals as unknown as Prisma.InputJsonValue } : {}),
         // An admin's own edit is final: the structured-content backfill never rewrites it.
-        contentVersion: CONTENT_VERSION,
+        // (A Little Coders lesson keeps its own content version, and remembers WHICH fields were
+        // edited so a later release of the authored curriculum leaves exactly those alone.)
+        ...(littleCoders
+          ? { sourceRefs: this.lcRefsWithEdits(existing, this.lcEditedBy(existing, dto)) }
+          : { contentVersion: CONTENT_VERSION }),
       },
     });
     return { ...updated, warnings: check.warnings };
+  }
+
+  // ── Admin: Little Coders lessons and platforms ───────────────────────────
+
+  /** A Little Coders lesson's position decides its class number, its course and where its
+   *  assessment sits, so the generic editor cannot move or retype it. */
+  private assertLcStructureUnchanged(
+    lesson: { order: number; type: SessionType; moduleId: string | null; projectId: string | null },
+    dto: UpdateLessonContentDto,
+  ) {
+    const moved =
+      (dto.order !== undefined && dto.order !== lesson.order) ||
+      (dto.type !== undefined && dto.type !== lesson.type) ||
+      (dto.moduleId !== undefined && dto.moduleId !== lesson.moduleId) ||
+      (dto.projectId !== undefined && dto.projectId !== lesson.projectId);
+    if (moved) {
+      throw new BadRequestException(
+        'A Little Coders lesson cannot be moved to another position, course or type: its position is its class number. Edit its name and content instead.',
+      );
+    }
+  }
+
+  /** The fields of a Little Coders lesson this generic save actually changes. */
+  private lcEditedBy(
+    lesson: {
+      title: string;
+      objectives: string[];
+      contentMarkdown: string | null;
+      homework: string | null;
+      teacherNotes: string | null;
+      checkpoint: string | null;
+      codeSnippets: unknown;
+    },
+    dto: UpdateLessonContentDto,
+  ): LcEditableField[] {
+    const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    const out: LcEditableField[] = [];
+    if (dto.title !== undefined && dto.title !== lesson.title) out.push('title');
+    if (dto.objectives !== undefined && !same(dto.objectives, lesson.objectives)) out.push('objectives');
+    if (dto.contentMarkdown !== undefined && dto.contentMarkdown !== lesson.contentMarkdown) out.push('contentMarkdown');
+    if (dto.homework !== undefined && dto.homework !== lesson.homework) out.push('homework');
+    if (dto.teacherNotes !== undefined && dto.teacherNotes !== (lesson.teacherNotes ?? '')) out.push('teacherNotes');
+    if (dto.checkpoint !== undefined && dto.checkpoint !== lesson.checkpoint) out.push('checkpoint');
+    if (dto.codeSnippets !== undefined && !same(dto.codeSnippets, lesson.codeSnippets)) out.push('codeSnippets');
+    return out;
+  }
+
+  /** sourceRefs with more fields recorded as admin-edited (everything else in it is kept). */
+  private lcRefsWithEdits(lesson: { sourceRefs: unknown }, more: LcEditableField[]): Prisma.InputJsonValue {
+    const prev =
+      lesson.sourceRefs && typeof lesson.sourceRefs === 'object' && !Array.isArray(lesson.sourceRefs)
+        ? (lesson.sourceRefs as Record<string, unknown>)
+        : {};
+    const lcV2 = readLcRefs(prev) ?? { key: '', version: 0, edited: [] };
+    const edited = [...new Set([...lcV2.edited, ...more])];
+    return { ...prev, lcV2: { ...lcV2, edited } } as unknown as Prisma.InputJsonValue;
+  }
+
+  /**
+   * Saves the Little Coders parts of a lesson: the interactive page, the "Your Learning Preview"
+   * video record, the project card (title, project and copy addresses, platform buttons and their
+   * labels, teacher instructions) and the homework card. Every document is validated in full first;
+   * a save with problems is rejected with all of them listed. What an admin edits here is recorded
+   * so a later release of the authored curriculum never overwrites it.
+   */
+  async updateLittleCodersLesson(lessonId: string, dto: UpdateLcLessonDto) {
+    const lesson = await this.prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) throw new NotFoundException('Lesson not found');
+    if (!isLcLessonRow(lesson)) {
+      throw new BadRequestException('Only a redesigned Little Coders lesson has these parts.');
+    }
+    const problems: string[] = [];
+    const data: Prisma.LessonUpdateInput = {};
+    const edited: LcEditableField[] = [];
+    const json = (v: unknown) => v as Prisma.InputJsonValue;
+    const alreadyEdited = new Set(readLcRefs(lesson.sourceRefs)?.edited ?? []);
+
+    if (dto.experience !== undefined) {
+      const v = validateExperience(dto.experience);
+      if (!v.value) problems.push(...v.errors);
+      else {
+        data.experience = json(v.value);
+        edited.push('experience');
+        // The plain-text fallback follows the page — unless an admin wrote that text themselves.
+        const title = typeof data.title === 'string' ? data.title : lesson.title;
+        if (!alreadyEdited.has('contentMarkdown')) data.contentMarkdown = fallbackMarkdown({ title, ...v.value });
+        if (!alreadyEdited.has('homework')) data.homework = homeworkMarkdown(v.value);
+        if (!alreadyEdited.has('codeSnippets')) data.codeSnippets = json(snippetsFromStacks(v.value.project.stacks));
+      }
+    }
+    if (dto.previewVideo !== undefined) {
+      const v = validatePreviewVideo(dto.previewVideo);
+      if (!v.value) problems.push(...v.errors);
+      else {
+        data.previewVideo = json(v.value);
+        edited.push('previewVideo');
+      }
+    }
+    let cardTitle: string | null = null;
+    if (dto.projectCard !== undefined) {
+      const v = validateProjectCard(dto.projectCard);
+      if (!v.value) problems.push(...v.errors);
+      else {
+        data.projectCard = json(v.value);
+        cardTitle = v.value.title;
+        edited.push('projectCard');
+      }
+    }
+    if (dto.homeworkCard !== undefined) {
+      const v = validateHomeworkCard(dto.homeworkCard);
+      if (!v.value) problems.push(...v.errors);
+      else {
+        data.homeworkCard = json(v.value);
+        edited.push('homeworkCard');
+      }
+    }
+    if (problems.length > 0) {
+      throw new BadRequestException({
+        message: `The lesson cannot be saved yet: ${problems.slice(0, 3).join(' ')}${problems.length > 3 ? ` (and ${problems.length - 3} more)` : ''}`,
+        errors: problems,
+      });
+    }
+    if (edited.length === 0) throw new BadRequestException('Nothing to save.');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.lesson.update({
+        where: { id: lessonId },
+        data: {
+          ...data,
+          contentVersion: LC_LESSON_CONTENT_VERSION,
+          sourceRefs: this.lcRefsWithEdits(lesson, edited),
+        },
+      });
+      // The project card's title is also the lesson's Project row: keep them together.
+      if (cardTitle && lesson.projectId) {
+        await tx.project.update({ where: { id: lesson.projectId }, data: { title: cardTitle } });
+      }
+      return row;
+    });
+    return {
+      id: updated.id,
+      experience: updated.experience,
+      previewVideo: updated.previewVideo,
+      projectCard: updated.projectCard,
+      homeworkCard: updated.homeworkCard,
+      edited: readLcRefs(updated.sourceRefs)?.edited ?? [],
+    };
+  }
+
+  /** Every coding platform, in display order (admin). */
+  listCodingPlatforms() {
+    return listPlatforms(this.prisma);
+  }
+
+  /** Changes where a platform's "Start Coding" opens, or switches it off. */
+  async updateCodingPlatform(key: string, dto: UpdateCodingPlatformDto) {
+    if (!isPlatformKey(key)) throw new NotFoundException('Unknown coding platform.');
+    const problems = platformUpdateProblems(dto);
+    if (problems.length > 0) throw new BadRequestException(problems.join(' '));
+    const fallback = DEFAULT_PLATFORMS.find((p) => p.key === key)!;
+    const description = dto.description === undefined ? undefined : dto.description.trim() || null;
+    await this.prisma.codingPlatform.upsert({
+      where: { key },
+      create: {
+        key,
+        name: dto.name?.trim() || fallback.name,
+        startUrl: dto.startUrl?.trim() || fallback.startUrl,
+        description: description === undefined ? fallback.description : description,
+        sortOrder: fallback.sortOrder,
+        isActive: dto.isActive ?? true,
+      },
+      update: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.startUrl !== undefined ? { startUrl: dto.startUrl.trim() } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+    });
+    return (await listPlatforms(this.prisma)).find((p) => p.key === key);
   }
 
   private async ensure(

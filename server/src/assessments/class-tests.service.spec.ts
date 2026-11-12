@@ -75,6 +75,7 @@ function attemptRow(over: Row = {}): Row {
       { selectedIndex: null },
     ],
     practicalSubmissions: [],
+    files: [],
     report: null,
     ...over,
   };
@@ -199,7 +200,7 @@ describe('ClassTestsService.getOverview', () => {
           status: AttemptStatus.SUBMITTED,
           submittedAt: lockedAt,
           lockedAt,
-          practicalSubmissions: [{ code: 'print(1)' }],
+          practicalSubmissions: [{ code: 'print(1)', links: [] }],
           report: { id: 'rep-2', status: TestReportStatus.PENDING_REVIEW },
         }),
         testLockedAt: lockedAt,
@@ -256,7 +257,7 @@ describe('ClassTestsService.getOverview', () => {
     prisma.scheduledLesson.findMany.mockResolvedValue([
       member('a', 'Ada', {
         assessmentAttempt: attemptRow({
-          practicalSubmissions: [{ code: '  \n' }],
+          practicalSubmissions: [{ code: '  \n', links: [] }],
         }),
       }),
     ]);

@@ -24,6 +24,7 @@
 
 import { Prisma, PrismaClient, SessionType } from '@prisma/client';
 import { canonicalCourseSlug } from '../../courses/course-slug';
+import { isLittleCodersSlug } from '../../little-coders/lc.constants';
 import { BANK_CONTENT_VERSION, standardInstructions } from './bank.constants';
 import { materializeBank } from './bank.materialize';
 import { BankRegistry, DEFAULT_REGISTRY } from './bank.registry';
@@ -90,6 +91,9 @@ export function resolveBank(
 ): TestBank | null {
   // Canonical so a database that still has the old "-path" spelling resolves too.
   const courseSlug = canonicalCourseSlug(lesson.course.slug);
+  // Little Coders has its own assessments (server/src/little-coders/assessments), applied by
+  // syncLittleCodersBanks — the retired three-course banks below now serve Odyssey only.
+  if (isLittleCodersSlug(courseSlug)) return null;
   if (!registry.courseSlugs.includes(courseSlug)) return null;
   switch (lesson.type) {
     case SessionType.COURSE_TEST:

@@ -56,7 +56,7 @@ function courseReport(over: Row = {}): Row {
     studentUserId: STUDENT.userId,
     teacherId: 'tp-1',
     courseId: 'course-1',
-    courseTitle: 'Python for Young Builders',
+    courseTitle: 'Python Explorers',
     assessmentType: SessionType.COURSE_TEST,
     testTitle: 'Course Test',
     status: TestReportStatus.PENDING_REVIEW,
@@ -178,7 +178,16 @@ function flatMatch(row: Row, where: Row): boolean {
   });
 }
 
-function setup(initial: Row, opts: { teacherProfile?: boolean } = {}) {
+function setup(
+  initial: Row,
+  opts: {
+    teacherProfile?: boolean;
+    /** Assessment rows the format lookup finds (Little Coders ones). */
+    assessments?: Row[];
+    /** The temporary-files service of a Little Coders practical. */
+    files?: Row;
+  } = {},
+) {
   const db = { report: initial, attemptUpdates: [] as Row[] };
   const certificateFindFirst = jest.fn().mockResolvedValue(null);
   const prisma: any = {
@@ -219,6 +228,9 @@ function setup(initial: Row, opts: { teacherProfile?: boolean } = {}) {
     practicalSubmission: { updateMany: jest.fn().mockResolvedValue({}) },
     certificate: { findFirst: certificateFindFirst },
     emailLog: { findUnique: jest.fn().mockResolvedValue(null) },
+    assessment: {
+      findMany: jest.fn().mockResolvedValue(opts.assessments ?? []),
+    },
     $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
   const notifications = {
@@ -226,7 +238,11 @@ function setup(initial: Row, opts: { teacherProfile?: boolean } = {}) {
       .fn()
       .mockResolvedValue({ ok: true, logId: 'mail-1' }),
   };
-  const service = new TestReportsService(prisma, notifications as any);
+  const service = new TestReportsService(
+    prisma,
+    notifications as any,
+    opts.files as any,
+  );
   return { service, prisma, db, notifications, certificateFindFirst };
 }
 
@@ -933,5 +949,267 @@ describe('TestReportsService.get — what the teacher sees', () => {
       'Calculations',
     ]);
     expect(d.totals.total).toBeNull();
+  });
+});
+
+// ─── Little Coders: a practical handed in as links and files ─────────────────
+
+describe('TestReportsService — Little Coders practical', () => {
+  const LC_ASSESSMENT = [
+    { id: 'asm-1', format: 'LITTLE_CODERS_V2', sourceAssessment: null },
+  ];
+  const spec = {
+    version: 1,
+    platform: 'STRETCH3',
+    brief: ['Make the rocket launch.'],
+    blocks: [{ category: 'Events', blocks: ['when green flag clicked'] }],
+    requirements: ['It starts on the green flag.'],
+    adminEdited: true,
+  };
+  const FILE = {
+    id: 'f1',
+    name: 'rocket.sb3',
+    size: 1200,
+    kind: 'DOWNLOAD',
+    status: 'ATTACHED',
+    removed: false,
+  };
+
+  /** A Course Assessment report: 15 objective marks + a 25-mark practical, every criterion marked. */
+  function lcReport(over: Row = {}): Row {
+    const rubric: RubricScore[] = [
+      { criterion: 'Required functionality works correctly', maxPoints: 10, score: 8 },
+      { criterion: 'Correct selection and use of blocks', maxPoints: 6, score: 5 },
+      { criterion: 'Logical sequence and programming flow', maxPoints: 5, score: 4 },
+      { criterion: 'Testing and debugging', maxPoints: 3, score: 2 },
+      { criterion: 'Project completed and submitted', maxPoints: 1, score: 1 },
+    ];
+    const results = Array.from({ length: 15 }, (_, i) =>
+      result(`q${i}`, i < 12, i < 10 ? 'MCQ' : 'TRUE_FALSE'),
+    );
+    return courseReport({
+      status: TestReportStatus.PENDING_REVIEW,
+      mcqTotal: 10,
+      trueFalseTotal: 5,
+      autoObjectiveScore: 12,
+      objectiveScore: 12,
+      objectiveMaxScore: 15,
+      questionResults: results,
+      hasCodingProject: true,
+      codingProject: {
+        questionId: 'p1',
+        title: 'Rocket Launch',
+        instructions: '…',
+        language: 'scratch',
+        code: '',
+        savedAt: null,
+        submission: {
+          links: ['https://scratch.mit.edu/projects/123/'],
+          note: 'My rocket flies!',
+          files: [{ id: 'f1', name: 'rocket.sb3', size: 1200 }],
+        },
+        spec,
+      },
+      codingMaxScore: 25,
+      codingRubricScores: rubric,
+      codingScore: 20,
+      totalMaxScore: 40,
+      totalScore: 32,
+      percentage: 80,
+      passed: true,
+      ...over,
+    });
+  }
+
+  const filesService = (over: Row = {}) => ({
+    listFor: jest.fn().mockResolvedValue([FILE]),
+    finaliseAttempt: jest.fn().mockResolvedValue(['f1']),
+    removeMarked: jest.fn().mockResolvedValue({ removed: 1, pending: 0 }),
+    ...over,
+  });
+
+  it('shows the teacher what was handed in: links, note, files and the brief', async () => {
+    const files = filesService();
+    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const d = await service.get('rep-1', TEACHER);
+
+    expect(d.littleCoders).toBe(true);
+    expect(d.typeLabel).toBe('Course Assessment');
+    expect(d.coding?.lc).toMatchObject({
+      links: ['https://scratch.mit.edu/projects/123/'],
+      note: 'My rocket flies!',
+      files: [{ id: 'f1', name: 'rocket.sb3', size: 1200, removed: false }],
+      filesRemoved: false,
+    });
+    // The brief is shown without the admin bookkeeping flag.
+    expect(d.coding?.lc?.spec).toMatchObject({ platform: 'STRETCH3' });
+    expect(d.coding?.lc?.spec).not.toHaveProperty('adminEdited');
+    // The plain project block stays the same shape every program uses.
+    expect(d.coding?.project).not.toHaveProperty('submission');
+    expect(d.coding?.project).not.toHaveProperty('spec');
+    expect(d.coding?.project?.title).toBe('Rocket Launch');
+  });
+
+  it('after the review is finalised the file names stay but the files are marked removed', async () => {
+    const files = filesService({
+      listFor: jest
+        .fn()
+        .mockResolvedValue([{ ...FILE, status: 'DELETED', removed: true }]),
+    });
+    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const d = await service.get('rep-1', TEACHER);
+    expect(d.coding?.lc?.files).toEqual([
+      { id: 'f1', name: 'rocket.sb3', size: 1200, kind: 'DOWNLOAD', removed: true },
+    ]);
+    expect(d.coding?.lc?.filesRemoved).toBe(true);
+  });
+
+  it('a file the student was still preparing is not part of what was handed in', async () => {
+    const files = filesService({
+      listFor: jest
+        .fn()
+        .mockResolvedValue([FILE, { ...FILE, id: 'f2', status: 'UPLOADED' }]),
+    });
+    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    const d = await service.get('rep-1', TEACHER);
+    expect(d.coding?.lc?.files.map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('another program’s report has no Little Coders block and its own label', async () => {
+    const { service } = setup(finalReport());
+    const d = await service.get('rep-1', TEACHER);
+    expect(d.littleCoders).toBe(false);
+    expect(d.typeLabel).toBe('Final Test');
+    expect(d.coding?.lc).toBeNull();
+  });
+
+  it('the list labels Little Coders reports as assessments', async () => {
+    const { service, prisma } = setup(lcReport(), { assessments: LC_ASSESSMENT });
+    prisma.testReport.findMany.mockResolvedValue([
+      {
+        id: 'rep-1',
+        assessmentId: 'asm-1',
+        status: TestReportStatus.PENDING_REVIEW,
+        assessmentType: SessionType.COURSE_TEST,
+        submittedAt: new Date('2026-10-24T09:00:00.000Z'),
+        shareEmailLogId: null,
+      },
+      {
+        id: 'rep-2',
+        assessmentId: 'asm-other',
+        status: TestReportStatus.PENDING_REVIEW,
+        assessmentType: SessionType.COURSE_TEST,
+        submittedAt: new Date('2026-10-23T09:00:00.000Z'),
+        shareEmailLogId: null,
+      },
+    ]);
+    const list = await service.list(TEACHER, {});
+    expect(list.find((r) => r.id === 'rep-1')).toMatchObject({
+      littleCoders: true,
+      typeLabel: 'Course Assessment',
+    });
+    expect(list.find((r) => r.id === 'rep-2')).toMatchObject({
+      littleCoders: false,
+      typeLabel: 'Course Test',
+    });
+    expect(list[0]).not.toHaveProperty('assessmentId');
+  });
+
+  it('approving marks the files in the SAME transaction as the final score, then removes them', async () => {
+    const files = filesService();
+    const order: string[] = [];
+    const { service, prisma, db } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    prisma.testReport.updateMany.mockImplementationOnce(async ({ data }: Row) => {
+      order.push('score');
+      Object.assign(db.report, data);
+      return { count: 1 };
+    });
+    files.finaliseAttempt.mockImplementation(async (tx: unknown, attemptId: string) => {
+      order.push('mark');
+      expect(tx).toBe(prisma); // inside the transaction callback
+      expect(attemptId).toBe('att-1');
+      return ['f1'];
+    });
+    files.removeMarked.mockImplementation(async (ids: string[]) => {
+      order.push('remove');
+      expect(ids).toEqual(['f1']);
+      return { removed: 1, pending: 0 };
+    });
+
+    const d = await service.approve('rep-1', TEACHER);
+
+    expect(order).toEqual(['score', 'mark', 'remove']);
+    expect(d.status).toBe(TestReportStatus.READY_TO_SHARE);
+    expect(d.totals).toMatchObject({ total: 32, totalMax: 40, percentage: 80 });
+  });
+
+  it('a failed approval (someone else changed the report) neither marks nor removes any file', async () => {
+    const files = filesService();
+    const { service, prisma } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    prisma.testReport.updateMany.mockResolvedValueOnce({ count: 0 });
+    await expect(service.approve('rep-1', TEACHER)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(files.finaliseAttempt).not.toHaveBeenCalled();
+    expect(files.removeMarked).not.toHaveBeenCalled();
+  });
+
+  it('an unfinished marking sheet cannot be approved, so no file is touched', async () => {
+    const files = filesService();
+    const unmarked = lcReport({
+      status: TestReportStatus.PENDING_CODE_EVALUATION,
+      codingScore: null,
+      codingRubricScores: [
+        { criterion: 'Required functionality works correctly', maxPoints: 10, score: null },
+        { criterion: 'Correct selection and use of blocks', maxPoints: 6, score: 5 },
+        { criterion: 'Logical sequence and programming flow', maxPoints: 5, score: 4 },
+        { criterion: 'Testing and debugging', maxPoints: 3, score: 2 },
+        { criterion: 'Project completed and submitted', maxPoints: 1, score: 1 },
+      ],
+    });
+    const { service } = setup(unmarked, { assessments: LC_ASSESSMENT, files });
+    await expect(service.approve('rep-1', TEACHER)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(files.finaliseAttempt).not.toHaveBeenCalled();
+    expect(files.removeMarked).not.toHaveBeenCalled();
+  });
+
+  it('opening the report never marks or removes anything', async () => {
+    const files = filesService();
+    const { service } = setup(lcReport(), { assessments: LC_ASSESSMENT, files });
+    await service.get('rep-1', TEACHER);
+    await service.get('rep-1', TEACHER);
+    expect(files.finaliseAttempt).not.toHaveBeenCalled();
+    expect(files.removeMarked).not.toHaveBeenCalled();
+  });
+
+  it('approving another program’s report never touches the files service', async () => {
+    const files = filesService();
+    const { service } = setup(courseReport(), { files });
+    await service.approve('rep-1', TEACHER);
+    expect(files.finaliseAttempt).not.toHaveBeenCalled();
+    expect(files.removeMarked).not.toHaveBeenCalled();
+  });
+
+  it('the parent email names the assessment the way Little Coders does', async () => {
+    const { service, notifications } = setup(
+      lcReport({
+        status: TestReportStatus.READY_TO_SHARE,
+        approvedAt: new Date('2026-10-24T10:00:00.000Z'),
+      }),
+      { assessments: LC_ASSESSMENT, files: filesService() },
+    );
+    await service.share('rep-1', TEACHER);
+    expect(notifications.sendTestReportToParent).toHaveBeenCalledWith(
+      'mira@example.com',
+      expect.objectContaining({
+        testTypeLabel: 'Course Assessment',
+        total: 32,
+        totalMax: 40,
+        coding: { score: 20, max: 25 },
+        objective: expect.objectContaining({ score: 12, max: 15 }),
+      }),
+    );
   });
 });

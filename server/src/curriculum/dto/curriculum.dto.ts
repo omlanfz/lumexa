@@ -142,6 +142,32 @@ export class PreviewLessonDto {
   @IsOptional() @IsArray() visuals?: unknown[];
   @IsOptional() @IsArray() projectLinks?: ProjectLinkDto[];
   @IsOptional() @IsArray() codeSnippets?: CodeSnippetDto[];
+  // Little Coders: the draft's interactive page, video record and cards (deeply validated by the
+  // Little Coders validators; omitted = what the lesson already has).
+  @IsOptional() @IsObject() experience?: Record<string, unknown>;
+  @IsOptional() @IsObject() previewVideo?: Record<string, unknown>;
+  @IsOptional() @IsObject() projectCard?: Record<string, unknown>;
+  @IsOptional() @IsObject() homeworkCard?: Record<string, unknown>;
+}
+
+/**
+ * Little Coders: the four stored documents of a redesigned lesson — its interactive page
+ * (experience), "Your Learning Preview" video record, project card and homework card. Each is
+ * validated in full by the Little Coders validators; a save with problems is rejected with the list.
+ */
+export class UpdateLcLessonDto {
+  @IsOptional() @IsObject() experience?: Record<string, unknown>;
+  @IsOptional() @IsObject() previewVideo?: Record<string, unknown>;
+  @IsOptional() @IsObject() projectCard?: Record<string, unknown>;
+  @IsOptional() @IsObject() homeworkCard?: Record<string, unknown>;
+}
+
+/** Little Coders: where a platform's "Start Coding" button opens (or switch the platform off). */
+export class UpdateCodingPlatformDto {
+  @IsOptional() @IsString() @MaxLength(80) name?: string;
+  @IsOptional() @IsString() @MaxLength(500) startUrl?: string;
+  @IsOptional() @IsString() @MaxLength(200) description?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 // A question is either a four-option MCQ or a True/False statement (options
@@ -193,6 +219,8 @@ export class UpdateAssessmentDto {
   @IsOptional() @IsInt() @Min(0) @Max(100) passScorePct?: number;
   @IsOptional() @IsBoolean() isPublished?: boolean;
   @IsOptional() @IsNumber() vivaMaxScore?: number;
+  // Little Coders Final Assessment: the practical-project version students are given.
+  @IsOptional() @IsIn(['SCRATCH_AI', 'PYTHON']) activeVariant?: string;
 }
 
 export class CreatePracticalQuestionDto {
@@ -209,6 +237,9 @@ export class CreatePracticalQuestionDto {
   @IsOptional() @IsInt() maxScore?: number;
   @IsOptional() @IsInt() order?: number;
   @IsOptional() @IsBoolean() isPublished?: boolean;
+  // Little Coders: the structured project (brief, blocks, requirements, starter project).
+  @IsOptional() spec?: Record<string, unknown>;
+  @IsOptional() @IsIn(['SCRATCH_AI', 'PYTHON']) variantKey?: string;
 }
 
 export class ImportLessonDto {
@@ -240,4 +271,6 @@ export class UpdatePracticalQuestionDto {
   @IsOptional() @IsInt() maxScore?: number;
   @IsOptional() @IsInt() order?: number;
   @IsOptional() @IsBoolean() isPublished?: boolean;
+  @IsOptional() spec?: Record<string, unknown>;
+  @IsOptional() @IsIn(['SCRATCH_AI', 'PYTHON']) variantKey?: string;
 }
