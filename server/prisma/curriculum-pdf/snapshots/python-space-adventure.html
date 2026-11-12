@@ -1,0 +1,36 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Space Parade</title>
+<style>
+@font-face{font-family:'Inter';font-weight:500;src:url('../../../assets/certificate/fonts/inter-latin-500-normal.woff2')}
+@font-face{font-family:'Inter';font-weight:700;src:url('../../../assets/certificate/fonts/inter-latin-700-normal.woff2')}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1280px;height:800px;overflow:hidden;font-family:'Inter',Arial,sans-serif;background:#eef7ff;color:#12324d}
+.top{height:56px;background:linear-gradient(90deg,#0ea5e9,#6366f1);display:flex;align-items:center;gap:14px;padding:0 24px;color:#fff;font-weight:700;font-size:20px}
+.top span{background:rgba(255,255,255,.25);border-radius:99px;padding:4px 14px;font-size:14px}
+.wrap{display:grid;grid-template-columns:600px 1fr;gap:22px;padding:22px 28px}
+.card{background:#fff;border-radius:22px;padding:18px;box-shadow:0 8px 20px -12px rgba(15,60,120,.5)}
+h3{font-size:17px;margin-bottom:12px;color:#1d4ed8}
+.blk{border-radius:12px;padding:12px 16px;color:#fff;font:700 17px 'DejaVu Sans Mono',Menlo,monospace;margin-bottom:7px;box-shadow:inset 0 -3px 0 rgba(0,0,0,.18)}
+.blk.in{margin-left:34px}.blk.in2{margin-left:68px}
+.var{background:#f59e0b}.fn{background:#8b5cf6}.loop{background:#0ea5e9}.out{background:#16a34a}
+.console{background:#0b1226;color:#d1fae5;border-radius:16px;padding:16px 18px;font:16px/1.7 'DejaVu Sans Mono',Menlo,monospace}
+.console .p{color:#7dd3fc}
+.sky{height:300px;border-radius:16px;background:radial-gradient(ellipse at 20% 0,#3b2f8f,#0b1226 70%);position:relative;overflow:hidden}
+.sky svg{position:absolute;inset:0}
+</style></head><body>
+<div class="top">🛰️ Space Parade <span>EduBlocks</span><span>Python Creative Lab</span></div>
+<div class="wrap">
+ <div class="card"><h3>Your blocks (they write real Python)</h3>
+  <div class="blk var">planets = ["Mercury", "Venus", "Earth", "Mars"]</div>
+  <div class="blk fn">def parade(name, size):</div>
+  <div class="blk out in">print("Here comes", name, "!")</div>
+  <div class="blk loop in">for i in range(size):</div>
+  <div class="blk out in2">print("★" * (i + 1))</div>
+  <div class="blk loop">for planet in planets:</div>
+  <div class="blk fn in">parade(planet, 3)</div></div>
+ <div><div class="card"><h3>What the program prints</h3><div class="console"><span class="p">&gt;&gt;&gt;</span> Here comes Mercury !<br>★<br>★★<br>★★★<br><span class="p">&gt;&gt;&gt;</span> Here comes Venus !<br>★<br>★★<br>★★★<br><span class="p">&gt;&gt;&gt;</span> Here comes Earth !</div></div>
+ <div class="card" style="margin-top:18px"><h3>The parade, drawn by the program</h3><div class="sky">
+  <svg viewBox="0 0 640 300"><g fill="#fff"><circle cx="40" cy="40" r="2"/><circle cx="130" cy="90" r="1.6"/><circle cx="260" cy="30" r="2"/><circle cx="420" cy="70" r="1.8"/><circle cx="560" cy="36" r="2"/><circle cx="610" cy="120" r="1.6"/><circle cx="80" cy="220" r="1.8"/><circle cx="330" cy="260" r="2"/><circle cx="520" cy="240" r="1.6"/></g>
+   <path d="M30 170C150 120 260 210 380 160S560 120 620 150" stroke="#fff" stroke-opacity=".25" stroke-width="2" stroke-dasharray="4 8" fill="none"/>
+   <circle cx="70" cy="150" r="18" fill="#a8a29e"/><circle cx="190" cy="170" r="28" fill="#fbbf24"/><circle cx="330" cy="160" r="32" fill="#38bdf8"/><path d="M312 150c10 6 26 4 38-6M316 172c12 4 24 2 34-4" stroke="#16a34a" stroke-width="7" fill="none" stroke-linecap="round"/><circle cx="470" cy="150" r="24" fill="#f87171"/><circle cx="578" cy="140" r="14" fill="#c4b5fd" opacity=".35"/>
+   <g font-size="13" font-weight="700" fill="#fff" text-anchor="middle"><text x="70" y="192">Mercury</text><text x="190" y="214">Venus</text><text x="330" y="208">Earth</text><text x="470" y="188">Mars</text></g></svg></div></div></div>
+</div></body></html>

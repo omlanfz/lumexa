@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8"><title>House Price Predictor</title>
+<style>
+@font-face{font-family:'Inter';font-weight:500;src:url('../../../assets/certificate/fonts/inter-latin-500-normal.woff2')}
+@font-face{font-family:'Inter';font-weight:700;src:url('../../../assets/certificate/fonts/inter-latin-700-normal.woff2')}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1280px;height:800px;overflow:hidden;font-family:'Inter',Arial,sans-serif;background:#eef2f7;color:#1f2a44}
+.chrome{height:44px;background:#dfe5ee;display:flex;align-items:center;gap:8px;padding:0 16px}
+.chrome i{width:12px;height:12px;border-radius:50%;background:#f87171}.chrome i:nth-child(2){background:#fbbf24}.chrome i:nth-child(3){background:#34d399}
+.chrome span{margin-left:14px;background:#fff;border-radius:8px;padding:5px 16px;font-size:13px;color:#64748b;width:420px}
+.wrap{padding:26px 34px;display:grid;grid-template-columns:600px 1fr;gap:24px;height:756px}
+h1{font-size:30px;margin-bottom:4px}.sub{color:#64748b;font-size:15px;margin-bottom:18px}
+.card{background:#fff;border-radius:18px;padding:20px 22px;box-shadow:0 6px 18px -10px rgba(30,41,59,.35)}
+.code{background:#0f172a;color:#e2e8f0;border-radius:14px;padding:16px 18px;font:14px/1.6 'DejaVu Sans Mono',Menlo,monospace;white-space:pre}
+.code .k{color:#c4b5fd}.code .s{color:#86efac}.code .c{color:#64748b}.code .n{color:#fcd34d}
+.out{margin-top:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:12px;padding:10px 14px;font:14px 'DejaVu Sans Mono',monospace;color:#065f46}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.tile{border-radius:14px;padding:14px;color:#fff}.tile b{display:block;font-size:30px}.tile span{font-size:13px;opacity:.9}
+h3{font-size:16px;margin-bottom:10px;color:#334155}
+.field{display:flex;justify-content:space-between;align-items:center;font-size:15px;margin:11px 0 4px;font-weight:500}.field b{color:#4f46e5}
+.slider{height:8px;border-radius:5px;background:#e2e8f0;position:relative}.slider i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:linear-gradient(90deg,#6366f1,#22d3ee)}
+.slider u{position:absolute;top:-5px;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid #6366f1}
+.result{margin-top:18px;border-radius:16px;padding:16px 20px;background:linear-gradient(120deg,#4338ca,#0ea5e9);color:#fff}
+.result small{font-size:13px;opacity:.9;display:block}.result b{font-size:46px;letter-spacing:-.02em}
+</style></head><body>
+<div class="chrome"><i></i><i></i><i></i><span>localhost:8501 — House Price Predictor</span></div>
+<div class="wrap">
+ <div><h1>House Price Predictor</h1><div class="sub">A scikit-learn model trained on 1,200 real home sales</div>
+  <div class="card"><div class="code"><span class="c"># train on 80% of the houses, test on the rest</span>
+<span class="k">from</span> sklearn.linear_model <span class="k">import</span> LinearRegression
+X = houses[[<span class="s">"size_sqft"</span>, <span class="s">"bedrooms"</span>, <span class="s">"age_years"</span>]]
+X_train, X_test, y_train, y_test = train_test_split(X, y)
+model = LinearRegression().fit(X_train, y_train)
+<span class="k">print</span>(<span class="s">"R² on test data:"</span>, model.score(X_test, y_test))</div>
+  <div class="out">R² on test data: 0.86</div>
+  <div class="tiles"><div class="tile" style="background:linear-gradient(135deg,#6366f1,#818cf8)"><b>0.86</b><span>R² score</span></div><div class="tile" style="background:linear-gradient(135deg,#0ea5e9,#38bdf8)"><b>$14.2k</b><span>typical error</span></div><div class="tile" style="background:linear-gradient(135deg,#10b981,#34d399)"><b>1,200</b><span>houses used</span></div></div></div>
+  <div class="card" style="margin-top:16px"><h3>Which feature matters most?</h3>
+   <div style="display:grid;gap:9px;font-size:14px;font-weight:500">
+    <div style="display:grid;grid-template-columns:110px 1fr 48px;align-items:center;gap:10px">size<span style="height:14px;border-radius:7px;background:linear-gradient(90deg,#6366f1,#818cf8);width:92%"></span><b>0.71</b></div>
+    <div style="display:grid;grid-template-columns:110px 1fr 48px;align-items:center;gap:10px">bedrooms<span style="height:14px;border-radius:7px;background:linear-gradient(90deg,#0ea5e9,#38bdf8);width:44%"></span><b>0.22</b></div>
+    <div style="display:grid;grid-template-columns:110px 1fr 48px;align-items:center;gap:10px">age<span style="height:14px;border-radius:7px;background:linear-gradient(90deg,#f59e0b,#fbbf24);width:18%"></span><b>0.07</b></div></div></div>
+ </div>
+ <div><div class="card"><h3>Price vs size — and the line the model learned</h3>
+  <svg viewBox="0 0 520 300" width="100%"><rect width="520" height="300" fill="#f8fafc" rx="10"/>
+   <g stroke="#e2e8f0"><path d="M50 40H500M50 100H500M50 160H500M50 220H500"/></g>
+   <g fill="#6366f1" opacity=".75"><circle cx="82" cy="214" r="5"/><circle cx="104" cy="196" r="5"/><circle cx="120" cy="206" r="5"/><circle cx="146" cy="178" r="5"/><circle cx="162" cy="190" r="5"/><circle cx="188" cy="160" r="5"/><circle cx="206" cy="170" r="5"/><circle cx="232" cy="142" r="5"/><circle cx="248" cy="152" r="5"/><circle cx="272" cy="124" r="5"/><circle cx="296" cy="136" r="5"/><circle cx="316" cy="104" r="5"/><circle cx="340" cy="116" r="5"/><circle cx="366" cy="84" r="5"/><circle cx="388" cy="96" r="5"/><circle cx="414" cy="64" r="5"/><circle cx="440" cy="74" r="5"/><circle cx="462" cy="52" r="5"/><circle cx="130" cy="186" r="5"/><circle cx="220" cy="150" r="5"/><circle cx="330" cy="128" r="5"/><circle cx="402" cy="80" r="5"/></g>
+   <path d="M62 224L488 44" stroke="#f43f5e" stroke-width="4" stroke-linecap="round"/>
+   <circle cx="262" cy="134" r="9" fill="#fff" stroke="#f43f5e" stroke-width="4"/>
+   <text x="276" y="118" font-size="13" font-weight="700" fill="#f43f5e">your house</text>
+   <text x="50" y="290" font-size="12" fill="#64748b">size (sq ft) →</text><text x="8" y="22" font-size="12" fill="#64748b">price</text></svg></div>
+  <div class="card" style="margin-top:16px"><h3>Try it: describe a house</h3>
+   <div class="field">Size <b>1,450 sq ft</b></div><div class="slider"><i style="width:58%"></i><u style="left:55%"></u></div>
+   <div class="field">Bedrooms <b>3</b></div><div class="slider"><i style="width:50%"></i><u style="left:47%"></u></div>
+   <div class="field">Age <b>8 years</b></div><div class="slider"><i style="width:22%"></i><u style="left:19%"></u></div>
+   <div class="result"><small>Predicted price</small><b>$312,400</b><small>± $14,200 typical error</small></div></div></div>
+</div></body></html>

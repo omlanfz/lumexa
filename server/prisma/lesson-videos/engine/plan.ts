@@ -43,7 +43,11 @@ export interface VideoPlan {
   scenes: PlanScene[];
   cues: PlanCue[];
   concepts: { emoji: string; title: string; text: string }[];
-  example: { title: string; lines: string[]; language: 'scratch' | 'edublocks' };
+  example: {
+    title: string;
+    lines: string[];
+    language: 'scratch' | 'edublocks';
+  };
   demo: LcDemo;
   tip: { kind: 'tip' | 'mistake'; title: string; text: string; fix?: string };
   challenge: {
@@ -60,7 +64,13 @@ export interface VideoPlan {
   logo: string;
 }
 
-export type SfxKind = 'whoosh' | 'pop' | 'chime' | 'success' | 'click' | 'sparkle';
+export type SfxKind =
+  | 'whoosh'
+  | 'pop'
+  | 'chime'
+  | 'success'
+  | 'click'
+  | 'sparkle';
 export interface SfxEvent {
   t: number;
   kind: SfxKind;

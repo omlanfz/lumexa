@@ -19,7 +19,11 @@ export interface Wav {
 /** Reads a mono PCM16 / float32 WAV file. */
 export function readWav(file: string): Wav {
   const buf = fs.readFileSync(file);
-  if (buf.toString('ascii', 0, 4) !== 'RIFF' || buf.toString('ascii', 8, 12) !== 'WAVE') throw new Error(`${file} is not a WAV file`);
+  if (
+    buf.toString('ascii', 0, 4) !== 'RIFF' ||
+    buf.toString('ascii', 8, 12) !== 'WAVE'
+  )
+    throw new Error(`${file} is not a WAV file`);
   let pos = 12;
   let rate = 0;
   let channels = 1;
@@ -41,7 +45,12 @@ export function readWav(file: string): Wav {
       const out = new Float32Array(frames);
       for (let i = 0; i < frames; i++) {
         const at = body + i * bytes * channels;
-        out[i] = format === 3 ? buf.readFloatLE(at) : bits === 16 ? buf.readInt16LE(at) / 32768 : buf.readInt32LE(at) / 2147483648;
+        out[i] =
+          format === 3
+            ? buf.readFloatLE(at)
+            : bits === 16
+              ? buf.readInt16LE(at) / 32768
+              : buf.readInt32LE(at) / 2147483648;
       }
       data = out;
     }
@@ -51,7 +60,12 @@ export function readWav(file: string): Wav {
   return { rate, data };
 }
 
-export function writeWavStereo(file: string, left: Float32Array, right: Float32Array, rate = SAMPLE_RATE): void {
+export function writeWavStereo(
+  file: string,
+  left: Float32Array,
+  right: Float32Array,
+  rate = SAMPLE_RATE,
+): void {
   const frames = left.length;
   const buf = Buffer.alloc(44 + frames * 4);
   buf.write('RIFF', 0, 'ascii');
@@ -66,7 +80,8 @@ export function writeWavStereo(file: string, left: Float32Array, right: Float32A
   buf.writeUInt16LE(16, 34);
   buf.write('data', 36, 'ascii');
   buf.writeUInt32LE(frames * 4, 40);
-  const clip = (v: number) => Math.max(-32768, Math.min(32767, Math.round(v * 32767)));
+  const clip = (v: number) =>
+    Math.max(-32768, Math.min(32767, Math.round(v * 32767)));
   for (let i = 0; i < frames; i++) {
     buf.writeInt16LE(clip(left[i]), 44 + i * 4);
     buf.writeInt16LE(clip(right[i]), 46 + i * 4);
@@ -75,7 +90,11 @@ export function writeWavStereo(file: string, left: Float32Array, right: Float32A
   fs.writeFileSync(file, buf);
 }
 
-export function resample(data: Float32Array, from: number, to: number): Float32Array {
+export function resample(
+  data: Float32Array,
+  from: number,
+  to: number,
+): Float32Array {
   if (from === to) return data;
   const n = Math.round((data.length * to) / from);
   const out = new Float32Array(n);
@@ -114,7 +133,10 @@ const PROGRESSION: number[][] = [
   [5, 9, 12],
 ];
 
-export function synthMusic(seconds: number, seed: number): { l: Float32Array; r: Float32Array } {
+export function synthMusic(
+  seconds: number,
+  seed: number,
+): { l: Float32Array; r: Float32Array } {
   const n = Math.ceil(seconds * SAMPLE_RATE);
   const l = new Float32Array(n);
   const r = new Float32Array(n);
@@ -126,7 +148,13 @@ export function synthMusic(seconds: number, seed: number): { l: Float32Array; r:
   const bar = beat * 4;
   const bars = Math.ceil(seconds / bar) + 1;
 
-  const add = (at: number, dur: number, fn: (t: number, i: number) => number, pan: number, gain: number) => {
+  const add = (
+    at: number,
+    dur: number,
+    fn: (t: number, i: number) => number,
+    pan: number,
+    gain: number,
+  ) => {
     const start = Math.floor(at * SAMPLE_RATE);
     const len = Math.floor(dur * SAMPLE_RATE);
     const gl = gain * Math.cos(((pan + 1) * Math.PI) / 4);
@@ -158,8 +186,16 @@ export function synthMusic(seconds: number, seed: number): { l: Float32Array; r:
         t0,
         bar + 0.6,
         (t) => {
-          const env = Math.min(1, t / 0.7) * Math.min(1, Math.max(0, (bar + 0.6 - t) / 0.7));
-          return (Math.sin(TAU * f * t) + Math.sin(TAU * f * 1.004 * t) + 0.22 * Math.sin(TAU * 2 * f * t)) * 0.5 * env;
+          const env =
+            Math.min(1, t / 0.7) *
+            Math.min(1, Math.max(0, (bar + 0.6 - t) / 0.7));
+          return (
+            (Math.sin(TAU * f * t) +
+              Math.sin(TAU * f * 1.004 * t) +
+              0.22 * Math.sin(TAU * 2 * f * t)) *
+            0.5 *
+            env
+          );
         },
         (m % 3) - 1 > 0 ? 0.4 : -0.4,
         0.05,
@@ -169,7 +205,13 @@ export function synthMusic(seconds: number, seed: number): { l: Float32Array; r:
     // bass: root on one and three
     for (const beatIndex of [0, 2]) {
       const f = midi(chord[0] - 12);
-      add(t0 + beatIndex * beat, beat * 1.8, (t) => Math.sin(TAU * f * t) * Math.exp(-t * 2.4), 0, 0.12);
+      add(
+        t0 + beatIndex * beat,
+        beat * 1.8,
+        (t) => Math.sin(TAU * f * t) * Math.exp(-t * 2.4),
+        0,
+        0.12,
+      );
     }
 
     // marimba-like arpeggio on the eighth notes
@@ -183,7 +225,12 @@ export function synthMusic(seconds: number, seed: number): { l: Float32Array; r:
         0.9,
         (t) => {
           const env = Math.exp(-t * 5.2) * Math.min(1, t / 0.004);
-          return (Math.sin(TAU * f * t) + 0.38 * Math.sin(TAU * 3 * f * t) * Math.exp(-t * 11) + 0.12 * Math.sin(TAU * 5.4 * f * t) * Math.exp(-t * 22)) * env;
+          return (
+            (Math.sin(TAU * f * t) +
+              0.38 * Math.sin(TAU * 3 * f * t) * Math.exp(-t * 11) +
+              0.12 * Math.sin(TAU * 5.4 * f * t) * Math.exp(-t * 22)) *
+            env
+          );
         },
         i % 2 ? 0.32 : -0.32,
         0.085 * accent,
@@ -229,33 +276,67 @@ function sfxSamples(kind: SfxKind, seed: number): Float32Array {
       return make(0.6, (t) => {
         const u = t / 0.6;
         const cutoff = 0.02 + 0.5 * Math.pow(u, 1.6);
-        lp += cutoff * ((rand() * 2 - 1) - lp);
+        lp += cutoff * (rand() * 2 - 1 - lp);
         return lp * Math.pow(Math.sin(Math.PI * Math.min(1, u)), 1.6) * 1.6;
       });
     }
     case 'pop':
       return make(0.16, (t) => {
         const f = 260 + 520 * Math.exp(-t * 34);
-        return (Math.sin(TAU * f * t) * Math.exp(-t * 26) + (rand() * 2 - 1) * 0.12 * Math.exp(-t * 300)) * 0.9;
+        return (
+          (Math.sin(TAU * f * t) * Math.exp(-t * 26) +
+            (rand() * 2 - 1) * 0.12 * Math.exp(-t * 300)) *
+          0.9
+        );
       });
     case 'click':
-      return make(0.07, (t) => ((rand() * 2 - 1) * 0.35 + Math.sin(TAU * 1600 * t) * 0.5) * Math.exp(-t * 95));
+      return make(
+        0.07,
+        (t) =>
+          ((rand() * 2 - 1) * 0.35 + Math.sin(TAU * 1600 * t) * 0.5) *
+          Math.exp(-t * 95),
+      );
     case 'chime':
-      return make(1.3, (t) => (Math.sin(TAU * 880 * t) * Math.exp(-t * 3.2) + 0.5 * Math.sin(TAU * 1760 * t) * Math.exp(-t * 5.5) + 0.25 * Math.sin(TAU * 2640 * t) * Math.exp(-t * 9)) * 0.6);
+      return make(
+        1.3,
+        (t) =>
+          (Math.sin(TAU * 880 * t) * Math.exp(-t * 3.2) +
+            0.5 * Math.sin(TAU * 1760 * t) * Math.exp(-t * 5.5) +
+            0.25 * Math.sin(TAU * 2640 * t) * Math.exp(-t * 9)) *
+          0.6,
+      );
     case 'success': {
       const notes = [523.25, 659.25, 783.99, 1046.5];
       return make(1.6, (t) => {
         let v = 0;
         notes.forEach((f, i) => {
           const tt = t - i * 0.09;
-          if (tt > 0) v += (Math.sin(TAU * f * tt) * Math.exp(-tt * 3.6) + 0.3 * Math.sin(TAU * 2 * f * tt) * Math.exp(-tt * 7)) * 0.4;
+          if (tt > 0)
+            v +=
+              (Math.sin(TAU * f * tt) * Math.exp(-tt * 3.6) +
+                0.3 * Math.sin(TAU * 2 * f * tt) * Math.exp(-tt * 7)) *
+              0.4;
         });
         return v;
       });
     }
     default: {
-      const tones = Array.from({ length: 7 }, () => ({ f: 2500 + rand() * 3500, at: rand() * 0.45 }));
-      return make(0.9, (t) => tones.reduce((v, k) => (t > k.at ? v + Math.sin(TAU * k.f * (t - k.at)) * Math.exp(-(t - k.at) * 14) * 0.2 : v), 0));
+      const tones = Array.from({ length: 7 }, () => ({
+        f: 2500 + rand() * 3500,
+        at: rand() * 0.45,
+      }));
+      return make(0.9, (t) =>
+        tones.reduce(
+          (v, k) =>
+            t > k.at
+              ? v +
+                Math.sin(TAU * k.f * (t - k.at)) *
+                  Math.exp(-(t - k.at) * 14) *
+                  0.2
+              : v,
+          0,
+        ),
+      );
     }
   }
 }
@@ -298,7 +379,10 @@ export function mixLessonAudio(input: MixInput): MixReport {
       peak = Math.max(peak, Math.abs(x));
     }
     const rms = count ? Math.sqrt(sum / count) : 0;
-    const gain = rms > 0 ? Math.min(TARGET_VOICE_RMS / rms, 0.92 / Math.max(peak, 1e-6)) : 1;
+    const gain =
+      rms > 0
+        ? Math.min(TARGET_VOICE_RMS / rms, 0.92 / Math.max(peak, 1e-6))
+        : 1;
     s = s.map((x) => x * gain);
     const at = Math.round(v.start * SAMPLE_RATE);
     for (let i = 0; i < s.length && at + i < n; i++) voice[at + i] += s[i];
@@ -327,7 +411,14 @@ export function mixLessonAudio(input: MixInput): MixReport {
   input.sfx.forEach((event, index) => {
     const s = sfxSamples(event.kind, input.seed + index * 17);
     const at = Math.round(event.t * SAMPLE_RATE);
-    const gain = event.kind === 'whoosh' ? 0.2 : event.kind === 'success' ? 0.2 : event.kind === 'click' ? 0.16 : 0.18;
+    const gain =
+      event.kind === 'whoosh'
+        ? 0.2
+        : event.kind === 'success'
+          ? 0.2
+          : event.kind === 'click'
+            ? 0.16
+            : 0.18;
     for (let i = 0; i < s.length && at + i < n; i++) {
       l[at + i] += s[i] * gain;
       r[at + i] += s[i] * gain;

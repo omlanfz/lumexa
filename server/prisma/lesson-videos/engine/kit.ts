@@ -5,22 +5,30 @@
 export const W = 1920;
 export const H = 1080;
 export const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
-export const EMOJI_FONT = '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+export const EMOJI_FONT =
+  '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
 
 export type Ctx = CanvasRenderingContext2D;
 
 export const clamp01 = (x: number): number => (x < 0 ? 0 : x > 1 ? 1 : x);
-export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+export const lerp = (a: number, b: number, t: number): number =>
+  a + (b - a) * t;
 
 /** Progress 0…1 of an animation that starts at `start` and lasts `dur` seconds. */
-export const prog = (t: number, start: number, dur: number): number => clamp01((t - start) / dur);
+export const prog = (t: number, start: number, dur: number): number =>
+  clamp01((t - start) / dur);
 
 export const ease = {
   out3: (t: number): number => 1 - Math.pow(1 - t, 3),
-  inOut3: (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
-  outBack: (t: number, s = 1.70158): number => 1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2),
+  inOut3: (t: number): number =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  outBack: (t: number, s = 1.70158): number =>
+    1 + (s + 1) * Math.pow(t - 1, 3) + s * Math.pow(t - 1, 2),
   outElastic: (t: number): number =>
-    t === 0 || t === 1 ? t : Math.pow(2, -9 * t) * Math.sin(((t * 10 - 0.75) * (2 * Math.PI)) / 3) + 1,
+    t === 0 || t === 1
+      ? t
+      : Math.pow(2, -9 * t) * Math.sin(((t * 10 - 0.75) * (2 * Math.PI)) / 3) +
+        1,
 };
 
 /** Deterministic pseudo-random numbers (so every render draws the same stars). */
@@ -32,7 +40,14 @@ export function rng(seed: number): () => number {
   };
 }
 
-export function rrPath(c: Ctx, x: number, y: number, w: number, h: number, r: number): void {
+export function rrPath(
+  c: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
   const rad = Math.max(0, Math.min(r, w / 2, h / 2));
   c.beginPath();
   c.moveTo(x + rad, y);
@@ -43,20 +58,44 @@ export function rrPath(c: Ctx, x: number, y: number, w: number, h: number, r: nu
   c.closePath();
 }
 
-export function fillRR(c: Ctx, x: number, y: number, w: number, h: number, r: number, fill: string | CanvasGradient): void {
+export function fillRR(
+  c: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  fill: string | CanvasGradient,
+): void {
   rrPath(c, x, y, w, h, r);
   c.fillStyle = fill;
   c.fill();
 }
 
-export function strokeRR(c: Ctx, x: number, y: number, w: number, h: number, r: number, stroke: string, width: number): void {
+export function strokeRR(
+  c: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+  stroke: string,
+  width: number,
+): void {
   rrPath(c, x, y, w, h, r);
   c.strokeStyle = stroke;
   c.lineWidth = width;
   c.stroke();
 }
 
-export function linear(c: Ctx, x0: number, y0: number, x1: number, y1: number, stops: [number, string][]): CanvasGradient {
+export function linear(
+  c: Ctx,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  stops: [number, string][],
+): CanvasGradient {
   const g = c.createLinearGradient(x0, y0, x1, y1);
   for (const [o, col] of stops) g.addColorStop(o, col);
   return g;
@@ -73,10 +112,22 @@ export interface TextOpts {
   shadow?: boolean;
 }
 
-export const fontOf = (size: number, weight: number | string = 700, mono = false): string =>
-  mono ? `${weight} ${size}px "DejaVu Sans Mono", "Liberation Mono", monospace` : `${weight} ${size}px ${FONT}`;
+export const fontOf = (
+  size: number,
+  weight: number | string = 700,
+  mono = false,
+): string =>
+  mono
+    ? `${weight} ${size}px "DejaVu Sans Mono", "Liberation Mono", monospace`
+    : `${weight} ${size}px ${FONT}`;
 
-export function text(c: Ctx, s: string, x: number, y: number, o: TextOpts = {}): number {
+export function text(
+  c: Ctx,
+  s: string,
+  x: number,
+  y: number,
+  o: TextOpts = {},
+): number {
   c.save();
   c.font = fontOf(o.size ?? 40, o.weight ?? 700, o.mono);
   c.textAlign = o.align ?? 'left';
@@ -94,7 +145,13 @@ export function text(c: Ctx, s: string, x: number, y: number, o: TextOpts = {}):
   return w;
 }
 
-export function measure(c: Ctx, s: string, size: number, weight: number | string = 700, mono = false): number {
+export function measure(
+  c: Ctx,
+  s: string,
+  size: number,
+  weight: number | string = 700,
+  mono = false,
+): number {
   c.save();
   c.font = fontOf(size, weight, mono);
   const w = c.measureText(s).width;
@@ -103,7 +160,13 @@ export function measure(c: Ctx, s: string, size: number, weight: number | string
 }
 
 /** Greedy word wrap into lines no wider than `maxW`. */
-export function wrap(c: Ctx, s: string, maxW: number, size: number, weight: number | string = 700): string[] {
+export function wrap(
+  c: Ctx,
+  s: string,
+  maxW: number,
+  size: number,
+  weight: number | string = 700,
+): string[] {
   c.save();
   c.font = fontOf(size, weight);
   const words = s.split(/\s+/).filter(Boolean);
@@ -121,7 +184,14 @@ export function wrap(c: Ctx, s: string, maxW: number, size: number, weight: numb
   return lines;
 }
 
-export function emoji(c: Ctx, ch: string, x: number, y: number, size: number, alpha = 1): void {
+export function emoji(
+  c: Ctx,
+  ch: string,
+  x: number,
+  y: number,
+  size: number,
+  alpha = 1,
+): void {
   c.save();
   c.font = `${size}px ${EMOJI_FONT}`;
   c.textAlign = 'center';
@@ -132,7 +202,14 @@ export function emoji(c: Ctx, ch: string, x: number, y: number, size: number, al
   c.restore();
 }
 
-export function glow(c: Ctx, x: number, y: number, r: number, color: string, alpha = 0.5): void {
+export function glow(
+  c: Ctx,
+  x: number,
+  y: number,
+  r: number,
+  color: string,
+  alpha = 0.5,
+): void {
   const g = c.createRadialGradient(x, y, 0, x, y, r);
   g.addColorStop(0, hexA(color, alpha));
   g.addColorStop(1, hexA(color, 0));
@@ -145,19 +222,41 @@ export function glow(c: Ctx, x: number, y: number, r: number, color: string, alp
 /** "#rrggbb" + alpha -> "rgba(…)". */
 export function hexA(hex: string, a: number): string {
   const h = hex.replace('#', '');
-  const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h, 16);
+  const n = parseInt(
+    h.length === 3
+      ? h
+          .split('')
+          .map((x) => x + x)
+          .join('')
+      : h,
+    16,
+  );
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
 export function shade(hex: string, amount: number): string {
   const h = hex.replace('#', '');
   const n = parseInt(h, 16);
-  const f = (v: number) => Math.max(0, Math.min(255, Math.round(v + (amount >= 0 ? (255 - v) * amount : v * amount))));
+  const f = (v: number) =>
+    Math.max(
+      0,
+      Math.min(
+        255,
+        Math.round(v + (amount >= 0 ? (255 - v) * amount : v * amount)),
+      ),
+    );
   return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
 }
 
 /** A tiny four-point sparkle. */
-export function sparkle(c: Ctx, x: number, y: number, r: number, color = '#fff', alpha = 1): void {
+export function sparkle(
+  c: Ctx,
+  x: number,
+  y: number,
+  r: number,
+  color = '#fff',
+  alpha = 1,
+): void {
   c.save();
   c.globalAlpha *= alpha;
   c.fillStyle = color;
@@ -172,7 +271,13 @@ export function sparkle(c: Ctx, x: number, y: number, r: number, color = '#fff',
 }
 
 /** Scales content about (cx, cy) while it pops in: scale from 0.6 → 1 with a little overshoot. */
-export function pop<T>(c: Ctx, cx: number, cy: number, p: number, draw: () => T): T | undefined {
+export function pop<T>(
+  c: Ctx,
+  cx: number,
+  cy: number,
+  p: number,
+  draw: () => T,
+): T | undefined {
   if (p <= 0) return undefined;
   const s = ease.outBack(clamp01(p));
   c.save();

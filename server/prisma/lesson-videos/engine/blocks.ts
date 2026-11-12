@@ -12,7 +12,16 @@ import {
   type BlockNode,
   type Segment,
 } from '../../../../client/lib/littleCoders/blockLines';
-import { ease, fillRR, fontOf, hexA, rrPath, shade, text, type Ctx } from './kit';
+import {
+  ease,
+  fillRR,
+  fontOf,
+  hexA,
+  rrPath,
+  shade,
+  text,
+  type Ctx,
+} from './kit';
 
 export type Language = 'scratch' | 'edublocks';
 
@@ -42,15 +51,25 @@ function segWidth(c: Ctx, segs: Segment[], fs: number): number {
 function oneWidth(c: Ctx, s: Segment, fs: number): number {
   c.font = fontOf(fs, 700);
   if (s.kind === 'text') return c.measureText(s.text).width;
-  if (s.kind === 'string') return Math.max(58, c.measureText(plainBlockText(s.inner)).width + 30) + 6;
+  if (s.kind === 'string')
+    return Math.max(58, c.measureText(plainBlockText(s.inner)).width + 30) + 6;
   if (s.kind === 'round') {
-    const inner = s.parts ? segWidth(c, s.parts, fs - 4) + 8 : c.measureText(plainBlockText(s.inner)).width;
+    const inner = s.parts
+      ? segWidth(c, s.parts, fs - 4) + 8
+      : c.measureText(plainBlockText(s.inner)).width;
     return Math.max(50, inner + 30) + 6;
   }
   return Math.max(76, segWidth(c, s.parts, fs - 4) + 52) + 6;
 }
 
-function drawSegs(c: Ctx, segs: Segment[], x: number, cy: number, fs: number, fill: string): number {
+function drawSegs(
+  c: Ctx,
+  segs: Segment[],
+  x: number,
+  cy: number,
+  fs: number,
+  fill: string,
+): number {
   let at = x;
   for (const s of segs) {
     const w = oneWidth(c, s, fs);
@@ -72,7 +91,14 @@ function drawSegs(c: Ctx, segs: Segment[], x: number, cy: number, fs: number, fi
       const ww = w - 6;
       fillRR(c, at + 3, cy - 19, ww, 38, 19, '#fff');
       if (s.parts) {
-        drawSegs(c, s.parts.map((p) => (p.kind === 'text' ? { ...p } : p)), at + 17, cy, fs - 4, fill);
+        drawSegs(
+          c,
+          s.parts.map((p) => (p.kind === 'text' ? { ...p } : p)),
+          at + 17,
+          cy,
+          fs - 4,
+          fill,
+        );
       } else {
         c.fillStyle = '#4a5070';
         c.font = fontOf(fs - 4, 700);
@@ -109,7 +135,9 @@ interface Size {
 }
 
 const isCBlock = (n: BlockNode): boolean =>
-  n.children.length > 0 || n.elseChildren !== undefined || /^(repeat|forever|if|wait until|repeat until)\b/.test(n.text);
+  n.children.length > 0 ||
+  n.elseChildren !== undefined ||
+  /^(repeat|forever|if|wait until|repeat until)\b/.test(n.text);
 
 function headerWidth(c: Ctx, n: BlockNode): number {
   return PAD * 2 + segWidth(c, segmentsOf(n.text), FS);
@@ -144,7 +172,14 @@ function measureStackNodes(c: Ctx, nodes: BlockNode[]): Size {
   return { w, h: h + (nodes.length ? 4 : 0) };
 }
 
-function blockShape(c: Ctx, x: number, y: number, w: number, h: number, hat: boolean): void {
+function blockShape(
+  c: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  hat: boolean,
+): void {
   if (hat) {
     c.beginPath();
     c.moveTo(x, y + HAT_CAP + 10);
@@ -160,7 +195,16 @@ function blockShape(c: Ctx, x: number, y: number, w: number, h: number, hat: boo
   } else rrPath(c, x, y, w, h, 10);
 }
 
-function drawNode(c: Ctx, n: BlockNode, x: number, y: number, boxW: number, fill: string, edge: string, o: StackOpts): number {
+function drawNode(
+  c: Ctx,
+  n: BlockNode,
+  x: number,
+  y: number,
+  boxW: number,
+  fill: string,
+  edge: string,
+  o: StackOpts,
+): number {
   const reveal = o.reveal ? o.reveal(n.line) : 1;
   if (reveal <= 0) return measureNode(c, n).h - 4;
   const hat = n.top && isHat(n.category, n.text);
@@ -214,10 +258,24 @@ function drawNode(c: Ctx, n: BlockNode, x: number, y: number, boxW: number, fill
     c.restore();
   }
 
-  drawSegs(c, segmentsOf(n.text), x + PAD, y + (hat ? HAT_CAP : 0) + ROW / 2 - 2, FS, fill);
+  drawSegs(
+    c,
+    segmentsOf(n.text),
+    x + PAD,
+    y + (hat ? HAT_CAP : 0) + ROW / 2 - 2,
+    FS,
+    fill,
+  );
 
   if (cblock) {
-    const kids = drawStackNodes(c, n.children, x + INDENT, y + headH - 2, o, boxW - INDENT);
+    const kids = drawStackNodes(
+      c,
+      n.children,
+      x + INDENT,
+      y + headH - 2,
+      o,
+      boxW - INDENT,
+    );
     if (n.elseChildren) {
       const elseY = y + headH + Math.max(kids, 30);
       c.fillStyle = '#fff';
@@ -225,14 +283,28 @@ function drawNode(c: Ctx, n: BlockNode, x: number, y: number, boxW: number, fill
       c.textAlign = 'left';
       c.textBaseline = 'middle';
       c.fillText('else', x + PAD, elseY + 24);
-      drawStackNodes(c, n.elseChildren, x + INDENT, elseY + 46, o, boxW - INDENT);
+      drawStackNodes(
+        c,
+        n.elseChildren,
+        x + INDENT,
+        elseY + 46,
+        o,
+        boxW - INDENT,
+      );
     }
   }
   c.restore();
   return size.h - 4;
 }
 
-function drawStackNodes(c: Ctx, nodes: BlockNode[], x: number, y: number, o: StackOpts, minW: number): number {
+function drawStackNodes(
+  c: Ctx,
+  nodes: BlockNode[],
+  x: number,
+  y: number,
+  o: StackOpts,
+  minW: number,
+): number {
   let at = y;
   for (const n of nodes) {
     const { fill, edge } = blockColor('scratch', n.category);
@@ -247,23 +319,39 @@ function drawStackNodes(c: Ctx, nodes: BlockNode[], x: number, y: number, o: Sta
 
 const PY_FS = 28;
 
-function pyRows(lines: string[]): { line: number; depth: number; category: string; text: string }[] {
-  const out: { line: number; depth: number; category: string; text: string }[] = [];
+function pyRows(
+  lines: string[],
+): { line: number; depth: number; category: string; text: string }[] {
+  const out: { line: number; depth: number; category: string; text: string }[] =
+    [];
   lines.forEach((raw, i) => {
     const p = parseLine(raw);
-    if (p) out.push({ line: i + 1, depth: p.depth, category: p.category, text: p.text });
+    if (p)
+      out.push({
+        line: i + 1,
+        depth: p.depth,
+        category: p.category,
+        text: p.text,
+      });
   });
   return out;
 }
 
 function pyWidth(c: Ctx, rows: ReturnType<typeof pyRows>): number {
   c.font = fontOf(PY_FS, 600, true);
-  return rows.reduce((m, r) => Math.max(m, r.depth * 44 + c.measureText(r.text).width + 44), 0);
+  return rows.reduce(
+    (m, r) => Math.max(m, r.depth * 44 + c.measureText(r.text).width + 44),
+    0,
+  );
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
-export function measureStack(c: Ctx, lines: string[], language: Language): Size {
+export function measureStack(
+  c: Ctx,
+  lines: string[],
+  language: Language,
+): Size {
   if (language === 'edublocks') {
     const rows = pyRows(lines);
     return { w: pyWidth(c, rows), h: rows.length * 54 + 4 };
@@ -272,7 +360,14 @@ export function measureStack(c: Ctx, lines: string[], language: Language): Size 
 }
 
 /** Draws the stack with its top-left corner at (x, y); returns its size. */
-export function drawStack(c: Ctx, lines: string[], language: Language, x: number, y: number, o: StackOpts = {}): Size {
+export function drawStack(
+  c: Ctx,
+  lines: string[],
+  language: Language,
+  x: number,
+  y: number,
+  o: StackOpts = {},
+): Size {
   if (language === 'edublocks') {
     const rows = pyRows(lines);
     let at = y;
@@ -285,7 +380,13 @@ export function drawStack(c: Ctx, lines: string[], language: Language, x: number
         c.globalAlpha *= Math.min(1, reveal * 2.4);
         c.translate(0, -(1 - ease.out3(reveal)) * 30);
         const bx = x + r.depth * 44;
-        const bw = Math.max(120, (() => { c.font = fontOf(PY_FS, 600, true); return c.measureText(r.text).width + 44; })());
+        const bw = Math.max(
+          120,
+          (() => {
+            c.font = fontOf(PY_FS, 600, true);
+            return c.measureText(r.text).width + 44;
+          })(),
+        );
         fillRR(c, bx, at + 4, bw, 50, 9, edge);
         fillRR(c, bx, at, bw, 50, 9, fill);
         if (glowing > 0) {
@@ -298,7 +399,13 @@ export function drawStack(c: Ctx, lines: string[], language: Language, x: number
           c.stroke();
           c.restore();
         }
-        text(c, r.text, bx + 22, at + 26, { size: PY_FS, weight: 600, mono: true, base: 'middle', color: '#fff' });
+        text(c, r.text, bx + 22, at + 26, {
+          size: PY_FS,
+          weight: 600,
+          mono: true,
+          base: 'middle',
+          color: '#fff',
+        });
         c.restore();
       }
       at += 54;

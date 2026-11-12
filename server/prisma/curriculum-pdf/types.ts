@@ -35,11 +35,13 @@ export interface CourseContent {
   lessons: string[];
   /** Hands-on project pictures that belong to this course (1–2). */
   snapshots: SnapshotRef[];
+  /** One sentence under the sample-project picture: what students build in this course. */
+  snapshotNote: string;
   /** The assessment that closes the course ("Roblox World Builder — Course Test"). */
   testTitle: string;
   /** One-line summary of what the course test checks. */
   testBlurb: string;
-  /** Short "what you will learn" bullets used on the overview page. */
+  /** One line about the course for the progression row on the cover. */
   teaser: string;
 }
 
@@ -65,6 +67,18 @@ export interface TestKind {
   headline: string;
   parts: TestPart[];
   blurb: string;
+  /** Short chips shown on the course page ("30 multiple-choice", "40 marks"). */
+  tags: string[];
+}
+
+/** An example in the style of the program's tests (written for this document — not taken from a real test). */
+export interface SampleQuestions {
+  mcq: {
+    question: string;
+    options: [string, string, string, string];
+    answer: 0 | 1 | 2 | 3;
+  };
+  trueFalse: { statement: string; answer: boolean };
 }
 
 export interface AssessmentContent {
@@ -74,6 +88,8 @@ export interface AssessmentContent {
   courseTest: TestKind;
   stageTest?: TestKind;
   finalTest: TestKind;
+  /** A taste of a test: one multiple-choice and one true/false example. */
+  sample: SampleQuestions;
   /** What happens after a test (report, parents, certificate). */
   afterwards: { title: string; body: string }[];
 }

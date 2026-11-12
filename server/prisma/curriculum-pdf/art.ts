@@ -8,7 +8,12 @@ import type { ThemeKey } from './types';
 // ─── Starfield ──────────────────────────────────────────────────────────────
 
 /** A deterministic scatter of tiny stars and sparkles, as an SVG that fills its parent. */
-export function starfield(seed: number, count: number, w = 800, h = 220): string {
+export function starfield(
+  seed: number,
+  count: number,
+  w = 800,
+  h = 220,
+): string {
   let s = seed >>> 0 || 1;
   const rnd = () => {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
@@ -20,7 +25,9 @@ export function starfield(seed: number, count: number, w = 800, h = 220): string
     const y = (rnd() * h).toFixed(1);
     const r = (0.6 + rnd() * 1.4).toFixed(2);
     const o = (0.3 + rnd() * 0.65).toFixed(2);
-    dots.push(`<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity="${o}"/>`);
+    dots.push(
+      `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity="${o}"/>`,
+    );
   }
   for (let i = 0; i < Math.max(3, Math.round(count / 12)); i++) {
     const x = rnd() * w;
@@ -44,7 +51,8 @@ const ICONS: Record<string, string> = {
   check:
     '<path d="M4.5 12.5l4.6 4.6L19.5 6.6" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
   book: '<path d="M4 4.5A2.5 2.5 0 016.5 2H20v16H6.5A2.5 2.5 0 004 20.5z"/><path d="M4 20.5A2.5 2.5 0 006.5 23H20v-2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>',
-  shield: '<path d="M12 2l8 3v6.5c0 5-3.4 8.7-8 10.5-4.6-1.8-8-5.5-8-10.5V5z"/>',
+  shield:
+    '<path d="M12 2l8 3v6.5c0 5-3.4 8.7-8 10.5-4.6-1.8-8-5.5-8-10.5V5z"/>',
   medal:
     '<circle cx="12" cy="15" r="6"/><path d="M8 2h3l1 5-2.5 1.5zM16 2h-3l-1 5 2.5 1.5z" opacity=".8"/>',
   heart:
@@ -72,7 +80,11 @@ const ICONS: Record<string, string> = {
     '<circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6.5V12l3.6 2.2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
 };
 
-export function icon(name: keyof typeof ICONS | string, size = 16, color = 'currentColor'): string {
+export function icon(
+  name: keyof typeof ICONS | string,
+  size = 16,
+  color = 'currentColor',
+): string {
   const body = ICONS[name];
   if (!body) throw new Error(`Unknown icon "${name}"`);
   return `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" style="color:${color}" aria-hidden="true">${body}</svg>`;
@@ -95,12 +107,20 @@ const rocketShape = (
     <path d="M-6 23 L0 44 L6 23Z" fill="${GOLD}"/><path d="M-3 23 L0 35 L3 23Z" fill="#FFF3B0"/>
   </g>`;
 
-const pixel = (rows: string[], cell: number, x: number, y: number, fill: string): string => {
+const pixel = (
+  rows: string[],
+  cell: number,
+  x: number,
+  y: number,
+  fill: string,
+): string => {
   const rects: string[] = [];
   rows.forEach((row, r) =>
     [...row].forEach((ch, c) => {
       if (ch === '#')
-        rects.push(`<rect x="${x + c * cell}" y="${y + r * cell}" width="${cell}" height="${cell}" fill="${fill}"/>`);
+        rects.push(
+          `<rect x="${x + c * cell}" y="${y + r * cell}" width="${cell}" height="${cell}" fill="${fill}"/>`,
+        );
     }),
   );
   return rects.join('');
@@ -137,7 +157,14 @@ function odysseyArt(t: Theme): string {
 }
 
 function littleArt(t: Theme): string {
-  const block = (x: number, y: number, w: number, fill: string, edge: string, label: string) => `
+  const block = (
+    x: number,
+    y: number,
+    w: number,
+    fill: string,
+    edge: string,
+    label: string,
+  ) => `
     <g transform="translate(${x} ${y})">
       <path d="M0 6a6 6 0 016-6h10l4 5h14l4-5h${w - 38}a6 6 0 016 6v26a6 6 0 01-6 6H${w - 4}"/>
       <rect x="0" y="0" width="${w}" height="38" rx="7" fill="${fill}"/>
@@ -292,10 +319,23 @@ function webArt(t: Theme): string {
 
 function dataArt(t: Theme): string {
   const pts: [number, number][] = [
-    [64, 156], [84, 146], [98, 150], [114, 128], [132, 132], [148, 112], [166, 116], [182, 94], [200, 98], [218, 76], [236, 70],
+    [64, 156],
+    [84, 146],
+    [98, 150],
+    [114, 128],
+    [132, 132],
+    [148, 112],
+    [166, 116],
+    [182, 94],
+    [200, 98],
+    [218, 76],
+    [236, 70],
   ];
   const dots = pts
-    .map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="5" fill="${i % 3 === 0 ? '#FDE047' : i % 3 === 1 ? '#5EEAD4' : '#fff'}"/>`)
+    .map(
+      ([x, y], i) =>
+        `<circle cx="${x}" cy="${y}" r="5" fill="${i % 3 === 0 ? '#FDE047' : i % 3 === 1 ? '#5EEAD4' : '#fff'}"/>`,
+    )
     .join('');
   const bars = [34, 52, 40, 70, 58]
     .map(
@@ -325,7 +365,11 @@ function dataArt(t: Theme): string {
 
 function adsArt(t: Theme): string {
   const orbitDots = [
-    [112, 150, '#FDE047'], [150, 186, '#5EEAD4'], [250, 190, '#F0ABFC'], [292, 130, '#fff'], [262, 52, '#7DD3FC'],
+    [112, 150, '#FDE047'],
+    [150, 186, '#5EEAD4'],
+    [250, 190, '#F0ABFC'],
+    [292, 130, '#fff'],
+    [262, 52, '#7DD3FC'],
   ]
     .map(([x, y, c]) => `<circle cx="${x}" cy="${y}" r="6" fill="${c}"/>`)
     .join('');
@@ -349,7 +393,10 @@ function adsArt(t: Theme): string {
 
 function digitalArt(t: Theme): string {
   const steps = [34, 58, 84, 114]
-    .map((h, i) => `<rect x="${196 + i * 28}" y="${190 - h}" width="22" height="${h}" rx="5" fill="${i === 3 ? GOLD : '#fff'}" opacity="${i === 3 ? 1 : 0.55 + i * 0.1}"/>`)
+    .map(
+      (h, i) =>
+        `<rect x="${196 + i * 28}" y="${190 - h}" width="22" height="${h}" rx="5" fill="${i === 3 ? GOLD : '#fff'}" opacity="${i === 3 ? 1 : 0.55 + i * 0.1}"/>`,
+    )
     .join('');
   return `
   <svg viewBox="0 0 330 230" class="art" aria-hidden="true">
@@ -394,7 +441,13 @@ export function heroArt(t: Theme): string {
 // ─── Gamified markers used on several pages ─────────────────────────────────
 
 /** A hexagon "level" badge with a number. */
-export function levelBadge(n: string | number, from: string, to: string, size = 44, id = 'lb'): string {
+export function levelBadge(
+  n: string | number,
+  from: string,
+  to: string,
+  size = 44,
+  id = 'lb',
+): string {
   return `<svg class="lvl" width="${size}" height="${size}" viewBox="0 0 48 48" aria-hidden="true">
     <defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs>
     <path d="M24 2.5l18.5 10.7v21.6L24 45.5 5.5 34.8V13.2z" fill="url(#${id})" stroke="#fff" stroke-opacity=".75" stroke-width="2"/>
@@ -403,7 +456,11 @@ export function levelBadge(n: string | number, from: string, to: string, size = 
 
 /** An XP bar: `done` of `total` segments lit. */
 export function xpBar(done: number, total: number, color: string): string {
-  const segs = Array.from({ length: total }, (_, i) => `<i style="background:${i < done ? color : 'rgba(255,255,255,.18)'}"></i>`).join('');
+  const segs = Array.from(
+    { length: total },
+    (_, i) =>
+      `<i style="background:${i < done ? color : 'rgba(255,255,255,.18)'}"></i>`,
+  ).join('');
   return `<span class="xp">${segs}</span>`;
 }
 

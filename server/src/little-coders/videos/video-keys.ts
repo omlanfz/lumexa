@@ -9,7 +9,11 @@ export const LESSON_VIDEO_KEY_ROOT = 'lesson-videos/';
 
 export type VideoAssetKind = 'video' | 'poster' | 'captions';
 
-const EXTENSION: Record<VideoAssetKind, string> = { video: 'mp4', poster: 'jpg', captions: 'vtt' };
+const EXTENSION: Record<VideoAssetKind, string> = {
+  video: 'mp4',
+  poster: 'jpg',
+  captions: 'vtt',
+};
 export const CONTENT_TYPE: Record<VideoAssetKind, string> = {
   video: 'video/mp4',
   poster: 'image/jpeg',
@@ -17,9 +21,15 @@ export const CONTENT_TYPE: Record<VideoAssetKind, string> = {
 };
 
 /** lesson-videos/little-coders/c1l1/3f9a1c0d52ab.mp4 */
-export function lessonVideoKey(programKey: string, lessonKey: string, kind: VideoAssetKind, sha256: string): string {
+export function lessonVideoKey(
+  programKey: string,
+  lessonKey: string,
+  kind: VideoAssetKind,
+  sha256: string,
+): string {
   const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_');
-  if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error('A lesson video key needs the SHA-256 of the file');
+  if (!/^[a-f0-9]{64}$/.test(sha256))
+    throw new Error('A lesson video key needs the SHA-256 of the file');
   return `${LESSON_VIDEO_KEY_ROOT}${safe(programKey)}/${safe(lessonKey)}/${sha256.slice(0, 12)}.${EXTENSION[kind]}`;
 }
 
@@ -54,8 +64,8 @@ export const NARRATOR = {
 /** The production record the template asks for: where every sound comes from and under what terms. */
 export const VIDEO_CREDITS =
   'Narration: Kokoro-82M text-to-speech, voice af_heart (Apache-2.0, commercial use permitted). ' +
-  'Background music and sound effects: synthesised by Lumexa\'s own tooling (prisma/lesson-videos/audio.ts) — no third-party samples or recordings, so no licence is owed. ' +
-  'Artwork: drawn by Lumexa\'s own renderer; the Lumexa mark is Lumexa\'s.';
+  "Background music and sound effects: synthesised by Lumexa's own tooling (prisma/lesson-videos/audio.ts) — no third-party samples or recordings, so no licence is owed. " +
+  "Artwork: drawn by Lumexa's own renderer; the Lumexa mark is Lumexa's.";
 
 /** The six scenes of the standard storyboard, as the player's chapter markers. */
 export const CHAPTER_LABELS = [

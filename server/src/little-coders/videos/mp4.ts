@@ -79,7 +79,9 @@ export function probeMp4(buf: Buffer): Mp4Info | null {
 
 /** True when the bytes look like a baseline JPEG / JFIF image. */
 export function looksLikeJpeg(buf: Buffer): boolean {
-  return buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  return (
+    buf.length > 4 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff
+  );
 }
 
 /** True when the text is a WebVTT subtitle file. */

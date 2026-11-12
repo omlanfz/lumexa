@@ -72,7 +72,12 @@ export function drawBackground(c: Ctx, t: number, plan: VideoPlan): void {
 
 // ─── Header (logo + lesson) ─────────────────────────────────────────────────
 
-export function drawHeader(c: Ctx, plan: VideoPlan, logo: HTMLImageElement | null, alpha = 1): void {
+export function drawHeader(
+  c: Ctx,
+  plan: VideoPlan,
+  logo: HTMLImageElement | null,
+  alpha = 1,
+): void {
   c.save();
   c.globalAlpha *= alpha;
   if (logo) {
@@ -84,25 +89,66 @@ export function drawHeader(c: Ctx, plan: VideoPlan, logo: HTMLImageElement | nul
     strokeRR(c, 56, 34, 84, 84, 22, 'rgba(255,255,255,.28)', 2);
   }
   text(c, 'LUMEXA', 160, 70, { size: 34, weight: 900, color: '#fff' });
-  text(c, 'LITTLE CODERS', 160, 104, { size: 22, weight: 800, color: hexA('#ffffff', 0.7) });
+  text(c, 'LITTLE CODERS', 160, 104, {
+    size: 22,
+    weight: 800,
+    color: hexA('#ffffff', 0.7),
+  });
 
   const label = `LESSON ${plan.lesson.number} OF ${plan.course.lessons}  ·  ${plan.course.title.toUpperCase()}`;
   c.font = fontOf(24, 800);
   const w = c.measureText(label).width + 56;
   const x = W - 60 - w;
-  fillRR(c, x, 52, w, 52, 26, linear(c, x, 0, x + w, 0, [[0, plan.accent[0]], [1, plan.accent[1]]]));
-  text(c, label, x + w / 2, 79, { size: 24, weight: 800, align: 'center', base: 'middle', color: '#fff' });
+  fillRR(
+    c,
+    x,
+    52,
+    w,
+    52,
+    26,
+    linear(c, x, 0, x + w, 0, [
+      [0, plan.accent[0]],
+      [1, plan.accent[1]],
+    ]),
+  );
+  text(c, label, x + w / 2, 79, {
+    size: 24,
+    weight: 800,
+    align: 'center',
+    base: 'middle',
+    color: '#fff',
+  });
   c.restore();
 }
 
 // ─── Panels and chips ───────────────────────────────────────────────────────
 
-export function panel(c: Ctx, x: number, y: number, w: number, h: number, o: { fill?: string; border?: string; r?: number } = {}): void {
+export function panel(
+  c: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  o: { fill?: string; border?: string; r?: number } = {},
+): void {
   fillRR(c, x, y, w, h, o.r ?? 30, o.fill ?? 'rgba(10,8,44,.55)');
   strokeRR(c, x, y, w, h, o.r ?? 30, o.border ?? 'rgba(255,255,255,.16)', 2);
 }
 
-export function chip(c: Ctx, label: string, x: number, y: number, o: { size?: number; fill?: string | CanvasGradient; color?: string; padX?: number; h?: number; align?: 'left' | 'center' } = {}): number {
+export function chip(
+  c: Ctx,
+  label: string,
+  x: number,
+  y: number,
+  o: {
+    size?: number;
+    fill?: string | CanvasGradient;
+    color?: string;
+    padX?: number;
+    h?: number;
+    align?: 'left' | 'center';
+  } = {},
+): number {
   const size = o.size ?? 28;
   c.font = fontOf(size, 800);
   const padX = o.padX ?? 26;
@@ -110,7 +156,13 @@ export function chip(c: Ctx, label: string, x: number, y: number, o: { size?: nu
   const h = o.h ?? size + 26;
   const x0 = o.align === 'center' ? x - w / 2 : x;
   fillRR(c, x0, y, w, h, h / 2, o.fill ?? 'rgba(255,255,255,.16)');
-  text(c, label, x0 + w / 2, y + h / 2 + 1, { size, weight: 800, align: 'center', base: 'middle', color: o.color ?? '#fff' });
+  text(c, label, x0 + w / 2, y + h / 2 + 1, {
+    size,
+    weight: 800,
+    align: 'center',
+    base: 'middle',
+    color: o.color ?? '#fff',
+  });
   return w;
 }
 
@@ -119,7 +171,15 @@ export function chip(c: Ctx, label: string, x: number, y: number, o: { size?: nu
 export type PixelMood = 'wave' | 'point' | 'cheer' | 'idle' | 'think';
 
 /** Draws Pixel standing with its feet at (x, y); `s` is the scale (1 ≈ 380 px tall). */
-export function drawPixel(c: Ctx, x: number, y: number, s: number, t: number, mood: PixelMood, alpha = 1): void {
+export function drawPixel(
+  c: Ctx,
+  x: number,
+  y: number,
+  s: number,
+  t: number,
+  mood: PixelMood,
+  alpha = 1,
+): void {
   c.save();
   c.globalAlpha *= alpha;
   c.translate(x, y + Math.sin(t * 2.2) * 7 * s);
@@ -131,7 +191,10 @@ export function drawPixel(c: Ctx, x: number, y: number, s: number, t: number, mo
   c.ellipse(0, 34, 70 - Math.sin(t * 2.2) * 4, 12, 0, 0, Math.PI * 2);
   c.fill();
   const flame = 30 + Math.sin(t * 18) * 6;
-  const fg = linear(c, 0, -34, 0, -34 + flame, [[0, '#FFE066'], [1, 'rgba(255,120,60,0)']]);
+  const fg = linear(c, 0, -34, 0, -34 + flame, [
+    [0, '#FFE066'],
+    [1, 'rgba(255,120,60,0)'],
+  ]);
   c.fillStyle = fg;
   c.beginPath();
   c.moveTo(-20, -40);
@@ -158,14 +221,26 @@ export function drawPixel(c: Ctx, x: number, y: number, s: number, t: number, mo
   };
   arm(-52, Math.PI * 0.62, 86);
   if (mood === 'wave') arm(52, -Math.PI * 0.32 + Math.sin(t * 9) * 0.4, 92);
-  else if (mood === 'point') arm(52, -Math.PI * 0.08 + Math.sin(t * 2.5) * 0.05, 100);
+  else if (mood === 'point')
+    arm(52, -Math.PI * 0.08 + Math.sin(t * 2.5) * 0.05, 100);
   else if (mood === 'cheer') {
     arm(-52, Math.PI * 1.15 + Math.sin(t * 8) * 0.15, 96);
     arm(52, -Math.PI * 0.15 + Math.sin(t * 8 + 1) * 0.15, 96);
   } else arm(52, Math.PI * 0.38, 86);
 
   // body
-  fillRR(c, -50, -158, 100, 118, 30, linear(c, 0, -158, 0, -40, [[0, '#3B82F6'], [1, '#1D4ED8']]));
+  fillRR(
+    c,
+    -50,
+    -158,
+    100,
+    118,
+    30,
+    linear(c, 0, -158, 0, -40, [
+      [0, '#3B82F6'],
+      [1, '#1D4ED8'],
+    ]),
+  );
   glow(c, 0, -100, 34, '#FDE68A', 0.8);
   c.fillStyle = '#FDE68A';
   c.beginPath();
@@ -173,7 +248,18 @@ export function drawPixel(c: Ctx, x: number, y: number, s: number, t: number, mo
   c.fill();
 
   // head
-  fillRR(c, -98, -344, 196, 168, 48, linear(c, 0, -344, 0, -176, [[0, '#BAE6FD'], [1, '#38BDF8']]));
+  fillRR(
+    c,
+    -98,
+    -344,
+    196,
+    168,
+    48,
+    linear(c, 0, -344, 0, -176, [
+      [0, '#BAE6FD'],
+      [1, '#38BDF8'],
+    ]),
+  );
   fillRR(c, -118, -290, 20, 56, 9, '#1E40AF');
   fillRR(c, 98, -290, 20, 56, 9, '#1E40AF');
   fillRR(c, -76, -322, 152, 118, 34, '#0B1230');
@@ -197,7 +283,8 @@ export function drawPixel(c: Ctx, x: number, y: number, s: number, t: number, mo
   if (mood === 'think') {
     c.moveTo(-14, -228);
     c.lineTo(16, -232);
-  } else if (mood === 'cheer') c.arc(0, -246, 26, 0.05 * Math.PI, 0.95 * Math.PI);
+  } else if (mood === 'cheer')
+    c.arc(0, -246, 26, 0.05 * Math.PI, 0.95 * Math.PI);
   else c.arc(0, -244, 22, 0.15 * Math.PI, 0.85 * Math.PI);
   c.stroke();
   c.fillStyle = 'rgba(255,140,160,.55)';
@@ -222,7 +309,16 @@ export function drawPixel(c: Ctx, x: number, y: number, s: number, t: number, mo
 }
 
 /** A speech bubble with its tail pointing down-left at (tx, ty). */
-export function bubble(c: Ctx, x: number, y: number, w: number, h: number, tx: number, ty: number, fill = '#fff'): void {
+export function bubble(
+  c: Ctx,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  tx: number,
+  ty: number,
+  fill = '#fff',
+): void {
   c.save();
   c.shadowColor = 'rgba(0,0,0,.3)';
   c.shadowBlur = 22;
@@ -255,8 +351,10 @@ function highlightMask(textStr: string, phrases: string[]): boolean[] {
     let at = lower.indexOf(p);
     while (at !== -1) {
       const before = at === 0 || /\W/.test(lower[at - 1]);
-      const after = at + p.length >= lower.length || /\W/.test(lower[at + p.length]);
-      if (before && after && !mask.slice(at, at + p.length).some(Boolean)) for (let i = at; i < at + p.length; i++) mask[i] = true;
+      const after =
+        at + p.length >= lower.length || /\W/.test(lower[at + p.length]);
+      if (before && after && !mask.slice(at, at + p.length).some(Boolean))
+        for (let i = at; i < at + p.length; i++) mask[i] = true;
       at = lower.indexOf(p, at + 1);
     }
   }
@@ -269,20 +367,31 @@ function runsOf(textStr: string, phrases: string[]): Run[] {
   const re = /\S+/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(textStr))) {
-    const hot = mask.slice(m.index, m.index + m[0].length).filter(Boolean).length >= Math.ceil(m[0].length / 2);
+    const hot =
+      mask.slice(m.index, m.index + m[0].length).filter(Boolean).length >=
+      Math.ceil(m[0].length / 2);
     runs.push({ word: m[0], hot });
   }
   return runs;
 }
 
 export function activeCue(cues: PlanCue[], t: number): PlanCue | null {
-  for (const cue of cues) if (t >= cue.start - 0.05 && t <= cue.end + 0.3) return cue;
+  for (const cue of cues)
+    if (t >= cue.start - 0.05 && t <= cue.end + 0.3) return cue;
   return null;
 }
 
 /** Subtitles: at most two lines, large, high contrast, key terms highlighted. */
-export function drawSubtitle(c: Ctx, cue: PlanCue, t: number, phrases: string[]): void {
-  const fade = Math.min(clamp01((t - (cue.start - 0.05)) / 0.14), clamp01((cue.end + 0.3 - t) / 0.18));
+export function drawSubtitle(
+  c: Ctx,
+  cue: PlanCue,
+  t: number,
+  phrases: string[],
+): void {
+  const fade = Math.min(
+    clamp01((t - (cue.start - 0.05)) / 0.14),
+    clamp01((cue.end + 0.3 - t) / 0.18),
+  );
   if (fade <= 0) return;
   let size = 52;
   let lines: Run[][] = [];
@@ -306,7 +415,13 @@ export function drawSubtitle(c: Ctx, cue: PlanCue, t: number, phrases: string[])
   }
   const lineH = size * 1.3;
   c.font = fontOf(size, 700);
-  const widths = lines.map((ln) => ln.reduce((sum, r, i) => sum + c.measureText(r.word).width + (i ? c.measureText(' ').width : 0), 0));
+  const widths = lines.map((ln) =>
+    ln.reduce(
+      (sum, r, i) =>
+        sum + c.measureText(r.word).width + (i ? c.measureText(' ').width : 0),
+      0,
+    ),
+  );
   const boxW = Math.max(...widths) + 76;
   const boxH = lines.length * lineH + 30;
   const x0 = (W - boxW) / 2;
@@ -331,7 +446,14 @@ export function drawSubtitle(c: Ctx, cue: PlanCue, t: number, phrases: string[])
 
 // ─── Celebration ────────────────────────────────────────────────────────────
 
-export function burst(c: Ctx, cx: number, cy: number, p: number, colors: string[], seed = 1): void {
+export function burst(
+  c: Ctx,
+  cx: number,
+  cy: number,
+  p: number,
+  colors: string[],
+  seed = 1,
+): void {
   if (p <= 0 || p >= 1) return;
   const r = rng(seed);
   for (let i = 0; i < 18; i++) {

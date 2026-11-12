@@ -36,7 +36,15 @@ window.__init = async (p: VideoPlan) => {
   canvas.width = W;
   canvas.height = H;
   ctx = canvas.getContext('2d', { alpha: false }) as Ctx;
-  await Promise.all(['600 40px Inter', '700 40px Inter', '800 40px Inter', '900 40px Inter', '600 28px "DejaVu Sans Mono"'].map((f) => document.fonts.load(f)));
+  await Promise.all(
+    [
+      '600 40px Inter',
+      '700 40px Inter',
+      '800 40px Inter',
+      '900 40px Inter',
+      '600 28px "DejaVu Sans Mono"',
+    ].map((f) => document.fonts.load(f)),
+  );
   await document.fonts.ready;
   logo = await loadImage(p.logo);
   setLogo(logo);

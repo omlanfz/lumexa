@@ -9,11 +9,16 @@ import type { SfxEvent, VideoPlan } from './engine/plan';
 
 /** The one esbuild call this tool makes (the server does not depend on esbuild's types). */
 interface EsbuildApi {
-  build(options: Record<string, unknown>): Promise<{ outputFiles: { text: string }[] }>;
+  build(
+    options: Record<string, unknown>,
+  ): Promise<{ outputFiles: { text: string }[] }>;
 }
 
 function loadEsbuild(): EsbuildApi {
-  const candidates = ['esbuild', path.resolve(__dirname, '../../../client/node_modules/esbuild')];
+  const candidates = [
+    'esbuild',
+    path.resolve(__dirname, '../../../client/node_modules/esbuild'),
+  ];
   for (const c of candidates) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -22,7 +27,9 @@ function loadEsbuild(): EsbuildApi {
       /* try the next one */
     }
   }
-  throw new Error('esbuild is needed to bundle the video engine: run `npm install` in client/ (it comes with tsx) or `npm i -D esbuild` in server/.');
+  throw new Error(
+    'esbuild is needed to bundle the video engine: run `npm install` in client/ (it comes with tsx) or `npm i -D esbuild` in server/.',
+  );
 }
 
 let bundleCache: string | null = null;
@@ -45,7 +52,8 @@ export async function bundleEngine(): Promise<string> {
   return bundle;
 }
 
-export const ffmpegPath = (): string => process.env.FFMPEG_PATH?.trim() || 'ffmpeg';
+export const ffmpegPath = (): string =>
+  process.env.FFMPEG_PATH?.trim() || 'ffmpeg';
 
 export function chromiumPath(): string | undefined {
   const candidates = [
@@ -62,7 +70,13 @@ export async function launchBrowser(): Promise<Browser> {
   return puppeteer.launch({
     headless: true,
     executablePath: chromiumPath(),
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--font-render-hinting=none'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--font-render-hinting=none',
+    ],
   });
 }
 
@@ -80,15 +94,24 @@ export interface RenderOptions {
 
 async function openPage(browser: Browser, plan: VideoPlan) {
   const page = await browser.newPage();
-  await page.setViewport({ width: plan.width, height: plan.height, deviceScaleFactor: 1 });
-  await page.setContent('<!doctype html><html><body style="margin:0;background:#000"><canvas id="c"></canvas></body></html>');
+  await page.setViewport({
+    width: plan.width,
+    height: plan.height,
+    deviceScaleFactor: 1,
+  });
+  await page.setContent(
+    '<!doctype html><html><body style="margin:0;background:#000"><canvas id="c"></canvas></body></html>',
+  );
   await page.addScriptTag({ content: await bundleEngine() });
   await page.evaluate((p) => window.__init(p), plan as never);
   return page;
 }
 
 /** The sound-effect schedule of a plan (computed by the same code that draws the animation). */
-export async function sfxFor(browser: Browser, plan: VideoPlan): Promise<SfxEvent[]> {
+export async function sfxFor(
+  browser: Browser,
+  plan: VideoPlan,
+): Promise<SfxEvent[]> {
   const page = await openPage(browser, plan);
   try {
     return await page.evaluate(() => window.__sfx());
@@ -98,12 +121,21 @@ export async function sfxFor(browser: Browser, plan: VideoPlan): Promise<SfxEven
 }
 
 /** One frame as a JPEG (for the poster and for visual checks). */
-export async function frameAt(browser: Browser, plan: VideoPlan, times: number[], quality = 0.92): Promise<Buffer[]> {
+export async function frameAt(
+  browser: Browser,
+  plan: VideoPlan,
+  times: number[],
+  quality = 0.92,
+): Promise<Buffer[]> {
   const page = await openPage(browser, plan);
   try {
     const out: Buffer[] = [];
     for (const t of times) {
-      const uri = await page.evaluate((tt, q) => window.__frame(tt, q), t, quality);
+      const uri = await page.evaluate(
+        (tt, q) => window.__frame(tt, q),
+        t,
+        quality,
+      );
       out.push(Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64'));
     }
     return out;
@@ -118,15 +150,44 @@ export async function renderVideo(o: RenderOptions): Promise<void> {
   const total = Math.ceil(plan.duration * plan.fps);
   const args = [
     '-y',
-    '-loglevel', 'error',
-    '-f', 'image2pipe', '-framerate', String(plan.fps), '-c:v', 'mjpeg', '-i', '-',
-    '-i', o.audioPath,
-    '-c:v', 'libx264', '-preset', 'medium', '-crf', '22', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-r', String(plan.fps),
-    '-g', String(plan.fps * 2),
-    '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11',
-    '-c:a', 'aac', '-b:a', '160k', '-ar', '48000',
-    '-movflags', '+faststart',
-    '-t', String(plan.duration),
+    '-loglevel',
+    'error',
+    '-f',
+    'image2pipe',
+    '-framerate',
+    String(plan.fps),
+    '-c:v',
+    'mjpeg',
+    '-i',
+    '-',
+    '-i',
+    o.audioPath,
+    '-c:v',
+    'libx264',
+    '-preset',
+    'medium',
+    '-crf',
+    '22',
+    '-pix_fmt',
+    'yuv420p',
+    '-profile:v',
+    'high',
+    '-r',
+    String(plan.fps),
+    '-g',
+    String(plan.fps * 2),
+    '-af',
+    'loudnorm=I=-16:TP=-1.5:LRA=11',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '160k',
+    '-ar',
+    '48000',
+    '-movflags',
+    '+faststart',
+    '-t',
+    String(plan.duration),
     o.outPath,
   ];
   const ff = spawn(ffmpegPath(), args, { stdio: ['pipe', 'ignore', 'pipe'] });
@@ -134,13 +195,22 @@ export async function renderVideo(o: RenderOptions): Promise<void> {
   ff.stderr.on('data', (d: Buffer) => (stderr += d.toString()));
   const exited = new Promise<void>((resolve, reject) => {
     ff.on('error', reject);
-    ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited with ${code}: ${stderr.trim()}`))));
+    ff.on('close', (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`ffmpeg exited with ${code}: ${stderr.trim()}`)),
+    );
   });
   try {
     for (let i = 0; i < total; i++) {
-      const uri = await page.evaluate((t, q) => window.__frame(t, q), i / plan.fps, o.quality ?? 0.92);
+      const uri = await page.evaluate(
+        (t, q) => window.__frame(t, q),
+        i / plan.fps,
+        o.quality ?? 0.92,
+      );
       const buf = Buffer.from(uri.slice(uri.indexOf(',') + 1), 'base64');
-      if (!ff.stdin.write(buf)) await new Promise<void>((r) => ff.stdin.once('drain', () => r()));
+      if (!ff.stdin.write(buf))
+        await new Promise<void>((r) => ff.stdin.once('drain', () => r()));
       if (o.onProgress && i % 48 === 0) o.onProgress(i, total);
     }
     ff.stdin.end();
@@ -153,6 +223,11 @@ export async function renderVideo(o: RenderOptions): Promise<void> {
   }
   // a poster that shows the lesson title card with Pixel
   const intro = plan.scenes[1];
-  const [poster] = await frameAt(browser, plan, [Math.min(plan.duration - 1, intro.start + 6.2)], 0.9);
+  const [poster] = await frameAt(
+    browser,
+    plan,
+    [Math.min(plan.duration - 1, intro.start + 6.2)],
+    0.9,
+  );
   fs.writeFileSync(o.posterPath, poster);
 }

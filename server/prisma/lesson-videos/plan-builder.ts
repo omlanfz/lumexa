@@ -2,7 +2,11 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { DEFAULT_PLATFORMS, LC_COURSES, LC_LESSONS_PER_COURSE } from '../../src/little-coders/lc.constants';
+import {
+  DEFAULT_PLATFORMS,
+  LC_COURSES,
+  LC_LESSONS_PER_COURSE,
+} from '../../src/little-coders/lc.constants';
 import type { LcLessonSpec, LcTip } from '../../src/little-coders/lc.types';
 import { lessonKey } from '../../src/little-coders/videos/narration';
 import {
@@ -22,7 +26,10 @@ const COURSE_ACCENTS: [string, string][] = [
   ['#0EA5E9', '#6FCBF7'],
 ];
 
-const LOGO_FILE = path.resolve(__dirname, '../../../client/public/logo-mark.png');
+const LOGO_FILE = path.resolve(
+  __dirname,
+  '../../../client/public/logo-mark.png',
+);
 
 let logoUri: string | null = null;
 export function logoDataUri(): string {
@@ -52,13 +59,15 @@ export function pickTip(spec: LcLessonSpec): LcTip {
 
 function hash(s: string): number {
   let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  for (let i = 0; i < s.length; i++)
+    h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
 }
 
 export function trackOf(spec: LcLessonSpec): Track {
   if (spec.demo.kind === 'python-run') return 'python';
-  if (spec.demo.kind === 'ai-image' || spec.demo.kind === 'ai-voice') return 'ai';
+  if (spec.demo.kind === 'ai-image' || spec.demo.kind === 'ai-voice')
+    return 'ai';
   return 'scratch';
 }
 
@@ -70,9 +79,13 @@ export function buildPlan(spec: LcLessonSpec, timeline: Timeline): VideoPlan {
   const tip = pickTip(spec);
   const ch = spec.challenge;
   const phrases = new Set<string>();
-  for (const c of spec.concepts) phrases.add(c.title.replace(/[^\w\s’']/g, '').trim());
-  for (const s of spec.video.scenes) phrases.add(s.onScreen.replace(/[^\w\s’']/g, '').trim());
-  for (const s of spec.video.scenes) for (const m of s.narration.matchAll(/[“"]([^”"]{3,40})[”"]/g)) phrases.add(m[1]);
+  for (const c of spec.concepts)
+    phrases.add(c.title.replace(/[^\w\s’']/g, '').trim());
+  for (const s of spec.video.scenes)
+    phrases.add(s.onScreen.replace(/[^\w\s’']/g, '').trim());
+  for (const s of spec.video.scenes)
+    for (const m of s.narration.matchAll(/[“"]([^”"]{3,40})[”"]/g))
+      phrases.add(m[1]);
   phrases.add(spec.project.name);
 
   return {
@@ -82,7 +95,11 @@ export function buildPlan(spec: LcLessonSpec, timeline: Timeline): VideoPlan {
     duration: timeline.duration,
     seed: hash(lessonKey(spec)) % 100000,
     accent: COURSE_ACCENTS[(spec.course - 1) % COURSE_ACCENTS.length],
-    course: { number: spec.course, title: course.title, lessons: LC_LESSONS_PER_COURSE },
+    course: {
+      number: spec.course,
+      title: course.title,
+      lessons: LC_LESSONS_PER_COURSE,
+    },
     lesson: {
       number: spec.lesson,
       title: spec.title,
@@ -94,14 +111,34 @@ export function buildPlan(spec: LcLessonSpec, timeline: Timeline): VideoPlan {
     hook: spec.video.hook,
     scenes: timeline.scenes,
     cues: timeline.cues,
-    concepts: spec.concepts.map((c) => ({ emoji: c.emoji, title: c.title, text: c.text })),
-    example: { title: example.title, lines: example.lines, language: example.language },
+    concepts: spec.concepts.map((c) => ({
+      emoji: c.emoji,
+      title: c.title,
+      text: c.text,
+    })),
+    example: {
+      title: example.title,
+      lines: example.lines,
+      language: example.language,
+    },
     demo: spec.demo,
     tip: { kind: tip.kind, title: tip.title, text: tip.text, fix: tip.fix },
     challenge:
       ch.kind === 'choose'
-        ? { kind: 'choose', prompt: ch.prompt, options: ch.options, lines: [], language: ch.code?.language ?? example.language }
-        : { kind: 'order', prompt: ch.prompt, options: [], lines: ch.lines, language: ch.language },
+        ? {
+            kind: 'choose',
+            prompt: ch.prompt,
+            options: ch.options,
+            lines: [],
+            language: ch.code?.language ?? example.language,
+          }
+        : {
+            kind: 'order',
+            prompt: ch.prompt,
+            options: [],
+            lines: ch.lines,
+            language: ch.language,
+          },
     project: { name: spec.project.name },
     highlights: [...phrases].filter((p) => p.length >= 3),
     logo: logoDataUri(),

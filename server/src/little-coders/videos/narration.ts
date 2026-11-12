@@ -13,8 +13,9 @@ export interface NarrationSentence {
   text: string;
 }
 
-export const lessonKey = (spec: Pick<LcLessonSpec, 'course' | 'lesson'>): string =>
-  `c${spec.course}l${spec.lesson}`;
+export const lessonKey = (
+  spec: Pick<LcLessonSpec, 'course' | 'lesson'>,
+): string => `c${spec.course}l${spec.lesson}`;
 
 /** "Look! It works. Ready?" -> three sentences. Keeps quotes and brackets with their sentence. */
 export function splitSentences(text: string): string[] {
@@ -30,7 +31,12 @@ export function narrationFor(spec: LcLessonSpec): NarrationSentence[] {
   const out: NarrationSentence[] = [];
   spec.video.scenes.forEach((scene, sceneIndex) => {
     splitSentences(scene.narration).forEach((text, index) => {
-      out.push({ id: `${key}-s${sceneIndex}-${index}`, scene: sceneIndex, index, text });
+      out.push({
+        id: `${key}-s${sceneIndex}-${index}`,
+        scene: sceneIndex,
+        index,
+        text,
+      });
     });
   });
   return out;

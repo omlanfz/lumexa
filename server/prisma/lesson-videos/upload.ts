@@ -27,20 +27,39 @@ import {
   LessonVideosService,
   orderOfLessonKey,
 } from '../../src/little-coders/videos/lesson-videos.service';
-import { LessonVideoStorageService, describeStorageError } from '../../src/little-coders/videos/lesson-video-storage.service';
-import { looksLikeJpeg, looksLikeMp4, looksLikeWebVtt, probeMp4 } from '../../src/little-coders/videos/mp4';
+import {
+  LessonVideoStorageService,
+  describeStorageError,
+} from '../../src/little-coders/videos/lesson-video-storage.service';
+import {
+  looksLikeJpeg,
+  looksLikeMp4,
+  looksLikeWebVtt,
+  probeMp4,
+} from '../../src/little-coders/videos/mp4';
 import { lessonKey } from '../../src/little-coders/videos/narration';
-import { CONTENT_TYPE, lessonVideoKey } from '../../src/little-coders/videos/video-keys';
+import {
+  CONTENT_TYPE,
+  lessonVideoKey,
+} from '../../src/little-coders/videos/video-keys';
 import { validatePreviewVideo } from '../../src/little-coders/lc.validate';
 import * as crypto from 'crypto';
 
 const arg = (name: string, fallback = ''): string => {
   const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : fallback;
+  return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--')
+    ? process.argv[i + 1]
+    : fallback;
 };
 const flag = (name: string): boolean => process.argv.includes(`--${name}`);
 
-const DIR = path.resolve(arg('dir', process.env.LESSON_VIDEO_OUT || path.join(__dirname, '../../.lesson-videos')));
+const DIR = path.resolve(
+  arg(
+    'dir',
+    process.env.LESSON_VIDEO_OUT ||
+      path.join(__dirname, '../../.lesson-videos'),
+  ),
+);
 
 /** server/.env, without overriding anything already in the environment (the same file Nest reads). */
 function loadEnvFile(file: string): void {
@@ -70,7 +89,9 @@ function readBuilt(key: string, problems: string[]): Built | null {
   const dir = path.join(DIR, key);
   const mp4 = path.join(dir, 'preview.mp4');
   if (!fs.existsSync(mp4)) {
-    problems.push(`${key}: ${mp4} does not exist — build it first (npm run lesson-videos:build -- --lesson ${key}).`);
+    problems.push(
+      `${key}: ${mp4} does not exist — build it first (npm run lesson-videos:build -- --lesson ${key}).`,
+    );
     return null;
   }
   const video = fs.readFileSync(mp4);
@@ -78,7 +99,10 @@ function readBuilt(key: string, problems: string[]): Built | null {
     problems.push(`${key}: preview.mp4 is not a readable MP4.`);
     return null;
   }
-  const read = (name: string) => (fs.existsSync(path.join(dir, name)) ? fs.readFileSync(path.join(dir, name)) : null);
+  const read = (name: string) =>
+    fs.existsSync(path.join(dir, name))
+      ? fs.readFileSync(path.join(dir, name))
+      : null;
   const poster = read('poster.jpg');
   const captions = read('captions.vtt');
   if (poster && !looksLikeJpeg(poster)) {
@@ -92,7 +116,12 @@ function readBuilt(key: string, problems: string[]): Built | null {
   let chapters: Built['chapters'] = [];
   const infoFile = path.join(dir, 'info.json');
   if (fs.existsSync(infoFile)) {
-    chapters = (JSON.parse(fs.readFileSync(infoFile, 'utf8')) as { chapters?: Built['chapters'] }).chapters ?? [];
+    chapters =
+      (
+        JSON.parse(fs.readFileSync(infoFile, 'utf8')) as {
+          chapters?: Built['chapters'];
+        }
+      ).chapters ?? [];
   }
   return {
     key,
@@ -110,9 +139,16 @@ function readBuilt(key: string, problems: string[]): Built | null {
 function stage(built: Built[], target: string): void {
   let files = 0;
   for (const b of built) {
-    const put = (kind: 'video' | 'poster' | 'captions', body: Buffer | null, hash: string | null) => {
+    const put = (
+      kind: 'video' | 'poster' | 'captions',
+      body: Buffer | null,
+      hash: string | null,
+    ) => {
       if (!body || !hash) return;
-      const dest = path.join(target, lessonVideoKey(LC_VIDEO_PROGRAM_KEY, b.key, kind, hash));
+      const dest = path.join(
+        target,
+        lessonVideoKey(LC_VIDEO_PROGRAM_KEY, b.key, kind, hash),
+      );
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.writeFileSync(dest, body);
       files++;
@@ -121,30 +157,49 @@ function stage(built: Built[], target: string): void {
     put('poster', b.poster, b.posterSha256);
     put('captions', b.captions, b.captionsSha256);
   }
-  console.log(`\nWrote ${files} file(s) for ${built.length} lesson(s) into ${target}/lesson-videos/`);
-  console.log('Copy that "lesson-videos" folder to the root of the bucket, for example:');
-  console.log(`  rclone copy "${target}/lesson-videos" r2:<bucket>/lesson-videos --progress`);
-  console.log(`  aws s3 sync "${target}/lesson-videos" s3://<bucket>/lesson-videos --endpoint-url https://<account-id>.r2.cloudflarestorage.com`);
+  console.log(
+    `\nWrote ${files} file(s) for ${built.length} lesson(s) into ${target}/lesson-videos/`,
+  );
+  console.log(
+    'Copy that "lesson-videos" folder to the root of the bucket, for example:',
+  );
+  console.log(
+    `  rclone copy "${target}/lesson-videos" r2:<bucket>/lesson-videos --progress`,
+  );
+  console.log(
+    `  aws s3 sync "${target}/lesson-videos" s3://<bucket>/lesson-videos --endpoint-url https://<account-id>.r2.cloudflarestorage.com`,
+  );
 }
 
 async function main() {
   loadEnvFile(path.join(__dirname, '../../.env'));
 
   const wanted = arg('lesson');
-  const keys = wanted ? wanted.split(',').map((s) => s.trim()) : LC_LESSON_SPECS.map(lessonKey);
+  const keys = wanted
+    ? wanted.split(',').map((s) => s.trim())
+    : LC_LESSON_SPECS.map(lessonKey);
   for (const k of keys) {
-    if (!LC_LESSON_SPECS.some((s) => lessonKey(s) === k)) throw new Error(`There is no Little Coders lesson "${k}" (use c1l1 … c5l8).`);
+    if (!LC_LESSON_SPECS.some((s) => lessonKey(s) === k))
+      throw new Error(
+        `There is no Little Coders lesson "${k}" (use c1l1 … c5l8).`,
+      );
   }
 
   const problems: string[] = [];
-  const built = keys.map((k) => readBuilt(k, problems)).filter((b): b is Built => b !== null);
+  const built = keys
+    .map((k) => readBuilt(k, problems))
+    .filter((b): b is Built => b !== null);
   if (problems.length) {
     console.error(problems.join('\n'));
     if (built.length === 0) throw new Error('Nothing to upload.');
-    console.error(`\nContinuing with the ${built.length} lesson(s) that are ready.\n`);
+    console.error(
+      `\nContinuing with the ${built.length} lesson(s) that are ready.\n`,
+    );
   }
   const megabytes = built.reduce((n, b) => n + b.video.length, 0) / 1048576;
-  console.log(`${built.length} lesson video(s) ready in ${DIR} (${megabytes.toFixed(0)} MB of video).`);
+  console.log(
+    `${built.length} lesson video(s) ready in ${DIR} (${megabytes.toFixed(0)} MB of video).`,
+  );
 
   if (flag('stage')) {
     const target = path.resolve(arg('stage', 'lesson-videos-stage'));
@@ -154,13 +209,20 @@ async function main() {
 
   const storage = new LessonVideoStorageService();
   const problem = storage.configurationProblem();
-  if (problem) throw new Error(`Lesson video storage is not set up: ${problem}. See docs/LESSON_VIDEOS_SETUP.md.`);
+  if (problem)
+    throw new Error(
+      `Lesson video storage is not set up: ${problem}. See docs/LESSON_VIDEOS_SETUP.md.`,
+    );
   console.log(`Bucket "${storage.bucket()}" on ${storage.endpoint()}.`);
 
   if (flag('dry-run')) {
     for (const b of built) {
-      const head = await storage.headObject(lessonVideoKey(LC_VIDEO_PROGRAM_KEY, b.key, 'video', b.sha256));
-      console.log(`  ${b.key}: ${head ? 'already in the bucket' : 'would be uploaded'} (${(b.video.length / 1048576).toFixed(1)} MB)`);
+      const head = await storage.headObject(
+        lessonVideoKey(LC_VIDEO_PROGRAM_KEY, b.key, 'video', b.sha256),
+      );
+      console.log(
+        `  ${b.key}: ${head ? 'already in the bucket' : 'would be uploaded'} (${(b.video.length / 1048576).toFixed(1)} MB)`,
+      );
     }
     console.log('\nDry run: nothing was uploaded or changed.');
     return;
@@ -181,7 +243,9 @@ async function main() {
       }
       console.log(`  ${b.key}: in the bucket`);
     }
-    console.log('\nUploaded. The server shows these videos on its next start, or press "Check storage" in the Little Coders admin editor.');
+    console.log(
+      '\nUploaded. The server shows these videos on its next start, or press "Check storage" in the Little Coders admin editor.',
+    );
     return;
   }
 
@@ -190,10 +254,16 @@ async function main() {
   try {
     const service = new LessonVideosService(prisma, storage);
     const course = await prisma.course.findFirst({
-      where: { isCustom: false, slug: { in: ['little-coders', 'little-coders-path'] } },
+      where: {
+        isCustom: false,
+        slug: { in: ['little-coders', 'little-coders-path'] },
+      },
       select: { id: true },
     });
-    if (!course) throw new Error('The Little Coders course is not in this database yet (start the server once so it is created).');
+    if (!course)
+      throw new Error(
+        'The Little Coders course is not in this database yet (start the server once so it is created).',
+      );
     const lessons = await prisma.lesson.findMany({
       where: { courseId: course.id },
       select: { id: true, order: true, previewVideo: true },
@@ -212,7 +282,9 @@ async function main() {
         continue;
       }
       if (current && !flag('replace')) {
-        console.log(`  ${b.key}: the lesson already has a different video — kept (use --replace to swap it)`);
+        console.log(
+          `  ${b.key}: the lesson already has a different video — kept (use --replace to swap it)`,
+        );
         continue;
       }
       try {
@@ -226,9 +298,13 @@ async function main() {
           { chapters: JSON.stringify(b.chapters) },
         );
         uploaded++;
-        console.log(`  ${b.key}: uploaded and shown on its lesson (${(b.video.length / 1048576).toFixed(1)} MB)`);
+        console.log(
+          `  ${b.key}: uploaded and shown on its lesson (${(b.video.length / 1048576).toFixed(1)} MB)`,
+        );
       } catch (err) {
-        console.error(`  ${b.key}: FAILED — ${(err as Error).message ?? describeStorageError(err)}`);
+        console.error(
+          `  ${b.key}: FAILED — ${(err as Error).message ?? describeStorageError(err)}`,
+        );
         process.exitCode = 1;
       }
     }

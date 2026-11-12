@@ -16,11 +16,14 @@ const arg = (name: string, fallback = ''): string => {
 
 async function main() {
   const wanted = arg('lesson', 'c1l1') || 'c1l1';
-  const keys = wanted === 'all' ? LC_LESSON_SPECS.map(lessonKey) : wanted.split(',');
+  const keys =
+    wanted === 'all' ? LC_LESSON_SPECS.map(lessonKey) : wanted.split(',');
   const voice = arg('voice');
   const out = arg('out', '.');
   fs.mkdirSync(out, { recursive: true });
-  const durations = JSON.parse(fs.readFileSync(path.join(voice, 'durations.json'), 'utf8')) as Record<string, number>;
+  const durations = JSON.parse(
+    fs.readFileSync(path.join(voice, 'durations.json'), 'utf8'),
+  ) as Record<string, number>;
   const browser = await launchBrowser();
   try {
     for (const key of keys) {
@@ -42,9 +45,18 @@ async function main() {
         ['6a-turn', s[5].start + 6],
         ['6b-end', s[5].end - 1.2],
       ];
-      const frames = await frameAt(browser, plan, picks.map((p) => p[1]), 0.92);
-      frames.forEach((buf, i) => fs.writeFileSync(path.join(out, `${key}-${picks[i][0]}.jpg`), buf));
-      console.log(`${key}: ${plan.duration}s, ${plan.cues.length} subtitles, ${frames.length} frames → ${out}`);
+      const frames = await frameAt(
+        browser,
+        plan,
+        picks.map((p) => p[1]),
+        0.92,
+      );
+      frames.forEach((buf, i) =>
+        fs.writeFileSync(path.join(out, `${key}-${picks[i][0]}.jpg`), buf),
+      );
+      console.log(
+        `${key}: ${plan.duration}s, ${plan.cues.length} subtitles, ${frames.length} frames → ${out}`,
+      );
     }
   } finally {
     await browser.close();

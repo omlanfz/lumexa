@@ -67,7 +67,9 @@ export function buildTimeline(
     const spoken = mine.reduce((sum, s) => {
       const d = durations[s.id];
       if (d === undefined)
-        throw new Error(`No narration audio for ${s.id} — run the narration step first.`);
+        throw new Error(
+          `No narration audio for ${s.id} — run the narration step first.`,
+        );
       return sum + d;
     }, 0);
     const need =
@@ -117,18 +119,30 @@ export function buildTimeline(
 
   const duration = round(cursor);
   if (duration > HARD_MAX_SECONDS)
-    warnings.push(`${key}: ${duration}s is over the ${HARD_MAX_SECONDS}s maximum`);
+    warnings.push(
+      `${key}: ${duration}s is over the ${HARD_MAX_SECONDS}s maximum`,
+    );
   else if (duration > TARGET_MAX_SECONDS)
-    warnings.push(`${key}: ${duration}s is over the ${TARGET_MAX_SECONDS}s target`);
+    warnings.push(
+      `${key}: ${duration}s is over the ${TARGET_MAX_SECONDS}s target`,
+    );
   else if (duration < TARGET_MIN_SECONDS)
-    warnings.push(`${key}: ${duration}s is under the ${TARGET_MIN_SECONDS}s target`);
+    warnings.push(
+      `${key}: ${duration}s is under the ${TARGET_MIN_SECONDS}s target`,
+    );
 
   return {
     key,
     duration,
-    scenes: scenes.map((s) => ({ ...s, start: round(s.start), end: round(s.end) })),
+    scenes: scenes.map((s) => ({
+      ...s,
+      start: round(s.start),
+      end: round(s.end),
+    })),
     cues,
-    narrationSeconds: round(cues.reduce((sum, c) => sum + (c.end - c.start), 0)),
+    narrationSeconds: round(
+      cues.reduce((sum, c) => sum + (c.end - c.start), 0),
+    ),
     narrationWords: sentences.reduce(
       (sum, s) => sum + s.text.split(/\s+/).filter(Boolean).length,
       0,
@@ -156,6 +170,11 @@ export function toWebVtt(cues: Pick<Cue, 'start' | 'end' | 'text'>[]): string {
   };
   return (
     'WEBVTT\n\n' +
-    cues.map((c, i) => `${i + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n')
+    cues
+      .map(
+        (c, i) =>
+          `${i + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`,
+      )
+      .join('\n')
   );
 }
