@@ -198,6 +198,7 @@ function lessonData(
         'posterUrl',
         'captionsUrl',
         'durationSeconds',
+        'stored',
       ]),
     );
   }

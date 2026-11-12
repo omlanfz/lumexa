@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { buildPrograms, homeOrder, programMetaFor, resolveProgramId, DEFAULT_BLOCK_PRICE } from './programs.ts';
+import { ODYSSEY, buildPrograms, homeOrder, programMetaFor, resolveProgramId, DEFAULT_BLOCK_PRICE } from './programs.ts';
 import { fullPayment, pricePerBlock } from './pricing.ts';
-import type { Catalog, CatalogCourse } from './catalog.ts';
+import { mergeProgramFacts, type Catalog, type CatalogCourse } from './catalog.ts';
 
 const snapshot = JSON.parse(readFileSync(new URL('./catalog-snapshot.json', import.meta.url), 'utf8')) as Catalog;
 const course = (slug: string): CatalogCourse => {
@@ -94,7 +94,8 @@ test('Advanced Data Science: beginner card with its own curriculum PDF', () => {
   assert.equal(ads.title, 'Advanced Data Science');
   assert.equal(ads.ages, 'Ages 12–18');
   assert.equal(ads.curriculumFile, 'advanced-data-science-curriculum.pdf');
-  assert.equal(ads.beginner.ok, true);
+  assert.deepEqual(ads.badges.map((b) => b.label), ['Beginner friendly']);
+  assert.equal(ads.mostPopular, false, 'AI Builder is the most popular program, not this one');
   assert.match(ads.tagline, /15\+ Real AI & Data Science Projects/);
 });
 
@@ -117,4 +118,66 @@ test('?program= accepts the short id, the slug and the old "-path" slug', () => 
   assert.equal(resolveProgramId('odyssey', all), 'odyssey');
   assert.equal(resolveProgramId('nope', all), null);
   assert.equal(resolveProgramId(null, all), null);
+});
+
+// ── Final ages and badges ───────────────────────────────────────────────────
+
+const FINAL: Record<string, { ages: string; badges: string[]; popular: boolean }> = {
+  'lumexa-odyssey': { ages: 'Ages 6–18', badges: ['Best choice for beginners', 'Suitable for all ages'], popular: false },
+  'little-coders': { ages: 'Ages 6–12', badges: ['Complete beginner friendly', 'For first-time coders'], popular: false },
+  'game-creator': { ages: 'Ages 6–12', badges: ['Beginner friendly'], popular: false },
+  'ai-builder': { ages: 'Ages 12–18', badges: ['Most popular', 'Basic Python needed'], popular: true },
+  'web-developer': { ages: 'Ages 12–18', badges: ['Beginner friendly'], popular: false },
+  'data-scientist': { ages: 'Ages 12–18', badges: ['Basic Python needed'], popular: false },
+  'advanced-data-science': { ages: 'Ages 12–18', badges: ['Beginner friendly'], popular: false },
+  'digital-independence': { ages: 'Ages 15–18', badges: ['Best after a few projects'], popular: false },
+};
+
+test('every program shows its final age range and badges', () => {
+  const { odyssey, specialized } = buildPrograms(snapshot);
+  const metas = [odyssey!.meta, ...specialized.map((s) => s.meta)];
+  assert.equal(metas.length, Object.keys(FINAL).length);
+  for (const meta of metas) {
+    const want = FINAL[meta.catalogSlug];
+    assert.ok(want, `${meta.catalogSlug} is a known program`);
+    assert.equal(meta.ages, want.ages, `${meta.title} ages`);
+    assert.deepEqual(meta.badges.map((b) => b.label), want.badges, `${meta.title} badges`);
+    assert.equal(meta.mostPopular, want.popular, `${meta.title} most popular`);
+  }
+  assert.deepEqual(
+    metas.filter((m) => m.prerequisite).map((m) => m.id),
+    ['ai', 'data'],
+    'only AI Builder and Data Scientist need basic Python',
+  );
+});
+
+test('the built-in Odyssey fallback matches the catalog while the live data is loading', () => {
+  const live = course('lumexa-odyssey');
+  assert.equal(ODYSSEY.ages, 'Ages 6–18');
+  assert.deepEqual(ODYSSEY.badges, live.badges);
+  assert.equal(ODYSSEY.audience, live.audience);
+});
+
+test('a catalog from an API that predates the badges borrows them from the snapshot', () => {
+  const bare: Catalog = {
+    ...snapshot,
+    courses: snapshot.courses.map((c) => {
+      const { badges, audience, prerequisite, mostPopular, ...rest } = c;
+      void badges; void audience; void prerequisite; void mostPopular;
+      // an older answer, with the retired "-path" spelling for one program
+      return c.slug === 'ai-builder' ? { ...rest, slug: 'ai-builder-path' } : rest;
+    }),
+  };
+  assert.equal(bare.courses.find((c) => c.slug === 'ai-builder-path')!.badges, undefined);
+  const merged = mergeProgramFacts(bare, snapshot);
+  const ai = merged.courses.find((c) => c.slug === 'ai-builder-path')!;
+  assert.deepEqual(ai.badges!.map((b) => b.label), ['Most popular', 'Basic Python needed']);
+  assert.equal(ai.prerequisite, 'Basic Python knowledge needed');
+  // A program the snapshot does not know keeps no badges; one that already has them is left alone.
+  const custom = mergeProgramFacts(
+    { ...snapshot, courses: [{ ...course('game-creator'), slug: 'robotics-lab', badges: undefined }, course('ai-builder')] },
+    snapshot,
+  );
+  assert.equal(custom.courses[0].badges, undefined);
+  assert.equal(custom.courses[1], course('ai-builder'));
 });

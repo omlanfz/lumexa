@@ -12,8 +12,12 @@ import {
   Query,
   Req,
   Response,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import type { Response as ExpressResponse } from 'express';
@@ -21,6 +25,8 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurriculumService } from './curriculum.service';
 import { CurriculumDocumentsService } from './curriculum-documents.service';
+import { LessonVideosService, type UploadedFile } from '../little-coders/videos/lesson-videos.service';
+import { MAX_VIDEO_BYTES } from '../little-coders/videos/video-keys';
 import {
   CreateModuleDto,
   CreateProjectDto,
@@ -34,6 +40,7 @@ import {
   UpdateLessonContentDto,
   UpdateModuleDto,
   UpdateProjectDto,
+  UploadPreviewVideoDto,
 } from './dto/curriculum.dto';
 
 @Controller('curriculum')
@@ -42,6 +49,7 @@ export class CurriculumController {
   constructor(
     private readonly curriculum: CurriculumService,
     private readonly documents: CurriculumDocumentsService,
+    private readonly lessonVideos: LessonVideosService,
   ) {}
 
   // ── Lesson Details (student sees own; teacher/admin see any assigned course) ──
@@ -300,6 +308,61 @@ export class CurriculumController {
     @Body() dto: UpdateLcLessonDto,
   ) {
     return this.curriculum.updateLittleCodersLesson(id, dto);
+  }
+
+  /**
+   * POST /curriculum/lessons/:id/preview-video — multipart parts "video" (the MP4), "poster" (JPEG,
+   * optional) and "captions" (WebVTT, optional). The video is read for what it really is (MP4,
+   * 10–120 s, 16:9) and kept in the lesson-video bucket; the lesson remembers where.
+   */
+  @Post('lessons/:id/preview-video')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'video', maxCount: 1 },
+        { name: 'poster', maxCount: 1 },
+        { name: 'captions', maxCount: 1 },
+      ],
+      {
+        // Held in memory only until it is in R2.
+        storage: memoryStorage(),
+        limits: { fileSize: MAX_VIDEO_BYTES, files: 3 },
+      },
+    ),
+  )
+  uploadPreviewVideo(
+    @Param('id') id: string,
+    @UploadedFiles()
+    files: { video?: UploadedFile[]; poster?: UploadedFile[]; captions?: UploadedFile[] },
+    @Body() dto: UploadPreviewVideoDto,
+  ) {
+    return this.lessonVideos.upload(id, files ?? {}, { chapters: dto.chapters });
+  }
+
+  /** Admin: is lesson-video storage set up, and how many lessons show a video? */
+  @Get('lesson-videos/status')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  lessonVideoStatus() {
+    return this.lessonVideos.status();
+  }
+
+  /** Admin: look in the bucket for the finished videos and switch on the ones that are there. */
+  @Post('lesson-videos/attach')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  attachLessonVideos() {
+    return this.lessonVideos.attachPublished();
+  }
+
+  /** The lesson stops showing its stored video. The files stay in the bucket (nothing is ever deleted). */
+  @Delete('lessons/:id/preview-video')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  detachPreviewVideo(@Param('id') id: string) {
+    return this.lessonVideos.detach(id);
   }
 
   /** The coding platforms "Start Coding" opens (MIT Scratch, Stretch3, Teachable Machine, EduBlocks). */

@@ -6,7 +6,7 @@ const tracks = [
     emoji: "⭐",
     name: "Little Coders",
     tagline: "Star Cadets",
-    ages: "Ages 6–11",
+    ages: "Ages 6–12",
     description:
       "Five independent courses: Scratch animations and games, AI-powered projects, and first block-based Python. Build a love of technology through play.",
     color: "from-blue-600/20 to-blue-900/10",

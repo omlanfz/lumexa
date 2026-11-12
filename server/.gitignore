@@ -60,3 +60,6 @@ prisma/migrations/dev.db
 
 # Chrome for Testing downloaded by Puppeteer (see .puppeteerrc.cjs)
 /.cache
+
+# Lesson preview videos built by prisma/lesson-videos (large files; they are uploaded to R2, never committed)
+/.lesson-videos

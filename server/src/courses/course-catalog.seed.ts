@@ -40,6 +40,7 @@ import { legacyCourseSlug } from './course-slug';
 import { syncAssessmentBanks } from '../assessments/bank/bank.sync';
 import { LC_PROGRAM_DESCRIPTION, LC_SESSIONS_TOTAL, isLittleCodersSlug } from '../little-coders/lc.constants';
 import { syncLittleCodersBanks } from '../little-coders/assessments/lc-bank.sync';
+import { PROGRAM_FACTS, factsBackfill, type CourseLevel } from './program-facts';
 
 interface CourseSeed {
   slug: string;
@@ -47,10 +48,40 @@ interface CourseSeed {
   description: string;
   emoji: string;
   category: string;
-  level: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED';
+  level: CourseLevel;
   ageMin: number;
   ageMax: number;
   sessions: number;
+}
+
+/** The description a program was seeded with before its audience facts changed. A stored description is
+ *  replaced by the current seed text only while it is still exactly one of these (admin edits are kept). */
+const DEPRECATED_DESCRIPTIONS: Record<string, string[]> = {
+  'ai-builder': [
+    "A complete, project-driven journey from first line of Python to real machine learning, computer vision, and large language model applications. Students don't just learn about AI — they write the code, train the models, and ship three working portfolio projects. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
+  ],
+};
+
+/** Level and ages of a default program come from PROGRAM_FACTS (one source for the seed, the admin, the website and the PDFs). */
+const ageAndLevel = (slug: string) => {
+  const f = PROGRAM_FACTS[slug];
+  return { level: f.level, ageMin: f.ageMin, ageMax: f.ageMax };
+};
+
+/** What to change on a stored default program so it carries the final ages / level / description — and
+ *  nothing an admin set themselves (each value moves only while it is still a value this seed used before). */
+export function storedFactsPatch(
+  seed: Pick<CourseSeed, 'slug' | 'description'>,
+  stored: { ageMin: number; ageMax: number; level: string; description: string | null },
+): { ageMin?: number; ageMax?: number; level?: CourseLevel; description?: string } {
+  const patch: { ageMin?: number; ageMax?: number; level?: CourseLevel; description?: string } = factsBackfill(
+    PROGRAM_FACTS[seed.slug],
+    stored,
+  );
+  if (stored.description && DEPRECATED_DESCRIPTIONS[seed.slug]?.includes(stored.description)) {
+    patch.description = seed.description;
+  }
+  return patch;
 }
 
 export const COURSE_CATALOG: CourseSeed[] = [
@@ -61,9 +92,7 @@ export const COURSE_CATALOG: CourseSeed[] = [
       'The flagship path every new student takes. Odyssey is a guided journey across nine real courses — games, websites, apps, data, and AI — giving students broad, hands-on exposure before they choose a specialty. No prior coding experience needed. 3 stages, 9 courses, 72 learning sessions plus 13 built-in assessments (3 course tests + 1 stage test per stage, plus a Final Test).',
     emoji: '🚀',
     category: 'Odyssey',
-    level: 'BEGINNER',
-    ageMin: 12,
-    ageMax: 18,
+    ...ageAndLevel('lumexa-odyssey'),
     sessions: 85,
   },
   {
@@ -74,9 +103,7 @@ export const COURSE_CATALOG: CourseSeed[] = [
     description: LC_PROGRAM_DESCRIPTION,
     emoji: '✦',
     category: 'Little Coders',
-    level: 'BEGINNER',
-    ageMin: 6,
-    ageMax: 11,
+    ...ageAndLevel('little-coders'),
     sessions: LC_SESSIONS_TOTAL,
   },
   {
@@ -86,9 +113,7 @@ export const COURSE_CATALOG: CourseSeed[] = [
       "A complete, project-driven journey from a first Roblox build to a polished, published game. Students don't just play games — they design them, script them, and ship three real, playable games friends can actually try. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '🎮',
     category: 'Game Creator',
-    level: 'INTERMEDIATE',
-    ageMin: 10,
-    ageMax: 18,
+    ...ageAndLevel('game-creator'),
     sessions: 28,
   },
   {
@@ -98,21 +123,17 @@ export const COURSE_CATALOG: CourseSeed[] = [
       "A complete, project-driven journey from a first HTML page to a deployed, full-stack React application. Students don't just learn about the web — they write the code, style real interfaces, and ship three live, working websites anyone can visit. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '🌐',
     category: 'Web Developer',
-    level: 'INTERMEDIATE',
-    ageMin: 12,
-    ageMax: 18,
+    ...ageAndLevel('web-developer'),
     sessions: 28,
   },
   {
     slug: 'ai-builder',
     title: 'AI Builder',
     description:
-      "A complete, project-driven journey from first line of Python to real machine learning, computer vision, and large language model applications. Students don't just learn about AI — they write the code, train the models, and ship three working portfolio projects. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
+      "A complete, project-driven journey that builds on basic Python to reach real machine learning, computer vision, and large language model applications. Students don't just learn about AI — they write the code, train the models, and ship three working portfolio projects. Basic Python knowledge is needed to start. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '🤖',
     category: 'AI Builder',
-    level: 'INTERMEDIATE',
-    ageMin: 12,
-    ageMax: 18,
+    ...ageAndLevel('ai-builder'),
     sessions: 28,
   },
   {
@@ -122,9 +143,7 @@ export const COURSE_CATALOG: CourseSeed[] = [
       "A complete, project-driven journey from messy raw data to real, working predictive models. Students don't just learn about data science — they clean real datasets, build compelling visualizations, and train machine learning models that make real decisions. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.",
     emoji: '📊',
     category: 'Data Scientist',
-    level: 'INTERMEDIATE',
-    ageMin: 13,
-    ageMax: 18,
+    ...ageAndLevel('data-scientist'),
     sessions: 28,
   },
   {
@@ -134,9 +153,7 @@ export const COURSE_CATALOG: CourseSeed[] = [
       'Build the portfolio, professional skills, digital reputation and business knowledge needed to turn your abilities into legitimate opportunities. The progression is Identity → Services → Clients → Professional Presence → Opportunities. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.',
     emoji: '💼',
     category: 'Digital Independence',
-    level: 'ADVANCED',
-    ageMin: 15,
-    ageMax: 18,
+    ...ageAndLevel('digital-independence'),
     sessions: 28,
   },
 ];
@@ -167,7 +184,7 @@ export async function seedCourseCatalog(
       },
       // Prefer the canonical slug when both spellings somehow exist.
       orderBy: { createdAt: 'asc' },
-      select: { id: true, slug: true, title: true },
+      select: { id: true, slug: true, title: true, description: true, ageMin: true, ageMax: true, level: true },
     });
 
     if (!existing) {
@@ -195,9 +212,18 @@ export async function seedCourseCatalog(
     // retired "-path" naming is moved to the new names once.
     // Little Coders owns its own session count: it only changes inside the Little Coders
     // migration, together with the lessons (never ahead of them).
-    const data: { sessions?: number; slug?: string; title?: string } = isLittleCodersSlug(seed.slug)
-      ? {}
-      : { sessions: seed.sessions };
+    const data: {
+      sessions?: number;
+      slug?: string;
+      title?: string;
+      ageMin?: number;
+      ageMax?: number;
+      level?: CourseLevel;
+      description?: string;
+    } = isLittleCodersSlug(seed.slug) ? {} : { sessions: seed.sessions };
+    // Final ages / level: a stored value moves only while it is still exactly what this program used to
+    // be seeded with (see factsBackfill) — an admin's own edit is never overwritten.
+    Object.assign(data, storedFactsPatch(seed, existing));
     if (existing.slug === legacyCourseSlug(seed.slug)) {
       const taken = await prisma.course.findUnique({
         where: { slug: seed.slug },

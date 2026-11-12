@@ -4,6 +4,7 @@ import Link from "next/link";
 import ScrollReveal from "../ScrollReveal";
 import { ODYSSEY, homeOrder, type ProgramMeta } from "@/lib/programs";
 import { usePrograms } from "@/lib/usePrograms";
+import ProgramBadges from "./ProgramBadges";
 
 /*
   Homepage program picker. Each card answers four things and nothing more:
@@ -12,28 +13,21 @@ import { usePrograms } from "@/lib/usePrograms";
   Lesson counts live on /programs, not here.
 */
 
-function Meta({ ages, beginner }: Pick<ProgramMeta, "ages" | "beginner">) {
+function Meta({ ages, badges }: Pick<ProgramMeta, "ages" | "badges">) {
   return (
     <div className="flex flex-wrap gap-2">
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-300 border border-[#E2E8F0] dark:border-gray-700/60">
         👤 {ages}
       </span>
-      <span
-        className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border ${
-          beginner.ok
-            ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-700/40"
-            : "bg-[#F0F4FF] dark:bg-gray-800/60 text-[#334155] dark:text-gray-300 border-[#E2E8F0] dark:border-gray-700/60"
-        }`}
-      >
-        {beginner.ok ? "🌱" : "ℹ️"} {beginner.text}
-      </span>
+      <ProgramBadges badges={badges} />
     </div>
   );
 }
 
 export default function ProgramsSection() {
-  const { specialized } = usePrograms();
+  const { odyssey, specialized } = usePrograms();
   const programs = homeOrder(specialized).map((entry) => entry.meta);
+  const flagship = odyssey?.meta ?? ODYSSEY;
 
   return (
     <section id="programs" className="scroll-mt-20 py-20 bg-[#F7F9FF] dark:bg-[#050D1A] transition-colors duration-200">
@@ -78,7 +72,7 @@ export default function ProgramsSection() {
                   <span className="font-bold text-[#0F172A] dark:text-white">Your child can build: </span>
                   games, websites, data projects and first AI apps while they explore, before choosing a specialty.
                 </p>
-                <Meta ages={ODYSSEY.ages} beginner={ODYSSEY.beginner} />
+                <Meta ages={flagship.ages} badges={flagship.badges} />
               </div>
 
               <div className="flex-none flex lg:flex-col items-center lg:items-end justify-between gap-1 lg:text-right">
@@ -106,7 +100,7 @@ export default function ProgramsSection() {
                 <span className="font-bold text-[#0F172A] dark:text-white">Your child can build: </span>
                 {p.builds}
               </p>
-              <Meta ages={p.ages} beginner={p.beginner} />
+              <Meta ages={p.ages} badges={p.badges} />
               <div className="mt-auto pt-5 flex items-center justify-between">
                 <span className="text-xs text-[#64748B] dark:text-gray-400">Full curriculum &amp; pricing</span>
                 <span className={`inline-flex items-center gap-1.5 text-sm font-black bg-gradient-to-r ${p.color} bg-clip-text text-transparent`}>

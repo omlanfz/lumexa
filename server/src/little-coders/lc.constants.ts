@@ -285,10 +285,12 @@ export const LC_FINAL_ASSESSMENT_TITLE = 'Little Coders — Final Assessment';
  *  is recognised by DEPRECATED_PROGRAM_DESCRIPTIONS and replaced only while an admin has
  *  not changed it. */
 export const LC_PROGRAM_DESCRIPTION =
-  'A gentle, hands-on journey for ages 6–11: from colourful Scratch blocks to games, AI-powered projects and block-based Python — building real, shareable projects the whole way. 5 independent courses, 40 learning lessons plus 5 course assessments and a final assessment (46 classes, about 6 months at two classes a week). Enrol one course at a time.';
+  'A gentle, hands-on journey for ages 6–12: from colourful Scratch blocks to games, AI-powered projects and block-based Python — building real, shareable projects the whole way. 5 independent courses, 40 learning lessons plus 5 course assessments and a final assessment (46 classes, about 6 months at two classes a week). Enrol one course at a time.';
 
-/** The text the seed used before the redesign: replaced only while it is still exactly this. */
+/** The texts the seed used before: replaced only while the stored description is still exactly one of them. */
 export const DEPRECATED_PROGRAM_DESCRIPTIONS: string[] = [
+  // The first redesigned text (ages 6–11), before the final age range of 6–12 was set.
+  'A gentle, hands-on journey for ages 6–11: from colourful Scratch blocks to games, AI-powered projects and block-based Python — building real, shareable projects the whole way. 5 independent courses, 40 learning lessons plus 5 course assessments and a final assessment (46 classes, about 6 months at two classes a week). Enrol one course at a time.',
   'A gentle, hands-on introduction to computing for young learners. Students move from colorful visual blocks to real Python code and even a first taste of AI — building genuine, shareable projects the whole way, at a pace made for ages 6–11. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.',
 ];
 

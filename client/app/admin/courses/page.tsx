@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "@/lib/axios";
 import { Card, Modal, StatusBadge, formatBDT } from "@/components/admin/AdminUI";
+import ProgramBadges from "@/components/marketing/ProgramBadges";
+import type { ProgramBadge } from "@/lib/catalog";
 
 interface Course {
   id: string;
@@ -19,7 +21,20 @@ interface Course {
   isActive: boolean;
   isCustom: boolean;
   _count: { lessons: number; assignedStudents: number };
+  /** Public badges of a default program (maintained by Lumexa, not edited here). */
+  badges?: ProgramBadge[];
+  audience?: string | null;
+  prerequisite?: string | null;
 }
+
+// What the stored level means to families; the website's badges are derived from the program itself.
+const LEVELS: { value: string; label: string }[] = [
+  { value: "STARTER", label: "Starter — complete beginners" },
+  { value: "BEGINNER", label: "Beginner friendly" },
+  { value: "INTERMEDIATE", label: "Intermediate — some coding knowledge needed" },
+  { value: "ADVANCED", label: "Advanced" },
+];
+const levelLabel = (level: string) => LEVELS.find((l) => l.value === level)?.label.split(" — ")[0] ?? level;
 
 export default function ManageCoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
@@ -126,9 +141,17 @@ export default function ManageCoursesPage() {
                       >
                         {c.isCustom ? "Custom" : "Core"}
                       </span>
+                      {c.badges && c.badges.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          <ProgramBadges badges={c.badges} size="xs" />
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.category}</td>
-                    <td className="px-4 py-3 text-[var(--a-text-muted)]">{c.ageMin}–{c.ageMax}</td>
+                    <td className="px-4 py-3 text-[var(--a-text-muted)]">
+                      {c.ageMin}–{c.ageMax}
+                      <span className="block text-xs text-[var(--a-text-faint)]">{levelLabel(c.level)}</span>
+                    </td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">{c._count.lessons}</td>
                     <td className="px-4 py-3 text-[var(--a-text-muted)]">
                       {c.priceCents ? (
@@ -275,6 +298,8 @@ function CourseFormModal({
     description: course?.description ?? "",
     category: course?.category ?? "",
     level: course?.level ?? "BEGINNER",
+    ageMin: course?.ageMin ?? 6,
+    ageMax: course?.ageMax ?? 18,
     sessions: course?.sessions ?? 8,
     priceTaka: course?.priceCents ? course.priceCents / 100 : "",
   });
@@ -319,6 +344,12 @@ function CourseFormModal({
       setError("Title, slug, and category are required.");
       return;
     }
+    const ageMin = Number(form.ageMin);
+    const ageMax = Number(form.ageMax);
+    if (!Number.isInteger(ageMin) || !Number.isInteger(ageMax) || ageMin < 4 || ageMax > 18 || ageMin > ageMax) {
+      setError("Ages must be whole numbers from 4 to 18, with the youngest age not above the oldest.");
+      return;
+    }
     if (assignNow && !selectedStudent) {
       setError("Pick a student to assign, or turn off \"Assign to a student now\".");
       return;
@@ -329,6 +360,8 @@ function CourseFormModal({
       const { priceTaka, ...rest } = form;
       const payload = {
         ...rest,
+        ageMin,
+        ageMax,
         sessions: Number(form.sessions),
         priceCents:
           priceTaka === "" || priceTaka === null
@@ -375,8 +408,36 @@ function CourseFormModal({
         </div>
         <div className="grid grid-cols-2 gap-3">
           <LabeledInput label="Category" value={form.category} onChange={(v) => set("category", v)} />
-          <LabeledInput label="Level" value={form.level} onChange={(v) => set("level", v)} />
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">Level</label>
+            <select
+              value={form.level}
+              onChange={(e) => set("level", e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] text-sm text-[var(--a-text)] a-focus"
+            >
+              {LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>{l.label}</option>
+              ))}
+              {!LEVELS.some((l) => l.value === form.level) && <option value={form.level}>{form.level} (current)</option>}
+            </select>
+          </div>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <LabeledInput label="Youngest age" type="number" value={form.ageMin} onChange={(v) => set("ageMin", v)} />
+          <LabeledInput label="Oldest age" type="number" value={form.ageMax} onChange={(v) => set("ageMax", v)} />
+        </div>
+        {course?.badges && course.badges.length > 0 && (
+          <div className="rounded-lg border border-[var(--a-border)] bg-[var(--a-surface-2)] p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--a-text-faint)] mb-1.5">
+              Badges shown on the website, curriculum PDF and certificates
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <ProgramBadges badges={course.badges} size="xs" />
+            </div>
+            {course.audience && <p className="text-xs text-[var(--a-text-muted)] mt-2">{course.audience}</p>}
+            {course.prerequisite && <p className="text-xs text-[var(--a-text-muted)]">Before starting: {course.prerequisite}.</p>}
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <LabeledInput label="Sessions" type="number" value={form.sessions} onChange={(v) => set("sessions", v)} />
           <div>

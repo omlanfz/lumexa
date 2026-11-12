@@ -8,7 +8,7 @@
 //     hand can never put markup, a broken button or an invented block in front of a child).
 //
 // Text limits are deliberate: the lessons are meant to be short, visual and friendly for
-// ages 6–11, so a paragraph does not fit.
+// ages 6–12, so a paragraph does not fit.
 
 import {
   LC_PLATFORM_KEYS,
@@ -28,8 +28,15 @@ import {
   type LcProjectCard,
   type LcProjectCardPublic,
   type LcStack,
+  type LcStoredVideo,
 } from './lc.types';
 import { toolboxOf, validateLines } from './blocks/block-dsl';
+import {
+  MAX_VIDEO_BYTES,
+  isLessonVideoKey,
+  kindOfKey,
+  type VideoAssetKind,
+} from './videos/video-keys';
 
 type Obj = Record<string, unknown>;
 
@@ -589,6 +596,7 @@ export function validatePreviewVideo(raw: unknown): Validated<LcPreviewVideo> {
     (!Number.isFinite(duration) || duration < 1 || duration > 120)
   )
     c.fail('durationSeconds', 'must be between 1 and 120 seconds');
+  const stored = validateStoredVideo(c, o.stored);
   const value: LcPreviewVideo = {
     title: c.str(o.title, 'title', 80),
     summary: c.str(o.summary, 'summary', 200),
@@ -605,19 +613,88 @@ export function validatePreviewVideo(raw: unknown): Validated<LcPreviewVideo> {
       challenge: c.str(bo.challenge, 'brief.challenge', 240),
       leadsInto: c.str(bo.leadsInto, 'brief.leadsInto', 200),
     },
+    ...(stored ? { stored } : {}),
   };
   return { errors: c.errors, value: c.errors.length ? null : value };
 }
 
+/** The part of a preview video that lives in the lesson-video bucket (null when there is none). */
+function validateStoredVideo(c: Check, raw: unknown): LcStoredVideo | null {
+  if (raw === null || raw === undefined) return null;
+  const o = c.obj(raw, 'stored');
+  const key = (
+    v: unknown,
+    path: string,
+    kind: VideoAssetKind,
+    optional: boolean,
+  ): string | null => {
+    if (optional && (v === null || v === undefined || v === '')) return null;
+    if (!isLessonVideoKey(v) || kindOfKey(v) !== kind) {
+      c.fail(path, 'is not a lesson-video storage key');
+      return null;
+    }
+    return v;
+  };
+  const num = (v: unknown, path: string, min: number, max: number): number => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < min || n > max) {
+      c.fail(path, `must be a number from ${min} to ${max}`);
+      return min;
+    }
+    return n;
+  };
+  const sha =
+    typeof o.sha256 === 'string' && /^[a-f0-9]{64}$/.test(o.sha256)
+      ? o.sha256
+      : '';
+  if (!sha) c.fail('stored.sha256', 'must be a SHA-256 in hex');
+  const chapters = c
+    .arr(o.chapters ?? [], 'stored.chapters', 0, 8)
+    .map((ch, i) => {
+      const co = c.obj(ch, `stored.chapters[${i}]`);
+      return {
+        label: c.str(co.label, `stored.chapters[${i}].label`, 40),
+        start: num(co.start, `stored.chapters[${i}].start`, 0, 120),
+      };
+    });
+  const uploadedAt =
+    typeof o.uploadedAt === 'string' && !Number.isNaN(Date.parse(o.uploadedAt))
+      ? o.uploadedAt
+      : '';
+  if (!uploadedAt) c.fail('stored.uploadedAt', 'must be a date');
+  return {
+    videoKey: key(o.videoKey, 'stored.videoKey', 'video', false) ?? '',
+    posterKey: key(o.posterKey, 'stored.posterKey', 'poster', true),
+    captionsKey: key(o.captionsKey, 'stored.captionsKey', 'captions', true),
+    bytes: num(o.bytes, 'stored.bytes', 1, MAX_VIDEO_BYTES),
+    sha256: sha,
+    width: num(o.width, 'stored.width', 320, 3840),
+    height: num(o.height, 'stored.height', 180, 2160),
+    chapters,
+    uploadedAt,
+  };
+}
+
+/** The addresses a stored video is played from (made when a lesson is served, never stored). */
+export interface ResolvedVideoUrls {
+  videoUrl: string;
+  posterUrl: string;
+  captionsUrl: string;
+}
+
 /** What a student receives: the address, poster and subtitles — never the production brief. */
-export function publicVideo(v: LcPreviewVideo): LcPreviewVideoPublic {
+export function publicVideo(
+  v: LcPreviewVideo,
+  urls?: ResolvedVideoUrls | null,
+): LcPreviewVideoPublic {
   return {
     title: v.title,
     summary: v.summary,
-    videoUrl: v.videoUrl,
-    posterUrl: v.posterUrl,
-    captionsUrl: v.captionsUrl,
+    videoUrl: urls?.videoUrl || v.videoUrl,
+    posterUrl: urls?.posterUrl || v.posterUrl,
+    captionsUrl: urls?.captionsUrl || v.captionsUrl,
     durationSeconds: v.durationSeconds,
+    chapters: v.stored?.chapters ?? [],
   };
 }
 

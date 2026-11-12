@@ -11,6 +11,8 @@
 // session type only. Rich lesson content (objectives, markdown, homework,
 // code, MCQ banks) and prices are never exposed here.
 
+import { publicFactsFor, type ProgramBadge } from './program-facts';
+
 export const ODYSSEY_SLUG = 'lumexa-odyssey';
 
 export type PublicLessonType =
@@ -89,6 +91,13 @@ export interface PublicCourse {
   stages: PublicStage[];
   /** Sessions outside any module or stage (the final test). */
   closingAssessments: PublicLesson[];
+  /** Badges shown next to the age range (see program-facts.ts); empty for a program without facts. */
+  badges: ProgramBadge[];
+  /** One plain line on who the program is for. */
+  audience: string | null;
+  /** What a child should know first (e.g. "Basic Python knowledge needed"), or null. */
+  prerequisite: string | null;
+  mostPopular: boolean;
 }
 
 export interface PublicCatalog {
@@ -365,6 +374,7 @@ export function buildPublicCatalog(input: BuildCatalogInput): PublicCatalog {
       modules,
       stages: [...stageByNumber.values()].sort((a, b) => a.number - b.number),
       closingAssessments,
+      ...publicFactsFor(course),
     });
   }
 

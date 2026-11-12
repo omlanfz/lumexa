@@ -127,15 +127,55 @@ export interface LcExperience {
 
 // ─── Video, cards ───────────────────────────────────────────────────────────
 
+/** A chapter marker on the player's seek bar (one per scene of the video). */
+export interface LcVideoChapter {
+  label: string;
+  /** Seconds from the start. */
+  start: number;
+}
+
 /** What a student receives: no production script. */
 export interface LcPreviewVideoPublic {
   title: string;
   summary: string;
-  /** MP4 address — empty until an admin adds the real video. */
+  /** MP4 address — empty until a video is uploaded (or an admin adds an address). */
   videoUrl: string;
   posterUrl: string;
   captionsUrl: string;
   durationSeconds: number | null;
+  chapters: LcVideoChapter[];
+}
+
+/** A preview video kept in the lesson-video bucket (set by an upload; the addresses are made when the lesson is served). */
+export interface LcStoredVideo {
+  videoKey: string;
+  posterKey: string | null;
+  captionsKey: string | null;
+  bytes: number;
+  sha256: string;
+  width: number;
+  height: number;
+  chapters: LcVideoChapter[];
+  uploadedAt: string;
+}
+
+/** What /curriculum/lesson-videos/status says (admin). */
+export interface LcVideoStorageStatus {
+  configured: boolean;
+  problem: string | null;
+  storage: { bucket: string; delivery: 'signed' | 'public' } | null;
+  lessons: number;
+  withVideo: number;
+  published: number;
+}
+
+/** What /curriculum/lesson-videos/attach says (admin). */
+export interface LcVideoAttachReport {
+  attached: string[];
+  alreadyHave: string[];
+  notInStorage: string[];
+  noLesson: string[];
+  storageProblem: string | null;
 }
 
 export interface LcVideoScene {
@@ -156,8 +196,10 @@ export interface LcVideoBrief {
   leadsInto: string;
 }
 
-export interface LcPreviewVideo extends LcPreviewVideoPublic {
+export interface LcPreviewVideo extends Omit<LcPreviewVideoPublic, 'chapters'> {
   brief: LcVideoBrief;
+  /** The video kept in the lesson-video bucket, if one was uploaded. */
+  stored?: LcStoredVideo | null;
 }
 
 /** A platform button with its start address already resolved by the server (null = switched off). */
