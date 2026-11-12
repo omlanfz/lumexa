@@ -269,16 +269,39 @@ export interface LcVideoBrief {
   leadsInto: string;
 }
 
+/** A chapter marker of the preview video (one per storyboard scene). */
+export interface LcVideoChapter {
+  label: string;
+  /** Seconds from the start. */
+  start: number;
+}
+
+/** A preview video kept in the lesson-video bucket (see videos/video-keys.ts) — set by the upload. */
+export interface LcStoredVideo {
+  videoKey: string;
+  posterKey: string | null;
+  captionsKey: string | null;
+  bytes: number;
+  sha256: string;
+  width: number;
+  height: number;
+  chapters: LcVideoChapter[];
+  /** ISO time of the upload. */
+  uploadedAt: string;
+}
+
 export interface LcPreviewVideo {
   title: string;
   summary: string;
-  /** MP4 address — empty until an admin adds the real video. */
+  /** MP4 address — empty until a video is uploaded or an admin adds an address. */
   videoUrl: string;
   posterUrl: string;
   /** WebVTT subtitles address. */
   captionsUrl: string;
   durationSeconds: number | null;
   brief: LcVideoBrief;
+  /** The video stored in the lesson-video bucket; its addresses are made when the lesson is served. */
+  stored?: LcStoredVideo | null;
 }
 
 /** What a student / shared screen receives: no production brief. */
@@ -289,6 +312,8 @@ export interface LcPreviewVideoPublic {
   posterUrl: string;
   captionsUrl: string;
   durationSeconds: number | null;
+  /** Scene markers for the player's seek bar. */
+  chapters: LcVideoChapter[];
 }
 
 // ─── Project and homework cards ─────────────────────────────────────────────

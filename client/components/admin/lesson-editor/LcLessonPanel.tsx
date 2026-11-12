@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import api from '@/lib/axios';
 import { Card } from '@/components/admin/AdminUI';
+import LcVideoStorage from './LcVideoStorage';
 import type {
   LcEditorData,
   LcExperience,
@@ -236,7 +237,11 @@ export default function LcLessonPanel({ lessonId, data, onDraft }: { lessonId: s
         <Card className="p-5">
           <h2 className="font-semibold text-[var(--a-text)] mb-1">🎬 “Your Learning Preview” video</h2>
           <p className="text-xs text-[var(--a-text-faint)] mb-3">
-            Until a video address is added, students see “Video coming soon” — the page never pretends a video exists. Host the MP4 (1920×1080, 60–100 seconds, up to 120) anywhere that serves it over https, then paste its address.
+            The video is kept in Lumexa’s own lesson-video storage: upload the MP4 (1920×1080, 60–100 seconds, up to 120) below and students watch it on the lesson page. Until a lesson has a video, students see “Video coming soon” — the page never pretends a video exists.
+          </p>
+          <LcVideoStorage lessonId={lessonId} video={video} onVideo={setVideo} />
+          <p className="text-xs text-[var(--a-text-faint)] mb-2">
+            Or, instead of storage, host the MP4 anywhere that serves it over https and paste its address here (a stored video always wins over a pasted address).
           </p>
           <div className="grid md:grid-cols-2 gap-3">
             <Field label="Video address (MP4)">

@@ -12,6 +12,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { seedCourseCatalog } from './course-catalog.seed';
+import { publicFactsFor } from './program-facts';
 import {
   buildPublicCatalog,
   lessonIdsNeedingHeading,
@@ -73,14 +74,19 @@ export class CoursesService implements OnModuleInit {
     });
   }
 
-  /** Admin — every course regardless of active state, with lesson counts. */
-  listAll() {
-    return this.prisma.course.findMany({
+  /** Admin — every course regardless of active state, with lesson counts and the program badges
+   *  (ages and level are the stored values; badges come from program-facts.ts). */
+  async listAll() {
+    const courses = await this.prisma.course.findMany({
       include: {
         _count: { select: { lessons: true, assignedStudents: true } },
       },
       orderBy: [{ category: 'asc' }, { title: 'asc' }],
     });
+    return courses.map((course) => ({
+      ...course,
+      ...publicFactsFor(course),
+    }));
   }
 
   /** Public — the whole default catalog (Odyssey + specialized paths) as the
@@ -181,12 +187,26 @@ export class CoursesService implements OnModuleInit {
   }
 
   create(dto: CreateCourseDto) {
+    this.assertAgeRange(dto.ageMin ?? 6, dto.ageMax ?? 18);
     return this.prisma.course.create({ data: dto });
   }
 
   async update(id: string, dto: Partial<CreateCourseDto>) {
-    await this.findById(id);
+    const existing = await this.findById(id);
+    this.assertAgeRange(
+      dto.ageMin ?? existing.ageMin,
+      dto.ageMax ?? existing.ageMax,
+    );
     return this.prisma.course.update({ where: { id }, data: dto });
+  }
+
+  /** The youngest age can never be above the oldest (the schema defaults are 6–18). */
+  private assertAgeRange(ageMin: number, ageMax: number) {
+    if (ageMin > ageMax) {
+      throw new BadRequestException(
+        'The youngest age cannot be higher than the oldest age.',
+      );
+    }
   }
 
   private async findById(id: string) {

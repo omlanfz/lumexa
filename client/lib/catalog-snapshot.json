@@ -5,7 +5,7 @@
       "title": "Lumexa Odyssey",
       "emoji": "🚀",
       "category": "Odyssey",
-      "ageMin": 12,
+      "ageMin": 6,
       "ageMax": 18,
       "kind": "odyssey",
       "totalLessons": 85,
@@ -1029,7 +1029,20 @@
           "type": "FINAL_TEST",
           "title": "Lumexa Odyssey — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Best choice for beginners",
+          "tone": "beginner"
+        },
+        {
+          "label": "Suitable for all ages",
+          "tone": "info"
+        }
+      ],
+      "audience": "Suitable for all ages — the best choice for beginners",
+      "prerequisite": null,
+      "mostPopular": false
     },
     {
       "slug": "little-coders",
@@ -1037,7 +1050,7 @@
       "emoji": "✦",
       "category": "Little Coders",
       "ageMin": 6,
-      "ageMax": 11,
+      "ageMax": 12,
       "kind": "specialized",
       "totalLessons": 46,
       "learningLessons": 40,
@@ -1321,15 +1334,28 @@
           "type": "FINAL_TEST",
           "title": "Little Coders — Final Assessment"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Complete beginner friendly",
+          "tone": "starter"
+        },
+        {
+          "label": "For first-time coders",
+          "tone": "beginner"
+        }
+      ],
+      "audience": "For first-time coders — complete beginners welcome",
+      "prerequisite": null,
+      "mostPopular": false
     },
     {
       "slug": "game-creator",
       "title": "Game Creator",
       "emoji": "🎮",
       "category": "Game Creator",
-      "ageMin": 10,
-      "ageMax": 18,
+      "ageMin": 6,
+      "ageMax": 12,
       "kind": "specialized",
       "totalLessons": 28,
       "learningLessons": 24,
@@ -1505,7 +1531,16 @@
           "type": "FINAL_TEST",
           "title": "Game Creator — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Beginner friendly",
+          "tone": "beginner"
+        }
+      ],
+      "audience": "Beginner friendly — no experience needed",
+      "prerequisite": null,
+      "mostPopular": false
     },
     {
       "slug": "web-developer",
@@ -1689,7 +1724,16 @@
           "type": "FINAL_TEST",
           "title": "Web Developer — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Beginner friendly",
+          "tone": "beginner"
+        }
+      ],
+      "audience": "Beginner friendly — start with your first web page",
+      "prerequisite": null,
+      "mostPopular": false
     },
     {
       "slug": "ai-builder",
@@ -1873,14 +1917,27 @@
           "type": "FINAL_TEST",
           "title": "AI Builder — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Most popular",
+          "tone": "popular"
+        },
+        {
+          "label": "Basic Python needed",
+          "tone": "prerequisite"
+        }
+      ],
+      "audience": "Our most popular program — for learners who already know basic Python",
+      "prerequisite": "Basic Python knowledge needed",
+      "mostPopular": true
     },
     {
       "slug": "data-scientist",
       "title": "Data Scientist",
       "emoji": "📊",
       "category": "Data Scientist",
-      "ageMin": 13,
+      "ageMin": 12,
       "ageMax": 18,
       "kind": "specialized",
       "totalLessons": 28,
@@ -2057,7 +2114,16 @@
           "type": "FINAL_TEST",
           "title": "Data Scientist — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Basic Python needed",
+          "tone": "prerequisite"
+        }
+      ],
+      "audience": "For learners who already know basic Python",
+      "prerequisite": "Basic Python knowledge needed",
+      "mostPopular": false
     },
     {
       "slug": "digital-independence",
@@ -2241,7 +2307,16 @@
           "type": "FINAL_TEST",
           "title": "Digital Independence — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Best after a few projects",
+          "tone": "info"
+        }
+      ],
+      "audience": "For teens ready to turn their skills into real opportunities",
+      "prerequisite": null,
+      "mostPopular": false
     },
     {
       "slug": "advanced-data-science",
@@ -2533,7 +2608,16 @@
           "type": "FINAL_TEST",
           "title": "Advanced Data Science — Final Test"
         }
-      ]
+      ],
+      "badges": [
+        {
+          "label": "Beginner friendly",
+          "tone": "beginner"
+        }
+      ],
+      "audience": "Beginner friendly — starts from scratch",
+      "prerequisite": null,
+      "mostPopular": false
     }
   ],
   "totals": {

@@ -1,4 +1,4 @@
-# Little Coders (ages 6–11)
+# Little Coders (ages 6–12)
 
 Little Coders is five **independent courses** of eight lessons each. Every course ends with its
 own assessment and the program closes with one final assessment:
@@ -69,10 +69,14 @@ Python examples, common mistakes and tips, the in-class project, the project car
 homework card with the existing **Submit Homework** workflow. Teacher notes, the video
 brief and project instructions are served only to staff (`/curriculum/lessons/:id/teacher-prep`).
 
-- **Preview video.** Metadata (title, duration, storyboard, narration script, poster, captions
-  and the video URL) is stored per lesson. The player shows a clear "coming soon" state until
-  an administrator pastes a real URL — no video is ever fabricated. Target: 60–100 s (max 120 s),
-  1920×1080 MP4, ~100–130 narration words.
+- **Preview video.** Each of the 40 lessons has a produced video (about 80 s, 1920×1080 MP4,
+  spoken narration, music, effects, burned-in and WebVTT subtitles, six scenes from hook to "your turn"),
+  made from the lesson spec by `server/prisma/lesson-videos/` (see its README). The MP4s are kept
+  **indefinitely in their own private R2 bucket** (`lumexa-lesson-videos`, settings `LESSON_VIDEO_R2_*`);
+  the lesson record stores only the content-addressed keys, and a signed link is made whenever a lesson
+  opens. The player has play/pause, a seek bar with scene markers, jump-to-scene buttons, volume, speed,
+  subtitles, fullscreen and keyboard shortcuts. A lesson without a stored video shows an honest
+  "Video coming soon". Setup, uploading and the admin tools: `docs/LESSON_VIDEOS_SETUP.md`.
 - **Project cards.** "Open Project" and "Copy Link" stay disabled while the project URL is
   empty. The "Start Coding" buttons open the platform editor (URLs live in `CodingPlatform`).
 - **Demos** are labelled practice simulations. The AI demos use no camera or microphone.
@@ -123,8 +127,9 @@ The same service works for any future program that registers a file profile
 
 ## What still needs a person
 
-- **Preview videos**: record the 40 videos from the briefs in each lesson's admin panel and paste
-  the hosted MP4 URL (plus poster / captions if you have them).
+- **Preview videos**: create the `lumexa-lesson-videos` bucket, set the `LESSON_VIDEO_R2_*` variables
+  and get the 40 finished MP4s into it (`docs/LESSON_VIDEOS_SETUP.md`). The videos are not in git;
+  `npm run lesson-videos:build` rebuilds them.
 - **Project URLs**: add each lesson's project link (and homework link) in the admin Little
   Coders panel. They are intentionally empty on a fresh install.
 - **Course 3 practical**: add the prepared model / starter URL in the admin assessment page.
@@ -136,7 +141,7 @@ The same service works for any future program that registers a file profile
 ```bash
 cd server
 npm run export:public-catalog                 # client/lib/catalog-snapshot.json (offline marketing fallback)
-npm run export:little-coders-curriculum-pdf   # the curriculum PDF families download and the certificate email attaches
+npm run export:curriculum-pdfs                # every curriculum PDF (Little Coders included) families download and the certificate email attaches
 ```
 
 ## Tests

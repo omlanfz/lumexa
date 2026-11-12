@@ -7,6 +7,7 @@ import { describeRange } from "@/lib/catalog";
 import { ODYSSEY, resolveProgramId, type ProgramKey, type ProgramMeta } from "@/lib/programs";
 import { usePrograms } from "@/lib/usePrograms";
 import Collapse from "@/components/Collapse";
+import ProgramBadges from "@/components/marketing/ProgramBadges";
 import {
   BATCH_PRICE_RATIO,
   FORMATS,
@@ -231,8 +232,13 @@ function PriceCard({
             <h3 className="font-black text-lg text-[#0F172A] dark:text-white leading-tight">{program.title}</h3>
             <p className="text-xs text-[#64748B] dark:text-gray-400">
               {program.ages}
-              {isOdyssey && " · Complete journey for beginners"}
+              {isOdyssey && " · Complete journey"}
             </p>
+            {program.badges.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                <ProgramBadges badges={program.badges} size="xs" />
+              </div>
+            )}
           </div>
         </div>
 

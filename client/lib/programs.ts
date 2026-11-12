@@ -12,7 +12,7 @@
 // still gets a card: a colour picked from its slug, a generic tagline, the
 // default price and no curriculum download.
 
-import type { CatalogCourse, Catalog } from "./catalog";
+import type { CatalogCourse, Catalog, ProgramBadge } from "./catalog";
 
 /** Short id used in links (?program=ai); the slug itself for programs not listed below. */
 export type ProgramKey = string;
@@ -28,7 +28,13 @@ export interface ProgramMeta {
   tagline: string;
   /** "Your child can build: …" on the homepage card. */
   builds: string;
-  beginner: { ok: boolean; text: string };
+  /** Badges next to the age range: "Beginner friendly", "Most popular", "Basic Python needed"… */
+  badges: ProgramBadge[];
+  /** One plain line on who the program is for. */
+  audience: string | null;
+  /** What a child should know first, or null when nothing is needed. */
+  prerequisite: string | null;
+  mostPopular: boolean;
   /** gradient used for icon tiles and primary buttons */
   color: string;
   border: string;
@@ -128,7 +134,6 @@ interface Preset {
   emoji: string;
   tagline: string;
   builds: string;
-  beginner: { ok: boolean; text: string };
   theme: ThemeName;
   curriculumFile: string | null;
   /** Private 1:1 price for every 8 lessons, in BDT. */
@@ -152,7 +157,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "🌟",
     tagline: "Learn Coding Through Play",
     builds: "Animated stories, arcade games, AI-powered projects and first Python programs.",
-    beginner: { ok: true, text: "A perfect first step" },
     theme: "amber",
     curriculumFile: "little-coders-path-curriculum.pdf",
     blockPrice: 5000,
@@ -164,7 +168,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "🎮",
     tagline: "Design, Code & Build Your Own Games",
     builds: "Roblox and Python games that friends can actually play.",
-    beginner: { ok: true, text: "Beginner-friendly" },
     theme: "red",
     curriculumFile: "game-creator-path-curriculum.pdf",
     blockPrice: 6000,
@@ -176,7 +179,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "🤖",
     tagline: "Explore AI & Build Intelligent Projects",
     builds: "Chatbots, image classifiers and other smart AI apps.",
-    beginner: { ok: true, text: "Starts from Python basics" },
     theme: "purple",
     curriculumFile: "ai-builder-path-curriculum.pdf",
     blockPrice: 7500,
@@ -188,7 +190,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "🌐",
     tagline: "Design, Build & Launch Real Websites",
     builds: "Live websites and web apps that anyone can visit.",
-    beginner: { ok: true, text: "Beginner-friendly" },
     theme: "blue",
     curriculumFile: "web-developer-path-curriculum.pdf",
     blockPrice: 7000,
@@ -200,7 +201,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "📊",
     tagline: "Turn Data Into Insights With Python",
     builds: "Charts, dashboards and models that predict from real data.",
-    beginner: { ok: false, text: "Some Python helps" },
     theme: "teal",
     curriculumFile: "data-scientist-path-curriculum.pdf",
     blockPrice: DATA_SCIENCE_BLOCK_PRICE,
@@ -212,7 +212,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "🧠",
     tagline: "Build 15+ Real AI & Data Science Projects",
     builds: "Arcade games, data dashboards and machine learning models you can deploy.",
-    beginner: { ok: true, text: "Beginner-friendly, starts from scratch" },
     theme: "indigo",
     curriculumFile: "advanced-data-science-curriculum.pdf",
     blockPrice: DATA_SCIENCE_BLOCK_PRICE,
@@ -224,7 +223,6 @@ const PRESETS: Record<string, Preset> = {
     emoji: "💼",
     tagline: "Build Your Digital Identity & Future",
     builds: "A professional portfolio, personal brand and service plan.",
-    beginner: { ok: false, text: "Best after a few projects" },
     theme: "green",
     curriculumFile: "digital-independence-path-curriculum.pdf",
     blockPrice: 6000,
@@ -279,7 +277,10 @@ export function programMetaFor(course: CatalogCourse): ProgramMeta {
     ages: agesOf(course),
     tagline: preset?.tagline ?? FALLBACK_TAGLINE,
     builds: preset?.builds ?? FALLBACK_BUILDS,
-    beginner: preset?.beginner ?? { ok: false, text: "Ask us if it fits your child" },
+    badges: course.badges ?? [],
+    audience: course.audience ?? null,
+    prerequisite: course.prerequisite ?? null,
+    mostPopular: course.mostPopular ?? false,
     ...theme,
     curriculumFile: preset ? preset.curriculumFile : null,
     blockPrice: preset?.blockPrice ?? DEFAULT_BLOCK_PRICE,
@@ -291,10 +292,17 @@ export const ODYSSEY: ProgramMeta = {
   catalogSlug: "lumexa-odyssey",
   emoji: "🚀",
   title: "Lumexa Odyssey",
-  ages: "Ages 12–18",
+  ages: "Ages 6–18",
   tagline: "Your child's complete coding journey",
   builds: "Games, websites, data projects and first AI apps while they explore, before choosing a specialty.",
-  beginner: { ok: true, text: "For complete beginners" },
+  // Until the catalog answers (these match the server's program facts; a test keeps them in step).
+  badges: [
+    { label: "Best choice for beginners", tone: "beginner" },
+    { label: "Suitable for all ages", tone: "info" },
+  ],
+  audience: "Suitable for all ages — the best choice for beginners",
+  prerequisite: null,
+  mostPopular: false,
   color: "from-indigo-600 via-purple-600 to-blue-600",
   border: "border-purple-300 dark:border-purple-700/40",
   badge: "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
@@ -318,6 +326,18 @@ export interface Programs {
  *  program appears the moment it is in the catalog, whatever its slug. */
 export function buildPrograms(catalog: Catalog): Programs {
   const odysseyCourse = catalog.courses.find((c) => c.kind === "odyssey");
+  // The flagship's age range and badges follow the catalog like every other program's.
+  const odysseyMeta: ProgramMeta = odysseyCourse
+    ? {
+        ...ODYSSEY,
+        catalogSlug: odysseyCourse.slug,
+        ages: agesOf(odysseyCourse),
+        badges: odysseyCourse.badges ?? ODYSSEY.badges,
+        audience: odysseyCourse.audience ?? ODYSSEY.audience,
+        prerequisite: odysseyCourse.prerequisite ?? ODYSSEY.prerequisite,
+        mostPopular: odysseyCourse.mostPopular ?? ODYSSEY.mostPopular,
+      }
+    : ODYSSEY;
   const specialized = catalog.courses
     .filter((c) => c.kind === "specialized")
     .map((course) => ({ meta: programMetaFor(course), course, preset: presetFor(course) }))
@@ -329,9 +349,9 @@ export function buildPrograms(catalog: Catalog): Programs {
     )
     .map(({ meta, course }) => ({ meta, course }));
   return {
-    odyssey: odysseyCourse ? { meta: { ...ODYSSEY, catalogSlug: odysseyCourse.slug }, course: odysseyCourse } : null,
+    odyssey: odysseyCourse ? { meta: odysseyMeta, course: odysseyCourse } : null,
     specialized,
-    all: [ODYSSEY, ...specialized.map((s) => s.meta)],
+    all: [odysseyMeta, ...specialized.map((s) => s.meta)],
   };
 }
 

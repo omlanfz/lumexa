@@ -20,6 +20,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   AssessmentFormat,
@@ -49,6 +50,7 @@ import { canonicalCourseSlug } from '../courses/course-slug';
 import { getBankSummary } from '../assessments/bank-summary';
 import { lcAssessmentMeta } from '../little-coders/assessments/lc-attempt';
 import { listPlatforms } from '../little-coders/lc.platforms';
+import { LessonVideosService } from '../little-coders/videos/lesson-videos.service';
 import {
   directoryOf,
   isLcLessonRow,
@@ -156,7 +158,17 @@ function dhakaDateStrOf(date: Date): string {
 
 @Injectable()
 export class CurriculumService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Optional so the many unit tests that build the service by hand keep working; the module provides it.
+    @Optional() private readonly videos?: LessonVideosService,
+  ) {}
+
+  /** Playable addresses of a Little Coders lesson's stored preview video (undefined for every other lesson). */
+  private async lcVideoUrls(row: { experience?: unknown; previewVideo?: unknown }) {
+    if (!isLcLessonRow(row) || !this.videos) return undefined;
+    return this.videos.resolveUrls(row.previewVideo);
+  }
 
   /** Where each coding platform button opens. Read only for a Little Coders lesson (every other
    *  lesson returns undefined without touching the database). */
@@ -241,6 +253,7 @@ export class CurriculumService {
           lesson.projectLinks,
         ),
         platforms: await this.lcPlatforms(lesson),
+        videoUrls: await this.lcVideoUrls(lesson),
       }),
       assessment: await this.describeAssessment(lesson.assessment),
       viewer: 'student' as Viewer,
@@ -389,6 +402,7 @@ export class CurriculumService {
         contentMarkdown: markdown,
         projectLinks: this.resolveProjectLinks(lesson.course.slug, lesson.order, lesson.projectLinks),
         platforms: await this.lcPlatforms(lesson),
+        videoUrls: await this.lcVideoUrls(lesson),
       }),
       assessment: await this.describeAssessment(lesson.assessment),
       viewer,
@@ -567,6 +581,7 @@ export class CurriculumService {
         contentMarkdown: markdown,
         projectLinks: this.resolveProjectLinks(sl.course.slug, lesson.order, lesson.projectLinks),
         platforms: await this.lcPlatforms(lesson),
+        videoUrls: await this.lcVideoUrls(lesson),
       }),
       assessment: await this.describeAssessment(lesson.assessment),
       // Homework hand-ins are each student's own. A batch class's lesson page
@@ -904,7 +919,7 @@ export class CurriculumService {
         })
       : { numbering: null, navigation: null, refs: {} };
     return {
-      lesson: buildSharedLesson(draft, { platforms: await this.lcPlatforms(draft) }),
+      lesson: buildSharedLesson(draft, { platforms: await this.lcPlatforms(draft), videoUrls: await this.lcVideoUrls(draft) }),
       teacherPrep: buildTeacherPrep(draft),
       ...context,
       validation: { errors: [...check.errors, ...lcErrors], warnings: check.warnings },

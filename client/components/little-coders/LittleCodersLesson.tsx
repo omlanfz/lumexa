@@ -2,7 +2,7 @@
 
 // FILE PATH: client/components/little-coders/LittleCodersLesson.tsx
 //
-// The body of a redesigned Little Coders lesson (ages 6–11): big ideas as tap cards, a live demo, real
+// The body of a redesigned Little Coders lesson (ages 6–12): big ideas as tap cards, a live demo, real
 // blocks, tips and common mistakes, a quick challenge, the in-class project and the homework — all drawn
 // from the lesson's stored, validated data. The section ids are the ones the lesson page tracks reading
 // against; the two interactive parts report back so a student's progress counts them.

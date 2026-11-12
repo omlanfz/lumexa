@@ -30,6 +30,7 @@ import type {
 } from './lc.types';
 import {
   publicVideo,
+  type ResolvedVideoUrls,
   validateExperience,
   validateHomeworkCard,
   validatePreviewVideo,
@@ -133,6 +134,7 @@ export function isLcLessonRow(row: LcRow): boolean {
 export function readLcShared(
   row: LcRow,
   directory: PlatformDirectory,
+  videoUrls?: ResolvedVideoUrls | null,
 ): LcSharedLesson | null {
   if (!isLcLessonRow(row)) return null;
   const experience = readExperience(row.experience);
@@ -142,7 +144,7 @@ export function readLcShared(
   const homework = readHomeworkCard(row.homeworkCard);
   return {
     experience,
-    previewVideo: video ? publicVideo(video) : null,
+    previewVideo: video ? publicVideo(video, videoUrls) : null,
     projectCard: card
       ? (() => {
           const { teacherInstructions: _staffOnly, platforms, ...rest } = card;
@@ -166,7 +168,7 @@ export function readLcTeacherPrep(row: LcRow): LcTeacherPrep | null {
   const card = readProjectCard(row.projectCard);
   return {
     videoBrief: video?.brief ?? null,
-    videoReady: !!video?.videoUrl,
+    videoReady: !!(video?.videoUrl || video?.stored),
     teacherInstructions: card?.teacherInstructions ?? '',
   };
 }

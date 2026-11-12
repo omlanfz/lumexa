@@ -21,6 +21,7 @@ import {
   type LcTeacherPrep,
   type PlatformDirectory,
 } from '../../little-coders/lc.public';
+import type { ResolvedVideoUrls } from '../../little-coders/lc.validate';
 
 export type Viewer = 'student' | 'teacher' | 'admin';
 
@@ -92,10 +93,12 @@ export function buildSharedLesson(
     projectLinks?: unknown;
     /** Where each coding platform button opens (Little Coders lessons only). */
     platforms?: PlatformDirectory;
+    /** Playable addresses of the lesson's stored preview video (Little Coders lessons only). */
+    videoUrls?: ResolvedVideoUrls | null;
   },
 ): SharedLesson {
   const questions = readQuiz(row.miniQuiz);
-  const littleCoders = readLcShared(row, opts.platforms ?? {});
+  const littleCoders = readLcShared(row, opts.platforms ?? {}, opts.videoUrls);
   return {
     id: row.id,
     title: row.title,

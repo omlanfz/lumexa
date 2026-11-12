@@ -71,7 +71,7 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
     slug: 'ai-builder',
     title: 'AI Builder',
     blurb:
-      'Go from a first line of Python to real machine learning, computer vision, and LLM applications.',
+      'Build on basic Python to create real machine learning, computer vision, and LLM applications.',
     pdfFile: 'ai-builder-path-curriculum.pdf',
   },
 };

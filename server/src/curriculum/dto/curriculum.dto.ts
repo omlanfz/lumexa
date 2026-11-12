@@ -274,3 +274,12 @@ export class UpdatePracticalQuestionDto {
   @IsOptional() spec?: Record<string, unknown>;
   @IsOptional() @IsIn(['SCRATCH_AI', 'PYTHON']) variantKey?: string;
 }
+
+/** Admin: the extra form fields of a preview video upload (the files travel as multipart parts). */
+export class UploadPreviewVideoDto {
+  /** JSON list of chapter markers, e.g. [{"label":"The question","start":0}] (optional). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  chapters?: string;
+}

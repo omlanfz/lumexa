@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Digit Classifier</title>
+<style>
+@font-face{font-family:'Inter';font-weight:500;src:url('../../../assets/certificate/fonts/inter-latin-500-normal.woff2')}
+@font-face{font-family:'Inter';font-weight:700;src:url('../../../assets/certificate/fonts/inter-latin-700-normal.woff2')}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1280px;height:800px;overflow:hidden;font-family:'Inter',Arial,sans-serif;background:#f3f0ff;color:#2a1d5c}
+.chrome{height:44px;background:#e3dcff;display:flex;align-items:center;gap:8px;padding:0 16px}
+.chrome i{width:12px;height:12px;border-radius:50%;background:#f87171}.chrome i:nth-child(2){background:#fbbf24}.chrome i:nth-child(3){background:#34d399}
+.chrome span{margin-left:14px;background:#fff;border-radius:8px;padding:5px 16px;font-size:13px;color:#6b5fa8;width:420px}
+.wrap{padding:26px 34px;display:grid;grid-template-columns:480px 1fr;gap:24px}
+h1{font-size:30px;margin-bottom:4px}.sub{color:#6b5fa8;font-size:15px;margin-bottom:18px}
+.card{background:#fff;border-radius:18px;padding:20px 22px;box-shadow:0 6px 18px -10px rgba(60,40,140,.4)}
+h3{font-size:16px;margin-bottom:12px;color:#4c3aa8}
+.bars{display:grid;gap:10px}.bar{display:grid;grid-template-columns:48px 1fr 56px;align-items:center;gap:10px;font-weight:700;font-size:15px}
+.bar span{height:20px;border-radius:10px;background:#e9e4ff;position:relative;overflow:hidden}.bar span i{position:absolute;left:0;top:0;bottom:0;border-radius:10px;background:linear-gradient(90deg,#7c3aed,#c084fc)}
+.code{background:#1e1b4b;color:#e0e7ff;border-radius:14px;padding:14px 16px;font:14px/1.6 'DejaVu Sans Mono',Menlo,monospace;white-space:pre}
+.code .k{color:#c4b5fd}.code .s{color:#86efac}.code .n{color:#fcd34d}
+.stat{display:flex;gap:12px;margin-top:14px}.stat div{flex:1;border-radius:14px;padding:12px 14px;color:#fff}.stat b{display:block;font-size:28px}.stat span{font-size:12px;opacity:.9}
+.cm{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;font-size:13px;font-weight:700;text-align:center}
+.cm div{border-radius:8px;padding:9px 0;color:#2a1d5c}
+</style></head><body>
+<div class="chrome"><i></i><i></i><i></i><span>localhost:8888 — Digit Classifier</span></div>
+<div class="wrap">
+ <div><h1>Handwritten Digit Classifier</h1><div class="sub">A model that learned from 1,797 labelled images</div>
+  <div class="card"><h3>The image the model sees (8 × 8 pixels)</h3>
+   <svg viewBox="0 0 240 240" width="240" height="240" style="display:block;margin:0 auto;border-radius:12px;background:#0f0b2e">
+    <g fill="#f5f3ff">
+     <rect x="30" y="30" width="30" height="30" opacity=".9"/><rect x="60" y="30" width="30" height="30"/><rect x="90" y="30" width="30" height="30"/><rect x="120" y="30" width="30" height="30"/><rect x="150" y="30" width="30" height="30" opacity=".85"/>
+     <rect x="150" y="60" width="30" height="30" opacity=".95"/><rect x="120" y="90" width="30" height="30"/><rect x="120" y="120" width="30" height="30" opacity=".9"/><rect x="90" y="150" width="30" height="30"/><rect x="90" y="180" width="30" height="30" opacity=".8"/></g>
+    <g stroke="#2b2466" stroke-width="1"><path d="M0 30H240M0 60H240M0 90H240M0 120H240M0 150H240M0 180H240M0 210H240M30 0V240M60 0V240M90 0V240M120 0V240M150 0V240M180 0V240M210 0V240"/></g></svg>
+   <div style="text-align:center;margin-top:12px;font-size:15px;color:#6b5fa8">true label: <b style="color:#2a1d5c">7</b></div></div>
+  <div class="card" style="margin-top:16px"><div class="code"><span class="k">from</span> sklearn <span class="k">import</span> datasets, svm
+digits = datasets.load_digits()
+clf = svm.SVC(gamma=<span class="n">0.001</span>).fit(X_train, y_train)
+<span class="k">print</span>(clf.predict([image]))   <span style="color:#86efac"># [7]</span></div></div>
+ </div>
+ <div><div class="card"><h3>What does the model think it is?</h3>
+  <div style="display:flex;align-items:center;gap:20px;margin-bottom:14px"><div style="font-size:92px;font-weight:700;line-height:1;color:#7c3aed">7</div><div><div style="font-size:14px;color:#6b5fa8">prediction</div><div style="font-size:26px;font-weight:700">94% sure</div></div></div>
+  <div class="bars">
+   <div class="bar">7<span><i style="width:94%"></i></span>94%</div><div class="bar">1<span><i style="width:3%;background:#c4b5fd"></i></span>3%</div>
+   <div class="bar">9<span><i style="width:2%;background:#c4b5fd"></i></span>2%</div><div class="bar">2<span><i style="width:1%;background:#c4b5fd"></i></span>1%</div></div></div>
+  <div class="card" style="margin-top:16px"><h3>How well does it do on images it has never seen?</h3>
+   <div class="stat"><div style="background:linear-gradient(135deg,#7c3aed,#a78bfa)"><b>97.2%</b><span>accuracy on test images</span></div><div style="background:linear-gradient(135deg,#0ea5e9,#38bdf8)"><b>360</b><span>test images</span></div><div style="background:linear-gradient(135deg,#f59e0b,#fbbf24)"><b>10</b><span>classes (0–9)</span></div></div>
+   <div style="margin:14px 0 8px;font-size:13px;color:#6b5fa8;font-weight:700">Confusion matrix (digits 5–9): the diagonal is what it got right</div>
+   <div class="cm">
+    <div style="background:#6d28d9;color:#fff">34</div><div style="background:#f1ecff">0</div><div style="background:#f1ecff">1</div><div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div>
+    <div style="background:#f1ecff">0</div><div style="background:#6d28d9;color:#fff">36</div><div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div><div style="background:#e4dcff">1</div>
+    <div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div><div style="background:#6d28d9;color:#fff">35</div><div style="background:#e4dcff">1</div><div style="background:#f1ecff">0</div>
+    <div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div><div style="background:#6d28d9;color:#fff">36</div><div style="background:#f1ecff">0</div>
+    <div style="background:#e4dcff">1</div><div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div><div style="background:#f1ecff">0</div><div style="background:#6d28d9;color:#fff">35</div></div></div></div>
+</div></body></html>

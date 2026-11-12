@@ -14,6 +14,14 @@ import snapshot from "./catalog-snapshot.json";
 
 export type LessonType = "LEARNING" | "COURSE_TEST" | "STAGE_TEST" | "FINAL_TEST";
 
+/** How a program badge is drawn: green sprout, amber star, "know this first", or a neutral note. */
+export type ProgramBadgeTone = "starter" | "beginner" | "popular" | "prerequisite" | "info";
+
+export interface ProgramBadge {
+  label: string;
+  tone: ProgramBadgeTone;
+}
+
 export interface CatalogLesson {
   order: number;
   title: string;
@@ -52,6 +60,13 @@ export interface CatalogCourse {
   modules: CatalogModule[];
   stages: CatalogStage[];
   closingAssessments: CatalogLesson[];
+  /** Badges shown next to the age range (maintained on the server, see program-facts.ts). */
+  badges?: ProgramBadge[];
+  /** One plain line on who the program is for. */
+  audience?: string | null;
+  /** What a child should know first, or null when nothing is needed. */
+  prerequisite?: string | null;
+  mostPopular?: boolean;
 }
 
 export interface Catalog {
@@ -60,6 +75,33 @@ export interface Catalog {
 }
 
 export const FALLBACK_CATALOG = snapshot as unknown as Catalog;
+
+/** "ai-builder-path" -> "ai-builder": the retired suffix is ignored. */
+const baseSlug = (slug: string) => slug.replace(/-path$/, "");
+
+/**
+ * An API that predates the program facts (ages notes, badges, prerequisites) answers without
+ * them; borrow each course's facts from the bundled snapshot so the badges never disappear
+ * while the two are deployed a few minutes apart.
+ */
+export function mergeProgramFacts(live: Catalog, fallback: Catalog): Catalog {
+  const bySlug = new Map(fallback.courses.map((c) => [baseSlug(c.slug), c]));
+  return {
+    ...live,
+    courses: live.courses.map((course) => {
+      if (course.badges) return course;
+      const known = bySlug.get(baseSlug(course.slug));
+      if (!known) return course;
+      return {
+        ...course,
+        badges: known.badges ?? [],
+        audience: known.audience ?? null,
+        prerequisite: known.prerequisite ?? null,
+        mostPopular: known.mostPopular ?? false,
+      };
+    }),
+  };
+}
 
 export function findCourse(catalog: Catalog, slug: string): CatalogCourse | undefined {
   return catalog.courses.find((c) => c.slug === slug);
@@ -95,7 +137,7 @@ async function fetchCatalog(): Promise<Catalog | null> {
     const res = await fetch(`${base}/courses/catalog`, { headers: { Accept: "application/json" } });
     if (!res.ok) return null;
     const data: unknown = await res.json();
-    return isCatalog(data) ? data : null;
+    return isCatalog(data) ? mergeProgramFacts(data, FALLBACK_CATALOG) : null;
   } catch {
     return null;
   }

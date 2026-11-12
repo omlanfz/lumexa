@@ -16,9 +16,7 @@ import {
 } from "@/lib/programs";
 import { usePrograms } from "@/lib/usePrograms";
 import Collapse from "@/components/Collapse";
-
-// Shown on the card of the program most families start with.
-const MOST_POPULAR: ProgramId = "ai";
+import ProgramBadges from "@/components/marketing/ProgramBadges";
 
 function DownloadIcon({ className }: { className?: string }) {
   return (
@@ -43,7 +41,7 @@ const isAssessment = (title: string) => /\bassessment\b/i.test(title);
 
 // ── Odyssey: a simple overview of its stages, no lesson-by-lesson detail ────
 
-function OdysseySection({ course }: { course: CatalogCourse }) {
+function OdysseySection({ course, meta }: { course: CatalogCourse; meta: ProgramMeta }) {
   const finalTests = course.closingAssessments.length;
   return (
     <div id="program-odyssey" className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 scroll-mt-24">
@@ -57,10 +55,8 @@ function OdysseySection({ course }: { course: CatalogCourse }) {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">{ODYSSEY.title}</h2>
-                <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${ODYSSEY.badge}`}>{ODYSSEY.ages}</span>
-                <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
-                  For complete beginners
-                </span>
+                <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${meta.badge}`}>{meta.ages}</span>
+                <ProgramBadges badges={meta.badges} />
               </div>
               <p className="font-bold text-sm bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text text-transparent mb-1">
                 {ODYSSEY.tagline}
@@ -172,16 +168,7 @@ function ProgramCard({
           <h3 className="text-[#0F172A] dark:text-white font-black text-xl leading-tight">{program.title}</h3>
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${program.badge}`}>{program.ages}</span>
-            {program.beginner.ok && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-                🌱 Beginner-friendly
-              </span>
-            )}
-            {program.id === MOST_POPULAR && (
-              <span className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
-                Most Popular
-              </span>
-            )}
+            <ProgramBadges badges={program.badges} />
           </div>
         </div>
       </div>
@@ -412,7 +399,15 @@ function ProgramDetail({
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
-function JourneyChoice({ specialized, odyssey }: { specialized: ProgramEntry[]; odyssey: CatalogCourse | undefined }) {
+function JourneyChoice({
+  specialized,
+  odyssey,
+  odysseyMeta,
+}: {
+  specialized: ProgramEntry[];
+  odyssey: CatalogCourse | undefined;
+  odysseyMeta: ProgramMeta;
+}) {
   const lessons = describeRange(specialized.map((s) => s.course.totalLessons));
   const courses = describeRange(specialized.map((s) => s.course.modules.length));
 
@@ -442,7 +437,7 @@ function JourneyChoice({ specialized, odyssey }: { specialized: ProgramEntry[]; 
             <p className="text-xs font-semibold text-[#64748B] dark:text-gray-400 mb-1">
               {odyssey.totalLessons} lessons · {plural(odyssey.modules.length, "course")} · {plural(odyssey.stages.length, "stage")}
             </p>
-            <p className="text-xs text-[#64748B] dark:text-gray-400 mb-5">{ODYSSEY.ages} · No experience needed</p>
+            <p className="text-xs text-[#64748B] dark:text-gray-400 mb-5">{odysseyMeta.ages} · {odysseyMeta.audience ?? "No experience needed"}</p>
             <span className="mt-auto text-sm font-black text-purple-600 dark:text-purple-400 group-hover:translate-x-1 transition-transform">
               See the {odyssey.stages.length || 3} stages ↓
             </span>
@@ -559,12 +554,12 @@ function ProgramsContent() {
       </section>
 
       {/* The parent decision comes first */}
-      <JourneyChoice specialized={visible} odyssey={odyssey} />
+      <JourneyChoice specialized={visible} odyssey={odyssey} odysseyMeta={odysseyEntry?.meta ?? ODYSSEY} />
 
       {/* Odyssey */}
       {odyssey && (
         <div className="pb-16">
-          <OdysseySection course={odyssey} />
+          <OdysseySection course={odyssey} meta={odysseyEntry?.meta ?? ODYSSEY} />
         </div>
       )}
 
