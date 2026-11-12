@@ -25,11 +25,17 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { isLessonVideoKey, kindOfKey, CONTENT_TYPE } from './video-keys';
+import {
+  isLessonVideoKey,
+  kindOfKey,
+  CONTENT_TYPE,
+  LESSON_VIDEO_KEY_ROOT,
+} from './video-keys';
 
 /** How long a signed link to a lesson video stays good. Long enough to watch it, rewind and finish the lesson. */
 export const LESSON_VIDEO_URL_TTL_SECONDS = 6 * 60 * 60;
@@ -60,6 +66,12 @@ export interface LessonVideoStorage {
   headObject(key: string): Promise<{ sizeBytes: number } | null>;
   /** A playable address for a stored object (public, or signed). */
   urlFor(key: string): Promise<string>;
+  /** The lesson-video objects under a prefix (read-only). */
+  listObjects(
+    prefix: string,
+  ): Promise<{ key: string; sizeBytes: number; lastModified: Date | null }[]>;
+  /** The bytes of a small stored object (a description file — never a video); null when there is none. */
+  getSmallObject(key: string, maxBytes?: number): Promise<Buffer | null>;
   /** Where the videos are kept and how they reach students, for the admin page (null when not set up). */
   describe(): { bucket: string; delivery: 'signed' | 'public' } | null;
 }
@@ -224,6 +236,67 @@ export class LessonVideoStorageService
       }),
       { expiresIn: LESSON_VIDEO_URL_TTL_SECONDS },
     );
+  }
+
+  async listObjects(
+    prefix: string,
+  ): Promise<{ key: string; sizeBytes: number; lastModified: Date | null }[]> {
+    if (!prefix.startsWith(LESSON_VIDEO_KEY_ROOT) || prefix.includes('..'))
+      throw new LessonVideoStorageError(
+        `"${prefix}" is not a lesson video prefix.`,
+        'InvalidKey',
+      );
+    const found: {
+      key: string;
+      sizeBytes: number;
+      lastModified: Date | null;
+    }[] = [];
+    let token: string | undefined;
+    try {
+      do {
+        const page = await this.s3().send(
+          new ListObjectsV2Command({
+            Bucket: this.bucket(),
+            Prefix: prefix,
+            ContinuationToken: token,
+          }),
+        );
+        for (const o of page.Contents ?? []) {
+          if (o.Key && isLessonVideoKey(o.Key))
+            found.push({
+              key: o.Key,
+              sizeBytes: Number(o.Size ?? 0),
+              lastModified: o.LastModified ?? null,
+            });
+        }
+        token = page.IsTruncated ? page.NextContinuationToken : undefined;
+      } while (token);
+    } catch (err) {
+      throw toStorageError(err);
+    }
+    return found;
+  }
+
+  async getSmallObject(
+    key: string,
+    maxBytes = 64 * 1024,
+  ): Promise<Buffer | null> {
+    this.assertKey(key);
+    try {
+      const res = await this.s3().send(
+        new GetObjectCommand({ Bucket: this.bucket(), Key: key }),
+      );
+      if (Number(res.ContentLength ?? 0) > maxBytes)
+        throw new LessonVideoStorageError(
+          `"${key}" is larger than ${maxBytes} bytes.`,
+          'TooLarge',
+        );
+      const bytes = await res.Body?.transformToByteArray();
+      return bytes ? Buffer.from(bytes) : null;
+    } catch (err) {
+      if (isNotFound(err)) return null;
+      throw toStorageError(err);
+    }
   }
 
   private assertKey(key: string): void {

@@ -12,7 +12,7 @@ specs in `src/little-coders/curriculum/`, following the Lumexa lesson-preview vi
 | Music / effects | soft background music and a few purposeful sound effects, mixed under the narrator |
 | Structure | six scenes: **Hook · Meet the concept · Explore & understand · See it in action · Remember this · Your turn!** |
 | Host | "Pixel", the Little Coders robot; the Lumexa mark on every scene and an end card |
-| Output | `<lesson>/preview.mp4`, `poster.jpg`, `captions.vtt`, `info.json` and a `manifest.json` |
+| Output | `<lesson>/preview.mp4`, `poster.jpg`, `captions.vtt`, `info.json` and a `manifest.json` (all in `.lesson-videos/`) |
 
 The videos teach nothing the lesson does not — they *introduce, explain simply and motivate*; the lesson page
 holds the full lesson.
@@ -65,7 +65,6 @@ npm run lesson-videos:build -- --workers 2           # how many videos are drawn
 
 npm run lesson-videos:preview -- --lesson c1l1 --voice <dir> --out <dir>   # a few still frames, no encoding
 
-npm run lesson-videos:manifest                       # (re)writes src/little-coders/videos/published-videos.ts
 npm run lesson-videos:upload                         # puts the videos in the R2 bucket and shows them (see below)
 ```
 
@@ -77,14 +76,15 @@ narration — and reports anything outside it.
 
 ## After a (re)build
 
-1. `npm run lesson-videos:manifest` and commit the updated `src/little-coders/videos/published-videos.ts`
-   (a rebuilt video has a new SHA-256, hence a new name in the bucket).
-2. `npm run lesson-videos:upload` — see `docs/LESSON_VIDEOS_SETUP.md` for the bucket, token and options.
+`npm run lesson-videos:upload` — see `docs/LESSON_VIDEOS_SETUP.md` for the bucket, the token and the options.
+Besides each video, poster and subtitle file it stores a small description (`<hash>.json`: size, length, chapters).
+The server finds videos in the bucket from those descriptions, so nothing has to be committed and no database
+access is needed (`--no-db`); a rebuilt video simply gets a new name and the newest description of a lesson wins.
 
 ## Changing a lesson's video
 
 The script, scenes, on-screen text, demonstration and challenge of a lesson all come from its spec in
 `src/little-coders/curriculum/course<N>.ts` (`video`, `concepts`, `examples`, `demo`, `tips`, `challenge`).
-Edit the spec, rebuild just that lesson (`--lesson c2l3 --force`), regenerate the manifest, upload.
+Edit the spec, rebuild just that lesson (`--lesson c2l3 --force`), upload (`--replace` to swap a video the lesson already shows).
 
 Narration is cached per sentence in `.lesson-videos/voice/`; a changed sentence is re-spoken, the rest reused.

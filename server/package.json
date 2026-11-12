@@ -26,7 +26,6 @@
     "lesson-videos:build": "ts-node -r tsconfig-paths/register prisma/lesson-videos/build.ts",
     "lesson-videos:preview": "ts-node -r tsconfig-paths/register prisma/lesson-videos/preview.ts",
     "lesson-videos:upload": "ts-node -r tsconfig-paths/register prisma/lesson-videos/upload.ts",
-    "lesson-videos:manifest": "ts-node -r tsconfig-paths/register prisma/lesson-videos/manifest.ts",
     "verify:banks": "ts-node -r tsconfig-paths/register prisma/verify-banks.ts",
     "report:lesson-content": "ts-node -r tsconfig-paths/register prisma/lesson-content-report.ts"
   },

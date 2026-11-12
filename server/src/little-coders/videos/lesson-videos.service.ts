@@ -35,13 +35,14 @@ import {
   type LessonVideoStorage,
 } from './lesson-video-storage.service';
 import { looksLikeJpeg, looksLikeMp4, looksLikeWebVtt, probeMp4 } from './mp4';
-import type { PublishedVideo } from './published-video';
-import { PUBLISHED_LESSON_VIDEOS } from './published-videos';
+import { parsePublishedVideo, type PublishedVideo } from './published-video';
 import {
   CONTENT_TYPE,
+  LESSON_VIDEO_KEY_ROOT,
   MAX_CAPTIONS_BYTES,
   MAX_POSTER_BYTES,
   MAX_VIDEO_BYTES,
+  kindOfKey,
   lessonVideoKey,
 } from './video-keys';
 
@@ -127,7 +128,7 @@ export interface LessonVideoStatus {
   lessons: number;
   /** … of which show a video kept in the bucket. */
   withVideo: number;
-  /** Finished videos the release knows about (they are switched on once they are in the bucket). */
+  /** Lessons the bucket holds a video description for (they are switched on once their video is there). */
   published: number;
 }
 
@@ -321,13 +322,72 @@ export class LessonVideosService implements OnApplicationBootstrap {
   }
 
   /**
-   * Switches on the finished videos (published-videos.ts) that are already in the bucket: each listed video
-   * is looked for under its content-addressed key and, when found, recorded on its lesson. It never
-   * replaces a video a lesson already has (an admin's own upload wins) and never writes to the bucket.
-   * Safe to run again and again.
+   * The videos the bucket describes: beside every lesson video the upload tool stores a small description
+   * (lesson-videos/little-coders/<lesson>/<video hash>.json). This reads the newest description of each
+   * lesson; one that is not valid, or does not belong to its lesson and video, is ignored.
+   */
+  async discoverPublished(): Promise<PublishedVideo[]> {
+    const objects = await this.storage.listObjects(
+      `${LESSON_VIDEO_KEY_ROOT}${LC_VIDEO_PROGRAM_KEY}/`,
+    );
+    const newest = new Map<string, { key: string; at: number }>();
+    for (const o of objects) {
+      if (kindOfKey(o.key) !== 'info') continue;
+      const lesson = o.key.split('/')[2];
+      const at = o.lastModified?.getTime() ?? 0;
+      const seen = newest.get(lesson);
+      if (!seen || at >= seen.at) newest.set(lesson, { key: o.key, at });
+    }
+    const found: PublishedVideo[] = [];
+    for (const [lesson, { key }] of newest) {
+      let entry: PublishedVideo | null = null;
+      try {
+        const raw = await this.storage.getSmallObject(key);
+        entry = raw
+          ? parsePublishedVideo(JSON.parse(raw.toString('utf8')))
+          : null;
+      } catch {
+        entry = null;
+      }
+      if (
+        !entry ||
+        entry.lesson !== lesson ||
+        !key.endsWith(`/${entry.sha256.slice(0, 12)}.json`)
+      ) {
+        this.logger.warn(
+          `Ignoring a lesson video description that is not valid: ${key}`,
+        );
+        continue;
+      }
+      found.push(entry);
+    }
+    return found.sort((a, b) => a.lesson.localeCompare(b.lesson));
+  }
+
+  /** How many lessons the bucket has a video description for (a listing only — nothing is read). */
+  private async countDescribed(): Promise<number> {
+    if (!this.storage.isConfigured()) return 0;
+    try {
+      const objects = await this.storage.listObjects(
+        `${LESSON_VIDEO_KEY_ROOT}${LC_VIDEO_PROGRAM_KEY}/`,
+      );
+      return new Set(
+        objects
+          .filter((o) => kindOfKey(o.key) === 'info')
+          .map((o) => o.key.split('/')[2]),
+      ).size;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
+   * Switches on the videos the bucket describes (or the `entries` given): each is looked for under its
+   * content-addressed key and, when found, recorded on its lesson. It never replaces a video a lesson
+   * already has (an admin's own upload wins) and never writes to the bucket. Safe to run again and again.
    */
   async attachPublished(
-    entries: readonly PublishedVideo[] = PUBLISHED_LESSON_VIDEOS,
+    entries?: readonly PublishedVideo[],
   ): Promise<AttachReport> {
     const report: AttachReport = {
       attached: [],
@@ -341,6 +401,14 @@ export class LessonVideosService implements OnApplicationBootstrap {
       report.storageProblem = problem;
       return report;
     }
+    let list: readonly PublishedVideo[];
+    try {
+      list = entries ?? (await this.discoverPublished());
+    } catch (err) {
+      report.storageProblem = (err as Error).message;
+      return report;
+    }
+    entries = list;
     const course = await this.prisma.course.findFirst({
       where: {
         isCustom: false,
@@ -468,13 +536,15 @@ export class LessonVideosService implements OnApplicationBootstrap {
       storage: this.storage.describe(),
       lessons: lessons.length,
       withVideo,
-      published: PUBLISHED_LESSON_VIDEOS.length,
+      published: await this.countDescribed(),
     };
   }
 
   /** At start-up: switch on whatever is already in the bucket. Never slows or stops the boot. */
   onApplicationBootstrap(): void {
     if (process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID) return;
+    // Storage not set up: the storage service already says so once at start-up, so stay quiet here.
+    if (!this.storage.isConfigured()) return;
     void this.attachPublished()
       .then((r) => {
         if (r.storageProblem) {

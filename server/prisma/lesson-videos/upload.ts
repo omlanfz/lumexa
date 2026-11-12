@@ -7,8 +7,8 @@
  *   npm run lesson-videos:upload -- --lesson c1l1,c2l3 only these
  *   npm run lesson-videos:upload -- --dir <folder>     read the built videos from <folder> (default server/.lesson-videos)
  *   npm run lesson-videos:upload -- --dry-run          check the files and say what would happen; touch nothing
- *   npm run lesson-videos:upload -- --no-db            only put the files in the bucket (the server shows them
- *                                                      on its next start, or press "Check storage" in the admin editor)
+ *   npm run lesson-videos:upload -- --no-db            only put the files in the bucket (no database needed): the server finds
+ *                                                      them there on its next start, or press "Check storage" in the admin editor
  *   npm run lesson-videos:upload -- --replace          also replace a video a lesson already has (default: keep it)
  *   npm run lesson-videos:upload -- --stage <folder>   no network, no database: write the files into <folder> with
  *                                                      the exact names the bucket needs, to copy over with rclone /
@@ -22,6 +22,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { LC_LESSON_SPECS } from '../../src/little-coders/curriculum';
 import { PrismaService } from '../../src/prisma.service';
+import type { PublishedVideo } from '../../src/little-coders/videos/published-video';
 import {
   LC_VIDEO_PROGRAM_KEY,
   LessonVideosService,
@@ -135,6 +136,30 @@ function readBuilt(key: string, problems: string[]): Built | null {
   };
 }
 
+/**
+ * The small description stored beside a video (lesson-videos/little-coders/<lesson>/<video hash>.json):
+ * it is how the server finds the video in the bucket and learns its size, length and chapters.
+ */
+function describeBuilt(b: Built): { key: string; json: Buffer } {
+  const info = probeMp4(b.video);
+  if (!info) throw new Error(`${b.key}: preview.mp4 is not a readable MP4.`);
+  const entry: PublishedVideo = {
+    lesson: b.key,
+    sha256: b.sha256,
+    bytes: b.video.length,
+    width: info.width,
+    height: info.height,
+    durationSeconds: Math.round(info.duration * 10) / 10,
+    posterSha256: b.posterSha256,
+    captionsSha256: b.captionsSha256,
+    chapters: b.chapters,
+  };
+  return {
+    key: lessonVideoKey(LC_VIDEO_PROGRAM_KEY, b.key, 'info', b.sha256),
+    json: Buffer.from(`${JSON.stringify(entry, null, 2)}\n`),
+  };
+}
+
 /** Copies the files into <stage>/lesson-videos/little-coders/<lesson>/<hash>.<ext> — the bucket's own layout. */
 function stage(built: Built[], target: string): void {
   let files = 0;
@@ -156,6 +181,11 @@ function stage(built: Built[], target: string): void {
     put('video', b.video, b.sha256);
     put('poster', b.poster, b.posterSha256);
     put('captions', b.captions, b.captionsSha256);
+    const info = describeBuilt(b);
+    const dest = path.join(target, info.key);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, info.json);
+    files++;
   }
   console.log(
     `\nWrote ${files} file(s) for ${built.length} lesson(s) into ${target}/lesson-videos/`,
@@ -241,6 +271,9 @@ async function main() {
         if (head && head.sizeBytes === body.length) continue;
         await storage.putObject(key, body, CONTENT_TYPE[kind]);
       }
+      // The description goes last: the server only announces a video once everything it needs is there.
+      const info = describeBuilt(b);
+      await storage.putObject(info.key, info.json, CONTENT_TYPE.info);
       console.log(`  ${b.key}: in the bucket`);
     }
     console.log(
@@ -278,6 +311,9 @@ async function main() {
       }
       const current = validatePreviewVideo(lesson.previewVideo).value?.stored;
       if (current?.sha256 === b.sha256) {
+        // Same video: make sure its description is in the bucket too, then move on.
+        const info = describeBuilt(b);
+        await storage.putObject(info.key, info.json, CONTENT_TYPE.info);
         console.log(`  ${b.key}: already uploaded`);
         continue;
       }
@@ -297,6 +333,8 @@ async function main() {
           },
           { chapters: JSON.stringify(b.chapters) },
         );
+        const info = describeBuilt(b);
+        await storage.putObject(info.key, info.json, CONTENT_TYPE.info);
         uploaded++;
         console.log(
           `  ${b.key}: uploaded and shown on its lesson (${(b.video.length / 1048576).toFixed(1)} MB)`,

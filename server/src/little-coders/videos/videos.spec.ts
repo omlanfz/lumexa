@@ -3,6 +3,7 @@
 
 import {
   BadRequestException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -21,8 +22,7 @@ import {
   orderOfLessonKey,
   parseChapters,
 } from './lesson-videos.service';
-import type { PublishedVideo } from './published-video';
-import { PUBLISHED_LESSON_VIDEOS } from './published-videos';
+import { parsePublishedVideo, type PublishedVideo } from './published-video';
 import { looksLikeJpeg, looksLikeMp4, looksLikeWebVtt, probeMp4 } from './mp4';
 import {
   lessonKey,
@@ -706,68 +706,63 @@ describe('a stored video on a lesson record', () => {
 
 const sha = (c: string) => c.repeat(64);
 
-describe('the list of finished videos', () => {
-  it('has exactly one video for each of the 40 lessons, as the standard describes them', () => {
-    expect(PUBLISHED_LESSON_VIDEOS.map((v) => v.lesson)).toEqual(
-      LC_LESSON_SPECS.map(lessonKey),
-    );
-    for (const v of PUBLISHED_LESSON_VIDEOS) {
-      expect(v.sha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(v.posterSha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(v.captionsSha256).toMatch(/^[a-f0-9]{64}$/);
-      expect([v.width, v.height]).toEqual([1920, 1080]);
-      expect(v.durationSeconds).toBeGreaterThanOrEqual(TARGET_MIN_SECONDS);
-      expect(v.durationSeconds).toBeLessThanOrEqual(TARGET_MAX_SECONDS);
-      expect(v.bytes).toBeGreaterThan(1_000_000);
-      expect(v.bytes).toBeLessThanOrEqual(MAX_VIDEO_BYTES);
-      expect(v.chapters).toHaveLength(6);
-      expect(v.chapters[0].start).toBe(0);
-      // the first chapter starts at 0 and they only move forward, inside the video
-      v.chapters.forEach((c, i) => {
-        expect(c.label.length).toBeGreaterThan(0);
-        if (i > 0) expect(c.start).toBeGreaterThan(v.chapters[i - 1].start);
-        expect(c.start).toBeLessThan(v.durationSeconds);
-      });
-    }
-    // every video is different, so every key is different
-    expect(new Set(PUBLISHED_LESSON_VIDEOS.map((v) => v.sha256)).size).toBe(40);
+describe('the description stored beside a video', () => {
+  it('is read back exactly, with the lengths tidied', () => {
+    const e = entry('c2l3', 12_345_678, {
+      durationSeconds: 80.34,
+      chapters: [
+        { label: ' The question ', start: 0 },
+        { label: 'Your turn', start: 69.26 },
+      ],
+    });
+    expect(parsePublishedVideo(JSON.parse(JSON.stringify(e)))).toEqual({
+      ...e,
+      durationSeconds: 80.3,
+      chapters: [
+        { label: 'The question', start: 0 },
+        { label: 'Your turn', start: 69.3 },
+      ],
+    });
+    // a video without a poster or subtitles is fine
+    expect(
+      parsePublishedVideo({
+        ...entry('c1l1', 1000),
+        posterSha256: null,
+        captionsSha256: undefined,
+        chapters: undefined,
+      }),
+    ).toMatchObject({ posterSha256: null, captionsSha256: null, chapters: [] });
   });
 
-  it('is valid as the stored part of a lesson record', () => {
-    for (const v of PUBLISHED_LESSON_VIDEOS) {
-      const base = JSON.parse(
-        JSON.stringify(
-          lcPatchFor(Number(v.lesson[1]), Number(v.lesson[3])).previewVideo,
-        ),
-      ) as Record<string, unknown>;
-      const stored = {
-        videoKey: lessonVideoKey('little-coders', v.lesson, 'video', v.sha256),
-        posterKey: lessonVideoKey(
-          'little-coders',
-          v.lesson,
-          'poster',
-          v.posterSha256 as string,
-        ),
-        captionsKey: lessonVideoKey(
-          'little-coders',
-          v.lesson,
-          'captions',
-          v.captionsSha256 as string,
-        ),
-        bytes: v.bytes,
-        sha256: v.sha256,
-        width: v.width,
-        height: v.height,
-        chapters: v.chapters,
-        uploadedAt: '2026-11-12T00:00:00.000Z',
-      };
-      expect(
-        validatePreviewVideo({
-          ...base,
-          durationSeconds: v.durationSeconds,
-          stored,
-        }).errors,
-      ).toEqual([]);
+  it('is refused when anything is off — it is then simply ignored', () => {
+    const good = entry('c1l1', 1000);
+    for (const bad of [
+      null,
+      'text',
+      42,
+      { ...good, lesson: 'c6l1' },
+      { ...good, lesson: 'x' },
+      { ...good, sha256: 'abc' },
+      { ...good, bytes: 0 },
+      { ...good, bytes: MAX_VIDEO_BYTES + 1 },
+      { ...good, bytes: 1.5 },
+      { ...good, width: 100 },
+      { ...good, height: 99999 },
+      { ...good, durationSeconds: 0 },
+      { ...good, durationSeconds: 500 },
+      { ...good, posterSha256: 'nope' },
+      { ...good, chapters: 'none' },
+      {
+        ...good,
+        chapters: Array.from({ length: 9 }, (_, i) => ({
+          label: `c${i}`,
+          start: i,
+        })),
+      },
+      { ...good, chapters: [{ label: '', start: 0 }] },
+      { ...good, chapters: [{ label: 'x', start: 500 }] },
+    ]) {
+      expect(parsePublishedVideo(bad)).toBeNull();
     }
   });
 
@@ -835,6 +830,111 @@ const entry = (
   captionsSha256: sha('c'),
   chapters: [{ label: 'The question', start: 0 }],
   ...overrides,
+});
+
+/** Puts a video's description (and optionally its video) in the bucket, the way the upload tool does. */
+async function publish(
+  storage: MemoryLessonVideoStorage,
+  e: PublishedVideo,
+  withVideo = true,
+): Promise<string> {
+  const key = lessonVideoKey('little-coders', e.lesson, 'info', e.sha256);
+  if (withVideo)
+    await storage.putObject(
+      lessonVideoKey('little-coders', e.lesson, 'video', e.sha256),
+      Buffer.alloc(e.bytes),
+      'video/mp4',
+    );
+  await storage.putObject(
+    key,
+    Buffer.from(JSON.stringify(e)),
+    'application/json',
+  );
+  return key;
+}
+
+describe('LessonVideosService.discoverPublished', () => {
+  it('reads the descriptions in the bucket — the newest one of each lesson', async () => {
+    const { service, storage } = attachWorld();
+    await publish(storage, entry('c1l1', 1000, { sha256: sha('1') }));
+    await publish(
+      storage,
+      entry('c1l1', 2000, { sha256: sha('2'), durationSeconds: 70 }),
+    ); // re-recorded later
+    await publish(storage, entry('c1l3', 3000, { sha256: sha('3') }));
+    const found = await service.discoverPublished();
+    expect(found.map((e) => [e.lesson, e.sha256.slice(0, 1), e.bytes])).toEqual(
+      [
+        ['c1l1', '2', 2000],
+        ['c1l3', '3', 3000],
+      ],
+    );
+  });
+
+  it('ignores a description that is not valid, or is not for its own lesson and video', async () => {
+    const { service, storage } = attachWorld();
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    // not JSON / not a description
+    await storage.putObject(
+      'lesson-videos/little-coders/c1l1/aaaaaaaaaaaa.json',
+      Buffer.from('not json'),
+      'application/json',
+    );
+    await storage.putObject(
+      'lesson-videos/little-coders/c1l2/aaaaaaaaaaaa.json',
+      Buffer.from('{"lesson":"c1l2"}'),
+      'application/json',
+    );
+    // a description filed under another lesson's name
+    await storage.putObject(
+      lessonVideoKey('little-coders', 'c1l4', 'info', sha('a')),
+      Buffer.from(JSON.stringify(entry('c1l5', 1000))),
+      'application/json',
+    );
+    // a description whose name does not match its video
+    await storage.putObject(
+      'lesson-videos/little-coders/c1l6/bbbbbbbbbbbb.json',
+      Buffer.from(JSON.stringify(entry('c1l6', 1000))),
+      'application/json',
+    );
+    await publish(storage, entry('c1l7', 1000)); // the one good one
+    expect((await service.discoverPublished()).map((e) => e.lesson)).toEqual([
+      'c1l7',
+    ]);
+    expect(warn).toHaveBeenCalledTimes(4);
+    warn.mockRestore();
+  });
+
+  it('is what "check storage" uses: the described videos that are really in the bucket are switched on', async () => {
+    const { service, storage, rows } = attachWorld();
+    await publish(storage, entry('c1l1', 1000));
+    await publish(storage, entry('c1l2', 1000), false); // described, but its video never arrived
+    const report = await service.attachPublished();
+    expect(report).toMatchObject({
+      attached: ['c1l1'],
+      notInStorage: ['c1l2'],
+      storageProblem: null,
+    });
+    expect(
+      validatePreviewVideo(rows[0].previewVideo).value?.stored?.sha256,
+    ).toBe(sha('a'));
+    expect(
+      validatePreviewVideo(rows[1].previewVideo).value?.stored,
+    ).toBeUndefined();
+  });
+
+  it('says so — and changes nothing — when the bucket cannot be listed', async () => {
+    const { service, storage, prisma } = attachWorld();
+    storage.listObjects = async () => {
+      throw new Error('R2 is not answering');
+    };
+    const report = await service.attachPublished();
+    expect(report.storageProblem).toMatch(/not answering/);
+    expect(report.attached).toEqual([]);
+    expect(prisma.lesson.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('LessonVideosService.attachPublished', () => {
@@ -997,13 +1097,15 @@ describe('LessonVideosService.status', () => {
       'video/mp4',
     );
     await service.attachPublished([entry('c1l1', 1000)]);
+    await publish(storage, entry('c1l1', 1000), false);
+    await publish(storage, entry('c1l2', 1000), false);
     expect(await service.status()).toEqual({
       configured: true,
       problem: null,
       storage: { bucket: 'memory', delivery: 'signed' },
       lessons: 4,
       withVideo: 1,
-      published: PUBLISHED_LESSON_VIDEOS.length,
+      published: 2, // two lessons have a description in the bucket
     });
     storage.problem = 'missing LESSON_VIDEO_R2_BUCKET';
     const down = await service.status();
@@ -1012,6 +1114,7 @@ describe('LessonVideosService.status', () => {
       problem: 'missing LESSON_VIDEO_R2_BUCKET',
       storage: null,
       withVideo: 1,
+      published: 0,
     });
   });
 });

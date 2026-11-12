@@ -7,17 +7,20 @@
 
 export const LESSON_VIDEO_KEY_ROOT = 'lesson-videos/';
 
-export type VideoAssetKind = 'video' | 'poster' | 'captions';
+/** A lesson's files: the video, its poster and subtitles — and "info", the small description the upload tool stores beside them. */
+export type VideoAssetKind = 'video' | 'poster' | 'captions' | 'info';
 
 const EXTENSION: Record<VideoAssetKind, string> = {
   video: 'mp4',
   poster: 'jpg',
   captions: 'vtt',
+  info: 'json',
 };
 export const CONTENT_TYPE: Record<VideoAssetKind, string> = {
   video: 'video/mp4',
   poster: 'image/jpeg',
   captions: 'text/vtt; charset=utf-8',
+  info: 'application/json',
 };
 
 /** lesson-videos/little-coders/c1l1/3f9a1c0d52ab.mp4 */
@@ -49,6 +52,7 @@ export function kindOfKey(key: string): VideoAssetKind | null {
   if (key.endsWith('.mp4')) return 'video';
   if (key.endsWith('.jpg')) return 'poster';
   if (key.endsWith('.vtt')) return 'captions';
+  if (key.endsWith('.json')) return 'info';
   return null;
 }
 

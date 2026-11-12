@@ -25,10 +25,11 @@ This page is everything you need to do. It takes about 15 minutes, plus the time
 * The bucket stays **private**. The server signs a short-lived link whenever a lesson is opened. (Optional:
   put a public domain in front of the bucket and set `LESSON_VIDEO_PUBLIC_BASE_URL`; then plain addresses are
   used and Cloudflare caches the videos at the edge.)
-* The release contains a small list of the finished videos (`server/src/little-coders/videos/published-videos.ts`:
-  each video's SHA-256, size and chapter markers). **As soon as a listed file is in the bucket, the lesson
-  shows it** — on the next server start, or when an admin presses **Check storage for the finished videos**
-  in the lesson editor. So how the files get into the bucket is up to you (steps 4–5).
+* Beside every video the upload tool stores a tiny **description** file (`<video hash>.json`: the video's size,
+  length and chapter markers). The server reads these from the bucket itself. **As soon as a described video is
+  in the bucket, its lesson shows it** — on the next server start, or when an admin presses **Check storage for
+  the finished videos** in the lesson editor. So how the files get into the bucket is up to you (steps 4–5), and
+  nothing about the videos has to live in git or in the database first.
 
 ## 1. Create the bucket
 
@@ -96,7 +97,8 @@ npm run lesson-videos:upload -- --stage ./bucket        # no network, no databas
 rclone copy ./bucket/lesson-videos r2:lumexa-lesson-videos/lesson-videos --progress
 ```
 
-(Or drag the `lesson-videos` folder into the bucket in the Cloudflare dashboard.) Then restart the server, or
+(Or drag the `lesson-videos` folder into the bucket in the Cloudflare dashboard.) The staged folder holds each
+video, its poster and subtitles *and* its description file — copy all of them. Then restart the server, or
 press **Check storage for the finished videos** in the admin lesson editor.
 
 ### C. One lesson at a time, in the admin
@@ -108,11 +110,14 @@ before anything is stored. **Detach** stops the lesson showing the video; the fi
 
 ## 5. Where do the 40 MP4 files come from?
 
-They are **not in git** (480 MB), by design. They were produced by `server/prisma/lesson-videos/` — see its
-`README.md` — and can be rebuilt at any time with `npm run lesson-videos:build`, which needs ffmpeg, a
-Chromium (Puppeteer downloads one) and the free Kokoro text-to-speech model. If you rebuild, run
-`npm run lesson-videos:manifest` afterwards and commit the updated `published-videos.ts`: a rebuilt video has a
-new hash, so a new name in the bucket.
+They are **not in git** (480 MB), by design. They are produced by `server/prisma/lesson-videos/` — see its
+`README.md` — and can be rebuilt at any time with `npm run lesson-videos:build` (allow a few hours), which needs
+ffmpeg, a Chromium (Puppeteer downloads one) and the free Kokoro text-to-speech model. Then upload them (step 4).
+
+Because the upload tool writes a description file beside each video, **there is nothing to commit afterwards**.
+A rebuilt video has a new hash, so a new name in the bucket, and the newest description of a lesson wins. To swap
+a video a lesson is already showing, run the upload tool with `--replace`, or press **Detach** on the lesson and
+then **Check storage**.
 
 ## 6. Optional: make delivery faster with a public address
 

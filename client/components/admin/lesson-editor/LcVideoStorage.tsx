@@ -96,8 +96,8 @@ export default function LcVideoStorage({ lessonId, video, onVideo }: { lessonId:
       else {
         setNotice(
           report.attached.length
-            ? `${report.attached.length} video(s) switched on (${report.attached.join(', ')}). Reload this page to see them. ${report.notInStorage.length} are not in the bucket yet.`
-            : `Nothing new: ${report.alreadyHave.length} lesson(s) already have a video, ${report.notInStorage.length} are not in the bucket yet.`,
+            ? `${report.attached.length} video(s) switched on (${report.attached.join(', ')}). Reload this page to see them.${report.notInStorage.length ? ` ${report.notInStorage.length} described video(s) are missing their file in the bucket.` : ''}`
+            : `Nothing new: ${report.alreadyHave.length} lesson(s) already show a video${report.notInStorage.length ? `, ${report.notInStorage.length} described video(s) are missing their file in the bucket` : ''}. Upload videos to the bucket (docs/LESSON_VIDEOS_SETUP.md) and check again.`,
         );
         setStatus(await getVideoStorageStatus());
       }
@@ -123,7 +123,7 @@ export default function LcVideoStorage({ lessonId, video, onVideo }: { lessonId:
         <p className="mt-1 text-xs text-[var(--a-text-faint)]">Checking storage…</p>
       ) : status.configured ? (
         <p className="mt-1 text-xs text-[var(--a-text-muted)]" data-testid="lc-video-status">
-          Storage is ready — bucket <strong>{status.storage?.bucket}</strong>, {status.storage?.delivery === 'public' ? 'public address' : 'private (signed links)'}. {status.withVideo} of {status.lessons} lessons show a stored video.
+          Storage is ready — bucket <strong>{status.storage?.bucket}</strong>, {status.storage?.delivery === 'public' ? 'public address' : 'private (signed links)'}. {status.withVideo} of {status.lessons} lessons show a stored video; the bucket holds videos for {status.published}.
         </p>
       ) : (
         <p role="alert" className="mt-1 text-xs text-[var(--a-danger)]" data-testid="lc-video-status">

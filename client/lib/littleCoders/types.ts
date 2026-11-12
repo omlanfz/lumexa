@@ -166,6 +166,7 @@ export interface LcVideoStorageStatus {
   storage: { bucket: string; delivery: 'signed' | 'public' } | null;
   lessons: number;
   withVideo: number;
+  /** Lessons the bucket holds a video description for. */
   published: number;
 }
 
