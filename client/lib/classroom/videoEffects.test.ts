@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DEFAULT_APPEARANCE, VideoEffectsController } from './videoEffects.ts';
-import type { CameraRequest, EffectsCall, EffectsDeps } from './videoEffects.ts';
+import type { CameraRequest, ControllerOptions, EffectsCall, EffectsDeps } from './videoEffects.ts';
 import type { PipelineEvents, PipelineHandle } from './effects/pipeline.ts';
 import type { EffectSettings } from './effects/options.ts';
 import type { ParticipantLike, TrackStateLike } from './daily/peers.ts';
@@ -187,7 +187,7 @@ interface Rig {
   duringStart: { run: ((events: PipelineEvents) => void) | null };
 }
 
-function setup(over: { supported?: boolean; reason?: string } = {}): Rig {
+function setup(over: { supported?: boolean; reason?: string; options?: ControllerOptions } = {}): Rig {
   const daily = new FakeDaily();
   const pipelines: FakePipeline[] = [];
   const opened: CameraRequest[] = [];
@@ -212,7 +212,8 @@ function setup(over: { supported?: boolean; reason?: string } = {}): Rig {
     },
     support: async () => ({ supported: over.supported ?? true, reason: over.reason ?? null }),
   };
-  const controller = new VideoEffectsController(daily, deps, { handoffTimeoutMs: 250, pollMs: 2 });
+  // (restarts after a failure are immediate here: the tests do not wait for the pauses)
+  const controller = new VideoEffectsController(daily, deps, { handoffTimeoutMs: 250, pollMs: 2, restartPausesMs: [0, 0, 0], ...over.options });
   return { daily, controller, pipelines, opened, failStart, failOpen, duringStart };
 }
 
@@ -463,21 +464,160 @@ test('Daily accepting the output but never sending it is put right: the camera i
   assert.equal(rig.daily.video().state, 'playable');
 });
 
-test('a pipeline that stalls or fails hands the camera back by name, switches the controls off and says why', async () => {
+const stalled = { reason: 'stalled', message: 'stalled', recoverable: true } as const;
+
+test('effects that break are started again, quietly: the camera goes back to Daily by name for a moment, the effects restart, and the person’s choice never changes', async () => {
   const rig = setup();
   rig.daily.selectedDevice = 'cam-external';
   rig.daily.native = new FakeTrack('daily-camera', 'cam-external');
   await ready(rig);
   await rig.controller.setAppearance({ lighting: 0.6, touchUp: true, autoFraming: true });
-  rig.pipelines[0].events.onFailure({ reason: 'stalled', message: 'stalled' });
+  await rig.controller.setBackground(BLUR);
+  const first = rig.pipelines[0];
+  first.events.onFailure(stalled);
   await tick(5);
   await rig.controller.settled();
+
+  assert.equal(rig.pipelines.length, 2, 'a new pipeline was started');
+  assert.equal(first.stopped, true, 'the one that broke is let go of');
+  const second = rig.pipelines[1];
+  assert.equal(second.stopped, false);
+  assert.equal(rig.daily.custom?.id, (second.output as unknown as FakeTrack).id, 'Daily sends the new output');
+  assert.ok(rig.daily.calls.includes('device:cam-external'), 'the camera went back to Daily by name — the person’s own camera');
+  assert.equal(rig.daily.calls.at(-1), `custom:${(second.output as unknown as FakeTrack).id}`);
+  const s = rig.controller.getSnapshot();
+  assert.equal(s.settings.background.mode, 'blur', 'the background is still what the person chose');
+  assert.deepEqual([s.settings.appearance.lighting, s.settings.appearance.touchUp, s.settings.appearance.autoFraming], [0.6, true, true]);
+  assert.equal(s.running, true);
+  assert.equal(s.error, null, 'and nothing is shown: it was mended');
+  assert.deepEqual(second.startSettings, s.settings, 'the new pipeline starts with everything that was asked for');
+});
+
+test('each kind of break that a restart can mend is mended: a lost graphics context, errors, a camera that stopped', async () => {
+  for (const reason of ['gpu-lost', 'errors', 'input-ended', 'stalled'] as const) {
+    const rig = setup();
+    await ready(rig);
+    await rig.controller.setBackground(BLUR);
+    rig.pipelines[0].events.onFailure({ reason, message: reason, recoverable: true });
+    await tick(5);
+    await rig.controller.settled();
+    assert.equal(rig.pipelines.length, 2, reason);
+    assert.equal(rig.controller.getSnapshot().settings.background.mode, 'blur', reason);
+    assert.equal(rig.controller.getSnapshot().error, null, reason);
+    rig.daily.emit('left-meeting');
+  }
+});
+
+test('effects that keep breaking are given up on after a few tries: the camera stays with Daily, the controls go Off, and the person is told', async () => {
+  const rig = setup();
+  rig.daily.selectedDevice = 'cam-external';
+  rig.daily.native = new FakeTrack('daily-camera', 'cam-external');
+  await ready(rig);
+  await rig.controller.setBackground(BLUR);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    rig.pipelines.at(-1)!.events.onFailure(stalled);
+    await tick(5);
+    await rig.controller.settled();
+    assert.equal(rig.controller.getSnapshot().settings.background.mode, 'blur', `still on after break ${attempt + 1}`);
+  }
+  assert.equal(rig.pipelines.length, 4, 'the first, and three restarts');
+  rig.pipelines.at(-1)!.events.onFailure(stalled); // the fourth within the window
+  await tick(5);
+  await rig.controller.settled();
+  assert.equal(rig.pipelines.length, 4, 'no more restarts');
+  assert.equal(rig.pipelines.at(-1)!.stopped, true);
+  assert.equal(rig.daily.calls.at(-1), 'device:cam-external');
+  assert.equal(rig.daily.video().state, 'playable');
+  const s = rig.controller.getSnapshot();
+  assert.deepEqual([s.settings.background.mode, s.running], ['none', false]);
+  assert.match(s.error ?? '', /stopped working.*camera is still on/i);
+});
+
+test('a video that has all but stopped for cost is not started again — it would only come back — and says why', async () => {
+  const rig = setup();
+  rig.daily.selectedDevice = 'cam-external';
+  rig.daily.native = new FakeTrack('daily-camera', 'cam-external');
+  await ready(rig);
+  await rig.controller.setAppearance({ lighting: 0.6, touchUp: true, autoFraming: true });
+  rig.pipelines[0].events.onFailure({ reason: 'too-slow', message: 'slow', recoverable: false });
+  await tick(5);
+  await rig.controller.settled();
+  assert.equal(rig.pipelines.length, 1, 'no second pipeline');
   assert.equal(rig.daily.calls.at(-1), 'device:cam-external');
   assert.equal(rig.daily.video().state, 'playable');
   assert.equal(rig.pipelines[0].stopped, true);
   const s = rig.controller.getSnapshot();
   assert.deepEqual([s.settings.appearance.touchUp, s.settings.appearance.autoFraming, s.settings.appearance.lighting], [false, false, 0]);
-  assert.match(s.error ?? '', /stopped working.*camera is still on/i);
+  assert.match(s.error ?? '', /couldn't keep up.*camera is still on/i);
+});
+
+test('a restart waits for its pause, with Daily’s own camera meanwhile — and a choice made in the meantime starts the effects at once', async () => {
+  const rig = setup({ options: { restartPausesMs: [200, 200, 200] } });
+  await ready(rig);
+  await rig.controller.setBackground(BLUR);
+  rig.pipelines[0].events.onFailure(stalled);
+  await tick(30);
+  await rig.controller.settled();
+  assert.equal(rig.pipelines.length, 1, 'not yet');
+  assert.equal(rig.daily.custom, null, 'the camera is Daily’s own meanwhile');
+  assert.equal(rig.daily.video().state, 'playable');
+  const s = rig.controller.getSnapshot();
+  assert.deepEqual([s.settings.background.mode, s.running, s.error], ['blur', false, null], 'the choice is still shown');
+  // the person chooses something themselves: no waiting
+  await rig.controller.setBackground({ mode: 'blur-slight' });
+  assert.equal(rig.pipelines.length, 2);
+  assert.equal(rig.controller.getSnapshot().running, true);
+  rig.daily.emit('left-meeting');
+});
+
+test('left to itself, the pause ends and the effects start again', async () => {
+  const rig = setup({ options: { restartPausesMs: [60, 60, 60] } });
+  await ready(rig);
+  await rig.controller.setBackground(BLUR);
+  rig.pipelines[0].events.onFailure(stalled);
+  await tick(20);
+  assert.equal(rig.pipelines.length, 1);
+  await tick(150);
+  await rig.controller.settled();
+  assert.equal(rig.pipelines.length, 2);
+  assert.equal(rig.controller.getSnapshot().running, true);
+  rig.daily.emit('left-meeting');
+});
+
+test('effects that break while the camera is off start again when the camera comes back — and not before', async () => {
+  const rig = setup();
+  await ready(rig);
+  await rig.controller.setBackground(BLUR);
+  rig.daily.setCamera(false);
+  await tick(5);
+  rig.pipelines[0].events.onFailure({ reason: 'gpu-lost', message: 'lost', recoverable: true });
+  await tick(5);
+  await rig.controller.settled();
+  assert.equal(rig.pipelines.length, 1, 'nothing is started on a camera that is off');
+  assert.equal(rig.controller.getSnapshot().settings.background.mode, 'blur', 'the choice is kept');
+  rig.daily.setCamera(true);
+  await tick(5);
+  await rig.controller.settled();
+  assert.equal(rig.pipelines.length, 2);
+  assert.equal(rig.controller.getSnapshot().running, true);
+  rig.daily.emit('left-meeting');
+});
+
+test('if Daily will not take the camera back for the restart, the picture is left flowing, the effects look off, and the hand-back is tried again', async () => {
+  const rig = setup();
+  await ready(rig);
+  await rig.controller.setBackground(BLUR);
+  rig.daily.failNext = new Error('could not switch');
+  rig.pipelines[0].events.onFailure(stalled);
+  await tick(5);
+  await rig.controller.settled();
+  const [pipeline] = rig.pipelines;
+  assert.equal(pipeline.stopped, false, 'the picture is not left without a source');
+  assert.equal(rig.daily.video().state, 'playable');
+  assert.equal(pipeline.updates.at(-1)!.background.mode, 'none', 'the effects look off');
+  assert.equal(rig.controller.getSnapshot().settings.background.mode, 'none');
+  assert.match(rig.controller.getSnapshot().error ?? '', /couldn't switch the effects off/i);
+  rig.daily.emit('left-meeting');
 });
 
 test('an effect whose model cannot be loaded is taken back by itself; the others carry on', async () => {
