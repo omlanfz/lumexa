@@ -11,10 +11,14 @@
 //
 //   - A frame is ALWAYS closed, and a frame the effects cannot handle goes out as it
 //     came in (unprocessed) rather than not at all. A processing error never stops the
-//     video; many in a row make the pipeline report a failure, and the controller
-//     hands the camera back to Daily.
+//     video; many in a row make the pipeline report a failure — which the controller
+//     mends by starting the effects again, and only gives up on if that keeps failing.
 //   - A watchdog notices output that has stopped (a stalled GPU, a camera that stopped
 //     delivering) and reports it.
+//   - The effects are NEVER dropped for being slow. A computer that cannot make 30 pictures
+//     a second makes as many as it can, with lighter work (see governor.ts); only a video
+//     that has all but stopped is given up on. A failing segmentation model is loaded again
+//     rather than the background taken away.
 //   - Models load lazily and fail softly: an effect whose model cannot be loaded is
 //     reported as unavailable (events.onUnavailable); the rest carry on.
 //   - It owns its input track and its output track and nothing else; stop() gives all
@@ -37,6 +41,8 @@ import { canAffordHighQuality, loadFaceFinder, loadSegmenter } from './models.ts
 import type { FaceFinder, PersonSegmenter } from './models.ts';
 import { needsFaceDetection, needsSegmentation } from './options.ts';
 import type { EffectSettings } from './options.ts';
+import { Governor } from './governor.ts';
+import { RetryBudget } from './retry.ts';
 
 /** The width the segmentation model and the face finder are shown (they work on a
  * small picture anyway; showing them less means a smaller mask to read back). */
@@ -61,6 +67,13 @@ const HIGH_MAX_BENCHMARK_MS = 30;
  * only once it has seen at least GOVERN_MIN_FRAMES. */
 const GOVERN_EVERY_MS = 1_500;
 const GOVERN_MIN_FRAMES = 6;
+/** A mask older than this (ms) is not trusted: the person has surely moved. (The last mask
+ * carries a failing model through the moment it takes to be loaded again.) */
+const MASK_STALE_MS = 6_000;
+/** This many segmentations failing in a row: the model is loaded afresh. */
+const SEGMENTATION_ERRORS_BEFORE_RELOAD = 3;
+/** The face finder failing this many times in a row is let go of. */
+const FACE_ERRORS_BEFORE_DROP = 5;
 /** Strength of the touch-up when it is on: visible, never plastic. */
 const TOUCH_UP_AMOUNT = 0.7;
 /** The blur's sigma in pixels of a 720-line picture. */
@@ -73,6 +86,10 @@ export type PipelineFailureReason = 'gpu-lost' | 'stalled' | 'errors' | 'input-e
 export interface PipelineFailure {
   reason: PipelineFailureReason;
   message: string;
+  /** Starting the effects again may mend it (a stall, a lost graphics context, a camera that
+   * stopped) — unlike a video that has all but stopped for cost, which a restart would only
+   * bring back. */
+  recoverable: boolean;
 }
 
 /** An effect that cannot be provided. */
@@ -120,6 +137,8 @@ export interface PipelineMetrics {
   /** Average time between the camera's pictures (ms). */
   intervalMs: number;
   renderScale: number;
+  /** How many steps of quality have been given up to keep up (0 = full quality). */
+  rung: number;
   tier: string | null;
   delegate: string | null;
   software: boolean;
@@ -409,6 +428,13 @@ export class EffectsPipeline implements PipelineHandle {
   private segMs = 0;
   private slowSegmentations = 0;
   private segmentationErrors = 0;
+  private faceErrors = 0;
+  /** When the last mask arrived. */
+  private lastMaskAt = 0;
+  /** A segmentation model has worked here: one that stops is mended, not given up on. */
+  private hadSegmenter = false;
+  private reloadTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly segmenterRetries = new RetryBudget(4, 120_000, [300, 2_000, 8_000, 20_000]);
   /** Segmentation is never run more often than every this many frames (the governor raises it). */
   private segFloor = 1;
   private frameMs = 0;
@@ -417,7 +443,17 @@ export class EffectsPipeline implements PipelineHandle {
   private intervalMs = 33;
   private lastProcessStart = 0;
   private framesMade = 0;
-  private overBudget = 0;
+  /** What has been given up to keep up (see lighten / restore), and the judge of when. */
+  private rung = 0;
+  private readonly governor: Governor;
+  /** What can be given up, the lightest loss first; each step knows how to be taken back. */
+  private readonly rungs: ReadonlyArray<{ apply: () => void; undo: () => void }> = [
+    { apply: () => { this.segFloor = 3; }, undo: () => { this.segFloor = 1; } },
+    { apply: () => this.renderer.setRenderScale(0.75), undo: () => this.renderer.setRenderScale(1) },
+    { apply: () => this.renderer.setRenderScale(0.5), undo: () => this.renderer.setRenderScale(0.75) },
+    { apply: () => { this.segFloor = 6; }, undo: () => { this.segFloor = 3; } },
+    { apply: () => this.renderer.setRenderScale(0.35), undo: () => this.renderer.setRenderScale(0.5) },
+  ];
   private lastGovernAt = 0;
   private framesSinceGovern = 0;
   private watchdog: ReturnType<typeof setInterval> | null = null;
@@ -434,6 +470,7 @@ export class EffectsPipeline implements PipelineHandle {
     private readonly events: PipelineEvents,
   ) {
     this.settings = options.settings;
+    this.governor = new Governor({ lighten: () => this.lighten(), restore: () => this.restore() });
     this.inputTrack = options.input;
     this.loadImage = options.loadImage ?? defaultLoadImage;
     this.tuning = { ...DEFAULT_TUNING, ...options.tuning };
@@ -579,6 +616,8 @@ export class EffectsPipeline implements PipelineHandle {
     this.loadAbort.abort();
     if (this.watchdog !== null) clearInterval(this.watchdog);
     this.watchdog = null;
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+    this.reloadTimer = null;
     this.driver.stop();
     this.releaseInput();
     this.segmenter?.close();
@@ -613,7 +652,7 @@ export class EffectsPipeline implements PipelineHandle {
   private fail(reason: PipelineFailureReason, message: string): void {
     if (this.stopped || this.failed) return;
     this.failed = true;
-    this.events.onFailure({ reason, message });
+    this.events.onFailure({ reason, message, recoverable: reason !== 'too-slow' });
   }
 
   // ─── One frame ──────────────────────────────────────────────────────────
@@ -694,19 +733,31 @@ export class EffectsPipeline implements PipelineHandle {
         if (result) {
           this.renderer.setMask(result.mask, result.width, result.height);
           this.hasMask = true;
+          this.lastMaskAt = now;
         }
       } catch (error) {
-        // The model is failing (its own graphics context was lost, say). The picture
-        // goes on without the background effect rather than not at all.
+        // The model is failing (its own graphics context was lost, say). This picture goes
+        // on with the last mask; if it keeps failing the model is loaded afresh. The
+        // background is not taken away for it.
         console.error('Segmentation failed', error);
         this.segmentationErrors += 1;
-        if (this.segmentationErrors >= 3) this.dropSegmentation();
+        if (this.segmentationErrors >= SEGMENTATION_ERRORS_BEFORE_RELOAD) this.reloadSegmenter();
       }
     }
 
     if (faceDue && this.faceFinder) {
       this.lastFaceAt = now;
-      const face = this.faceFinder.find(image);
+      let face: FaceBox | null = null;
+      try {
+        face = this.faceFinder.find(image);
+        this.faceErrors = 0;
+      } catch (error) {
+        // not this picture's problem: it goes on without a face, and a finder that keeps
+        // failing is let go of
+        console.error('Face finding failed', error);
+        this.faceErrors += 1;
+        if (this.faceErrors >= FACE_ERRORS_BEFORE_DROP) this.dropFaceFinder();
+      }
       if (face) {
         this.face = face;
         this.lastFaceSeenAt = now;
@@ -746,7 +797,7 @@ export class EffectsPipeline implements PipelineHandle {
       crop,
       background,
       blurSigma: mode === 'blur-slight' ? BLUR_SIGMA_SLIGHT : BLUR_SIGMA_FULL,
-      hasMask: this.hasMask && background !== 'none',
+      hasMask: this.hasMask && now - this.lastMaskAt < MASK_STALE_MS && background !== 'none',
       dt,
       gain,
       lift,
@@ -762,43 +813,39 @@ export class EffectsPipeline implements PipelineHandle {
     return Math.max(this.segFloor, wanted);
   }
 
-  /** Looks at what a frame costs against the time the camera gives for it, and makes the
-   * work lighter — a step at a time — when it does not fit: the better model goes, the
-   * segmentation runs less often, the picture is made smaller. If even that is not
-   * enough, the effects give up (the controller hands the camera back) rather than let
-   * the picture stutter or freeze. */
+  /** Looks at what a picture costs against the time the camera gives for it and acts on the
+   * verdict (see governor.ts): lighter work when it does not fit, a step back toward full
+   * quality when there is plenty of room — and a give-up only for a video that has all but
+   * stopped. A computer that can do 20 pictures a second keeps the effect at 20. */
   private govern(): void {
-    const budget = this.nominalIntervalMs() * 0.9;
-    const cost = this.frameMs + this.handOnMs;
-    if (cost <= budget) {
-      this.overBudget = 0;
-      return;
+    const verdict = this.governor.evaluate(this.frameMs + this.handOnMs, this.nominalIntervalMs());
+    if (verdict === 'lightened' || verdict === 'restored') {
+      this.frameMs = 0; // measured afresh at the new setting
+      this.handOnMs = 0;
+    } else if (verdict === 'give-up') {
+      this.fail('too-slow', "This computer can't keep up with the video effects.");
     }
-    this.overBudget += 1;
-    if (this.overBudget < 2) return;
-    this.overBudget = 0;
-    const steps: (() => boolean)[] = [
-      () => {
-        if (this.segmenter?.tier !== 'high') return false;
-        this.downgrade();
-        return true;
-      },
-      () => {
-        if (this.segFloor >= 3) return false;
-        this.segFloor = 3;
-        return true;
-      },
-      () => this.lowerScale(0.75),
-      () => this.lowerScale(0.5),
-    ];
-    for (const step of steps) {
-      if (step()) {
-        this.frameMs = 0; // measured afresh at the lighter setting
-        this.handOnMs = 0;
-        return;
-      }
+  }
+
+  /** One step lighter: the better model goes first, then what can be given up in order. */
+  private lighten(): boolean {
+    if (this.segmenter?.tier === 'high') {
+      this.downgrade();
+      return true;
     }
-    if (cost > this.nominalIntervalMs() * 1.6) this.fail('too-slow', "This computer can't keep up with the video effects.");
+    const step = this.rungs[this.rung];
+    if (!step) return false;
+    step.apply();
+    this.rung += 1;
+    return true;
+  }
+
+  /** One step back toward full quality (the better model, once given up, stays given up). */
+  private restore(): boolean {
+    if (this.rung === 0) return false;
+    this.rung -= 1;
+    this.rungs[this.rung].undo();
+    return true;
   }
 
   /** The time the camera gives for each picture, from its own frame rate. (The time
@@ -806,12 +853,6 @@ export class EffectsPipeline implements PipelineHandle {
   private nominalIntervalMs(): number {
     const fps = this.inputTrack?.getSettings?.().frameRate;
     return Math.min(50, Math.max(16, fps && fps > 0 ? 1000 / fps : 33));
-  }
-
-  private lowerScale(scale: number): boolean {
-    if (this.renderer.currentRenderScale <= scale) return false;
-    this.renderer.setRenderScale(scale);
-    return true;
   }
 
   get metrics(): PipelineMetrics {
@@ -822,6 +863,7 @@ export class EffectsPipeline implements PipelineHandle {
       segmentationMs: this.segMs,
       intervalMs: this.intervalMs,
       renderScale: this.renderer.currentRenderScale,
+      rung: this.rung,
       tier: this.segmenter?.tier ?? null,
       delegate: this.segmenter?.delegate ?? null,
       software: this.renderer.isSoftware,
@@ -853,18 +895,23 @@ export class EffectsPipeline implements PipelineHandle {
             segmenter.close();
             return;
           }
-          if (segmenter.benchmarkMs > this.tuning.standardMaxBenchmarkMs) {
+          if (!this.hadSegmenter && segmenter.benchmarkMs > this.tuning.standardMaxBenchmarkMs) {
             // too slow to run on live video here: say so now, rather than freeze the camera
+            // (a model being loaded again is let through — the governor looks after speed)
             segmenter.close();
             this.events.onUnavailable('background', 'Background effects need a faster computer than this one.');
             return;
           }
           this.segmenter = segmenter;
+          this.hadSegmenter = true;
           this.upgradeInTheBackground();
         })
         .catch((error) => {
           if (this.stopped) return;
           console.error('Could not load the person segmentation model', error);
+          // A model that worked and has to be loaded again is tried again, a little later;
+          // one that never loaded is reported at once.
+          if (this.hadSegmenter && this.scheduleReload()) return;
           this.events.onUnavailable('background', 'Background effects could not be loaded. Check your connection and try again.');
         })
         .finally(() => {
@@ -927,15 +974,54 @@ export class EffectsPipeline implements PipelineHandle {
       });
   }
 
-  /** The segmentation model keeps failing: the background effect is taken back (the
-   * controller turns its control off and says so), and the rest carries on. */
+  /** The segmentation model keeps failing: it is loaded afresh, a moment later — and a little
+   * longer after each time it fails again. The picture goes on with the last mask meanwhile.
+   * Only if that keeps failing too is the background effect taken back. */
+  private reloadSegmenter(): void {
+    const broken = this.segmenter;
+    this.segmenter = null;
+    this.segmentationErrors = 0;
+    this.segMs = 0;
+    this.slowSegmentations = 0;
+    broken?.close();
+    if (!this.scheduleReload()) this.dropSegmentation();
+  }
+
+  /** Arranges for the model to be loaded again. False when it has been tried enough. */
+  private scheduleReload(): boolean {
+    const pause = this.segmenterRetries.take(performance.now());
+    if (pause === null) return false;
+    console.warn(`The person segmentation model will be loaded again in ${pause} ms.`);
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => {
+      this.reloadTimer = null;
+      if (!this.stopped) this.ensureModels();
+    }, pause);
+    return true;
+  }
+
+  /** The model could not be mended: the background effect is taken back (the controller turns
+   * its control off and says so), and the rest carries on. */
   private dropSegmentation(): void {
+    if (this.reloadTimer !== null) clearTimeout(this.reloadTimer);
+    this.reloadTimer = null;
     this.segmenter?.close();
     this.segmenter = null;
     this.hasMask = false;
     this.renderer.clearMask();
     this.segmentationErrors = 0;
     this.events.onUnavailable('background', 'Background effects stopped working and were turned off.');
+  }
+
+  /** The face finder keeps failing: it is let go of (touch-up and the light go on without it). */
+  private dropFaceFinder(): void {
+    this.faceFinder?.close();
+    this.faceFinder = null;
+    this.face = null;
+    this.faceErrors = 0;
+    if (this.settings.appearance.autoFraming) {
+      this.events.onUnavailable('autoFraming', 'Auto-framing stopped working and was turned off.');
+    }
   }
 
   /** The high-quality model is too slow here: back to the light one. */

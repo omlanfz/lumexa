@@ -25,11 +25,17 @@
 //     to Daily — by naming the camera explicitly, so the person's choice of camera is
 //     kept — and the pipeline is stopped only once Daily has its own camera track
 //     again.
-//   - Anything that goes wrong (a model that cannot load, a pipeline that stalls, a
-//     lost GPU, a handover that does not complete) ends with the camera in Daily's
-//     hands and the control back to Off, with the reason in `error` for the person to
-//     see. Never a camera left off, a black picture, or a control that says On while
-//     nothing is happening.
+//   - The person's choice outlasts hiccups. When the effects break (a stall, a lost
+//     graphics context, a camera that stopped, a handover that came undone) the camera
+//     goes back to Daily for a moment and the effects are started again — quietly, a
+//     little later each time if it keeps happening — so the background does not
+//     disappear a while into a class. Only when that has been tried a few times, or when
+//     the cause is a video that has all but stopped for cost (a restart would only bring
+//     it back), does the camera go to Daily for good and the control back to Off, with the
+//     reason in `error` for the person to see.
+//   - Anything that cannot be mended (a model that cannot load, a handover that will not
+//     complete) ends the same way. Never a camera left off, a black picture, or a control
+//     that says On while nothing is happening.
 //
 // Plain TypeScript with no Daily import and no browser APIs of its own (they come in as
 // `deps`), so the sequencing can be tested with fakes.
@@ -39,6 +45,7 @@ import type { BackgroundEffect } from './backgrounds.ts';
 import { DEFAULT_SETTINGS, isNeutral } from './effects/options.ts';
 import type { AppearanceOptions, EffectSettings } from './effects/options.ts';
 import type { PipelineEvents, PipelineHandle } from './effects/pipeline.ts';
+import { RetryBudget } from './effects/retry.ts';
 import type { ParticipantLike } from './daily/peers.ts';
 
 export { DEFAULT_APPEARANCE, DEFAULT_SETTINGS } from './effects/options.ts';
@@ -98,7 +105,16 @@ export interface ControllerOptions {
   handoffTimeoutMs?: number;
   /** How often to look while waiting (ms). */
   pollMs?: number;
+  /** The pause (ms) before the 1st, 2nd, 3rd … time the effects are started again after they
+   * broke; the number of pauses is the number of tries allowed in five minutes. */
+  restartPausesMs?: readonly number[];
 }
+
+/** How the effects are started again after they broke: at once, then a little later each time. */
+const DEFAULT_RESTART_PAUSES_MS = [0, 2_000, 8_000] as const;
+/** Tries count over this long (ms): a hiccup an hour is mended each time; a failure that will
+ * not go away is given up on. */
+const RESTART_WINDOW_MS = 5 * 60_000;
 
 /** An error whose message is fit for the person to read. */
 export class EffectsError extends Error {
@@ -150,7 +166,13 @@ export class VideoEffectsController {
   /** A handover is being made: camera events are looked at again once it is done. */
   private transitioning = false;
   private resuming = false;
-  private failure: string | null = null;
+  /** The effects broke: what to tell the person if they are not started again, and whether
+   * starting them again may mend it. */
+  private failure: { message: string; restart: boolean } | null = null;
+  private readonly restartBudget: RetryBudget;
+  /** The effects are not started again before this time (after a failure). */
+  private installAfter = 0;
+  private installTimer: ReturnType<typeof setTimeout> | null = null;
   private drift = 0;
   private errorTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -166,6 +188,8 @@ export class VideoEffectsController {
     this.deps = deps;
     this.handoffTimeoutMs = options.handoffTimeoutMs ?? 4_000;
     this.pollMs = options.pollMs ?? 50;
+    const pauses = options.restartPausesMs ?? DEFAULT_RESTART_PAUSES_MS;
+    this.restartBudget = new RetryBudget(pauses.length, RESTART_WINDOW_MS, pauses);
     this.listen('participant-updated', () => this.syncCamera());
     // The call is over: nothing may keep holding the camera.
     this.listen('left-meeting', () => this.dispose());
@@ -219,6 +243,10 @@ export class VideoEffectsController {
     if (this.disposed) return Promise.resolve();
     this.desired = next;
     this.failure = null;
+    // their own choice starts afresh: no waiting, and every try is available again
+    this.restartBudget.reset();
+    this.installAfter = 0;
+    this.clearInstallTimer();
     this.clearError();
     this.set({ settings: next });
     if (!this.state.supported) return Promise.resolve(); // kept, and applied if support is confirmed
@@ -268,6 +296,7 @@ export class VideoEffectsController {
     this.clearError();
     if (this.retryTimer !== null) clearTimeout(this.retryTimer);
     this.retryTimer = null;
+    this.clearInstallTimer();
     // The call is over: no more telling Daily anything — just let go of the camera.
     this.installed?.pipeline.stop();
     this.installed = null;
@@ -292,9 +321,27 @@ export class VideoEffectsController {
     let want = this.desired;
     try {
       if (this.failure) {
-        // something broke: effects off, and the reason shown
-        const message = this.failure;
+        const { message, restart } = this.failure;
         this.failure = null;
+        const pause = restart ? this.restartBudget.take(Date.now()) : null;
+        if (pause !== null) {
+          // The effects broke; the person's choice did not. The camera goes back to Daily for
+          // a moment and the effects are started again (a little later if it keeps happening).
+          // (The pipeline has already logged why they broke.)
+          console.warn(`The video effects broke and are being started again${pause > 0 ? ` in ${pause} ms` : ''}.`);
+          try {
+            await this.uninstall();
+          } catch (error) {
+            // not even the camera could be handed back: effects off, and the hand-back retried
+            want = this.desired = NEUTRAL;
+            this.set({ settings: NEUTRAL });
+            throw error;
+          }
+          this.installAfter = Date.now() + pause;
+          this.set({ settings: this.desired, running: false });
+          return; // (uninstall asked for another look, which starts them again)
+        }
+        // not to be mended, or mended enough times already: effects off, and the reason shown
         want = this.desired = NEUTRAL;
         this.set({ settings: NEUTRAL });
         await this.uninstall();
@@ -310,6 +357,13 @@ export class VideoEffectsController {
         if (!this.cameraIsOn()) {
           // asked for while the camera is off: it starts when the camera comes on
           this.set({ settings: want });
+          return;
+        }
+        const wait = this.installAfter - Date.now();
+        if (wait > 0) {
+          // started again after a failure, but not just yet
+          this.scheduleInstall(wait);
+          this.set({ settings: want, running: false });
           return;
         }
         await this.install(want);
@@ -430,7 +484,7 @@ export class VideoEffectsController {
       onFailure: (failure) => {
         if (this.disposed) return;
         console.error('The video effects pipeline failed', failure);
-        this.failure = failure.reason === 'too-slow' ? TOO_SLOW : STOPPED_WORKING;
+        this.failure = { message: failure.reason === 'too-slow' ? TOO_SLOW : STOPPED_WORKING, restart: failure.recoverable };
         void this.requestReconcile();
       },
       onUnavailable: (effect, message) => {
@@ -509,7 +563,7 @@ export class VideoEffectsController {
       });
     } catch (error) {
       console.error('Could not reopen the camera for the effects', error);
-      this.failure = CAMERA_FAILED;
+      this.failure = { message: CAMERA_FAILED, restart: false };
       void this.requestReconcile();
     } finally {
       this.resuming = false;
@@ -528,7 +582,7 @@ export class VideoEffectsController {
       await this.until(() => this.outgoingTrack()?.id === installed.pipeline.output.id, 'Daily did not start sending the effects.');
     } catch (error) {
       console.error('The effects could not be put back on the camera', error);
-      this.failure = STOPPED_WORKING;
+      this.failure = { message: STOPPED_WORKING, restart: true };
       void this.requestReconcile();
     } finally {
       this.transitioning = false;
@@ -596,6 +650,20 @@ export class VideoEffectsController {
       this.inFlight -= 1;
       if (this.inFlight === 0) this.set({ busy: false });
     });
+  }
+
+  /** Looks again when it is time to start the effects again. */
+  private scheduleInstall(inMs: number): void {
+    if (this.installTimer !== null || this.disposed) return;
+    this.installTimer = setTimeout(() => {
+      this.installTimer = null;
+      if (!this.disposed) void this.requestReconcile();
+    }, inMs);
+  }
+
+  private clearInstallTimer(): void {
+    if (this.installTimer !== null) clearTimeout(this.installTimer);
+    this.installTimer = null;
   }
 
   /** Tries again, once, a little later (a hand-back that did not complete). */

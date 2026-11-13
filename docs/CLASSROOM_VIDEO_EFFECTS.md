@@ -62,14 +62,44 @@ show a failure to the person at all.)
 - Only when every effect is off, or something has failed, is the camera handed back to Daily
   — by **naming the camera**, so the person's choice is kept — and the pipeline is stopped
   only after Daily has its own camera track again.
-- Every failure (a model that cannot load, a stalled pipeline, a lost GPU, a handover that does
-  not complete, a computer too slow) ends the same way: the camera is in Daily's hands, the
-  control is back to *Off*, and the reason is shown in the panel. A frame the effects cannot
-  handle goes out unprocessed rather than not at all.
-- A **performance governor** compares what a picture costs (drawing it and handing it on) with
-  the time the camera gives for each. If it does not fit it makes the work lighter a step at a
-  time (drops the high-quality model, segments less often, makes the picture smaller) and, if
-  even that is not enough, gives the effects up rather than let the picture stutter.
+- A frame the effects cannot handle goes out unprocessed rather than not at all.
+- Something that cannot be mended ends the same way every time: the camera is in Daily's
+  hands (by name, so the chosen camera is kept), the control is back to *Off*, and the reason
+  is shown in the panel. See "Effects that stay on" for what is mended first.
+
+### Effects that stay on
+
+The person's choice (*Blur*, a background, …) outlasts hiccups. The effects used to be given
+up on the first sign of trouble — most often a computer that could not quite make 30 pictures
+a second — and the control quietly went back to *Off* a little while into the class ("the
+background is completely gone"). They are now **degraded, mended and only then given up on**:
+
+- A **performance governor** (`effects/governor.ts`, pure logic, unit-tested) compares what a
+  picture costs (drawing it and handing it on) with the time the camera gives for each. If it
+  does not fit, twice in a row, it makes the work lighter a step at a time: the better
+  segmentation model goes, the model runs on fewer pictures, the picture is drawn smaller (down
+  to 35 % — it is only ever blur, so little shows). A computer that manages 15–20 pictures a
+  second keeps the effect at that rate. It is **not** given up on for being slow.
+- When there is plenty of room for a good while, a step is taken back toward full quality, one
+  at a time (each time the work has had to be lightened again the wait is longer, so a computer
+  on the edge settles instead of bouncing), so a short load — a screen share starting, another
+  program — does not leave the picture poorer for the rest of the class.
+- Only a video that has **all but stopped** — a picture takes over 250 ms, four looks in a row,
+  with everything already as light as it goes — is given up on: that is worse than no effect.
+- The **segmentation model** that fails three pictures in a row (its own graphics context was
+  lost, say) is closed and loaded again, a moment later (0.3 s, 2 s, 8 s, 20 s — four tries in
+  two minutes). Meanwhile the picture carries on with the last mask, which is used for up to
+  6 s. Only if it keeps failing is the background effect taken back, with a message. The face
+  finder is handled the same way (a face it cannot find is not a reason to stop the picture).
+- Everything else that can go wrong — a stalled pipeline, a lost graphics context, the camera's
+  track ending, repeated frame errors — makes the controller **start the effects again**
+  (`videoEffects.ts`): the pipeline is stopped, Daily is back on the real camera for a moment,
+  and the effects are started afresh, with the same settings and no message. Three restarts are
+  allowed in five minutes (immediately, after 2 s, after 8 s); the person's own choice at any
+  point gives every restart back. If it keeps breaking, it is given up on after all: the
+  control goes to *Off* and says "…stopped working. Your camera is still on."
+- A computer that is **too slow** to be mended by starting again (the governor's give-up) is
+  not restarted — that would only repeat it — and says so at once.
 
 ### Where things are supported
 
@@ -77,7 +107,7 @@ show a failure to the person at all.)
 |---|---|
 | Browsers | Needs WebGL 2 and WebAssembly. **Verified: Chromium** (Chrome/Edge), which moves frames with insertable streams (they keep running when the tab is in the background). **Designed for, not yet tried: Firefox and Safari**, which use the fallback: a hidden `<video>` drawn onto a canvas whose stream is captured, ticked by a worker timer. Try both on a real machine before relying on them. |
 | Phones and tablets | Not offered (the panel says so). |
-| No graphics acceleration | The effects are offered but a computer without it will usually be too slow; the governor then switches them off with a message. |
+| No graphics acceleration | The effects are offered. A computer without it runs them at a smaller picture size and a lower rate (the governor above); only if the video has all but stopped are they switched off, with a message. |
 
 ### Troubleshooting
 
@@ -85,17 +115,24 @@ show a failure to the person at all.)
 |---|---|---|
 | "Video effects aren't available …" | Phone/tablet, no WebGL 2, or an unsupported browser | Use a laptop or desktop with a current browser |
 | "Background effects could not be loaded." | The models could not be downloaded (offline, or a network that blocks `storage.googleapis.com` / `cdn.jsdelivr.net`) | The standard model and the runtime are served by this app, so this means the app's own files did not load: check `/models/…` and `/mediapipe/<version>/wasm/…` answer 200 in the browser's Network tab |
-| "…couldn't keep up with them" | The computer is too slow for the picture size | Close other heavy tabs/apps; the camera itself is unaffected |
-| Edges lag behind fast movement | A slower computer segments less often (the governor's second step) | Expected on weak hardware; the better model is only used where it is fast enough |
+| "…couldn't keep up with them" | The video had all but stopped with the effects on (a picture took over a quarter of a second, even at the lightest setting) | Close other heavy tabs/apps; the camera itself is unaffected |
+| "…stopped working. Your camera is still on." | The effects broke more than three times in five minutes (a graphics driver that keeps resetting, a camera that keeps dropping) | Choose the effect again to try afresh; update the graphics driver; the console shows why each time ("The video effects pipeline failed …") and each restart ("The video effects broke and are being started again") |
+| Background blurry for a moment, or edges lag behind fast movement | A slower computer segments less often and draws a smaller picture (the governor's steps); the segmentation model may be being loaded again | Expected on weak hardware; it comes back toward full quality when the load goes. The better model is only used where it is fast enough |
 
 ### Testing it
 
-- `npm test` (in `client/`) runs the unit tests: the framing and exposure maths, the controller
-  against a fake Daily that behaves the way the real call machine was measured to behave.
+- `npm test` (in `client/`) runs the unit tests: the framing and exposure maths, the governor
+  and retry budget (`effects/governor.test.ts` — including the case that used to take the
+  background away: a computer at 47 ms a picture against a 33 ms interval must keep the effect
+  for ever), and the controller against a fake Daily that behaves the way the real call machine
+  was measured to behave (restart, pauses, bounded retries, what each kind of failure does).
 - The pipeline was also run in a real browser against the **real `daily-js` call machine** with
   a fake camera playing a portrait video: lifecycle (enable, disable, camera off/on, quick
-  toggles, switching camera), the output Daily really sends, the governor's give-up path, and
-  the quality of the picture on real portraits.
+  toggles, switching camera), the output Daily really sends, the quality of the picture on real
+  portraits, and the failure paths — a computer that cannot keep up (software graphics: the
+  effect stayed on for 100 s at a reduced picture size, the background still blurred in what
+  was sent), a lost graphics context, a stall, a failing segmentation model, and breakage that
+  will not stop (restarted three times, then given up on with the message).
 - Not covered: a live Daily room (that needs an account, as for the rest of the classroom) and
   physical webcams and GPUs (try a real class on a few machines).
 
