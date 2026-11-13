@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import type { DailyCall } from '@daily-co/daily-js';
-import { Mic, MicOff, Video, VideoOff, Wand2, ChevronDown, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Wand2, ChevronDown, AlertCircle, X } from 'lucide-react';
 import IconButton from './IconButton';
 import VideoEffectsPanel from './VideoEffectsPanel';
 import { VideoView } from './MediaViews';
@@ -103,11 +103,10 @@ export default function PreJoinScreen({
   return (
     <div className="cr-root min-h-screen flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-4xl grid md:grid-cols-[1.3fr_1fr] gap-6 items-center">
-        {/* Camera preview — deliberately NOT overflow-hidden: the video
-            effects popover below needs to extend above this box without
-            being clipped, so the rounded corners are applied directly to
-            the video/placeholder elements instead of via a clipping
-            ancestor. */}
+        {/* Camera preview — deliberately NOT overflow-hidden: the buttons'
+            tooltips extend above this box, so the rounded corners are applied
+            directly to the video/placeholder elements instead of via a
+            clipping ancestor. */}
         <div className="relative aspect-video rounded-2xl bg-[var(--cr-surface)] border border-[var(--cr-border)]">
           <VideoView
             track={previewTrack}
@@ -146,24 +145,13 @@ export default function PreJoinScreen({
               onClick={() => call.setLocalVideo(!videoEnabled)}
               off={!videoEnabled}
             />
-            <div className="relative">
-              <IconButton icon={Wand2} label="Video effects" onClick={() => setEffectsOpen((v) => !v)} active={effectsOpen} />
-              {effectsOpen && (
-                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-[var(--cr-surface)] border border-[var(--cr-border)] rounded-xl shadow-2xl p-4 cr-fade-in z-20">
-                  <VideoEffectsPanel
-                    background={effects.background}
-                    onBackgroundChange={(e) => void effects.setBackground(e)}
-                    appearance={effects.appearance}
-                    onAppearanceChange={(a) => void effects.setAppearance(a)}
-                    supported={effects.supported}
-                    unsupportedReason={effects.unsupportedReason}
-                    loading={effects.loading}
-                    error={effects.error}
-                    onUploadImage={effects.uploadBackground}
-                  />
-                </div>
-              )}
-            </div>
+            <IconButton
+              icon={Wand2}
+              label="Video effects"
+              onClick={() => setEffectsOpen((v) => !v)}
+              active={effectsOpen}
+              pressed={effectsOpen}
+            />
           </div>
 
           {/* Device selects */}
@@ -183,23 +171,59 @@ export default function PreJoinScreen({
           </div>
         </div>
 
-        {/* Session info + join */}
-        <div className="cr-fade-in">
-          <div className="flex items-center gap-2 mb-3">
-            <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg bg-[#0B1026]" />
-            <span className="text-sm font-semibold text-[var(--cr-text)]">Lumexa AI School</span>
-          </div>
-          {isLive && (
-            <span className="inline-flex items-center gap-1.5 mb-2 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold uppercase tracking-wide">
-              <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Live
-            </span>
-          )}
-          <h1 className="text-xl sm:text-2xl font-bold text-[var(--cr-text)] mb-1">{sessionTitle}</h1>
-          {sessionSubtitle && <p className="text-sm text-[var(--cr-text-muted)] mb-4">{sessionSubtitle}</p>}
+        {/* Session info + join. While the video effects are open they take the place of the
+            session info, beside the picture they change: in the page's own flow, so they are
+            never cut off by the edge of the screen (the page scrolls if the window is short),
+            and they never cover the preview. Joining stays one click away. */}
+        <div className="min-w-0 cr-fade-in">
+          {effectsOpen ? (
+            <section
+              aria-label="Video effects"
+              data-testid="prejoin-effects"
+              className="mb-4 p-4 rounded-xl bg-[var(--cr-surface)] border border-[var(--cr-border)] cr-fade-in"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-[var(--cr-text)]">Video effects</h2>
+                <button
+                  type="button"
+                  onClick={() => setEffectsOpen(false)}
+                  aria-label="Close video effects"
+                  className="cr-icon-btn w-8 h-8 -mr-1"
+                >
+                  <X size={16} strokeWidth={2} />
+                </button>
+              </div>
+              <VideoEffectsPanel
+                background={effects.background}
+                onBackgroundChange={(e) => void effects.setBackground(e)}
+                appearance={effects.appearance}
+                onAppearanceChange={(a) => void effects.setAppearance(a)}
+                supported={effects.supported}
+                unsupportedReason={effects.unsupportedReason}
+                loading={effects.loading}
+                error={effects.error}
+                onUploadImage={effects.uploadBackground}
+              />
+            </section>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <img src="/logo-mark.png" alt="" className="w-7 h-7 rounded-lg bg-[#0B1026]" />
+                <span className="text-sm font-semibold text-[var(--cr-text)]">Lumexa AI School</span>
+              </div>
+              {isLive && (
+                <span className="inline-flex items-center gap-1.5 mb-2 px-2 py-0.5 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-bold uppercase tracking-wide">
+                  <span className="w-1.5 h-1.5 bg-red-500 rounded-full cr-live-dot" /> Live
+                </span>
+              )}
+              <h1 className="text-xl sm:text-2xl font-bold text-[var(--cr-text)] mb-1">{sessionTitle}</h1>
+              {sessionSubtitle && <p className="text-sm text-[var(--cr-text-muted)] mb-4">{sessionSubtitle}</p>}
 
-          <div className="mb-6 px-3 py-2 rounded-lg bg-[var(--cr-surface-2)] border border-[var(--cr-border)] inline-block text-xs text-[var(--cr-text-muted)]">
-            Joining as <span className="text-[var(--cr-text)] font-medium">{roleLabel}</span>
-          </div>
+              <div className="mb-6 px-3 py-2 rounded-lg bg-[var(--cr-surface-2)] border border-[var(--cr-border)] inline-block text-xs text-[var(--cr-text-muted)]">
+                Joining as <span className="text-[var(--cr-text)] font-medium">{roleLabel}</span>
+              </div>
+            </>
+          )}
 
           <button
             onClick={() => onJoin({ audioEnabled, videoEnabled })}

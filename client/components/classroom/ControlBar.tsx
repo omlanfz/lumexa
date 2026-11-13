@@ -269,7 +269,10 @@ export default function ControlBar({
         active={openPopover === 'effects'}
       />
       {openPopover === 'effects' && (
-        <div className="absolute bottom-full mb-2 left-0 bg-[var(--cr-surface)] border border-[var(--cr-border)] rounded-xl shadow-2xl p-4 z-30 cr-fade-in">
+        // 320px of panel inside the padding and border. Never taller than the room above the
+        // bar: on a short window the popover scrolls (with a scrollbar that shows in both
+        // themes) instead of being cut off at the top of the screen.
+        <div className="absolute bottom-full mb-2 left-0 w-[354px] max-h-[calc(100dvh-9rem)] overflow-y-auto [scrollbar-width:thin] [scrollbar-color:var(--cr-text-faint)_transparent] bg-[var(--cr-surface)] border border-[var(--cr-border)] rounded-xl shadow-2xl p-4 z-30 cr-fade-in">
           <VideoEffectsPanel {...effects} />
         </div>
       )}

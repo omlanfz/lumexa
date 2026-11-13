@@ -54,8 +54,9 @@ function OptionTile({
       data-testid={testId}
       className={`group flex flex-col items-center gap-1.5 ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
     >
+      {/* 64px where there is room (the usual 320px panel), smaller where the column is narrower */}
       <div
-        className={`w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center border-2 transition-all ${
+        className={`w-full max-w-16 aspect-square rounded-xl overflow-hidden flex items-center justify-center border-2 transition-all ${
           active
             ? 'border-[var(--cr-accent)] ring-2 ring-[var(--cr-accent)]/30'
             : 'border-[var(--cr-border)] group-hover:border-[var(--cr-border-strong)]'
@@ -131,7 +132,7 @@ export default function VideoEffectsPanel({
   const lightingPercent = Math.round(appearance.lighting * 100);
 
   return (
-    <div className="w-[320px] max-w-full" data-testid="effects-panel">
+    <div className="w-full" data-testid="effects-panel">
       {!supported && (
         <div className="mb-3 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 text-xs" data-testid="effects-unsupported">
           {unsupportedReason ?? "Video effects aren't supported in this browser. Try the latest Chrome or Edge."}
@@ -208,7 +209,9 @@ export default function VideoEffectsPanel({
       </div>
 
       <p className="text-xs font-semibold uppercase tracking-wide text-[var(--cr-text-muted)] mt-4 mb-2.5">Lumexa Backgrounds</p>
-      <div className="grid grid-cols-4 gap-3 max-h-[168px] overflow-y-auto cr-scroll pr-1">
+      {/* All of them, in the page's or the popover's own scroll — a box of its own that scrolled
+          would cut a row of tiles in half. */}
+      <div className="grid grid-cols-4 gap-3">
         {LUMEXA_BACKGROUNDS.map((bg) => (
           <OptionTile
             key={bg.id}
