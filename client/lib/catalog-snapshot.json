@@ -1543,6 +1543,203 @@
       "mostPopular": false
     },
     {
+      "slug": "python-foundations",
+      "title": "Python Foundations",
+      "emoji": "🐍",
+      "category": "Python Foundations",
+      "ageMin": 12,
+      "ageMax": 18,
+      "kind": "specialized",
+      "totalLessons": 28,
+      "learningLessons": 24,
+      "assessmentLessons": 4,
+      "modules": [
+        {
+          "slug": "python-programming-essentials",
+          "title": "Python Programming Essentials",
+          "order": 1,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 1,
+              "type": "LEARNING",
+              "title": "Python Setup and Your First Program"
+            },
+            {
+              "order": 2,
+              "type": "LEARNING",
+              "title": "Variables, Data Types, and Values"
+            },
+            {
+              "order": 3,
+              "type": "LEARNING",
+              "title": "User Input, Output, and Operators"
+            },
+            {
+              "order": 4,
+              "type": "LEARNING",
+              "title": "Making Decisions with Conditional Logic"
+            },
+            {
+              "order": 5,
+              "type": "LEARNING",
+              "title": "Repetition with Python Loops"
+            },
+            {
+              "order": 6,
+              "type": "LEARNING",
+              "title": "Working with Strings"
+            },
+            {
+              "order": 7,
+              "type": "LEARNING",
+              "title": "Working with Python Collections"
+            },
+            {
+              "order": 8,
+              "type": "LEARNING",
+              "title": "Creating Reusable Code with Functions"
+            },
+            {
+              "order": 9,
+              "type": "COURSE_TEST",
+              "title": "Python Programming Essentials — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "problem-solving-program-design",
+          "title": "Problem Solving & Program Design",
+          "order": 2,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 10,
+              "type": "LEARNING",
+              "title": "Computational Thinking & Problem Decomposition"
+            },
+            {
+              "order": 11,
+              "type": "LEARNING",
+              "title": "Functions in Depth & Modular Programming"
+            },
+            {
+              "order": 12,
+              "type": "LEARNING",
+              "title": "Advanced Collections & Nested Data Structures"
+            },
+            {
+              "order": 13,
+              "type": "LEARNING",
+              "title": "Algorithms & Problem-Solving Patterns"
+            },
+            {
+              "order": 14,
+              "type": "LEARNING",
+              "title": "Debugging, Testing & Fixing Problems"
+            },
+            {
+              "order": 15,
+              "type": "LEARNING",
+              "title": "Error Handling & Input Validation"
+            },
+            {
+              "order": 16,
+              "type": "LEARNING",
+              "title": "Working with Files & Structured Data"
+            },
+            {
+              "order": 17,
+              "type": "LEARNING",
+              "title": "Introduction to Object-Oriented Programming"
+            },
+            {
+              "order": 18,
+              "type": "COURSE_TEST",
+              "title": "Problem Solving & Program Design — Course Test"
+            }
+          ]
+        },
+        {
+          "slug": "python-tools-data-foundations",
+          "title": "Python Tools & Data Foundations",
+          "order": 3,
+          "lessonCount": 9,
+          "learningCount": 8,
+          "lessons": [
+            {
+              "order": 19,
+              "type": "LEARNING",
+              "title": "Python Development Environment & Workflow"
+            },
+            {
+              "order": 20,
+              "type": "LEARNING",
+              "title": "Python Modules, Libraries & Packages"
+            },
+            {
+              "order": 21,
+              "type": "LEARNING",
+              "title": "Introduction to Jupyter Notebooks"
+            },
+            {
+              "order": 22,
+              "type": "LEARNING",
+              "title": "Introduction to NumPy"
+            },
+            {
+              "order": 23,
+              "type": "LEARNING",
+              "title": "Introduction to Pandas & DataFrames"
+            },
+            {
+              "order": 24,
+              "type": "LEARNING",
+              "title": "Data Cleaning, Summaries & Basic Visualization"
+            },
+            {
+              "order": 25,
+              "type": "LEARNING",
+              "title": "Working with APIs & JSON Data"
+            },
+            {
+              "order": 26,
+              "type": "LEARNING",
+              "title": "Python Capstone: Build, Document & Share"
+            },
+            {
+              "order": 27,
+              "type": "COURSE_TEST",
+              "title": "Python Tools & Data Foundations — Course Test"
+            }
+          ]
+        }
+      ],
+      "stages": [],
+      "closingAssessments": [
+        {
+          "order": 28,
+          "type": "FINAL_TEST",
+          "title": "Python Foundations — Final Test"
+        }
+      ],
+      "badges": [
+        {
+          "label": "Beginner friendly",
+          "tone": "beginner"
+        },
+        {
+          "label": "No prior coding experience needed",
+          "tone": "info"
+        }
+      ],
+      "audience": "Beginner friendly — no prior coding experience needed",
+      "prerequisite": null,
+      "mostPopular": false
+    },
+    {
       "slug": "web-developer",
       "title": "Web Developer",
       "emoji": "🌐",
@@ -2621,7 +2818,7 @@
     }
   ],
   "totals": {
-    "programs": 7,
-    "courses": 25
+    "programs": 8,
+    "courses": 28
   }
 }

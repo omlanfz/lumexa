@@ -56,6 +56,18 @@ import {
   scratchAdventuresExtras,
 } from './scratch-adventures';
 import { skillsThatPay, skillsThatPayExtras } from './skills-that-pay';
+import {
+  problemSolvingProgramDesign,
+  problemSolvingProgramDesignExtras,
+} from './problem-solving-program-design';
+import {
+  pythonProgrammingEssentials,
+  pythonProgrammingEssentialsExtras,
+} from './python-programming-essentials';
+import {
+  pythonToolsDataFoundations,
+  pythonToolsDataFoundationsExtras,
+} from './python-tools-data-foundations';
 import { pythonForData, pythonForDataExtras } from './python-for-data';
 import {
   pythonForYoungBuilders,
@@ -81,6 +93,9 @@ export const courseTestBanks: Record<string, TestBank> = {
   'build-your-professional-identity': buildYourProfessionalIdentity,
   'skills-that-pay': skillsThatPay,
   'professional-presence': professionalPresence,
+  'python-programming-essentials': pythonProgrammingEssentials,
+  'problem-solving-program-design': problemSolvingProgramDesign,
+  'python-tools-data-foundations': pythonToolsDataFoundations,
 };
 
 export const moduleExtras: Record<string, ModuleExtras> = {
@@ -102,4 +117,7 @@ export const moduleExtras: Record<string, ModuleExtras> = {
   'build-your-professional-identity': buildYourProfessionalIdentityExtras,
   'skills-that-pay': skillsThatPayExtras,
   'professional-presence': professionalPresenceExtras,
+  'python-programming-essentials': pythonProgrammingEssentialsExtras,
+  'problem-solving-program-design': problemSolvingProgramDesignExtras,
+  'python-tools-data-foundations': pythonToolsDataFoundationsExtras,
 };

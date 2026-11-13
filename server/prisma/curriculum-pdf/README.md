@@ -9,6 +9,7 @@ its own colours, gradients and artwork.
 | Lumexa Odyssey | `lumexa-odyssey-curriculum.pdf` | indigo → violet |
 | Little Coders | `little-coders-path-curriculum.pdf` | amber → orange |
 | Game Creator | `game-creator-path-curriculum.pdf` | rose → red |
+| Python Foundations | `python-foundations-curriculum.pdf` | Python blue with yellow |
 | AI Builder | `ai-builder-path-curriculum.pdf` | violet → magenta |
 | Web Developer | `web-developer-path-curriculum.pdf` | blue → cyan |
 | Data Scientist | `data-scientist-path-curriculum.pdf` | teal |
@@ -33,6 +34,8 @@ Every PDF has the same pages:
   true/false; final test: 25 + 5 + a 20-mark project). Little Coders has its own 40-minute layout (10 + 5 + a 25-mark
   practical).
 * **Little Coders** is built from `src/little-coders/` — its courses, lesson titles and projects are the program's own.
+* **Python Foundations** reads its lesson titles from `prisma/curriculum-data/python-foundations-path.json` (the dataset
+  the database is seeded from), so the PDF can never list a lesson the program does not teach.
 * **Odyssey** lists the lessons of the nine courses it reuses from `prisma/curriculum-data/*.json`; the other programs'
   content is in `content/<program>.ts`.
 * **Sample-project pictures** are the website's screenshots (`client/public/student-projects/`) or the small web
@@ -43,12 +46,12 @@ Every PDF has the same pages:
 
 ```bash
 cd server
-npm run export:curriculum-pdfs                              # all eight
+npm run export:curriculum-pdfs                              # all nine
 npm run export:curriculum-pdfs -- --program game-creator    # only these (comma-separated slugs)
 npm run export:curriculum-pdfs -- --html ./tmp-html         # also keep each program's HTML, to inspect it
 ```
 
-Output goes to `client/public/curriculums/` and, for the seven programs the certificate email can attach,
+Output goes to `client/public/curriculums/` and, for the eight programs the certificate email can attach,
 `server/assets/curriculum-pdfs/`. It needs a Chromium (Puppeteer downloads one on `npm install`).
 
 The tool refuses to write a PDF whose content is invalid, and reports any page where text runs past the page edge or

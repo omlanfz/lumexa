@@ -80,6 +80,11 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
     { code: "Course 2", name: "Python Arcade Games" },
     { code: "Course 3", name: "Advanced Game Design" },
   ],
+  python: [
+    { code: "Course 1", name: "Python Programming Essentials" },
+    { code: "Course 2", name: "Problem Solving & Program Design" },
+    { code: "Course 3", name: "Python Tools & Data Foundations" },
+  ],
   ai: [
     { code: "Course 1", name: "Python and AI Foundations" },
     { code: "Course 2", name: "Computer Vision Projects" },
@@ -108,6 +113,7 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
     { code: "Course 3", name: "Professional Presence & Opportunity Building" },
   ],
   "game-creator":        [{ code: "Course 1", name: "Roblox World Builder" }, { code: "Course 2", name: "Python Arcade Games" }, { code: "Course 3", name: "Advanced Game Design" }],
+  "python-foundations":  [{ code: "Course 1", name: "Python Programming Essentials" }, { code: "Course 2", name: "Problem Solving & Program Design" }, { code: "Course 3", name: "Python Tools & Data Foundations" }],
   "ai-builder":          [{ code: "Course 1", name: "Python and AI Foundations" }, { code: "Course 2", name: "Computer Vision Projects" }, { code: "Course 3", name: "Language Models and Chatbots" }],
   "web-developer":       [{ code: "Course 1", name: "HTML and CSS Mastery" }, { code: "Course 2", name: "JavaScript and Interactivity" }, { code: "Course 3", name: "React and Full-Stack Web" }],
   "little-coders":       [{ code: "Course 1", name: "Scratch Adventures" }, { code: "Course 2", name: "Scratch Game Studio" }, { code: "Course 3", name: "AI for Kids: Smart Projects" }, { code: "Course 4", name: "Python Explorers" }, { code: "Course 5", name: "Python Creative Lab" }],
@@ -116,9 +122,9 @@ const PATHWAY_COURSES: Record<string, { code: string; name: string }[]> = {
 };
 
 const PATHWAY_LABELS: Record<string, string> = {
-  game: "Game Creator", ai: "AI Builder", web: "Web Developer",
+  game: "Game Creator", python: "Python Foundations", ai: "AI Builder", web: "Web Developer",
   little: "Little Coders", data: "Data Scientist", digital: "Digital Independence",
-  "game-creator": "Game Creator", "ai-builder": "AI Builder",
+  "game-creator": "Game Creator", "python-foundations": "Python Foundations", "ai-builder": "AI Builder",
   "web-developer": "Web Developer", "little-coders": "Little Coders",
   "data-scientist": "Data Scientist", "digital-independence": "Digital Independence",
 };

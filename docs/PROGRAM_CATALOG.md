@@ -29,7 +29,14 @@ stable colour picked from its slug, a generic tagline, the default price
 (`DEFAULT_BLOCK_PRICE`) and no curriculum download.
 
 To give a new program its own look, price and curriculum PDF, add an entry to
-`PRESETS` and put the PDF in `client/public/curriculums/`.
+`PRESETS` and put the PDF in `client/public/curriculums/`. A preset can also carry a
+`logo` (a path under `client/public`): the card then shows that brand mark on a white
+tile instead of the emoji (Python Foundations shows the Python logo; see
+`client/components/marketing/ProgramIcon.tsx`).
+
+Python Foundations is priced exactly like Game Creator: `blockPrice: 6000`, so Private 1:1
+is ৳6,000 per 8 lessons, a Small Learning Batch is 60% of that (৳3,600) and paying for the
+whole 28-session program upfront earns the same specialized-program discount.
 
 Advanced Data Science is priced exactly like Data Scientist (it shares
 `DATA_SCIENCE_BLOCK_PRICE`), for Private 1:1 and Small Batch alike.
@@ -47,6 +54,7 @@ snapshot and every curriculum PDF.
 | Lumexa Odyssey | 6–18 | Beginner | Best choice for beginners · Suitable for all ages |
 | Little Coders | 6–12 | Starter | Complete beginner friendly · For first-time coders |
 | Game Creator | 6–12 | Beginner | Beginner friendly |
+| Python Foundations | 12–18 | Beginner | Beginner friendly · No prior coding experience needed |
 | AI Builder | 12–18 | Intermediate | Most popular · Basic Python needed |
 | Web Developer | 12–18 | Beginner | Beginner friendly |
 | Data Scientist | 12–18 | Intermediate | Basic Python needed |
@@ -82,6 +90,13 @@ Programs built by hand (no source JSON) are described by an outline in
 Little Coders is the exception among the path programs: it is five independent courses
 (46 classes) read from `server/src/little-coders`, not from the three-module
 `little-coders-path.json` that Odyssey still reuses. See [LITTLE_CODERS.md](LITTLE_CODERS.md).
+
+## Python Foundations
+
+The newest default program (three courses, 24 lessons, nine portfolio projects) is authored in
+`server/prisma/python-foundations/` rather than in a spreadsheet-style dataset. How it is built,
+how to regenerate it, the project notebooks and how an admin adds the Colab links are in
+[PYTHON_FOUNDATIONS.md](PYTHON_FOUNDATIONS.md).
 
 ## Server
 

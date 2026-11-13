@@ -56,7 +56,7 @@ export function usePreview(draft: Draft, enabled: boolean) {
           teacherNotes: draft.teacherNotes,
           miniQuiz: draft.miniQuiz,
           visuals: draft.visuals,
-          projectLinks: draft.projectLinks.filter((p) => p.title.trim() && p.url.trim()),
+          projectLinks: draft.projectLinks.filter((p) => p.title.trim()).map((p) => ({ title: p.title.trim(), url: p.url.trim() })),
           ...(draft.lc ?? {}),
         })
         .then((res) => {

@@ -82,6 +82,7 @@ describe('certificate themes — a programme inherits from its category', () => 
   it.each([
     ['Little Coders', 'creative-coding-game-dev'],
     ['Game Creator', 'creative-coding-game-dev'],
+    ['Python Foundations', 'ai-data-science'],
     ['Web Developer', 'web-digital-skills'],
     ['Digital Independence', 'web-digital-skills'],
     ['AI Builder', 'ai-data-science'],
@@ -105,6 +106,7 @@ describe('certificate themes — a programme inherits from its category', () => 
     expect(themeOf('Python', 'ai-builder')).toBe('ai-data-science');
     expect(themeOf('Python', 'ai-builder-path')).toBe('ai-data-science');
     expect(themeOf('???', 'lumexa-odyssey')).toBe('general');
+    expect(themeOf('???', 'python-foundations')).toBe('ai-data-science');
   });
 
   it('places a NEW programme by the words of its category', () => {

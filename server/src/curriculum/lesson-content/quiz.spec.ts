@@ -25,7 +25,7 @@ const shipped = (): { key: string; questions: McqQuestion[] }[] => upgradeAll().
 describe('every quiz question is a multiple-choice question with exactly four options', () => {
   it('holds for every question of every shipped learning lesson — there is no exception', () => {
     const all = shipped();
-    expect(all).toHaveLength(144);
+    expect(all).toHaveLength(168);
     let total = 0;
     for (const { key, questions } of all) {
       expect({ key, hasQuiz: questions.length > 0 }).toEqual({ key, hasQuiz: true });
@@ -192,12 +192,19 @@ describe('grading is deterministic and reveals the answer only after a submissio
 
 describe('authored quizzes are validated', () => {
   it('accepts every authored quiz in the catalog, each question four-option multiple choice', () => {
+    // Little Coders: 24 lessons × 3 questions. Python Foundations: 24 lessons × 5 questions.
+    const littleCoders = new Set([
+      'scratch-adventures',
+      'python-for-young-builders',
+      'ai-for-kids',
+    ]);
     const keys = quizCatalogKeys();
-    expect(keys.length).toBe(24);
+    expect(keys.length).toBe(48);
     for (const k of keys) {
       const v = normalizeQuiz(quizCatalogFor(k));
       expect({ k, errors: v.errors }).toEqual({ k, errors: [] });
-      expect(v.quiz.length).toBe(3);
+      const want = littleCoders.has(k.split('/')[0]) ? 3 : 5;
+      expect({ k, questions: v.quiz.length }).toEqual({ k, questions: want });
       for (const q of v.quiz) expect(q.options).toHaveLength(MCQ_OPTION_COUNT);
     }
   });

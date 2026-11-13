@@ -6,7 +6,7 @@ import api from '@/lib/axios';
 import { Card } from '@/components/admin/AdminUI';
 import LessonMarkdown from '@/components/lesson/LessonMarkdown';
 import { LessonRenderContext } from '@/components/lesson/LessonContext';
-import ProjectLinksSection, { ProjectLink } from '@/components/curriculum/ProjectLinksSection';
+import ProjectLinksSection, { ProjectLink, visibleProjectLinks } from '@/components/curriculum/ProjectLinksSection';
 import QuizEditor, { toDraftQuestion, type DraftQuestion } from '@/components/admin/lesson-editor/QuizEditor';
 import VisualsEditor, { type VisualTypeInfo } from '@/components/admin/lesson-editor/VisualsEditor';
 import LessonPreview, { usePreview, type Draft } from '@/components/admin/lesson-editor/LessonPreview';
@@ -146,7 +146,8 @@ export default function AdminLessonEditPage() {
               teacherNotes,
               miniQuiz,
               visuals,
-              projectLinks: projectLinks.map((p) => ({ title: p.title.trim(), url: p.url.trim() })).filter((p) => p.title && p.url),
+              // A project with a name but no link yet is kept (the lesson page shows it as "link coming soon").
+              projectLinks: visibleProjectLinks(projectLinks.map((p) => ({ title: p.title.trim(), url: p.url.trim() }))),
             },
       );
       setSaved(true);
@@ -367,7 +368,7 @@ export default function AdminLessonEditPage() {
       {!lc && (
       <Section
         title="💻 Project"
-        hint='Buttons ("Open Project" / "Copy Link") shown on the lesson page in place of the Code section. Leave empty to keep showing the Code section below instead. Add more than one entry (e.g. a recap session) to show each project under its own heading.'
+        hint='Buttons ("Open Project" / "Copy Link") shown on the lesson page in place of the Code section. Leave empty to keep showing the Code section below instead. Add more than one entry (e.g. a recap session) to show each project under its own heading. A project with a name but no link yet shows "Project link coming soon" — paste the notebook link here (e.g. a Google Colab link) when it is ready.'
       >
         <div className="grid md:grid-cols-2 gap-4">
           <div className="space-y-3">
@@ -395,8 +396,8 @@ export default function AdminLessonEditPage() {
             </button>
           </div>
           <div className="rounded-lg border border-[var(--a-border)] p-4 bg-[var(--a-surface)]">
-            {projectLinks.filter((p) => p.title.trim() && p.url.trim()).length > 0 ? (
-              <ProjectLinksSection projectLinks={projectLinks.filter((p) => p.title.trim() && p.url.trim())} />
+            {visibleProjectLinks(projectLinks).length > 0 ? (
+              <ProjectLinksSection projectLinks={projectLinks} />
             ) : (
               <p className="text-sm text-[var(--a-text-faint)] italic">Nothing to preview yet — the Code section below will show instead.</p>
             )}
@@ -408,7 +409,7 @@ export default function AdminLessonEditPage() {
       {!lc && codeSnippetCount > 0 && (
         <p className="text-xs text-[var(--a-text-faint)]">
           {codeSnippetCount} code snippet(s) attached to this lesson — imported from source content; not editable from this page yet.
-          {projectLinks.filter((p) => p.title.trim() && p.url.trim()).length > 0 && ' Currently hidden on the lesson page because a Project section above is set.'}
+          {visibleProjectLinks(projectLinks).length > 0 && ' Currently hidden on the lesson page because a Project section above is set.'}
         </p>
       )}
 

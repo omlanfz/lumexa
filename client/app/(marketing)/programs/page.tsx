@@ -17,6 +17,7 @@ import {
 import { usePrograms } from "@/lib/usePrograms";
 import Collapse from "@/components/Collapse";
 import ProgramBadges from "@/components/marketing/ProgramBadges";
+import ProgramIcon from "@/components/marketing/ProgramIcon";
 
 function DownloadIcon({ className }: { className?: string }) {
   return (
@@ -161,9 +162,7 @@ function ProgramCard({
       }`}
     >
       <div className="flex items-start gap-3 mb-3">
-        <div className={`w-12 h-12 flex-none rounded-xl bg-gradient-to-br ${program.color} grid place-items-center text-2xl shadow-sm`}>
-          {program.emoji}
-        </div>
+        <ProgramIcon program={program} className="w-12 h-12 text-2xl" />
         <div className="min-w-0">
           <h3 className="text-[#0F172A] dark:text-white font-black text-xl leading-tight">{program.title}</h3>
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
@@ -315,7 +314,7 @@ function ProgramDetail({
     <div id={`program-${program.id}`} className="motion-rise scroll-mt-24 mt-8 rounded-3xl border border-[#E2E8F0] dark:border-gray-700/60 bg-[#F8FAFF] dark:bg-gray-900/30 p-5 sm:p-8">
       <div className={`flex flex-col sm:flex-row sm:items-center gap-4 mb-6 pb-6 border-b ${program.border}`}>
         <div className="flex items-center gap-4 flex-1 min-w-0">
-          <div className="text-4xl sm:text-5xl">{program.emoji}</div>
+          <ProgramIcon program={program} bare className="text-4xl sm:text-5xl" />
           <div className="min-w-0">
             <h3 className="text-xl sm:text-2xl font-black text-[#0F172A] dark:text-white">{program.title} curriculum</h3>
             <p className={`font-bold text-sm ${program.accent}`}>{program.tagline}</p>

@@ -6,6 +6,8 @@ import './data-scientist';
 import './digital-independence';
 import './game-creator';
 import './little-coders';
+import './python-foundations';
+import './python-foundations-quiz';
 import './web-developer';
 import './advanced-data-science';
 // Four-option multiple-choice rewrites of older quiz questions (the rule: every question is multiple choice)

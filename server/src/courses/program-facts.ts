@@ -90,6 +90,21 @@ export const PROGRAM_FACTS: Record<string, ProgramFacts> = {
     badges: [{ label: 'Beginner friendly', tone: 'beginner' }],
     replaces: { ages: [[10, 18]], levels: ['INTERMEDIATE'] },
   },
+  'python-foundations': {
+    slug: 'python-foundations',
+    ageMin: 12,
+    ageMax: 18,
+    level: 'BEGINNER',
+    audience: 'Beginner friendly — no prior coding experience needed',
+    prerequisite: null,
+    mostPopular: false,
+    badges: [
+      { label: 'Beginner friendly', tone: 'beginner' },
+      { label: 'No prior coding experience needed', tone: 'info' },
+    ],
+    // A new program: nothing was ever seeded under other values.
+    replaces: { ages: [], levels: [] },
+  },
   'ai-builder': {
     slug: 'ai-builder',
     ageMin: 12,

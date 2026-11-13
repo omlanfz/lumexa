@@ -75,6 +75,20 @@ export const THEMES: Record<ThemeKey, Theme> = {
       ['#BE185D', '#F472B6'],
     ],
   },
+  python: {
+    key: 'python',
+    deep: '#10294D',
+    main: '#306998',
+    light: '#6FB6F2',
+    soft: '#EAF3FB',
+    ink: '#25587F',
+    glow: '#CFE4F7',
+    courses: [
+      ['#306998', '#6FA8DC'],
+      ['#D99A00', '#FFD43B'],
+      ['#1F8A70', '#5EDBB8'],
+    ],
+  },
   ai: {
     key: 'ai',
     deep: '#2E0A63',

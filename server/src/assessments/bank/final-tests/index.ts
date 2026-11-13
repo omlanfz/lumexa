@@ -10,6 +10,7 @@ import { digitalIndependenceFinal } from './digital-independence-path';
 import { gameCreatorFinal } from './game-creator-path';
 import { littleCodersFinal } from './little-coders-path';
 import { odysseyFinal } from './lumexa-odyssey';
+import { pythonFoundationsFinal } from './python-foundations-path';
 import { webDeveloperFinal } from './web-developer-path';
 
 export const finalTestBanks: Record<string, TestBank> = {
@@ -19,5 +20,6 @@ export const finalTestBanks: Record<string, TestBank> = {
   'game-creator': gameCreatorFinal,
   'little-coders': littleCodersFinal,
   'lumexa-odyssey': odysseyFinal,
+  'python-foundations': pythonFoundationsFinal,
   'web-developer': webDeveloperFinal,
 };

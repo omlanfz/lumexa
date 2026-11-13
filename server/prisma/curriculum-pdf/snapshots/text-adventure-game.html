@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Text-Based Adventure Game</title>
+<style>
+@font-face{font-family:'Inter';font-weight:500;src:url('../../../assets/certificate/fonts/inter-latin-500-normal.woff2')}
+@font-face{font-family:'Inter';font-weight:700;src:url('../../../assets/certificate/fonts/inter-latin-700-normal.woff2')}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1280px;height:800px;overflow:hidden;font-family:'Inter',Arial,sans-serif;background:#0b1226;color:#e2e8f0}
+.top{height:58px;background:linear-gradient(90deg,#10294d,#306998);display:flex;align-items:center;gap:14px;padding:0 26px;color:#fff;font-weight:700;font-size:20px}
+.top span{background:rgba(255,255,255,.18);border-radius:99px;padding:4px 14px;font-size:14px;font-weight:500}
+.top .yl{background:#ffd43b;color:#10294d;font-weight:700}
+.wrap{display:grid;grid-template-columns:690px 1fr;gap:24px;padding:26px 30px}
+.term{background:#050a18;border:1px solid #1e3a5f;border-radius:20px;padding:22px 26px;font:18px/1.75 'DejaVu Sans Mono',Menlo,monospace;height:690px}
+.term .g{color:#6ee7b7}.term .y{color:#ffd43b}.term .b{color:#7dd3fc}.term .r{color:#fda4af}.term .d{color:#64748b}
+.side{display:flex;flex-direction:column;gap:20px}
+.card{background:#10203e;border-radius:20px;padding:20px 22px;border:1px solid #1e3a5f}
+h3{font-size:16px;color:#ffd43b;margin-bottom:14px;letter-spacing:.04em;text-transform:uppercase}
+.map{position:relative;height:300px}
+.room{position:absolute;width:150px;height:62px;border-radius:12px;background:#17305a;border:2px solid #2f5d99;display:grid;place-items:center;font-size:17px;font-weight:700}
+.room.here{background:#306998;border-color:#ffd43b;box-shadow:0 0 0 4px rgba(255,212,59,.25)}
+.room.locked{border-style:dashed;color:#94a3b8}
+.line{position:absolute;background:#2f5d99}
+.inv{display:flex;gap:10px;flex-wrap:wrap}.inv span{background:#fff7d6;color:#10294d;border-radius:99px;padding:7px 16px;font-weight:700;font-size:16px}
+.ox{height:14px;border-radius:99px;background:#1e3a5f;overflow:hidden;margin-top:12px}.ox i{display:block;height:100%;width:62%;background:linear-gradient(90deg,#22c55e,#a3e635)}
+</style></head><body>
+<div class="top">🪐 Text-Based Adventure Game <span>Python</span><span class="yl">Course 2 · Project</span></div>
+<div class="wrap">
+ <div class="term">
+<span class="y">🚀 SPACE STATION ESCAPE 🚀</span><br>
+<span class="d">Your oxygen is running out. Find the keycard!</span><br><br>
+<span class="b">📍 Corridor</span><br>
+A long corridor. Doors lead west to the lab, east to<br>the garden and north to the engine room.<br>
+Exits: south, west, east, north<br>
+<span class="g">Oxygen: 7 moves left</span><br><br>
+<span class="y">&gt; What do you do?</span> go west<br><br>
+<span class="b">📍 Lab</span><br>
+A lab full of dusty monitors. A keycard lies on a desk.<br>
+You see: keycard<br><br>
+<span class="y">&gt; What do you do?</span> take keycard<br>
+<span class="g">You take the keycard.</span><br><br>
+<span class="y">&gt; What do you do?</span> go up<br>
+<span class="r">You can't go that way.</span><br><br>
+<span class="y">&gt; What do you do?</span> <span class="d">▌</span>
+ </div>
+ <div class="side">
+  <div class="card"><h3>The world: nested dictionaries</h3>
+   <div class="map">
+    <div class="line" style="left:75px;top:140px;width:150px;height:4px"></div>
+    <div class="line" style="left:300px;top:140px;width:150px;height:4px"></div>
+    <div class="line" style="left:225px;top:70px;width:4px;height:70px"></div>
+    <div class="line" style="left:225px;top:140px;width:4px;height:70px"></div>
+    <div class="room here" style="left:150px;top:110px">Corridor</div>
+    <div class="room" style="left:0;top:110px">Lab</div>
+    <div class="room" style="left:300px;top:110px">Garden</div>
+    <div class="room" style="left:150px;top:20px">Engine room</div>
+    <div class="room locked" style="left:300px;top:20px">🔒 Escape pod</div>
+    <div class="room" style="left:150px;top:210px">Airlock</div>
+   </div></div>
+  <div class="card"><h3>Player record</h3>
+   <div class="inv"><span>🔑 keycard</span><span>🫧 empty slot</span></div>
+   <div class="ox"><i></i></div></div>
+ </div>
+</div>
+</body></html>

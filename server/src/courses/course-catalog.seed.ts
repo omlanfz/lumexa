@@ -1,10 +1,11 @@
 // FILE PATH: server/src/courses/course-catalog.seed.ts
 //
-// The default Lumexa course catalog — the 7 courses Lumexa currently offers:
-// the flagship "Lumexa Odyssey" path and its 6 specialized pathways (Little
-// Coders, Game Creator, Web Developer, AI Builder, Data Scientist, Digital
-// Independence). One Course row per path (not per sub-course) so this is
-// exactly what Operations sees on /admin/courses out of the box.
+// The default Lumexa course catalog — the 8 courses Lumexa currently offers:
+// the flagship "Lumexa Odyssey" path and its 7 specialized pathways (Little
+// Coders, Game Creator, Python Foundations, Web Developer, AI Builder, Data
+// Scientist, Digital Independence). One Course row per path (not per
+// sub-course) so this is exactly what Operations sees on /admin/courses out of
+// the box.
 //
 // Each specialized pathway is 28 sessions: 3 real 8-lesson sub-courses
 // ("modules"), each followed by its own Course Test, plus one Final Test —
@@ -114,6 +115,16 @@ export const COURSE_CATALOG: CourseSeed[] = [
     emoji: '🎮',
     category: 'Game Creator',
     ...ageAndLevel('game-creator'),
+    sessions: 28,
+  },
+  {
+    slug: 'python-foundations',
+    title: 'Python Foundations',
+    description:
+      'A complete, hands-on journey into text-based Python, starting from the very first line of code. Students learn Python itself, then learn to think and build like programmers: solving problems, debugging, handling errors, working with files and writing object-oriented code. They finish by setting up real development tools and taking their first steps with Jupyter Notebooks, NumPy, Pandas and APIs. No prior coding experience needed. 3 courses, 24 learning sessions plus 3 course tests and a Final Test.',
+    emoji: '🐍',
+    category: 'Python Foundations',
+    ...ageAndLevel('python-foundations'),
     sessions: 28,
   },
   {

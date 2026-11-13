@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { ODYSSEY, buildPrograms, homeOrder, programMetaFor, resolveProgramId, DEFAULT_BLOCK_PRICE } from './programs.ts';
-import { fullPayment, pricePerBlock } from './pricing.ts';
+import { existsSync, readFileSync } from 'node:fs';
+import { ODYSSEY, buildPrograms, courseOutcome, homeOrder, programMetaFor, resolveProgramId, DEFAULT_BLOCK_PRICE } from './programs.ts';
+import { FULL_PAYMENT_DISCOUNT_PERCENT, fullPayment, pricePerBlock } from './pricing.ts';
 import { mergeProgramFacts, type Catalog, type CatalogCourse } from './catalog.ts';
 
 const snapshot = JSON.parse(readFileSync(new URL('./catalog-snapshot.json', import.meta.url), 'utf8')) as Catalog;
@@ -21,11 +21,11 @@ test('every active specialized program in the catalog gets a card, in parent ord
   assert.equal(odyssey?.course.slug, 'lumexa-odyssey');
   assert.deepEqual(
     specialized.map((s) => s.meta.id),
-    ['little', 'game', 'ai', 'web', 'data', 'advanced-data-science', 'digital'],
+    ['little', 'game', 'python', 'ai', 'web', 'data', 'advanced-data-science', 'digital'],
   );
   assert.deepEqual(
     homeOrder(specialized).map((s) => s.meta.id),
-    ['game', 'ai', 'web', 'little', 'data', 'advanced-data-science', 'digital'],
+    ['game', 'python', 'ai', 'web', 'little', 'data', 'advanced-data-science', 'digital'],
   );
 });
 
@@ -70,7 +70,7 @@ test('an admin re-slugging a program keeps its card, look and price', () => {
   assert.equal(ai.meta.id, 'ai', 'recognised by its title');
   assert.equal(ai.meta.blockPrice, 7500);
   assert.equal(ai.meta.curriculumFile, 'ai-builder-path-curriculum.pdf');
-  assert.equal(programs.length, 7);
+  assert.equal(programs.length, 8);
 });
 
 test('a brand-new or fully renamed program still gets a working card', () => {
@@ -111,8 +111,56 @@ test('Advanced Data Science costs the same as Data Scientist, 1:1 and batch', ()
   assert.equal(fullPayment(ads, 'private', 46).regular, Math.round((7500 / 8) * 46));
 });
 
+test('Python Foundations: a beginner card with the Python logo and its own curriculum PDF', () => {
+  const python = programMetaFor(course('python-foundations'));
+  assert.equal(python.id, 'python');
+  assert.equal(python.title, 'Python Foundations');
+  assert.equal(python.ages, 'Ages 12–18');
+  assert.equal(python.logo, '/brand/python-logo.svg');
+  assert.ok(existsSync(new URL('../public/brand/python-logo.svg', import.meta.url)), 'the logo file is shipped');
+  assert.equal(python.curriculumFile, 'python-foundations-curriculum.pdf');
+  assert.deepEqual(python.badges.map((b) => b.label), ['Beginner friendly', 'No prior coding experience needed']);
+  assert.equal(python.prerequisite, null, 'no prior coding experience is needed');
+  assert.equal(python.mostPopular, false);
+  assert.equal(python.emoji, '🐍', 'the emoji stays as the fallback while the logo loads');
+  // Only a program with a brand mark has a logo.
+  for (const slug of ['game-creator', 'ai-builder', 'web-developer', 'data-scientist', 'digital-independence', 'little-coders', 'advanced-data-science']) {
+    assert.equal(programMetaFor(course(slug)).logo, null, `${slug} has no logo`);
+  }
+  assert.equal(ODYSSEY.logo, null);
+  // 3 courses, 24 lessons + 3 course tests + a final test, like the other 28-session programs.
+  const live = course('python-foundations');
+  assert.deepEqual([live.totalLessons, live.learningLessons, live.assessmentLessons], [28, 24, 4]);
+  assert.deepEqual(live.modules.map((m) => m.title), ['Python Programming Essentials', 'Problem Solving & Program Design', 'Python Tools & Data Foundations']);
+  for (const m of live.modules) {
+    assert.ok(courseOutcome(m), `${m.title} has a summary line`);
+    assert.equal(m.learningCount, 8, `${m.title} has eight lessons`);
+    assert.equal(m.lessonCount, 9, `${m.title} ends with its course test`);
+  }
+  assert.deepEqual(live.closingAssessments.map((l) => l.type), ['FINAL_TEST']);
+});
+
+test('Python Foundations is priced exactly like Game Creator: 1:1, small batch and the whole-program discount', () => {
+  const python = programMetaFor(course('python-foundations'));
+  const game = programMetaFor(course('game-creator'));
+  assert.equal(python.blockPrice, 6000);
+  assert.equal(pricePerBlock(python, 'private'), 6000);
+  assert.equal(pricePerBlock(python, 'batch'), 3600);
+  for (const format of ['private', 'batch'] as const) {
+    assert.equal(pricePerBlock(python, format), pricePerBlock(game, format));
+    // the same 10% discount on the same 28-lesson program
+    assert.deepEqual(fullPayment(python, format, 28), fullPayment(game, format, 28));
+    assert.equal(fullPayment(python, format, 28).percent, FULL_PAYMENT_DISCOUNT_PERCENT.specialized);
+  }
+  assert.equal(fullPayment(python, 'private', 28).regular, 21000);
+  assert.equal(fullPayment(python, 'private', 28).discounted, 18900);
+  assert.equal(fullPayment(python, 'batch', 28).regular, 12600);
+  assert.equal(fullPayment(python, 'batch', 28).discounted, 11340);
+});
+
 test('?program= accepts the short id, the slug and the old "-path" slug', () => {
   const { all } = buildPrograms(snapshot);
+  for (const value of ['python', 'python-foundations', 'python-foundations-path']) assert.equal(resolveProgramId(value, all), 'python');
   for (const value of ['ai', 'ai-builder', 'ai-builder-path']) assert.equal(resolveProgramId(value, all), 'ai');
   assert.equal(resolveProgramId('advanced-data-science', all), 'advanced-data-science');
   assert.equal(resolveProgramId('odyssey', all), 'odyssey');
@@ -126,6 +174,7 @@ const FINAL: Record<string, { ages: string; badges: string[]; popular: boolean }
   'lumexa-odyssey': { ages: 'Ages 6–18', badges: ['Best choice for beginners', 'Suitable for all ages'], popular: false },
   'little-coders': { ages: 'Ages 6–12', badges: ['Complete beginner friendly', 'For first-time coders'], popular: false },
   'game-creator': { ages: 'Ages 6–12', badges: ['Beginner friendly'], popular: false },
+  'python-foundations': { ages: 'Ages 12–18', badges: ['Beginner friendly', 'No prior coding experience needed'], popular: false },
   'ai-builder': { ages: 'Ages 12–18', badges: ['Most popular', 'Basic Python needed'], popular: true },
   'web-developer': { ages: 'Ages 12–18', badges: ['Beginner friendly'], popular: false },
   'data-scientist': { ages: 'Ages 12–18', badges: ['Basic Python needed'], popular: false },

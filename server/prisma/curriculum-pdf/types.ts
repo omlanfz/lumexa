@@ -6,6 +6,7 @@ export type ThemeKey =
   | 'odyssey'
   | 'little'
   | 'game'
+  | 'python'
   | 'ai'
   | 'web'
   | 'data'

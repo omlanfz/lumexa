@@ -44,6 +44,8 @@ export interface ProgramMeta {
   hover: string;
   /** File in /public/curriculums, or null when the program has no PDF yet. */
   curriculumFile: string | null;
+  /** A brand mark shown in place of the emoji (a path under /public), or null. */
+  logo: string | null;
   /** Private 1:1 price for every 8 lessons, in BDT. */
   blockPrice: number;
 }
@@ -121,10 +123,20 @@ const THEMES = {
     dot: "bg-indigo-500",
     hover: "hover:border-indigo-300 dark:hover:border-indigo-500/50",
   },
+  // Python's own blue. Reserved for Python Foundations, so it is not in the pool below.
+  python: {
+    color: "from-sky-700 to-blue-600",
+    border: "border-sky-300 dark:border-sky-700/40",
+    badge: "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300",
+    accent: "text-sky-700 dark:text-sky-400",
+    dot: "bg-sky-500",
+    hover: "hover:border-sky-300 dark:hover:border-sky-500/50",
+  },
 } satisfies Record<string, Theme>;
 
 type ThemeName = keyof typeof THEMES;
-const THEME_NAMES = Object.keys(THEMES) as ThemeName[];
+/** The colours a program without a preset can be given (reserved themes are left out, so existing programs keep their look). */
+const THEME_NAMES = (Object.keys(THEMES) as ThemeName[]).filter((name) => name !== "python");
 
 // ── Presentation by program ─────────────────────────────────────────────────
 
@@ -136,6 +148,8 @@ interface Preset {
   builds: string;
   theme: ThemeName;
   curriculumFile: string | null;
+  /** A brand mark shown in place of the emoji (a path under /public). */
+  logo?: string;
   /** Private 1:1 price for every 8 lessons, in BDT. */
   blockPrice: number;
   /** Order on /programs and /pricing. */
@@ -161,7 +175,7 @@ const PRESETS: Record<string, Preset> = {
     curriculumFile: "little-coders-path-curriculum.pdf",
     blockPrice: 5000,
     rank: 1,
-    homeRank: 4,
+    homeRank: 5,
   },
   "game-creator": {
     id: "game",
@@ -174,6 +188,20 @@ const PRESETS: Record<string, Preset> = {
     rank: 2,
     homeRank: 1,
   },
+  // Priced exactly like Game Creator: the same block price, so the same Small Batch price
+  // (60%) and the same whole-program discount (see pricing.ts).
+  "python-foundations": {
+    id: "python",
+    emoji: "🐍",
+    tagline: "Learn Python From Zero & Build Real Projects",
+    builds: "Calculators, quiz games, a text adventure, an expense tracker and a data explorer, all written in Python.",
+    theme: "python",
+    curriculumFile: "python-foundations-curriculum.pdf",
+    logo: "/brand/python-logo.svg",
+    blockPrice: 6000,
+    rank: 3,
+    homeRank: 2,
+  },
   "ai-builder": {
     id: "ai",
     emoji: "🤖",
@@ -182,8 +210,8 @@ const PRESETS: Record<string, Preset> = {
     theme: "purple",
     curriculumFile: "ai-builder-path-curriculum.pdf",
     blockPrice: 7500,
-    rank: 3,
-    homeRank: 2,
+    rank: 4,
+    homeRank: 3,
   },
   "web-developer": {
     id: "web",
@@ -193,8 +221,8 @@ const PRESETS: Record<string, Preset> = {
     theme: "blue",
     curriculumFile: "web-developer-path-curriculum.pdf",
     blockPrice: 7000,
-    rank: 4,
-    homeRank: 3,
+    rank: 5,
+    homeRank: 4,
   },
   "data-scientist": {
     id: "data",
@@ -204,8 +232,8 @@ const PRESETS: Record<string, Preset> = {
     theme: "teal",
     curriculumFile: "data-scientist-path-curriculum.pdf",
     blockPrice: DATA_SCIENCE_BLOCK_PRICE,
-    rank: 5,
-    homeRank: 5,
+    rank: 6,
+    homeRank: 6,
   },
   "advanced-data-science": {
     id: "advanced-data-science",
@@ -215,8 +243,8 @@ const PRESETS: Record<string, Preset> = {
     theme: "indigo",
     curriculumFile: "advanced-data-science-curriculum.pdf",
     blockPrice: DATA_SCIENCE_BLOCK_PRICE,
-    rank: 6,
-    homeRank: 6,
+    rank: 7,
+    homeRank: 7,
   },
   "digital-independence": {
     id: "digital",
@@ -226,8 +254,8 @@ const PRESETS: Record<string, Preset> = {
     theme: "green",
     curriculumFile: "digital-independence-path-curriculum.pdf",
     blockPrice: 6000,
-    rank: 7,
-    homeRank: 7,
+    rank: 8,
+    homeRank: 8,
   },
 };
 
@@ -283,6 +311,7 @@ export function programMetaFor(course: CatalogCourse): ProgramMeta {
     mostPopular: course.mostPopular ?? false,
     ...theme,
     curriculumFile: preset ? preset.curriculumFile : null,
+    logo: preset?.logo ?? null,
     blockPrice: preset?.blockPrice ?? DEFAULT_BLOCK_PRICE,
   };
 }
@@ -310,6 +339,7 @@ export const ODYSSEY: ProgramMeta = {
   dot: "bg-purple-500",
   hover: "hover:border-purple-300 dark:hover:border-purple-500/50",
   curriculumFile: "lumexa-odyssey-curriculum.pdf",
+  logo: null,
   blockPrice: 6500,
 };
 
@@ -404,6 +434,10 @@ export const COURSE_OUTCOMES: Record<string, string> = {
   "html-css-mastery": "Build beautiful, responsive websites that look great on any device",
   "javascript-interactivity": "Add dynamic, interactive behavior to any webpage",
   "react-fullstack-web": "Build and deploy modern React applications used in real companies",
+  // Python Foundations
+  "python-programming-essentials": "Write your first real Python programs with variables, decisions, loops, strings, collections and functions",
+  "problem-solving-program-design": "Plan, debug, handle errors and build bigger programs with files and classes",
+  "python-tools-data-foundations": "Use real Python tools: notebooks, NumPy, Pandas and APIs to explore real data",
   "scratch-adventures": "Create animated stories, games, and interactive projects visually",
   "python-for-young-builders": "Write first real Python programs, the same language used by NASA and Google",
   "ai-for-kids": "Train your own AI models and build apps that see, listen, and respond",

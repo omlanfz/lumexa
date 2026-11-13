@@ -164,6 +164,7 @@ export const CATEGORY_ALIASES: Readonly<Record<string, CertificateCategoryId>> =
     // the default programmes (Course.category = the programme's own name)
     'little coders': 'CREATIVE_CODING_GAME_DEV',
     'game creator': 'CREATIVE_CODING_GAME_DEV',
+    'python foundations': 'AI_DATA_SCIENCE',
     'web developer': 'WEB_DIGITAL_SKILLS',
     'digital independence': 'WEB_DIGITAL_SKILLS',
     'ai builder': 'AI_DATA_SCIENCE',
@@ -180,6 +181,7 @@ export const SLUG_CATEGORIES: Readonly<Record<string, CertificateCategoryId>> =
   {
     'little-coders': 'CREATIVE_CODING_GAME_DEV',
     'game-creator': 'CREATIVE_CODING_GAME_DEV',
+    'python-foundations': 'AI_DATA_SCIENCE',
     'web-developer': 'WEB_DIGITAL_SKILLS',
     'digital-independence': 'WEB_DIGITAL_SKILLS',
     'ai-builder': 'AI_DATA_SCIENCE',
