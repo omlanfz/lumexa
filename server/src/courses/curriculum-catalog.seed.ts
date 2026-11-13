@@ -51,6 +51,9 @@ import { ensureLittleCodersCurriculum } from '../little-coders/migrate/little-co
 // L1 intro · L2-3 Project1 · L4-5 Project2 · L6-7 Project3 · L8 review
 
 function assignStandardCheckpoints(mod: RawModule) {
+  // A dataset that spells out its own project placement (Python Foundations builds each
+  // project in the lesson that teaches it, not across two lessons) keeps it exactly as written.
+  if (mod.explicitCheckpoints) return;
   const projects = mod.projects;
   mod.lessons.forEach((lesson, i) => {
     if (lesson.projectSlug !== undefined && lesson.projectSlug !== null) return; // web-developer already assigned
@@ -600,6 +603,7 @@ export async function seedCurriculumContent(
 
   await backfillProjectLinks(prisma, logger, 'ai-builder');
   await backfillProjectLinks(prisma, logger, 'data-scientist');
+  await backfillProjectLinks(prisma, logger, 'python-foundations');
   await backfillDataScientistKeyTerminologyTables(prisma, logger);
   await backfillWebDeveloperLessonContent(prisma, logger);
   await backfillAdvancedDataScience(prisma, logger);
@@ -758,9 +762,59 @@ const DATA_SCIENTIST_PROJECT_LINKS: Record<number, { title: string; url: string 
   26: [HOUSE_PRICE_PREDICTOR, CUSTOMER_CHURN_PREDICTOR, MOVIE_RECOMMENDATION_ENGINE],
 };
 
+// ── Python Foundations: portfolio-project slots ─────────────────────────────
+//
+// Each of the nine portfolio projects is a Google Colab notebook (the .ipynb files in
+// server/prisma/python-foundations/notebooks). Operations uploads them to Colab and pastes
+// each link into the lesson from /admin/lessons/<id>/edit (the "Project" section), so the URL is
+// deliberately EMPTY here: the lesson page shows the project card with "Open Project" and
+// "Copy Link" disabled ("link coming soon") until a link is added. The title is already in
+// place, so the admin only has to paste an address.
+//
+// Keyed by the lesson's absolute `order` in the 28-session course (Course 1 = 1-8 + Test 9,
+// Course 2 = 10-17 + Test 18, Course 3 = 19-26 + Test 27, Final Test 28). The notebook for a
+// project belongs to the lesson that builds it.
+const PF_SMART_CALCULATOR = { title: 'Smart Calculator', url: '' };
+const PF_NUMBER_GUESSING_GAME = { title: 'Number Guessing Game', url: '' };
+const PF_PYTHON_QUIZ_MASTER = { title: 'Python Quiz Master', url: '' };
+const PF_TEXT_ADVENTURE_GAME = { title: 'Text-Based Adventure Game', url: '' };
+const PF_PERSONAL_EXPENSE_TRACKER = {
+  title: 'Personal Expense Tracker',
+  url: '',
+};
+const PF_LIBRARY_MANAGEMENT_SYSTEM = {
+  title: 'Library Management System',
+  url: '',
+};
+const PF_DATASET_EXPLORER = { title: 'Dataset Explorer', url: '' };
+const PF_LIVE_DATA_EXPLORER = { title: 'Live Data Explorer', url: '' };
+const PF_STUDENT_LIFE_DATA_EXPLORER = {
+  title: 'Student Life Data Explorer',
+  url: '',
+};
+
+export const PYTHON_FOUNDATIONS_PROJECT_LINKS: Record<
+  number,
+  { title: string; url: string }[]
+> = {
+  // python-programming-essentials (lessons 1-8; 9 = Course Test)
+  3: [PF_SMART_CALCULATOR],
+  5: [PF_NUMBER_GUESSING_GAME],
+  8: [PF_PYTHON_QUIZ_MASTER],
+  // problem-solving-program-design (lessons 10-17; 18 = Course Test)
+  12: [PF_TEXT_ADVENTURE_GAME],
+  16: [PF_PERSONAL_EXPENSE_TRACKER],
+  17: [PF_LIBRARY_MANAGEMENT_SYSTEM],
+  // python-tools-data-foundations (lessons 19-26; 27 = Course Test, 28 = Final Test)
+  23: [PF_DATASET_EXPLORER],
+  25: [PF_LIVE_DATA_EXPLORER],
+  26: [PF_STUDENT_LIFE_DATA_EXPLORER],
+};
+
 const PROJECT_LINKS_BY_COURSE_SLUG: Record<string, Record<number, { title: string; url: string }[]>> = {
   'ai-builder': AI_BUILDER_PROJECT_LINKS,
   'data-scientist': DATA_SCIENTIST_PROJECT_LINKS,
+  'python-foundations': PYTHON_FOUNDATIONS_PROJECT_LINKS,
 };
 
 /** Read-time fallback for a pathway's project links, used by

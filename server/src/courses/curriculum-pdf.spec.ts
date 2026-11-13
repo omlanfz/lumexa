@@ -44,19 +44,20 @@ const decode = (s: string): string =>
     .replace(/&quot;/g, '"');
 
 describe('the curriculum PDFs: the programs', () => {
-  it('cover the eight programs, each with its own palette and file', () => {
+  it('cover the nine programs, each with its own palette and file', () => {
     expect(PROGRAMS.map((p) => p.slug)).toEqual([
       'lumexa-odyssey',
       'little-coders',
       'game-creator',
+      'python-foundations',
       'ai-builder',
       'web-developer',
       'data-scientist',
       'advanced-data-science',
       'digital-independence',
     ]);
-    expect(new Set(PROGRAMS.map((p) => p.themeKey)).size).toBe(8);
-    expect(new Set(PROGRAMS.map((p) => p.fileName)).size).toBe(8);
+    expect(new Set(PROGRAMS.map((p) => p.themeKey)).size).toBe(9);
+    expect(new Set(PROGRAMS.map((p) => p.fileName)).size).toBe(9);
     for (const p of PROGRAMS) expect(THEMES[p.themeKey]).toBeDefined();
     // every palette is genuinely different (the deep and main colours are the identity of a document)
     expect(
@@ -65,7 +66,7 @@ describe('the curriculum PDFs: the programs', () => {
           (p) => `${THEMES[p.themeKey].deep}${THEMES[p.themeKey].main}`,
         ),
       ).size,
-    ).toBe(8);
+    ).toBe(9);
   });
 
   it('have complete, valid content', () => {
@@ -83,7 +84,7 @@ describe('the curriculum PDFs: the programs', () => {
     expect(PROGRAMS.map((p) => p.fileName).sort()).toEqual(linked);
     for (const p of PROGRAMS) {
       const info = CURRICULUM_CATALOG[p.slug];
-      // The seven programs a certificate can recommend attach their PDF to the email; Advanced Data Science is not one of them.
+      // The eight programs a certificate can recommend attach their PDF to the email; Advanced Data Science is not one of them.
       expect(p.attachToCertificateEmail).toBe(!!info);
       if (info) expect(p.fileName).toBe(info.pdfFile);
     }
@@ -101,6 +102,7 @@ describe('the curriculum PDFs: the programs', () => {
     // 3 courses → 24 lessons + 3 course tests + 1 final test = 28 sessions; Odyssey 72 + 9 + 3 + 1 = 85; 5 courses 40 + 5 + 1 = 46
     for (const slug of [
       'game-creator',
+      'python-foundations',
       'ai-builder',
       'web-developer',
       'data-scientist',

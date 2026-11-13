@@ -1,16 +1,16 @@
 /**
- * Prints the downloadable curriculum PDFs of the eight programs — Lumexa Odyssey, Little Coders,
- * Game Creator, AI Builder, Web Developer, Data Scientist, Advanced Data Science and Digital
- * Independence — each with its own colours and artwork, the Lumexa logo, hands-on project pictures,
+ * Prints the downloadable curriculum PDFs of the nine programs — Lumexa Odyssey, Little Coders,
+ * Game Creator, Python Foundations, AI Builder, Web Developer, Data Scientist, Advanced Data Science
+ * and Digital Independence — each with its own colours and artwork, the Lumexa logo, hands-on project pictures,
  * a highlighted "how students are tested" page, and the ages and badges from the program facts
  * (server/src/courses/program-facts.ts).
  *
- *   npm run export:curriculum-pdfs                              all eight
+ *   npm run export:curriculum-pdfs                              all nine
  *   npm run export:curriculum-pdfs -- --program game-creator    only these (comma separated slugs)
  *   npm run export:curriculum-pdfs -- --html <dir>              also write each program's HTML to <dir>
  *   npm run export:curriculum-pdfs -- --out <dir>               write the PDFs to <dir> instead
  *
- * Output: client/public/curriculums/<file> (the website's download links) and, for the seven
+ * Output: client/public/curriculums/<file> (the website's download links) and, for the eight
  * programs the certificate email attaches, server/assets/curriculum-pdfs/<file>.
  *
  * Needs a Chromium (Puppeteer downloads one on `npm install`; CERTIFICATE_CHROMIUM_PATH or

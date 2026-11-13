@@ -25,6 +25,7 @@ export const CATALOG_COURSE_SLUGS = [
   'lumexa-odyssey',
   'little-coders',
   'game-creator',
+  'python-foundations',
   'web-developer',
   'ai-builder',
   'data-scientist',

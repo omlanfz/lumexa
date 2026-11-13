@@ -50,18 +50,18 @@ describe('question-bank catalog', () => {
     const finals = Object.keys(DEFAULT_REGISTRY.finalTests);
     const stages = Object.keys(DEFAULT_REGISTRY.stageTests).map(Number);
 
-    // 6 pathways × 3 modules, each module ends in a Course Test.
-    expect(courseTests).toHaveLength(18);
-    // 6 specialised pathway finals + the Odyssey final.
+    // 7 pathways × 3 modules, each module ends in a Course Test.
+    expect(courseTests).toHaveLength(21);
+    // 7 specialised pathway finals + the Odyssey final.
     expect(finals.sort()).toEqual([...CATALOG_COURSE_SLUGS].sort());
     // Odyssey's three Stage Tests.
     expect(stages.sort()).toEqual([1, 2, 3]);
-    expect(banks).toHaveLength(18 + 7 + 3);
+    expect(banks).toHaveLength(21 + 8 + 3);
   });
 
   it('has a Course Test bank for every module in the seeded curriculum', () => {
     const moduleSlugs = pathways.flatMap((p) => p.modules.map((m) => m.slug));
-    expect(moduleSlugs).toHaveLength(18);
+    expect(moduleSlugs).toHaveLength(21);
     for (const slug of moduleSlugs) {
       expect(DEFAULT_REGISTRY.courseTests).toHaveProperty([slug]);
     }

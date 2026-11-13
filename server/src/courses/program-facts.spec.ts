@@ -50,6 +50,12 @@ const SPEC: Record<
     prerequisite: null,
     mostPopular: false,
   },
+  'python-foundations': {
+    ages: [12, 18],
+    badges: ['Beginner friendly', 'No prior coding experience needed'],
+    prerequisite: null,
+    mostPopular: false,
+  },
   'data-scientist': {
     ages: [12, 18],
     badges: ['Basic Python needed'],
@@ -71,7 +77,7 @@ const SPEC: Record<
 };
 
 describe('program facts', () => {
-  it('describes exactly the eight programs, with the agreed ages, badges and prerequisites', () => {
+  it('describes exactly the nine programs, with the agreed ages, badges and prerequisites', () => {
     expect(Object.keys(PROGRAM_FACTS).sort()).toEqual(Object.keys(SPEC).sort());
     for (const [slug, want] of Object.entries(SPEC)) {
       const f = PROGRAM_FACTS[slug];

@@ -36,6 +36,11 @@ Data Scientist, Digital Independence, Game Creator, Little Coders, Web Developer
 title, with its original lineage as a fallback). Any custom course imported from these inherits the
 same way. Test lessons in all of them: **0 modified**.
 
+*Python Foundations* (added after this report) is a seventh pathway of 24 learning lessons. It was
+authored directly in this structure: its visuals and five-question multiple-choice quiz come from the
+same two catalogs (`catalog/python-foundations.ts`, `catalog/python-foundations-quiz.ts`) and the
+lessons go through the same upgrade on a fresh seed. See [PYTHON_FOUNDATIONS.md](PYTHON_FOUNDATIONS.md).
+
 ## Cleanup (idempotent; run over all 144 pathway lessons)
 
 | Change | Lessons |

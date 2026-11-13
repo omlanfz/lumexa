@@ -21,7 +21,7 @@ import Link from 'next/link';
 import api from '@/lib/axios';
 import CopyCodeButton from '@/components/curriculum/CopyCodeButton';
 import HomeworkSubmission from '@/components/curriculum/HomeworkSubmission';
-import ProjectLinksSection from '@/components/curriculum/ProjectLinksSection';
+import ProjectLinksSection, { visibleProjectLinks } from '@/components/curriculum/ProjectLinksSection';
 import {
   QUIZ_BLOCK_LANG,
   codeAlreadyInText,
@@ -151,7 +151,8 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
   // ── Table of contents ─────────────────────────────────────────────────────
   const hasObjectives = lesson.objectives.length > 0;
   const hasProject = !!lesson.project || !!lesson.checkpoint;
-  const showProjectCard = (lesson.projectLinks && lesson.projectLinks.length > 0) || lesson.codeSnippets?.length > 0;
+  const projectLinks = visibleProjectLinks(lesson.projectLinks);
+  const showProjectCard = projectLinks.length > 0 || lesson.codeSnippets?.length > 0;
   const toc: TocItem[] = useMemo(() => {
     if (lcList) return lcList.map((s) => ({ id: s.id, text: s.title, level: 2 as const }));
     const items: TocItem[] = [];
@@ -386,8 +387,8 @@ export default function LessonStudyView({ data, mode, isStudent, onSubmissionCha
 
       {showProjectCard && (
         <div id="lesson-project" className="mb-5 scroll-mt-24">
-          {lesson.projectLinks && lesson.projectLinks.length > 0 ? (
-            <ProjectLinksSection projectLinks={lesson.projectLinks} />
+          {projectLinks.length > 0 ? (
+            <ProjectLinksSection projectLinks={projectLinks} />
           ) : (
             snippets.length > 0 && (
               <section className={CARD}>

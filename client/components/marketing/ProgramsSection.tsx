@@ -5,6 +5,7 @@ import ScrollReveal from "../ScrollReveal";
 import { ODYSSEY, homeOrder, type ProgramMeta } from "@/lib/programs";
 import { usePrograms } from "@/lib/usePrograms";
 import ProgramBadges from "./ProgramBadges";
+import ProgramIcon from "./ProgramIcon";
 
 /*
   Homepage program picker. Each card answers four things and nothing more:
@@ -91,9 +92,7 @@ export default function ProgramsSection() {
               className={`group flex flex-col p-6 rounded-2xl bg-white dark:bg-gray-900/50 border border-[#E2E8F0] dark:border-gray-700/60 ${p.hover} card-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-500`}
             >
               <div className="flex items-center gap-3 mb-4">
-                <div className={`w-12 h-12 flex-none rounded-xl bg-gradient-to-br ${p.color} grid place-items-center text-2xl shadow-sm group-hover:scale-110 transition-transform duration-200`}>
-                  {p.emoji}
-                </div>
+                <ProgramIcon program={p} className="w-12 h-12 text-2xl group-hover:scale-110 transition-transform duration-200" />
                 <h3 className="text-[#0F172A] dark:text-white font-black text-xl leading-tight">{p.title}</h3>
               </div>
               <p className="text-[#334155] dark:text-gray-300 text-sm leading-relaxed mb-4">

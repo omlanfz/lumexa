@@ -11,10 +11,16 @@ import type { SourceLessonCase } from './test-support';
 
 const lessons = allSourceLessons();
 
+/** Pathways whose multiple-choice quiz is authored in the catalog (their source lessons carry no quiz), so they have no first-release quiz to migrate. */
+const CATALOG_QUIZ_PATHWAYS = new Set([
+  'little-coders-path',
+  'python-foundations-path',
+]);
+
 describe('the structured-content upgrade of every learning lesson', () => {
   const results = lessons.map((c) => ({ c, res: upgradeLesson(inputFor(c)) }));
 
-  it('upgrades all 144 lessons exactly once and stamps the current content version', () => {
+  it('upgrades all 168 lessons exactly once and stamps the current content version', () => {
     for (const { c, res } of results) expect({ key: c.key, version: res.patch?.contentVersion }).toEqual({ key: c.key, version: CONTENT_VERSION });
   });
 
@@ -91,6 +97,24 @@ describe('the structured-content upgrade of every learning lesson', () => {
     }
   });
 
+  it('gives every Python Foundations lesson its five authored multiple-choice questions, and says so', () => {
+    const pf = results.filter(
+      ({ c }) => c.pathway === 'python-foundations-path',
+    );
+    expect(pf).toHaveLength(24);
+    for (const { c, res } of pf) {
+      const authored = res.changes.some((x) => x.kind === 'quiz-authored');
+      expect({ key: c.key, authored }).toEqual({ key: c.key, authored: true });
+      expect(res.patch!.contentMarkdown).toMatch(/```lumexa-quiz/);
+      const quiz = readQuiz(res.patch!.miniQuiz);
+      const fourOptions = quiz.every(
+        (q) => q.type === 'multiple_choice' && q.options.length === 4,
+      );
+      expect({ key: c.key, n: quiz.length, fourOptions }).toEqual({ key: c.key, n: 5, fourOptions: true });
+      expect({ key: c.key, review: res.review }).toEqual({ key: c.key, review: [] });
+    }
+  });
+
   it('gives every lesson at least five multiple-choice questions when its source had five or more, and never fewer than it had', () => {
     for (const { c, res } of results) {
       if (c.pathway === 'little-coders-path') continue;
@@ -162,7 +186,7 @@ describe('moving a lesson from the first release (version 1) to multiple choice 
 
   it('changes only the quiz and the teacher notes, and ends up exactly where a fresh seed ends up', () => {
     for (const c of lessons) {
-      if (c.pathway === 'little-coders-path') continue; // their older quiz was authored in the catalog (covered below)
+      if (CATALOG_QUIZ_PATHWAYS.has(c.pathway)) continue; // their quiz is authored in the catalog (covered below)
       const out = upgradeLesson(v1Row(c));
       const fresh = byKey.get(c.key)!.fresh;
       const keys = Object.keys(out.patch ?? {}).sort();
@@ -175,7 +199,7 @@ describe('moving a lesson from the first release (version 1) to multiple choice 
 
   it('is done after one pass: the migrated row needs nothing more', () => {
     for (const c of lessons) {
-      if (c.pathway === 'little-coders-path') continue;
+      if (CATALOG_QUIZ_PATHWAYS.has(c.pathway)) continue;
       const out = upgradeLesson(v1Row(c));
       const migrated = inputFor(c, { ...v1Row(c).row, miniQuiz: out.patch!.miniQuiz ?? v1Row(c).row.miniQuiz, teacherNotes: out.patch!.teacherNotes ?? v1Row(c).row.teacherNotes, contentVersion: out.patch!.contentVersion });
       expect({ key: c.key, again: upgradeLesson(migrated).patch }).toEqual({ key: c.key, again: null });

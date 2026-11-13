@@ -13,9 +13,9 @@ const headingTexts = (md: string | null) => {
 };
 
 describe('cleanup engine over every shipped lesson', () => {
-  it('covers all six pathways (144 lessons) discovered from the data, not a hard-coded list', () => {
-    expect(lessons.length).toBe(144);
-    expect(new Set(lessons.map((l) => l.pathway)).size).toBe(6);
+  it('covers all seven pathways (168 lessons) discovered from the data, not a hard-coded list', () => {
+    expect(lessons.length).toBe(168);
+    expect(new Set(lessons.map((l) => l.pathway)).size).toBe(7);
   });
 
   it('is idempotent: cleaning the result again changes nothing', () => {

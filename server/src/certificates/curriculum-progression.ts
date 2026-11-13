@@ -2,14 +2,17 @@
 //
 // The ONLY place that knows "what comes after completing curriculum X" —
 // every actual Lumexa offering, per course-catalog.seed.ts's COURSE_CATALOG
-// (the flagship Lumexa Odyssey + its 6 specialized pathways). Nothing here
-// invents a curriculum name; PATHWAY_ORDER is exactly the 6 real pathway
+// (the flagship Lumexa Odyssey + its 7 specialized pathways). Nothing here
+// invents a curriculum name; PATHWAY_ORDER is exactly the 7 real pathway
 // slugs, ordered to mirror the real Stage 1 → 2 → 3 sequence Odyssey
 // samples them in (see ODYSSEY_STAGES in curriculum-catalog.seed.ts):
 // Stage 1 draws from little-coders + game-creator, Stage 2 from
 // web-developer + digital-independence, Stage 3 from data-scientist +
 // ai-builder — so this list runs youngest/most-foundational to most
 // advanced, the same progression Odyssey itself teaches in.
+// python-foundations is the on-ramp to the two Python-based specialisations
+// (it teaches the "basic Python" data-scientist and ai-builder expect), so it
+// sits directly before them.
 //
 // Kept deliberately separate from CertificateService/NotificationsService
 // so the actual progression rule can change later (e.g. to a
@@ -60,6 +63,13 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
       'Build the portfolio, professional skills, and business knowledge to turn ability into real opportunity.',
     pdfFile: 'digital-independence-path-curriculum.pdf',
   },
+  'python-foundations': {
+    slug: 'python-foundations',
+    title: 'Python Foundations',
+    blurb:
+      'Learn Python from the ground up, then problem solving, debugging, files, objects and your first data tools.',
+    pdfFile: 'python-foundations-curriculum.pdf',
+  },
   'data-scientist': {
     slug: 'data-scientist',
     title: 'Data Scientist',
@@ -76,7 +86,7 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
   },
 };
 
-// The 6 specialized pathways in Odyssey's own Stage 1→2→3 order. Odyssey
+// The 7 specialized pathways in Odyssey's own Stage 1→2→3 order. Odyssey
 // itself is intentionally excluded — it is the entry point, never a "next
 // step" recommendation.
 /** Looks a curriculum up by course slug, tolerating the old "-path" spelling. */
@@ -89,6 +99,7 @@ export const PATHWAY_ORDER: string[] = [
   'game-creator',
   'web-developer',
   'digital-independence',
+  'python-foundations',
   'data-scientist',
   'ai-builder',
 ];

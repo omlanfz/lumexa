@@ -8,6 +8,7 @@ import { ODYSSEY, resolveProgramId, type ProgramKey, type ProgramMeta } from "@/
 import { usePrograms } from "@/lib/usePrograms";
 import Collapse from "@/components/Collapse";
 import ProgramBadges from "@/components/marketing/ProgramBadges";
+import ProgramIcon from "@/components/marketing/ProgramIcon";
 import {
   BATCH_PRICE_RATIO,
   FORMATS,
@@ -225,9 +226,7 @@ function PriceCard({
 
       <div className={`flex ${wide ? "flex-col md:flex-row md:items-center md:justify-between gap-5" : "flex-col gap-4"}`}>
         <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 flex-none rounded-xl bg-gradient-to-br ${program.color} grid place-items-center text-2xl shadow-sm`}>
-            {program.emoji}
-          </div>
+          <ProgramIcon program={program} className="w-12 h-12 text-2xl" />
           <div className="min-w-0">
             <h3 className="font-black text-lg text-[#0F172A] dark:text-white leading-tight">{program.title}</h3>
             <p className="text-xs text-[#64748B] dark:text-gray-400">
@@ -451,9 +450,7 @@ function PricingContent() {
                     }`}
                   >
                     <div className="flex items-center gap-3 sm:w-64 flex-none">
-                      <div className={`w-10 h-10 flex-none rounded-xl bg-gradient-to-br ${meta.color} grid place-items-center text-xl shadow-sm`}>
-                        {meta.emoji}
-                      </div>
+                      <ProgramIcon program={meta} className="w-10 h-10 text-xl" />
                       <div>
                         <p className="font-bold leading-tight">{meta.title}</p>
                         <p className="text-xs text-[#64748B] dark:text-gray-400">{course.totalLessons} lessons</p>

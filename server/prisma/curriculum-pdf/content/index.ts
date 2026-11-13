@@ -1,4 +1,4 @@
-// The eight programs with a downloadable curriculum PDF, in the order the website lists them.
+// The nine programs with a downloadable curriculum PDF, in the order the website lists them.
 
 import type { ProgramContent } from '../types';
 import { ADVANCED_DATA_SCIENCE } from './advanced-data-science';
@@ -8,12 +8,14 @@ import { DIGITAL_INDEPENDENCE } from './digital-independence';
 import { GAME_CREATOR } from './game-creator';
 import { LITTLE_CODERS } from './little-coders';
 import { ODYSSEY } from './odyssey';
+import { PYTHON_FOUNDATIONS } from './python-foundations';
 import { WEB_DEVELOPER } from './web-developer';
 
 export const PROGRAMS: ProgramContent[] = [
   ODYSSEY,
   LITTLE_CODERS,
   GAME_CREATOR,
+  PYTHON_FOUNDATIONS,
   AI_BUILDER,
   WEB_DEVELOPER,
   DATA_SCIENTIST,

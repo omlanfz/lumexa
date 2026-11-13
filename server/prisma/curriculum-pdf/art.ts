@@ -422,10 +422,55 @@ function digitalArt(t: Theme): string {
   </svg>`;
 }
 
+function pythonArt(): string {
+  const stars = [
+    [46, 34, 2.2],
+    [98, 22, 1.6],
+    [302, 150, 2],
+    [318, 62, 1.6],
+    [270, 210, 1.8],
+    [30, 198, 1.8],
+    [160, 14, 1.4],
+  ]
+    .map(
+      ([x, y, r]) =>
+        `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity=".85"/>`,
+    )
+    .join('');
+  // The two-snake Python mark (drawn on a 128 × 128 grid), placed top right.
+  const logo = `
+    <g transform="translate(198 14) scale(.86)">
+      <linearGradient id="pyla" gradientUnits="userSpaceOnUse" x1="70.252" y1="1237.476" x2="170.659" y2="1151.089" gradientTransform="matrix(.563 0 0 -.568 -29.215 707.817)"><stop offset="0" stop-color="#5A9FD4"/><stop offset="1" stop-color="#306998"/></linearGradient>
+      <linearGradient id="pylb" gradientUnits="userSpaceOnUse" x1="209.474" y1="1098.811" x2="173.62" y2="1149.537" gradientTransform="matrix(.563 0 0 -.568 -29.215 707.817)"><stop offset="0" stop-color="#FFD43B"/><stop offset="1" stop-color="#FFE873"/></linearGradient>
+      <path fill="url(#pyla)" d="M63.391 1.988c-4.222.02-8.252.379-11.8 1.007-10.45 1.846-12.346 5.71-12.346 12.837v9.411h24.693v3.137H29.977c-7.176 0-13.46 4.313-15.426 12.521-2.268 9.405-2.368 15.275 0 25.096 1.755 7.311 5.947 12.519 13.124 12.519h8.491V67.234c0-8.151 7.051-15.34 15.426-15.34h24.665c6.866 0 12.346-5.654 12.346-12.548V15.833c0-6.693-5.646-11.72-12.346-12.837-4.244-.706-8.645-1.027-12.866-1.008zM50.037 9.557c2.55 0 4.634 2.117 4.634 4.721 0 2.593-2.083 4.69-4.634 4.69-2.56 0-4.633-2.097-4.633-4.69-.001-2.604 2.073-4.721 4.633-4.721z" transform="translate(0 10.26)"/>
+      <path fill="url(#pylb)" d="M91.682 28.38v10.966c0 8.5-7.208 15.655-15.426 15.655H51.591c-6.756 0-12.346 5.783-12.346 12.549v23.515c0 6.691 5.818 10.628 12.346 12.547 7.816 2.297 15.312 2.713 24.665 0 6.216-1.801 12.346-5.423 12.346-12.547v-9.412H63.938v-3.138h37.012c7.176 0 9.852-5.005 12.348-12.519 2.578-7.735 2.467-15.174 0-25.096-1.774-7.145-5.161-12.521-12.348-12.521h-9.268zM77.809 87.927c2.561 0 4.634 2.097 4.634 4.692 0 2.602-2.074 4.719-4.634 4.719-2.55 0-4.633-2.117-4.633-4.719 0-2.595 2.083-4.692 4.633-4.692z" transform="translate(0 10.26)"/>
+    </g>`;
+  return `
+  <svg viewBox="0 0 330 230" class="art" aria-hidden="true">
+    <defs><radialGradient id="pyglow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff" stop-opacity=".36"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="170" cy="118" r="112" fill="url(#pyglow)"/>
+    ${stars}
+    <g transform="translate(22 56)">
+      <rect width="196" height="138" rx="14" fill="#08203F" opacity=".88"/>
+      <rect width="196" height="138" rx="14" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/>
+      <circle cx="16" cy="15" r="4.5" fill="#FF6B6B"/><circle cx="30" cy="15" r="4.5" fill="#FFC83D"/><circle cx="44" cy="15" r="4.5" fill="#4ADE80"/>
+      <text x="16" y="48" font-size="11.5" font-family="monospace" fill="#7DD3FC">&gt;&gt;&gt; <tspan fill="#fff">print(</tspan><tspan fill="#FFD43B">"Hello, Cadet!"</tspan><tspan fill="#fff">)</tspan></text>
+      <text x="16" y="66" font-size="11.5" font-family="monospace" fill="#A7F3D0">Hello, Cadet!</text>
+      <text x="16" y="92" font-size="11.5" font-family="monospace" fill="#C4B5FD">for n in range(4):</text>
+      <text x="32" y="108" font-size="11.5" font-family="monospace" fill="#fff">print(n * n)</text>
+      <text x="16" y="128" font-size="11.5" font-family="monospace" fill="#A7F3D0">0  1  4  9</text>
+    </g>
+    ${logo}
+    ${rocketShape(262, 172, 0.7, 28)}
+    <path d="M230 196c14-6 22-14 30-30" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="1 7" opacity=".8"/>
+  </svg>`;
+}
+
 const ART: Record<ThemeKey, (t: Theme) => string> = {
   odyssey: odysseyArt,
   little: littleArt,
   game: gameArt,
+  python: pythonArt,
   ai: aiArt,
   web: webArt,
   data: dataArt,
