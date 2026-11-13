@@ -101,6 +101,23 @@ background is completely gone"). They are now **degraded, mended and only then g
 - A computer that is **too slow** to be mended by starting again (the governor's give-up) is
   not restarted — that would only repeat it — and says so at once.
 
+### Where the controls are
+
+Both places show the same panel (`components/classroom/VideoEffectsPanel.tsx`), which is never
+cut off by the edge of the screen:
+
+- **Join screen.** The wand under the preview opens the effects *beside* the preview, in the
+  place of the session details (the Join button stays below). They are part of the page, not a
+  popover over the picture: the preview they change stays in view, and on a window too short
+  for all of it the page itself scrolls. The close button (or the wand again) brings the
+  session details back.
+- **In the class.** The wand in the bottom bar opens a popover above the bar. It is never taller
+  than the room above the bar: on a short window it scrolls inside (the scrollbar shows in both
+  themes) instead of being cut off at the top of the screen.
+
+The panel shows every Lumexa background at once and scrolls only as a whole, so a row of
+tiles is never cut in half.
+
 ### Where things are supported
 
 | | |
