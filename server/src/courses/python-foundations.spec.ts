@@ -100,12 +100,11 @@ describe('Python Foundations: the nine portfolio projects', () => {
   it('each have a notebook that is ready for Google Colab: no saved output, a Python kernel, titled after the project', () => {
     expect(projects).toHaveLength(9);
     expect(new Set(projects.map((p) => p.notebook)).size).toBe(9);
-    expect(
-      fs
-        .readdirSync(NOTEBOOKS)
-        .filter((f) => f.endsWith('.ipynb'))
-        .sort(),
-    ).toEqual(projects.map((p) => p.notebook).sort());
+    // Exactly the nine notebooks and nothing else: a notebook run inside this folder leaves data files and
+    // charts behind (they were committed once by mistake), so run a copy elsewhere.
+    expect(fs.readdirSync(NOTEBOOKS).sort()).toEqual(
+      projects.map((p) => p.notebook).sort(),
+    );
     for (const p of projects) {
       const nb = readNotebook(p.notebook);
       expect({ file: p.notebook, nbformat: nb.nbformat }).toEqual({

@@ -91,6 +91,11 @@ They contain no saved output and run top to bottom with **Run all**.
 The other fifteen lessons each end with a small hands-on build (the lesson's "checkpoint") that students write
 during the class, so they have no notebook.
 
+> **Do not run a notebook inside `server/prisma/python-foundations/notebooks/`.** Jupyter starts the kernel in the
+> notebook's own folder, so the notebooks that save data files and charts would leave them behind (this once put
+> seven generated files into the repository). Run a *copy* in another folder. The build check and
+> `python-foundations.spec.ts` fail if anything but the nine `.ipynb` files is in that folder.
+
 **How the notebooks behave**
 
 * Notebooks 1–6 start with a setup cell: `INTERACTIVE = False` makes a scripted `ask()` "type" the answers, so

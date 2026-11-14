@@ -352,6 +352,20 @@ export function allProblems(): string[] {
         out.push(`${mod.slug}: the notebook ${p.notebook} is missing`);
     }
   }
+  // The folder holds the project notebooks and nothing else. Running a notebook inside it leaves
+  // data files and charts behind, so run a copy somewhere else.
+  const notebooksDir = path.join(__dirname, 'notebooks');
+  const expected = new Set(
+    OUTLINE.flatMap((m) => m.projects.map((p) => p.notebook)),
+  );
+  if (fs.existsSync(notebooksDir)) {
+    for (const entry of fs.readdirSync(notebooksDir)) {
+      if (!expected.has(entry))
+        out.push(
+          `notebooks/${entry} is not a project notebook (running a notebook in this folder leaves files behind: run a copy elsewhere)`,
+        );
+    }
+  }
   return out;
 }
 
