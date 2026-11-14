@@ -30,6 +30,7 @@ import {
   validateBank,
 } from './bank.validate';
 import { verifyBankCode } from './bank.verify';
+import { PUCSE_PATHWAY_FILE } from '../../pre-university-cse/outline';
 
 const banks = allBanks(DEFAULT_REGISTRY);
 
@@ -39,9 +40,11 @@ interface RawModule {
   title: string;
   lessons: unknown[];
 }
+// Pre-University CSE is assessed by the structured 45-mark tests of its own registry
+// (server/src/pre-university-cse/banks, gated by banks.spec.ts there), not by these banks.
 const pathways: { slug: string; modules: RawModule[] }[] = fs
   .readdirSync(PATHWAYS_DIR)
-  .filter((f) => f.endsWith('.json'))
+  .filter((f) => f.endsWith('.json') && f !== `${PUCSE_PATHWAY_FILE}.json`)
   .map((f) => JSON.parse(fs.readFileSync(path.join(PATHWAYS_DIR, f), 'utf8')));
 
 describe('question-bank catalog', () => {

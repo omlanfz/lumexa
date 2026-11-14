@@ -15,12 +15,13 @@ const lessons = allSourceLessons();
 const CATALOG_QUIZ_PATHWAYS = new Set([
   'little-coders-path',
   'python-foundations-path',
+  'pre-university-cse-path',
 ]);
 
 describe('the structured-content upgrade of every learning lesson', () => {
   const results = lessons.map((c) => ({ c, res: upgradeLesson(inputFor(c)) }));
 
-  it('upgrades all 168 lessons exactly once and stamps the current content version', () => {
+  it('upgrades all 232 lessons exactly once and stamps the current content version', () => {
     for (const { c, res } of results) expect({ key: c.key, version: res.patch?.contentVersion }).toEqual({ key: c.key, version: CONTENT_VERSION });
   });
 

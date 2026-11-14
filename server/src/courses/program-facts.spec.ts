@@ -74,10 +74,17 @@ const SPEC: Record<
     prerequisite: null,
     mostPopular: false,
   },
+  // The stored ceiling only has to be a sane number: the label is "Age 15+" (ageText).
+  'pre-university-cse': {
+    ages: [15, 25],
+    badges: ['Grades 9–12', 'HSC graduates welcome', 'No prior coding required'],
+    prerequisite: 'Basic school-level algebra',
+    mostPopular: false,
+  },
 };
 
 describe('program facts', () => {
-  it('describes exactly the nine programs, with the agreed ages, badges and prerequisites', () => {
+  it('describes exactly the ten programs, with the agreed ages, badges and prerequisites', () => {
     expect(Object.keys(PROGRAM_FACTS).sort()).toEqual(Object.keys(SPEC).sort());
     for (const [slug, want] of Object.entries(SPEC)) {
       const f = PROGRAM_FACTS[slug];
@@ -95,7 +102,9 @@ describe('program facts', () => {
         .map((f) => f.slug),
     ).toEqual(['ai-builder']);
     for (const f of Object.values(PROGRAM_FACTS)) {
-      if (f.prerequisite)
+      // A signature journey states what it expects in its card's age line ("Age 15+ · Basic
+      // school-level algebra expected"), so it keeps exactly the three badges it was specified with.
+      if (f.prerequisite && !f.signature)
         expect(f.badges.some((b) => b.tone === 'prerequisite')).toBe(true);
       if (f.mostPopular)
         expect(f.badges.some((b) => b.tone === 'popular')).toBe(true);
@@ -107,6 +116,22 @@ describe('program facts', () => {
     expect(ageLabel(PROGRAM_FACTS['little-coders'])).toBe('Ages 6–12');
     expect(ageLabel(PROGRAM_FACTS['lumexa-odyssey'])).toBe('Ages 6–18');
     expect(ageLabel({ ageMin: 9, ageMax: 9 })).toBe('Age 9');
+    // Pre-University CSE has no upper age: it says "Age 15+", never "Ages 15–25".
+    expect(ageLabel(PROGRAM_FACTS['pre-university-cse'])).toBe('Age 15+');
+  });
+
+  it('marks Lumexa Odyssey’s sibling as a signature journey, and nothing else', () => {
+    expect(
+      Object.values(PROGRAM_FACTS)
+        .filter((f) => f.signature)
+        .map((f) => f.slug),
+    ).toEqual(['pre-university-cse']);
+    expect(publicFactsFor({ slug: 'pre-university-cse' })).toMatchObject({
+      signature: true,
+      ageText: 'Age 15+',
+      prerequisite: 'Basic school-level algebra',
+    });
+    expect(publicFactsFor({ slug: 'game-creator' }).signature).toBe(false);
   });
 
   it('the seed creates every default program with the same ages and level', () => {
@@ -136,6 +161,8 @@ describe('program facts', () => {
       audience: null,
       prerequisite: null,
       mostPopular: false,
+      ageText: null,
+      signature: false,
     });
   });
 });

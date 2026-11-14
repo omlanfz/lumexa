@@ -710,13 +710,14 @@ describe('AssessmentsService.getAttemptState — "is my test still open?"', () =
     startedAt: new Date('2026-10-24T09:00:00.000Z'),
     submittedAt: null,
     lockedAt: null,
+    deadlineAt: null,
     studentUserId: STUDENT,
     student: { assignedTeacher: { userId: 'tch-assigned' } },
     scheduledLesson: { teacher: { userId: 'tch-class' } },
     ...over,
   });
 
-  it('answers with the status, the lock and the server clock — nothing else', async () => {
+  it('answers with the status, the lock, the deadline and the server clock — nothing else', async () => {
     const out = await state(row(), { userId: STUDENT, role: Role.STUDENT });
     expect(out).toMatchObject({
       id: 'att-1',
@@ -724,6 +725,7 @@ describe('AssessmentsService.getAttemptState — "is my test still open?"', () =
       released: false,
       lockedAt: null,
       lockedByTeacher: false,
+      deadlineAt: null,
     });
     expect(out.serverTime).toBeInstanceOf(Date);
     expect(Object.keys(out).sort()).toEqual(
@@ -735,9 +737,16 @@ describe('AssessmentsService.getAttemptState — "is my test still open?"', () =
         'submittedAt',
         'lockedAt',
         'lockedByTeacher',
+        'deadlineAt',
         'serverTime',
       ].sort(),
     );
+  });
+
+  it('hands a structured test its frozen deadline, so the countdown can follow the server', async () => {
+    const deadlineAt = new Date('2026-10-24T09:40:00.000Z');
+    const out = await state(row({ deadlineAt }), { userId: STUDENT, role: Role.STUDENT });
+    expect(out.deadlineAt).toEqual(deadlineAt);
   });
 
   it('reports a teacher lock', async () => {
