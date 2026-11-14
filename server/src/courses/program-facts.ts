@@ -44,6 +44,14 @@ export interface ProgramFacts {
   mostPopular: boolean;
   /** Shown next to the age range, in this order. */
   badges: ProgramBadge[];
+  /**
+   * The age label when "Ages 15–25" would say the wrong thing: Pre-University CSE is for
+   * learners from 15 up (Grades 9–12 and HSC graduates), not a fixed range. Absent for every
+   * other program, whose label is derived from ageMin / ageMax (see ageLabel).
+   */
+  ageText?: string;
+  /** A signature journey is presented beside Lumexa Odyssey, never in the specialized grid. */
+  signature?: boolean;
   /** Values the seed used before; a stored row is moved to the new ones only while it still has them. */
   replaces: { ages: [number, number][]; levels: CourseLevel[] };
 }
@@ -101,6 +109,27 @@ export const PROGRAM_FACTS: Record<string, ProgramFacts> = {
     badges: [
       { label: 'Beginner friendly', tone: 'beginner' },
       { label: 'No prior coding experience needed', tone: 'info' },
+    ],
+    // A new program: nothing was ever seeded under other values.
+    replaces: { ages: [], levels: [] },
+  },
+  'pre-university-cse': {
+    slug: 'pre-university-cse',
+    ageMin: 15,
+    // Open-ended in practice (HSC graduates study too); the stored ceiling only has to be a
+    // sane number, the label comes from ageText.
+    ageMax: 25,
+    ageText: 'Age 15+',
+    signature: true,
+    level: 'BEGINNER',
+    audience:
+      'For Grades 9–12 and HSC graduates preparing for a CSE or Computer Science degree',
+    prerequisite: 'Basic school-level algebra',
+    mostPopular: false,
+    badges: [
+      { label: 'Grades 9–12', tone: 'info' },
+      { label: 'HSC graduates welcome', tone: 'info' },
+      { label: 'No prior coding required', tone: 'beginner' },
     ],
     // A new program: nothing was ever seeded under other values.
     replaces: { ages: [], levels: [] },
@@ -186,10 +215,11 @@ export function factsForCourse(course: {
   );
 }
 
-/** "Ages 6–12". */
+/** "Ages 6–12" ("Age 15+" for a program that has its own wording). */
 export function ageLabel(
-  facts: Pick<ProgramFacts, 'ageMin' | 'ageMax'>,
+  facts: Pick<ProgramFacts, 'ageMin' | 'ageMax'> & { ageText?: string },
 ): string {
+  if (facts.ageText) return facts.ageText;
   return facts.ageMin === facts.ageMax
     ? `Age ${facts.ageMin}`
     : `Ages ${facts.ageMin}–${facts.ageMax}`;
@@ -201,6 +231,10 @@ export interface PublicProgramFacts {
   audience: string | null;
   prerequisite: string | null;
   mostPopular: boolean;
+  /** The age label when it is not simply "Ages <min>–<max>" (e.g. "Age 15+"); null otherwise. */
+  ageText: string | null;
+  /** True for a signature journey (Lumexa Odyssey's sibling), false for a specialized program. */
+  signature: boolean;
 }
 
 export function publicFactsFor(course: {
@@ -213,6 +247,8 @@ export function publicFactsFor(course: {
     audience: facts?.audience ?? null,
     prerequisite: facts?.prerequisite ?? null,
     mostPopular: facts?.mostPopular ?? false,
+    ageText: facts?.ageText ?? null,
+    signature: facts?.signature ?? false,
   };
 }
 

@@ -33,6 +33,8 @@ import bash from 'highlight.js/lib/languages/bash';
 import json from 'highlight.js/lib/languages/json';
 import lua from 'highlight.js/lib/languages/lua';
 import java from 'highlight.js/lib/languages/java';
+import c from 'highlight.js/lib/languages/c';
+import cpp from 'highlight.js/lib/languages/cpp';
 import sql from 'highlight.js/lib/languages/sql';
 import markdown from 'highlight.js/lib/languages/markdown';
 import diff from 'highlight.js/lib/languages/diff';
@@ -45,9 +47,9 @@ import { useLessonRender } from './LessonContext';
 import VisualBlock from './visuals/VisualBlock';
 
 // Only the languages lessons use: keeps the highlighter small.
-const LANGUAGES = { python, javascript, typescript, xml, css, bash, json, lua, java, sql, markdown, diff, plaintext };
+const LANGUAGES = { python, javascript, typescript, xml, css, bash, json, lua, java, c, cpp, sql, markdown, diff, plaintext };
 const REHYPE: [typeof rehypeHighlight, Parameters<typeof rehypeHighlight>[0]][] = [
-  [rehypeHighlight, { languages: LANGUAGES, detect: false, aliases: { bash: ['terminal', 'console'], plaintext: ['output', 'txt'], lua: ['luau'] } }],
+  [rehypeHighlight, { languages: LANGUAGES, detect: false, aliases: { bash: ['terminal', 'console'], plaintext: ['output', 'input', 'txt', 'asm', 'assembly'], lua: ['luau'], c: ['h'], cpp: ['c++', 'cc', 'cxx', 'hpp'] } }],
 ];
 const REMARK = [remarkGfm, remarkCallouts];
 

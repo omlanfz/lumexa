@@ -33,9 +33,11 @@ export interface BankOwnerRef {
   vivaMaxScore: number;
   isPublished: boolean;
   bankVersion: number;
-  /** How the test is taken: STANDARD everywhere except Little Coders (LITTLE_CODERS_V2). */
+  /** How the test is taken: STANDARD everywhere except Little Coders (LITTLE_CODERS_V2) and Pre-University CSE (STRUCTURED_V1). */
   format: AssessmentFormat;
   activeVariant: string | null;
+  /** STRUCTURED_V1: the maximum duration in minutes; null for every other test. */
+  timeLimitMinutes: number | null;
 }
 
 /** The root bank an assessment's questions live on: itself, or — if it is
@@ -67,6 +69,7 @@ export function linkedAssessmentData(
     bankVersion: source.bankVersion,
     format: source.format,
     activeVariant: source.activeVariant,
+    timeLimitMinutes: source.timeLimitMinutes,
   };
 }
 
@@ -110,4 +113,5 @@ export const BANK_OWNER_SELECT = {
   bankVersion: true,
   format: true,
   activeVariant: true,
+  timeLimitMinutes: true,
 } as const;

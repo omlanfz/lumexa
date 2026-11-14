@@ -20,8 +20,13 @@ export interface CodeCheck {
   /** `lua` snippets run on Lua 5.4 (via the `lupa` Python module) while the
    *  course teaches Roblox Luau — so a Lua snippet must stay in the subset
    *  both agree on (no whole-number results from `/` or `^`, which Lua 5.4
-   *  prints as "5.0" and Luau as "5"). */
-  language: 'python' | 'javascript' | 'lua';
+   *  prints as "5.0" and Luau as "5").
+   *  `c` / `cpp` / `java` snippets are compiled with the system gcc / g++ / javac
+   *  (a complete program: C and C++ with `main`, Java as `public class Main`), and
+   *  `sql` snippets run on SQLite (via Python's sqlite3); the rows of the LAST
+   *  statement that returns rows are printed one per line, columns joined by "|".
+   *  Each is skipped, not failed, when its toolchain is not installed. */
+  language: 'python' | 'javascript' | 'lua' | 'c' | 'cpp' | 'java' | 'sql';
   code: string;
   /** Third-party Python modules the snippet imports (e.g. "numpy"). The bank
    *  test suite runs the check only when they are installed, and skips it

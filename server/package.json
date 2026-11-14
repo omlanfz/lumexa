@@ -28,7 +28,9 @@
     "lesson-videos:preview": "ts-node -r tsconfig-paths/register prisma/lesson-videos/preview.ts",
     "lesson-videos:upload": "ts-node -r tsconfig-paths/register prisma/lesson-videos/upload.ts",
     "verify:banks": "ts-node -r tsconfig-paths/register prisma/verify-banks.ts",
-    "report:lesson-content": "ts-node -r tsconfig-paths/register prisma/lesson-content-report.ts"
+    "report:lesson-content": "ts-node -r tsconfig-paths/register prisma/lesson-content-report.ts",
+    "build:pre-university-cse": "ts-node -r tsconfig-paths/register prisma/pre-university-cse/build.ts",
+    "verify:pre-university-cse-code": "ts-node -r tsconfig-paths/register prisma/pre-university-cse/verify-code.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

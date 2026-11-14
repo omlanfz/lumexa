@@ -20,6 +20,7 @@
 import { fenceMask, findHeadings, isBlank, sectionRange, toLines } from './markdown';
 import { comparable, stripLeadingEmoji } from './text';
 import type { LessonVisual } from './types';
+import { TECHNICAL_VISUAL_TYPES, validateTechnicalConfig } from './visuals-technical';
 
 export const VISUAL_BLOCK_LANG = 'lumexa-visual';
 export const LESSON_ASSET_PREFIX = '/lesson-assets/';
@@ -33,7 +34,7 @@ export interface VisualTypeInfo {
   interactive: boolean;
 }
 
-export const VISUAL_TYPES: Record<string, VisualTypeInfo> = {
+const BASE_VISUAL_TYPES: Record<string, VisualTypeInfo> = {
   flow: { label: 'Flow / pipeline / cycle', description: 'Boxes and arrows: a pipeline, a game loop, a workflow or a state machine.', requires: ['nodes'], interactive: false },
   sequence: { label: 'Sequence diagram', description: 'Who sends what to whom, in order (browser ↔ server, app ↔ API).', requires: ['actors', 'messages'], interactive: false },
   tree: { label: 'Tree', description: 'A hierarchy: HTML/DOM structure, a component tree or a decision tree.', requires: ['root'], interactive: false },
@@ -64,6 +65,9 @@ export const VISUAL_TYPES: Record<string, VisualTypeInfo> = {
   video: { label: 'Short video', description: 'A short clip with controls and a transcript. Never autoplays.', requires: ['src', 'transcript'], interactive: false },
   walkthrough: { label: 'Step-by-step walkthrough', description: 'An illustrated stepper for a software workflow.', requires: ['steps'], interactive: true },
 };
+
+/** Every visual type a lesson can use: the original set plus the technical visuals of the Pre-University CSE program. */
+export const VISUAL_TYPES: Record<string, VisualTypeInfo> = { ...BASE_VISUAL_TYPES, ...TECHNICAL_VISUAL_TYPES };
 
 /** Media addresses a lesson may reference: https, or this app's own assets. */
 export function isSafeMediaSrc(src: unknown): boolean {
@@ -127,6 +131,7 @@ export function normalizeVisuals(raw: unknown): VisualValidation {
         errors.push(`${label} ("${id}"): ${info.label} needs "${key}".`);
       }
     }
+    for (const problem of validateTechnicalConfig(type, config)) errors.push(`${label} ("${id}"): ${problem}`);
     if (type === 'image' && config.src !== undefined && !isSafeMediaSrc(config.src)) {
       errors.push(`${label} ("${id}"): the image address must be https:// or start with ${LESSON_ASSET_PREFIX}.`);
     }

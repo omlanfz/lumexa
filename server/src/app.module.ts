@@ -41,6 +41,7 @@ import { RemindersModule } from './reminders/reminders.module';
 import { PackageAlertsModule } from './package-alerts/package-alerts.module';
 import { AdminAlertsModule } from './admin-alerts/admin-alerts.module';
 import { SubmissionsModule } from './submissions/submissions.module';
+import { CodeRunnerModule } from './code-runner/code-runner.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { SubmissionsModule } from './submissions/submissions.module';
     PackageAlertsModule,
     AdminAlertsModule,
     SubmissionsModule,
+    CodeRunnerModule,
   ],
   controllers: [AppController],
   providers: [

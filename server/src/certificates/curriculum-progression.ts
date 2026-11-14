@@ -2,7 +2,8 @@
 //
 // The ONLY place that knows "what comes after completing curriculum X" —
 // every actual Lumexa offering, per course-catalog.seed.ts's COURSE_CATALOG
-// (the flagship Lumexa Odyssey + its 7 specialized pathways). Nothing here
+// (the flagship Lumexa Odyssey, its 7 specialized pathways and the second
+// signature journey, Pre-University CSE). Nothing here
 // invents a curriculum name; PATHWAY_ORDER is exactly the 7 real pathway
 // slugs, ordered to mirror the real Stage 1 → 2 → 3 sequence Odyssey
 // samples them in (see ODYSSEY_STAGES in curriculum-catalog.seed.ts):
@@ -70,6 +71,16 @@ export const CURRICULUM_CATALOG: Record<string, CurriculumInfo> = {
       'Learn Python from the ground up, then problem solving, debugging, files, objects and your first data tools.',
     pdfFile: 'python-foundations-curriculum.pdf',
   },
+  // The university-preparation journey. It is in the catalog (its PDF and blurb are needed when a
+  // certificate is issued) but NOT in PATHWAY_ORDER: it is not a "next step" for a child who
+  // finished Odyssey, and nothing recommended after it (see TERMINAL_CURRICULA).
+  'pre-university-cse': {
+    slug: 'pre-university-cse',
+    title: 'Pre-University CSE',
+    blurb:
+      'Eight university-preparation courses: C and C++, data structures and algorithms, discrete mathematics, computer architecture, operating systems, networking, databases and Python with AI.',
+    pdfFile: 'pre-university-cse-curriculum.pdf',
+  },
   'data-scientist': {
     slug: 'data-scientist',
     title: 'Data Scientist',
@@ -94,6 +105,9 @@ export function findCurriculumInfo(slug: string): CurriculumInfo | undefined {
   return CURRICULUM_CATALOG[canonicalCourseSlug(slug)];
 }
 
+/** Programs that end a learner's journey: completing one recommends nothing further. */
+export const TERMINAL_CURRICULA: readonly string[] = ['pre-university-cse'];
+
 export const PATHWAY_ORDER: string[] = [
   'little-coders',
   'game-creator',
@@ -117,6 +131,7 @@ export function getNextRecommendedCurriculum(
 ): CurriculumInfo | null {
   const completed = new Set(allCompletedSlugs.map(canonicalCourseSlug));
   const completedCanonical = canonicalCourseSlug(completedSlug);
+  if (TERMINAL_CURRICULA.includes(completedCanonical)) return null;
 
   const startIndex =
     completedCanonical === 'lumexa-odyssey'

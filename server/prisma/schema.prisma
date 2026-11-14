@@ -196,38 +196,38 @@ model Shift {
 }
 
 model Booking {
-  id                   String               @id @default(uuid())
-  shiftId              String               @unique
-  studentId            String? // legacy: references Student sub-entity (nullable for student self-auth bookings)
-  studentUserId        String? // new: references User with STUDENT role (self-auth)
-  createdAt            DateTime             @default(now())
-  amountCents          Int?
-  egressId             String?
-  paymentIntentId      String?
-  paymentStatus        PaymentStatus        @default(PENDING)
+  id                     String               @id @default(uuid())
+  shiftId                String               @unique
+  studentId              String? // legacy: references Student sub-entity (nullable for student self-auth bookings)
+  studentUserId          String? // new: references User with STUDENT role (self-auth)
+  createdAt              DateTime             @default(now())
+  amountCents            Int?
+  egressId               String?
+  paymentIntentId        String?
+  paymentStatus          PaymentStatus        @default(PENDING)
   // Recording summary for this class. The recordings themselves are
   // RecordingSegment rows (one per Record → Stop in the teacher's browser, kept
   // in a private Cloudflare R2 bucket); recordingStatus is derived from them by
   // RecordingService. recordingUrl and the merge fields belong to the retired
   // server-side recorder: they are only read, so a recording made then keeps
   // working, and are never written for a new one.
-  recordingUrl            String?
-  recordingStatus         RecordingStatus @default(NONE)
-  recordingStartedAt      DateTime?
-  recordingFileSizeBytes  Int?
-  recordingMergedAt       DateTime?
-  recordingMergeAttempts  Int             @default(0)
-  recordingMergeError     String?
-  endReason               ClassEndReason?
-  endNote                 String?
-  shift                Shift                @relation(fields: [shiftId], references: [id])
-  student              Student?             @relation(fields: [studentId], references: [id])
-  studentUser          User?                @relation("StudentBookings", fields: [studentUserId], references: [id])
-  rescheduleRequests   RescheduleRequest[]
-  payoutEntries        PayoutEntry[]
-  review               Review?
-  studentLedgerEntries StudentLedgerEntry[]
-  recordingSegments    RecordingSegment[]
+  recordingUrl           String?
+  recordingStatus        RecordingStatus      @default(NONE)
+  recordingStartedAt     DateTime?
+  recordingFileSizeBytes Int?
+  recordingMergedAt      DateTime?
+  recordingMergeAttempts Int                  @default(0)
+  recordingMergeError    String?
+  endReason              ClassEndReason?
+  endNote                String?
+  shift                  Shift                @relation(fields: [shiftId], references: [id])
+  student                Student?             @relation(fields: [studentId], references: [id])
+  studentUser            User?                @relation("StudentBookings", fields: [studentUserId], references: [id])
+  rescheduleRequests     RescheduleRequest[]
+  payoutEntries          PayoutEntry[]
+  review                 Review?
+  studentLedgerEntries   StudentLedgerEntry[]
+  recordingSegments      RecordingSegment[]
 
   @@index([studentId])
   @@index([studentUserId])
@@ -593,13 +593,13 @@ model RecordingSegment {
 
   // The teacher whose browser made the recording: the only person who may
   // finish, upload or discard it. Null for a segment of the old recorder.
-  recordedByUserId  String?
+  recordedByUserId String?
   // What the browser actually recorded, e.g. video/webm;codecs=vp8,opus.
-  mimeType          String?
-  durationSeconds   Int?
-  uploadedAt        DateTime?
+  mimeType         String?
+  durationSeconds  Int?
+  uploadedAt       DateTime?
   // How many upload URLs were issued for it (retries and resumed uploads).
-  uploadAttempts    Int                    @default(0)
+  uploadAttempts   Int       @default(0)
 
   booking         Booking?         @relation(fields: [bookingId], references: [id])
   scheduledLesson ScheduledLesson? @relation(fields: [scheduledLessonId], references: [id])
@@ -725,26 +725,26 @@ model RecurringSlot {
 }
 
 model ScheduledLesson {
-  id              String         @id @default(uuid())
-  studentUserId   String
-  student         User           @relation(fields: [studentUserId], references: [id])
-  teacherId       String
-  teacher         TeacherProfile @relation(fields: [teacherId], references: [id])
-  courseId        String
-  course          Course         @relation(fields: [courseId], references: [id])
-  lessonNumber    Int
+  id            String         @id @default(uuid())
+  studentUserId String
+  student       User           @relation(fields: [studentUserId], references: [id])
+  teacherId     String
+  teacher       TeacherProfile @relation(fields: [teacherId], references: [id])
+  courseId      String
+  course        Course         @relation(fields: [courseId], references: [id])
+  lessonNumber  Int
   // Direct link to the catalog Lesson this occurrence teaches — resolved at
   // generation/reconciliation time by matching Lesson.order == lessonNumber
   // within the course. Nullable only so older rows created before this field
   // existed remain valid; a backfill sets it for every existing row. Once
   // set, this is what Lesson Details / the assessment interface read from,
   // never the (courseId, lessonNumber) pair directly.
-  lessonId        String?
-  lesson          Lesson?        @relation(fields: [lessonId], references: [id])
-  start           DateTime // UTC instant
-  end             DateTime // UTC instant
-  classType       ClassType
-  status          LessonStatus   @default(UPCOMING)
+  lessonId      String?
+  lesson        Lesson?        @relation(fields: [lessonId], references: [id])
+  start         DateTime // UTC instant
+  end           DateTime // UTC instant
+  classType     ClassType
+  status        LessonStatus   @default(UPCOMING)
 
   // Batch classes: this row is ONE STUDENT'S PARTICIPATION in a shared class
   // (see BatchSession). It keeps everything that is the student's own —
@@ -754,10 +754,10 @@ model ScheduledLesson {
   // session by the code that writes the session, never edited on their own.
   // A BATCH row always has both set and a 1:1 row never does (CHECK constraint
   // in the batches migration).
-  batchId         String?
-  batch           Batch?         @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  batchSessionId  String?
-  batchSession    BatchSession?  @relation(fields: [batchSessionId], references: [id], onDelete: Restrict)
+  batchId        String?
+  batch          Batch?        @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  batchSessionId String?
+  batchSession   BatchSession? @relation(fields: [batchSessionId], references: [id], onDelete: Restrict)
 
   // Attendance timestamps, set when each side's classroom join token is first
   // issued for this lesson (see ClassroomService.joinScheduledLesson).
@@ -786,10 +786,10 @@ model ScheduledLesson {
   // endedAt = finalized timestamp, endedByRole = 'TEACHER' | 'ADMIN' |
   // 'SYSTEM' (the 75-minute failsafe). endReason/endNote only apply to
   // INCOMPLETE.
-  endedAt      DateTime?
-  endedByRole  String?
-  endReason    ClassEndReason?
-  endNote      String?
+  endedAt     DateTime?
+  endedByRole String?
+  endReason   ClassEndReason?
+  endNote     String?
 
   // The teacher closed this student's test (the live "lock" button): the
   // student can no longer start it, and an attempt in progress was submitted
@@ -862,10 +862,10 @@ enum BatchStatus {
 }
 
 model Batch {
-  id          String      @id @default(uuid())
-  name        String
-  notes       String?
-  status      BatchStatus @default(ACTIVE)
+  id     String      @id @default(uuid())
+  name   String
+  notes  String?
+  status BatchStatus @default(ACTIVE)
 
   teacherId String
   teacher   TeacherProfile @relation(fields: [teacherId], references: [id])
@@ -878,7 +878,7 @@ model Batch {
 
   // Where the batch starts in the curriculum until it has taught a class (a
   // batch built around students who are already on lesson 10 starts at 10).
-  startLessonNumber Int @default(1)
+  startLessonNumber Int    @default(1)
   // First class date, 'YYYY-MM-DD' in Asia/Dhaka. Classes are never generated
   // before it.
   startDate         String
@@ -911,14 +911,14 @@ model BatchSlot {
 }
 
 model BatchMember {
-  id            String    @id @default(uuid())
-  batchId       String
-  batch         Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  studentUserId String
-  student       User      @relation("StudentBatchMemberships", fields: [studentUserId], references: [id])
-  joinedAt      DateTime  @default(now())
+  id             String    @id @default(uuid())
+  batchId        String
+  batch          Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  studentUserId  String
+  student        User      @relation("StudentBatchMemberships", fields: [studentUserId], references: [id])
+  joinedAt       DateTime  @default(now())
   // Set when the student leaves or is moved; the row is kept as history.
-  leftAt        DateTime?
+  leftAt         DateTime?
   // The explicit alignment decision taken when the student joined, so the
   // record shows why a student started at a lesson other than their own next
   // one: ALIGNED | SKIPPED_TO_BATCH | BATCH_REBASED | MIGRATED.
@@ -1129,25 +1129,25 @@ model Lesson {
 // Deliberately separate from the gamification systems: it awards no XP, gems,
 // streaks, ranks or badges, and the rank/streak/badge derivation never reads it.
 model LessonProgress {
-  id             String   @id @default(uuid())
-  studentUserId  String
-  student        User     @relation("StudentLessonProgress", fields: [studentUserId], references: [id], onDelete: Cascade)
-  lessonId       String
-  lesson         Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  id              String    @id @default(uuid())
+  studentUserId   String
+  student         User      @relation("StudentLessonProgress", fields: [studentUserId], references: [id], onDelete: Cascade)
+  lessonId        String
+  lesson          Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   // Section ids (heading slugs) the student has read, and the interactive
   // activities (visual ids) they have completed.
-  sectionsRead   String[] @default([])
-  activitiesDone String[] @default([])
+  sectionsRead    String[]  @default([])
+  activitiesDone  String[]  @default([])
   // { [questionId]: { correct: boolean | null, attempts: number, at: ISO date } }
-  quizResults    Json?
+  quizResults     Json?
   quizCompletedAt DateTime?
   // Machine-graded questions answered correctly / total graded (self-checks and
   // reflections are never counted).
-  quizScore      Int?
-  quizTotal      Int?
-  firstOpenedAt  DateTime @default(now())
-  lastOpenedAt   DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  quizScore       Int?
+  quizTotal       Int?
+  firstOpenedAt   DateTime  @default(now())
+  lastOpenedAt    DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@unique([studentUserId, lessonId])
   @@index([lessonId])
@@ -1198,7 +1198,7 @@ model Submission {
 
   // Files handed in since homework moved to Cloudflare R2 (see HomeworkFile).
   // `files` above only holds what was uploaded to Cloudinary before that.
-  homeworkFiles     HomeworkFile[]
+  homeworkFiles HomeworkFile[]
 
   @@index([studentUserId])
   @@index([teacherId, status])
@@ -1428,12 +1428,12 @@ model TrialLead {
   // assigned, never returned by any admin/teacher/public API, and only ever
   // grants entry to THIS trial's room, inside the joining window, while the
   // appointment is CONFIRMED (see trial-access.util.ts).
-  guestToken        String?   @unique
-  teacherId         String?
-  teacher           TeacherProfile? @relation("TrialClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
-  teacherAssignedAt DateTime?
-  teacherJoinedAt   DateTime?
-  guestJoinedAt     DateTime?
+  guestToken          String?         @unique
+  teacherId           String?
+  teacher             TeacherProfile? @relation("TrialClassTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
+  teacherAssignedAt   DateTime?
+  teacherJoinedAt     DateTime?
+  guestJoinedAt       DateTime?
   // When the 1-hour reminder (email) becomes due, and when it was sent. Null
   // due-date = no reminder (no teacher yet, or the link went out less than an
   // hour before the start). Reset on every reschedule; the WhatsApp reminder
@@ -1681,37 +1681,44 @@ enum QuestionKind {
 }
 
 // How an assessment is built and handed in. STANDARD is the original engine every
-// program uses; LITTLE_CODERS_V2 is the standardized Little Coders assessment.
+// program uses; LITTLE_CODERS_V2 is the standardized Little Coders assessment;
+// STRUCTURED_V1 is the standardized Pre-University CSE assessment.
 enum AssessmentFormat {
   STANDARD
   LITTLE_CODERS_V2
+  // Pre-University CSE: Part A 10 multiple-choice questions (1 mark each), Part B three
+  // short-answer questions (5 marks each, teacher-marked against a rubric) and Part C one
+  // practical problem (20 marks, teacher-marked against a rubric) — 45 marks in at most
+  // 40 minutes (see Assessment.timeLimitMinutes). Used by every course assessment AND the
+  // final assessment of the program.
+  STRUCTURED_V1
 }
 
 model Assessment {
-  id                 String      @id @default(uuid())
-  lessonId           String      @unique
-  lesson             Lesson      @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(uuid())
+  lessonId           String           @unique
+  lesson             Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   type               SessionType // COURSE_TEST | STAGE_TEST | FINAL_TEST
   title              String
   instructions       String?
   // Legacy: used to cap how many MCQs were drawn per attempt. Standardized
   // tests always present the whole bank, so this is no longer read.
-  mcqCount           Int          @default(0)
-  randomizeQuestions Boolean     @default(true)
-  randomizeOptions   Boolean     @default(true)
-  passScorePct       Int         @default(60)
+  mcqCount           Int              @default(0)
+  randomizeQuestions Boolean          @default(true)
+  randomizeOptions   Boolean          @default(true)
+  passScorePct       Int              @default(60)
   // Legacy Part C (live viva) — superseded by the coding project on Final
   // Tests. Kept so historical VivaRecord/attempt data stays readable.
-  vivaMaxScore       Float        @default(20)
-  isPublished        Boolean     @default(false)
+  vivaMaxScore       Float            @default(20)
+  isPublished        Boolean          @default(false)
   // See the block comment above: when set, this assessment's questions are
   // read from (and edited on) that assessment instead of its own rows.
   sourceAssessmentId String?
-  sourceAssessment   Assessment?  @relation("AssessmentQuestionBank", fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
-  linkedAssessments  Assessment[] @relation("AssessmentQuestionBank")
+  sourceAssessment   Assessment?      @relation("AssessmentQuestionBank", fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
+  linkedAssessments  Assessment[]     @relation("AssessmentQuestionBank")
   // Version of the maintained bank content (server/src/assessments/bank)
   // last applied to this assessment; 0 = never synced (legacy generated bank).
-  bankVersion        Int          @default(0)
+  bankVersion        Int              @default(0)
   // STANDARD is every existing test (and every other program's). LITTLE_CODERS_V2 is the
   // Little Coders assessment: 10 MCQ + 5 True/False + one 25-mark practical project handed in
   // as files and/or links, with files kept temporarily in R2 (see AssessmentFile).
@@ -1719,30 +1726,35 @@ model Assessment {
   // Little Coders Final Assessment: which practical-project version students are given
   // ('SCRATCH_AI' | 'PYTHON'), chosen by an admin before the assessment. null elsewhere.
   activeVariant      String?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  // STRUCTURED_V1 only: the maximum duration in minutes (40). null = no time limit, which is
+  // every other test: there the teacher ends the test. The deadline of one attempt is frozen
+  // on the attempt when it starts (AssessmentAttempt.deadlineAt).
+  timeLimitMinutes   Int?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
-  mcqQuestions       MCQQuestion[]
-  practicalQuestions PracticalQuestion[]
-  attempts           AssessmentAttempt[]
+  mcqQuestions         MCQQuestion[]
+  practicalQuestions   PracticalQuestion[]
+  shortAnswerQuestions ShortAnswerQuestion[]
+  attempts             AssessmentAttempt[]
 
   @@index([type])
   @@index([sourceAssessmentId])
 }
 
 model MCQQuestion {
-  id           String     @id @default(uuid())
-  assessmentId String
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  id            String       @id @default(uuid())
+  assessmentId  String
+  assessment    Assessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   questionType  QuestionKind @default(MCQ)
-  questionText String
+  questionText  String
   options       Json // string[] — four for MCQ, ["True", "False"] for TRUE_FALSE
-  correctIndex Int
-  explanation  String?
-  difficulty   String? // "EASY" | "MEDIUM" | "HARD"
-  tags         String[]   @default([])
-  order        Int        @default(0)
-  isPublished  Boolean    @default(true)
+  correctIndex  Int
+  explanation   String?
+  difficulty    String? // "EASY" | "MEDIUM" | "HARD"
+  tags          String[]     @default([])
+  order         Int          @default(0)
+  isPublished   Boolean      @default(true)
   // Stable identity of a question that comes from the maintained bank
   // content, so the idempotent bank sync updates it in place instead of
   // inserting a duplicate on every boot. Null for admin-authored questions.
@@ -1750,8 +1762,8 @@ model MCQQuestion {
   // Set when an admin edits the question on the Question Bank page — a later
   // bank-content release never overwrites an admin's edit.
   editedByAdmin Boolean      @default(false)
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   answers MCQAnswer[]
 
@@ -1787,6 +1799,51 @@ model PracticalQuestion {
   @@index([assessmentId])
 }
 
+// Part B of a STRUCTURED_V1 assessment: an explanation / reasoning / tracing / analysis question the
+// student answers in writing (Markdown: lists, tables, code blocks and text diagrams are fine).
+// Never auto-graded — the teacher marks it against `rubric` (criteria that add up to `maxScore`).
+// Like every question it lives on the assessment's root bank (see linked-assessment.ts).
+model ShortAnswerQuestion {
+  id            String     @id @default(uuid())
+  assessmentId  String
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  // Markdown: the question as the student reads it.
+  prompt        String
+  maxScore      Int        @default(5)
+  // [{ criterion, maxPoints, lookFor }] — the teacher's marking guide (never sent to a student
+  // before the result is released; a student sees the criteria names and marks only).
+  rubric        Json?
+  // Teacher-only exemplar answer.
+  modelAnswer   String?
+  order         Int        @default(0)
+  isPublished   Boolean    @default(true)
+  // See MCQQuestion.bankKey / editedByAdmin.
+  bankKey       String?
+  editedByAdmin Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  responses ShortAnswerResponse[]
+
+  @@unique([assessmentId, bankKey])
+  @@index([assessmentId])
+}
+
+// A student's written answer to one short-answer question. Autosaved while the attempt is
+// IN_PROGRESS and frozen on submit (the report keeps its own snapshot).
+model ShortAnswerResponse {
+  id         String              @id @default(uuid())
+  attemptId  String
+  attempt    AssessmentAttempt   @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   ShortAnswerQuestion @relation(fields: [questionId], references: [id])
+  answer     String              @default("")
+  updatedAt  DateTime            @updatedAt
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
 // One per (assessment, student) — created lazily the first time a student
 // opens the assessment interface for their test-type ScheduledLesson.
 model AssessmentAttempt {
@@ -1818,10 +1875,14 @@ model AssessmentAttempt {
   // whatever had been saved (instead of the student pressing Submit).
   lockedAt          DateTime?
   lockedByUserId    String?
+  // STRUCTURED_V1 only: when the student's time runs out (startedAt + the assessment's
+  // timeLimitMinutes, frozen when the attempt starts). null on every other test.
+  deadlineAt        DateTime?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
 
   mcqAnswers           MCQAnswer[]
+  shortAnswerResponses ShortAnswerResponse[]
   practicalSubmissions PracticalSubmission[]
   vivaRecord           VivaRecord?
   report               TestReport?
@@ -1935,6 +1996,15 @@ model TestReport {
   //    autoCorrect, explanation, override: { correct, note, at } | null }]
   // options/selectedIndex/correctIndex are in the order the student saw.
   questionResults    Json
+
+  // Short-answer part (STRUCTURED_V1, Part B), marked manually by the teacher. A frozen snapshot:
+  // [{ questionId, order, prompt, answer, maxScore, rubric: [{ criterion, maxPoints, lookFor,
+  //    score: number | null }], score: number | null, feedback: string | null, modelAnswer }]
+  hasShortAnswers     Boolean @default(false)
+  shortAnswerResults  Json?
+  shortAnswerMaxScore Float?
+  // null until every criterion of every short-answer question has a mark.
+  shortAnswerScore    Float?
 
   // Coding project — Final Tests only, marked manually by the teacher.
   hasCodingProject   Boolean   @default(false)
@@ -2138,11 +2208,11 @@ enum PackageAlertLevel {
 }
 
 model PackageAlertState {
-  id            String             @id @default(uuid())
-  studentUserId String             @unique
-  lastState     PackageAlertLevel  @default(NONE)
+  id            String            @id @default(uuid())
+  studentUserId String            @unique
+  lastState     PackageAlertLevel @default(NONE)
   lastSentAt    DateTime?
-  updatedAt     DateTime           @updatedAt
+  updatedAt     DateTime          @updatedAt
 }
 
 // ─── Certificates of Completion ───────────────────────────────────────────────
@@ -2319,19 +2389,19 @@ enum DisputeStatus {
 }
 
 model Dispute {
-  id                 String        @id @default(uuid())
-  filedByUserId      String
-  filedByRole        Role
-  againstUserId      String?
-  scheduledLessonId  String?
-  bookingId          String?
-  category           String
-  description        String
-  status             DisputeStatus @default(OPEN)
-  createdAt          DateTime      @default(now())
-  resolvedAt         DateTime?
-  resolvedByAdminId  String?
-  resolutionNotes    String?
+  id                String        @id @default(uuid())
+  filedByUserId     String
+  filedByRole       Role
+  againstUserId     String?
+  scheduledLessonId String?
+  bookingId         String?
+  category          String
+  description       String
+  status            DisputeStatus @default(OPEN)
+  createdAt         DateTime      @default(now())
+  resolvedAt        DateTime?
+  resolvedByAdminId String?
+  resolutionNotes   String?
 
   @@index([status, createdAt])
   @@index([filedByUserId])

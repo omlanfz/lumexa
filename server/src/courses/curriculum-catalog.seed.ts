@@ -46,6 +46,12 @@ import {
 } from './curriculum-source';
 import { isLittleCodersSlug } from '../little-coders/lc.constants';
 import { ensureLittleCodersCurriculum } from '../little-coders/migrate/little-coders.migrate';
+import { AssessmentFormat } from '@prisma/client';
+import {
+  STRUCTURED_TIME_LIMIT_MINUTES,
+  structuredInstructions,
+} from '../structured-assessments/structured.constants';
+import { PUCSE_FINAL_TITLE, PUCSE_PATHWAY_FILE } from '../pre-university-cse/outline';
 
 // ── Project-checkpoint assignment: the standard 8-lesson shape ─────────────
 // L1 intro · L2-3 Project1 · L4-5 Project2 · L6-7 Project3 · L8 review
@@ -131,6 +137,7 @@ async function createModuleRows(
   lessonOrderStart: number,
   stageNumber: number | null,
   courseTitle: string | null = null,
+  structured = false,
 ): Promise<number> {
   const courseModule = await prisma.courseModule.create({
     data: {
@@ -221,22 +228,21 @@ async function createModuleRows(
   // Course Test session directly after this module's 8 lessons. The
   // assessment starts as an empty shell; syncAssessmentBanks fills it with the
   // module's authored 40-question bank (see server/src/assessments/bank).
+  // Pre-University CSE calls it a Course Assessment and takes it in the structured
+  // format (10 MCQ + 3 short answers + a 20-mark practical, 45 marks, 40 minutes);
+  // syncStructuredBanks fills that shell.
+  const testTitle = structured ? `${mod.title} — Course Assessment` : `${mod.title} — Course Test`;
   const testLesson = await prisma.lesson.create({
     data: {
       courseId,
       moduleId: courseModule.id,
-      title: `${mod.title} — Course Test`,
+      title: testTitle,
       order,
       type: SessionType.COURSE_TEST,
       objectives: [`Demonstrate mastery of everything taught in "${mod.title}"`],
     },
   });
-  await createAssessmentShell(
-    prisma,
-    testLesson.id,
-    SessionType.COURSE_TEST,
-    `${mod.title} — Course Test`,
-  );
+  await createAssessmentShell(prisma, testLesson.id, SessionType.COURSE_TEST, testTitle, structured);
 
   return order + 1; // next free lesson order
 }
@@ -250,18 +256,24 @@ async function createAssessmentShell(
   lessonId: string,
   type: SessionType,
   title: string,
+  structured = false,
 ) {
   return prisma.assessment.create({
     data: {
       lessonId,
       type,
       title,
-      instructions: standardInstructions(type as BankTestType),
+      instructions: structured
+        ? structuredInstructions(type === SessionType.FINAL_TEST ? 'FINAL_TEST' : 'COURSE_TEST')
+        : standardInstructions(type as BankTestType),
       mcqCount: 0,
       randomizeQuestions: true,
       randomizeOptions: true,
       vivaMaxScore: 0,
       isPublished: true,
+      ...(structured
+        ? { format: AssessmentFormat.STRUCTURED_V1, timeLimitMinutes: STRUCTURED_TIME_LIMIT_MINUTES }
+        : {}),
     },
   });
 }
@@ -279,9 +291,10 @@ export async function seedPathwayCurriculum(prisma: PrismaClient, courseId: stri
     }
   }
 
+  const structured = pathwaySlug === PUCSE_PATHWAY_FILE;
   let order = 1;
   for (let i = 0; i < raw.modules.length; i++) {
-    order = await createModuleRows(prisma, courseId, raw.modules[i], i + 1, order, null, courseRow?.title ?? null);
+    order = await createModuleRows(prisma, courseId, raw.modules[i], i + 1, order, null, courseRow?.title ?? null, structured);
   }
 
   // Final Test: 25 MCQs + 5 True/False across all 3 modules plus one ~15-minute
@@ -293,17 +306,22 @@ export async function seedPathwayCurriculum(prisma: PrismaClient, courseId: stri
   const finalLesson = await prisma.lesson.create({
     data: {
       courseId,
-      title: `${course?.title ?? raw.slug} — Final Test`,
+      title: structured ? PUCSE_FINAL_TITLE : `${course?.title ?? raw.slug} — Final Test`,
       order,
       type: SessionType.FINAL_TEST,
-      objectives: ['Demonstrate complete mastery of every module in this pathway'],
+      objectives: [
+        structured
+          ? 'Demonstrate what you learned across all eight courses of the program'
+          : 'Demonstrate complete mastery of every module in this pathway',
+      ],
     },
   });
   await createAssessmentShell(
     prisma,
     finalLesson.id,
     SessionType.FINAL_TEST,
-    'Final Test',
+    structured ? 'Final Assessment' : 'Final Test',
+    structured,
   );
 
   return order; // total session count

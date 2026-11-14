@@ -173,6 +173,8 @@ export const CATEGORY_ALIASES: Readonly<Record<string, CertificateCategoryId>> =
     // the flagship spans every category, so it takes the general theme
     odyssey: 'GENERAL',
     'lumexa odyssey': 'GENERAL',
+    // the university-preparation journey spans programming, mathematics, systems and data: general
+    'pre university cse': 'GENERAL',
   };
 
 /** Canonical Course.slug (no "-path") → the certificate category. Used when an
@@ -188,6 +190,7 @@ export const SLUG_CATEGORIES: Readonly<Record<string, CertificateCategoryId>> =
     'data-scientist': 'AI_DATA_SCIENCE',
     'advanced-data-science': 'AI_DATA_SCIENCE',
     'lumexa-odyssey': 'GENERAL',
+    'pre-university-cse': 'GENERAL',
   };
 
 /** Whole words that place a programme with a category nobody listed above

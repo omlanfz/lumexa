@@ -16,7 +16,8 @@ const LABELS: Record<string, string> = {
   html: 'HTML', xml: 'HTML', css: 'CSS',
   bash: 'Terminal', sh: 'Terminal', shell: 'Terminal', zsh: 'Terminal', terminal: 'Terminal',
   json: 'JSON', lua: 'Lua', luau: 'Lua', java: 'Java', sql: 'SQL', md: 'Markdown', markdown: 'Markdown', diff: 'Diff',
-  text: 'Output', txt: 'Output', plaintext: 'Output', output: 'Output',
+  c: 'C', h: 'C', cpp: 'C++', 'c++': 'C++', cc: 'C++', cxx: 'C++', hpp: 'C++', asm: 'Assembly', assembly: 'Assembly',
+  text: 'Output', txt: 'Output', plaintext: 'Output', output: 'Output', input: 'Input',
 };
 
 export function languageLabel(lang: string): string {

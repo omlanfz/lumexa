@@ -9,5 +9,9 @@ import './code';
 import './web';
 import './vision';
 import './media';
+import './technical-structures';
+import './technical-diagrams';
+import './technical-logic';
+import './code-lab';
 
 export { VISUAL_RENDERERS } from './registry';

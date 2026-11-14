@@ -1,11 +1,12 @@
 // FILE PATH: server/src/courses/course-catalog.seed.ts
 //
-// The default Lumexa course catalog — the 8 courses Lumexa currently offers:
-// the flagship "Lumexa Odyssey" path and its 7 specialized pathways (Little
+// The default Lumexa course catalog — the 9 courses Lumexa currently offers:
+// the flagship "Lumexa Odyssey" path, its 7 specialized pathways (Little
 // Coders, Game Creator, Python Foundations, Web Developer, AI Builder, Data
-// Scientist, Digital Independence). One Course row per path (not per
-// sub-course) so this is exactly what Operations sees on /admin/courses out of
-// the box.
+// Scientist, Digital Independence) and the second signature journey,
+// "Pre-University CSE" (8 courses, 73 sessions). One Course row per path (not
+// per sub-course) so this is exactly what Operations sees on /admin/courses
+// out of the box.
 //
 // Each specialized pathway is 28 sessions: 3 real 8-lesson sub-courses
 // ("modules"), each followed by its own Course Test, plus one Final Test —
@@ -17,7 +18,7 @@
 // (server/prisma/curriculum-data/*.json) — this file only owns the
 // Course-level catalog row (pricing, age range, category, session count).
 //
-// A student who needs something other than one of these 7 (e.g. an Odyssey
+// A student who needs something other than one of these 9 (e.g. an Odyssey
 // track starting partway through because they already know the first two
 // courses) gets a one-off custom Course created by an admin from the
 // "Custom course for one student" option in the New Course modal — this
@@ -41,6 +42,15 @@ import { legacyCourseSlug } from './course-slug';
 import { syncAssessmentBanks } from '../assessments/bank/bank.sync';
 import { LC_PROGRAM_DESCRIPTION, LC_SESSIONS_TOTAL, isLittleCodersSlug } from '../little-coders/lc.constants';
 import { syncLittleCodersBanks } from '../little-coders/assessments/lc-bank.sync';
+import { syncStructuredBanks } from '../structured-assessments/structured.sync';
+import {
+  PUCSE_CATEGORY,
+  PUCSE_DESCRIPTION,
+  PUCSE_EMOJI,
+  PUCSE_SESSIONS,
+  PUCSE_SLUG,
+  PUCSE_TITLE,
+} from '../pre-university-cse/outline';
 import { PROGRAM_FACTS, factsBackfill, type CourseLevel } from './program-facts';
 
 interface CourseSeed {
@@ -167,6 +177,18 @@ export const COURSE_CATALOG: CourseSeed[] = [
     ...ageAndLevel('digital-independence'),
     sessions: 28,
   },
+  // The second signature journey, beside Lumexa Odyssey: 8 courses x (8 lessons + a course
+  // assessment) + a final assessment = 73 sessions. Its structure and content are authored in
+  // server/src/pre-university-cse and server/prisma/pre-university-cse.
+  {
+    slug: PUCSE_SLUG,
+    title: PUCSE_TITLE,
+    description: PUCSE_DESCRIPTION,
+    emoji: PUCSE_EMOJI,
+    category: PUCSE_CATEGORY,
+    ...ageAndLevel(PUCSE_SLUG),
+    sessions: PUCSE_SESSIONS,
+  },
 ];
 
 /** Upserts every course in COURSE_CATALOG, then builds/repairs its module +
@@ -255,6 +277,8 @@ export async function seedCourseCatalog(
   await syncAssessmentBanks(prisma, logger);
   // The redesigned Little Coders assessments (10 MCQ + 5 True/False + a 25-mark practical).
   await syncLittleCodersBanks(prisma, logger);
+  // The Pre-University CSE assessments (10 MCQ + 3 short answers + a 20-mark practical = 45 marks, 40 minutes).
+  await syncStructuredBanks(prisma, logger);
 
   return results;
 }

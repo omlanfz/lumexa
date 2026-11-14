@@ -10,6 +10,8 @@ import './python-foundations';
 import './python-foundations-quiz';
 import './web-developer';
 import './advanced-data-science';
+// Pre-University CSE: visuals and Mini Quizzes of its 64 lessons, one file per course
+import './pucse';
 // Four-option multiple-choice rewrites of older quiz questions (the rule: every question is multiple choice)
 import './mcq/ai-builder';
 import './mcq/game-creator';

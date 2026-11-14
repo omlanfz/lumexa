@@ -23,6 +23,9 @@
 # MediaPipe runtime, copied from node_modules by scripts/copy-mediapipe-wasm.mjs
 /public/mediapipe/
 
+# Code Lab runtimes (Pyodide, SQLite), copied from node_modules by scripts/copy-code-lab-runtimes.mjs
+/public/runtimes/
+
 # misc
 .DS_Store
 *.pem

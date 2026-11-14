@@ -116,6 +116,7 @@ export const PATHWAY_SLUGS: Record<string, string> = {
   'little-coders': 'little-coders-path',
   'digital-independence': 'digital-independence-path',
   'python-foundations': 'python-foundations-path',
+  'pre-university-cse': 'pre-university-cse-path',
   'web-developer': 'web-developer-path',
 };
 
