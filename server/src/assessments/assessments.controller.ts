@@ -39,6 +39,7 @@ import {
   SaveAnswerDto,
   SaveCodeDto,
   SavePracticalDto,
+  SaveShortAnswerDto,
   SetVariantDto,
   StartAttemptDto,
   SubmitAttemptDto,
@@ -106,6 +107,18 @@ export class AssessmentsController {
     @Req() req: any,
   ) {
     return this.assessments.saveCode(attemptId, dto, req.user.userId);
+  }
+
+  /** Structured assessments, Part B: autosave of one written answer. */
+  @Post('attempts/:attemptId/short-answers')
+  @Roles(Role.STUDENT)
+  @Throttle(AUTOSAVE_LIMIT)
+  saveShortAnswer(
+    @Param('attemptId') attemptId: string,
+    @Body() dto: SaveShortAnswerDto,
+    @Req() req: any,
+  ) {
+    return this.assessments.saveShortAnswer(attemptId, dto, req.user.userId);
   }
 
   /** Little Coders: autosave of the practical project's links and note. */

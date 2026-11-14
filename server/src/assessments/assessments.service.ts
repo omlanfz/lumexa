@@ -74,17 +74,28 @@ import {
   SaveAnswerDto,
   SaveCodeDto,
   SavePracticalDto,
+  SaveShortAnswerDto,
   SubmitAttemptDto,
 } from './dto/assessment.dto';
+import {
+  STRUCTURED_GRACE_SECONDS,
+  STRUCTURED_MARKS,
+  STRUCTURED_MAX_ANSWER_LENGTH,
+  STRUCTURED_SUGGESTED_MINUTES,
+  STRUCTURED_TIME_LIMIT_MINUTES,
+} from '../structured-assessments/structured.constants';
 import {
   QuestionResult,
   RubricScore,
   isEffectivelyCorrect,
   summarizeObjective,
+  ShortAnswerResult,
+  sumRubric,
 } from './assessment-grading';
 import {
   SubmittedAnswer,
   SubmittedCoding,
+  SubmittedShortAnswer,
   buildReportCreateData,
 } from './test-report.builder';
 import { AssessmentFilesService } from './assessment-files.service';
@@ -186,6 +197,36 @@ export class AssessmentsService {
     return root?.format === AssessmentFormat.LITTLE_CODERS_V2;
   }
 
+  /** Pre-University CSE (STRUCTURED_V1): 10 multiple choice + 3 short answers + 1 practical in at most
+   *  40 minutes. A linked test mirrors its root bank, so the root decides. */
+  private async structuredInfo(
+    a: {
+      id: string;
+      sourceAssessmentId: string | null;
+      format?: AssessmentFormat;
+      timeLimitMinutes?: number | null;
+    },
+    db: PrismaService | Prisma.TransactionClient = this.prisma,
+  ): Promise<{ structured: boolean; timeLimitMinutes: number }> {
+    let format = a.format;
+    let minutes = a.timeLimitMinutes ?? null;
+    if (format === undefined || format !== AssessmentFormat.STRUCTURED_V1) {
+      const rootId = rootBankId(a);
+      if (rootId !== a.id || format === undefined) {
+        const root = await db.assessment.findUnique({
+          where: { id: rootId },
+          select: { format: true, timeLimitMinutes: true },
+        });
+        format = root?.format ?? format;
+        minutes = root?.timeLimitMinutes ?? minutes;
+      }
+    }
+    return {
+      structured: format === AssessmentFormat.STRUCTURED_V1,
+      timeLimitMinutes: minutes ?? STRUCTURED_TIME_LIMIT_MINUTES,
+    };
+  }
+
   private requireFiles(): AssessmentFilesService {
     if (!this.files)
       throw new ConflictException(
@@ -212,6 +253,7 @@ export class AssessmentsService {
         sourceAssessmentId: true,
         format: true,
         activeVariant: true,
+        timeLimitMinutes: true,
       },
     });
     if (!assessment) throw new NotFoundException('Assessment not found');
@@ -274,6 +316,14 @@ export class AssessmentsService {
     }
 
     const rootId = rootBankId(assessment);
+    const structuredInfo = await this.structuredInfo(assessment);
+    const shortQuestions = structuredInfo.structured
+      ? await this.prisma.shortAnswerQuestion.findMany({
+          where: { assessmentId: rootId, isPublished: true },
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+          select: { id: true },
+        })
+      : [];
     const [questions, practicals] = await Promise.all([
       this.prisma.mCQQuestion.findMany({
         where: { assessmentId: rootId, isPublished: true },
@@ -332,13 +382,23 @@ export class AssessmentsService {
             'Your teacher has closed this test, so it can no longer be started.',
           );
         }
+        const startedAt = new Date();
         const created = await tx.assessmentAttempt.create({
           data: {
             assessmentId,
             studentUserId,
             scheduledLessonId,
             status: AttemptStatus.IN_PROGRESS,
-            startedAt: new Date(),
+            startedAt,
+            // Structured assessments run against a clock that the SERVER owns: the deadline is
+            // frozen here and never moves, whatever the browser's own clock says.
+            ...(structuredInfo.structured
+              ? {
+                  deadlineAt: new Date(
+                    startedAt.getTime() + structuredInfo.timeLimitMinutes * 60_000,
+                  ),
+                }
+              : {}),
             mcqQuestionIds: ordered.map((q) => q.id),
             mcqMaxScore: ordered.length * MARKS_PER_QUESTION,
             practicalMaxScore: assigned.reduce((sum, p) => sum + p.maxScore, 0),
@@ -369,6 +429,15 @@ export class AssessmentsService {
             };
           }),
         });
+        if (shortQuestions.length > 0) {
+          await tx.shortAnswerResponse.createMany({
+            data: shortQuestions.map((q) => ({
+              attemptId: created.id,
+              questionId: q.id,
+              answer: '',
+            })),
+          });
+        }
         return created;
       });
       return this.getAttempt(attempt.id, {
@@ -417,6 +486,7 @@ export class AssessmentsService {
             instructions: true,
             passScorePct: true,
             sourceAssessmentId: true,
+            timeLimitMinutes: true,
             format: true,
             activeVariant: true,
             lesson: {
@@ -448,6 +518,21 @@ export class AssessmentsService {
     });
     if (!attempt) throw new NotFoundException('Attempt not found');
     this.assertCanView(attempt, requester);
+
+    // A structured assessment whose clock has run out is handed in as soon as anybody looks at it
+    // (the sweeper does the same every half minute), so an attempt never stays open past its deadline.
+    if (
+      attempt.deadlineAt &&
+      attempt.status === AttemptStatus.IN_PROGRESS &&
+      Date.now() > attempt.deadlineAt.getTime() + STRUCTURED_GRACE_SECONDS * 1000
+    ) {
+      try {
+        await this.finalizeSubmission(attempt.id, attempt.studentUserId, {}, null);
+        return this.getAttempt(attemptId, requester);
+      } catch (err) {
+        this.logger.warn(`Could not hand in the expired attempt ${attempt.id}: ${err}`);
+      }
+    }
 
     const isStudent = requester.role === Role.STUDENT;
     const released = attempt.status === AttemptStatus.GRADED;
@@ -561,6 +646,51 @@ export class AssessmentsService {
         };
       })[0] ?? null;
 
+    // Structured assessments: the written Part B, the clock and what the practical screen needs.
+    const structuredCtx = await this.structuredInfo(attempt.assessment);
+    let structured: Record<string, unknown> | null = null;
+    let shortMax = 0;
+    if (structuredCtx.structured) {
+      const [shortQs, shortRows] = await Promise.all([
+        this.prisma.shortAnswerQuestion.findMany({
+          where: { assessmentId: rootId, isPublished: true },
+          orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
+        }),
+        this.prisma.shortAnswerResponse.findMany({ where: { attemptId } }),
+      ]);
+      const savedBy = new Map(shortRows.map((r) => [r.questionId, r]));
+      shortMax = shortQs.reduce((sum, q) => sum + q.maxScore, 0);
+      const spec = (practicalRow?.spec ?? null) as {
+        deliverables?: string[];
+        sqlSetup?: string;
+      } | null;
+      structured = {
+        timeLimitMinutes: structuredCtx.timeLimitMinutes,
+        graceSeconds: STRUCTURED_GRACE_SECONDS,
+        suggestedMinutes: STRUCTURED_SUGGESTED_MINUTES,
+        maxAnswerLength: STRUCTURED_MAX_ANSWER_LENGTH,
+        marks: STRUCTURED_MARKS,
+        shortAnswers: shortQs.map((q, i) => ({
+          id: q.id,
+          order: i + 1,
+          prompt: q.prompt,
+          maxScore: q.maxScore,
+          criteria: parseRubric(q.rubric).map((c) => ({
+            criterion: c.criterion,
+            maxPoints: c.maxPoints,
+          })),
+          answer: savedBy.get(q.id)?.answer ?? '',
+          savedAt: savedBy.get(q.id)?.updatedAt ?? null,
+        })),
+        practical: practicalRow
+          ? {
+              deliverables: spec?.deliverables ?? [],
+              ...(spec?.sqlSetup ? { sqlSetup: spec.sqlSetup } : {}),
+            }
+          : null,
+      };
+    }
+
     const report = attempt.report;
     const showResult = !!report && (!isStudent || released);
     const result = showResult
@@ -585,6 +715,25 @@ export class AssessmentsService {
                         | null) ?? [],
                     )
                   : report.codingRubricScores,
+              }
+            : null,
+          shortAnswers: report.hasShortAnswers
+            ? {
+                score: report.shortAnswerScore,
+                max: report.shortAnswerMaxScore,
+                items: (
+                  (report.shortAnswerResults as unknown as ShortAnswerResult[] | null) ?? []
+                ).map((r) => ({
+                  questionId: r.questionId,
+                  order: r.order,
+                  prompt: r.prompt,
+                  answer: r.answer,
+                  maxScore: r.maxScore,
+                  score: sumRubric(r.rubric),
+                  comment: r.comment,
+                  rubric: isStudent ? withoutMarkingGuide(r.rubric) : r.rubric,
+                  ...(isStudent ? {} : { modelAnswer: r.modelAnswer }),
+                })),
               }
             : null,
           total: report.totalScore,
@@ -652,10 +801,14 @@ export class AssessmentsService {
           (a) => a.question.questionType === QuestionKind.TRUE_FALSE,
         ).length,
         totalMarks:
-          orderedAnswers.length * MARKS_PER_QUESTION + (coding?.maxScore ?? 0),
-        format: lc
-          ? AssessmentFormat.LITTLE_CODERS_V2
-          : AssessmentFormat.STANDARD,
+          orderedAnswers.length * MARKS_PER_QUESTION +
+          (coding?.maxScore ?? 0) +
+          shortMax,
+        format: structuredCtx.structured
+          ? AssessmentFormat.STRUCTURED_V1
+          : lc
+            ? AssessmentFormat.LITTLE_CODERS_V2
+            : AssessmentFormat.STANDARD,
         lc: lc ? this.lcMeta(attempt.assessment.type) : null,
       },
       student: { id: attempt.student.id, fullName: attempt.student.fullName },
@@ -685,6 +838,9 @@ export class AssessmentsService {
       // The clock the student's stopwatch is measured against — the browser's
       // own clock may be minutes off, which must not start the test at 03:12.
       serverTime: new Date(),
+      // Structured assessments: when the student's time runs out (frozen when the attempt started).
+      deadlineAt: attempt.deadlineAt,
+      structured,
       report: report ? { id: report.id, status: report.status } : null,
       result: result ?? legacyResult,
     };
@@ -743,6 +899,7 @@ export class AssessmentsService {
         startedAt: true,
         submittedAt: true,
         lockedAt: true,
+        deadlineAt: true,
         studentUserId: true,
         student: { select: { assignedTeacher: { select: { userId: true } } } },
         scheduledLesson: { select: { teacher: { select: { userId: true } } } },
@@ -758,6 +915,8 @@ export class AssessmentsService {
       submittedAt: attempt.submittedAt,
       lockedAt: attempt.lockedAt,
       lockedByTeacher: !!attempt.lockedAt,
+      // Structured assessments: when the clock runs out (null for every other test).
+      deadlineAt: attempt.deadlineAt,
       serverTime: new Date(),
     };
   }
@@ -805,9 +964,10 @@ export class AssessmentsService {
           status: AttemptStatus;
           assessmentId: string;
           lockedAt: Date | null;
+          deadlineAt: Date | null;
         }[]
       >(
-        Prisma.sql`SELECT "studentUserId", "status", "assessmentId", "lockedAt" FROM "AssessmentAttempt" WHERE "id" = ${attemptId} FOR SHARE`,
+        Prisma.sql`SELECT "studentUserId", "status", "assessmentId", "lockedAt", "deadlineAt" FROM "AssessmentAttempt" WHERE "id" = ${attemptId} FOR SHARE`,
       );
       const row = rows[0];
       if (!row) throw new NotFoundException('Attempt not found');
@@ -817,6 +977,16 @@ export class AssessmentsService {
           row.lockedAt
             ? 'Your teacher locked this test, so answers can no longer be changed.'
             : 'This test has already been submitted, so answers can no longer be changed.',
+        );
+      }
+      // Structured assessments: nothing is accepted after the deadline plus a short grace (the
+      // browser's own automatic hand-in at 00:00 and a slow connection must never lose an answer).
+      if (
+        row.deadlineAt &&
+        Date.now() > row.deadlineAt.getTime() + STRUCTURED_GRACE_SECONDS * 1000
+      ) {
+        throw new ConflictException(
+          'Time is up. Your answers were handed in automatically, so they can no longer be changed.',
         );
       }
       return fn(tx, { assessmentId: row.assessmentId });
@@ -885,6 +1055,44 @@ export class AssessmentsService {
           },
           create: { attemptId, questionId: dto.questionId, code: dto.code },
           update: { code: dto.code },
+        });
+        return { saved: true, savedAt: saved.updatedAt };
+      },
+    );
+  }
+
+  /** Structured assessments, Part B: autosave of one written answer. Saving never grades anything —
+   *  the teacher marks every short answer against its rubric. */
+  async saveShortAnswer(
+    attemptId: string,
+    dto: SaveShortAnswerDto,
+    studentUserId: string,
+  ) {
+    if (dto.answer.length > STRUCTURED_MAX_ANSWER_LENGTH)
+      throw new BadRequestException('That answer is too long.');
+    return this.withEditableAttempt(
+      attemptId,
+      studentUserId,
+      async (tx, row) => {
+        const a = await tx.assessment.findUnique({
+          where: { id: row.assessmentId },
+          select: { id: true, sourceAssessmentId: true },
+        });
+        if (!a) throw new NotFoundException('Assessment not found');
+        const q = await tx.shortAnswerQuestion.findUnique({
+          where: { id: dto.questionId },
+          select: { assessmentId: true },
+        });
+        if (!q || q.assessmentId !== rootBankId(a))
+          throw new NotFoundException(
+            'That question is not part of this test.',
+          );
+        const saved = await tx.shortAnswerResponse.upsert({
+          where: {
+            attemptId_questionId: { attemptId, questionId: dto.questionId },
+          },
+          create: { attemptId, questionId: dto.questionId, answer: dto.answer },
+          update: { answer: dto.answer },
         });
         return { saved: true, savedAt: saved.updatedAt };
       },
@@ -1064,6 +1272,15 @@ export class AssessmentsService {
           },
         });
 
+        // Past the deadline (and its short grace) nothing new is accepted: the attempt is handed in
+        // exactly as it was last saved.
+        if (
+          attempt.deadlineAt &&
+          now.getTime() > attempt.deadlineAt.getTime() + STRUCTURED_GRACE_SECONDS * 1000
+        ) {
+          dto = {};
+        }
+
         // 2. Apply the student's final answers (display index → canonical).
         const byQuestion = new Map(
           attempt.mcqAnswers.map((a) => [a.questionId, a]),
@@ -1230,6 +1447,47 @@ export class AssessmentsService {
           }
         }
 
+        // Part B of a structured assessment: the final written answers, frozen into the report.
+        let shortAnswers: SubmittedShortAnswer[] | undefined;
+        if ((await this.structuredInfo(attempt.assessment, tx)).structured) {
+          const shortRoot = rootBankId(attempt.assessment);
+          for (const incoming of dto.shortAnswers ?? []) {
+            const q = await tx.shortAnswerQuestion.findUnique({
+              where: { id: incoming.questionId },
+              select: { assessmentId: true },
+            });
+            if (!q || q.assessmentId !== shortRoot)
+              throw new BadRequestException(
+                'One of the written answers is not part of this test.',
+              );
+            if (incoming.answer.length > STRUCTURED_MAX_ANSWER_LENGTH)
+              throw new BadRequestException('One of the written answers is too long.');
+            await tx.shortAnswerResponse.upsert({
+              where: {
+                attemptId_questionId: { attemptId, questionId: incoming.questionId },
+              },
+              create: { attemptId, questionId: incoming.questionId, answer: incoming.answer },
+              update: { answer: incoming.answer },
+            });
+          }
+          const rows = await tx.shortAnswerResponse.findMany({
+            where: { attemptId },
+            include: { question: true },
+          });
+          shortAnswers = rows
+            .filter((r) => r.question.isPublished)
+            .sort((a, b) => a.question.order - b.question.order)
+            .map((r, i) => ({
+              questionId: r.questionId,
+              order: i + 1,
+              prompt: r.question.prompt,
+              answer: r.answer,
+              maxScore: r.question.maxScore,
+              rubric: parseRubric(r.question.rubric),
+              modelAnswer: r.question.modelAnswer,
+            }));
+        }
+
         // 4. Grade the objective part and build the report card.
         const teacherId =
           attempt.scheduledLesson?.teacherId ??
@@ -1267,6 +1525,7 @@ export class AssessmentsService {
           submittedAt: new Date(),
           answers,
           coding,
+          shortAnswers,
         });
         const report = await tx.testReport.create({ data: reportData });
 
@@ -1304,6 +1563,29 @@ export class AssessmentsService {
       );
     }
     return this.submissionSummary(attemptId, false);
+  }
+
+  /** Hands in every structured attempt whose clock ran out more than the grace ago, exactly as it was
+   *  last saved. Called every half minute by StructuredAttemptSweeper; safe to run on several servers
+   *  at once (whoever claims an attempt first wins, see finalizeSubmission). */
+  async submitExpiredAttempts(limit = 50): Promise<number> {
+    const cutoff = new Date(Date.now() - STRUCTURED_GRACE_SECONDS * 1000);
+    const rows = await this.prisma.assessmentAttempt.findMany({
+      where: { status: AttemptStatus.IN_PROGRESS, deadlineAt: { lt: cutoff } },
+      select: { id: true, studentUserId: true },
+      orderBy: { deadlineAt: 'asc' },
+      take: limit,
+    });
+    let handedIn = 0;
+    for (const row of rows) {
+      try {
+        await this.finalizeSubmission(row.id, row.studentUserId, {}, null);
+        handedIn += 1;
+      } catch (err) {
+        this.logger.warn(`Could not hand in the expired attempt ${row.id}: ${err}`);
+      }
+    }
+    return handedIn;
   }
 
   private async submissionSummary(

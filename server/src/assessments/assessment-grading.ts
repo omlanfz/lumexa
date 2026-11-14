@@ -133,16 +133,25 @@ export function computeTotals(input: {
   codingMax: number | null;
   codingScore: number | null;
   passScorePct: number;
+  /** Structured assessments: the written Part B. null (or absent) when the test has none. */
+  shortMax?: number | null;
+  shortScore?: number | null;
 }): Totals {
   const hasCoding = input.codingMax !== null;
+  const hasShort = input.shortMax !== null && input.shortMax !== undefined;
   const totalMax = round2(
-    input.objectiveMax + (hasCoding ? (input.codingMax as number) : 0),
+    input.objectiveMax +
+      (hasCoding ? (input.codingMax as number) : 0) +
+      (hasShort ? (input.shortMax as number) : 0),
   );
-  if (hasCoding && input.codingScore === null) {
+  const shortScore = input.shortScore ?? null;
+  if ((hasCoding && input.codingScore === null) || (hasShort && shortScore === null)) {
     return { totalMax, total: null, percentage: null, passed: null };
   }
   const total = round2(
-    input.objectiveScore + (hasCoding ? (input.codingScore as number) : 0),
+    input.objectiveScore +
+      (hasCoding ? (input.codingScore as number) : 0) +
+      (hasShort ? (shortScore as number) : 0),
   );
   if (totalMax <= 0) return { totalMax, total, percentage: 0, passed: false };
   const ratio = (total / totalMax) * 100;
@@ -232,5 +241,76 @@ export function applyQuestionOverrides(
         at: nowIso,
       },
     };
+  });
+}
+
+// ─── Part B of a structured assessment: written answers marked against a rubric ─────
+
+/** One short-answer question in a report: what the student saw and wrote, and the teacher's marks. */
+export interface ShortAnswerResult {
+  questionId: string;
+  order: number;
+  prompt: string;
+  /** What the student wrote (frozen when the attempt was submitted). */
+  answer: string;
+  maxScore: number;
+  /** The criteria with the teacher's mark for each (null = not marked yet). */
+  rubric: RubricScore[];
+  /** The teacher's note to the student on this answer. */
+  comment: string | null;
+  /** Teacher-only exemplar answer. */
+  modelAnswer: string | null;
+}
+
+/** Marks for one short answer: the sum of its rubric, or null while any criterion is unmarked. */
+export function sumShortAnswer(r: Pick<ShortAnswerResult, 'rubric'>): number | null {
+  return sumRubric(r.rubric);
+}
+
+/** Part B total: the sum of every question, or null while any question is not fully marked. */
+export function sumShortAnswers(results: ShortAnswerResult[] | null | undefined): number | null {
+  if (!results || results.length === 0) return null;
+  let total = 0;
+  for (const r of results) {
+    const s = sumShortAnswer(r);
+    if (s === null) return null;
+    total += s;
+  }
+  return round2(total);
+}
+
+/** Merges the teacher's incoming criterion marks and comments into the short-answer results. */
+export function applyShortAnswerMarks(
+  current: ShortAnswerResult[],
+  incoming: {
+    questionId: string;
+    scores?: { criterion: string; score: number | null }[];
+    comment?: string | null;
+  }[],
+): ShortAnswerResult[] {
+  const byId = new Map(current.map((r) => [r.questionId, r]));
+  for (const inc of incoming) {
+    if (!byId.has(inc.questionId))
+      throw new ReportValidationError('That question is not part of this report.');
+  }
+  const seen = new Set<string>();
+  const patch = new Map<string, (typeof incoming)[number]>();
+  for (const inc of incoming) {
+    if (seen.has(inc.questionId))
+      throw new ReportValidationError('A question was given twice.');
+    seen.add(inc.questionId);
+    patch.set(inc.questionId, inc);
+  }
+  return current.map((r) => {
+    const inc = patch.get(r.questionId);
+    if (!inc) return r;
+    const rubric = inc.scores ? applyRubricScores(r.rubric, inc.scores) : r.rubric;
+    const comment =
+      inc.comment === undefined
+        ? r.comment
+        : inc.comment && inc.comment.trim()
+          ? inc.comment.trim().slice(0, 2000)
+          : null;
+    return { ...r, rubric, comment };
   });
 }

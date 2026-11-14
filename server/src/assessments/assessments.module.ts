@@ -8,6 +8,7 @@ import { ClassTestsService } from './class-tests.service';
 import { TestReportsController } from './test-reports.controller';
 import { TestReportsService } from './test-reports.service';
 import { AssessmentFilesService } from './assessment-files.service';
+import { StructuredAttemptSweeper } from '../structured-assessments/structured.sweeper';
 
 // The coding project is marked by the teacher against a rubric, so the old
 // in-process code runner and AI auto-grader were removed: nothing needs to
@@ -24,6 +25,8 @@ import { AssessmentFilesService } from './assessment-files.service';
     ClassTestsService,
     TestReportsService,
     AssessmentFilesService,
+    // Hands in structured assessments (Pre-University CSE) whose 40 minutes have run out.
+    StructuredAttemptSweeper,
   ],
   exports: [
     AssessmentsService,

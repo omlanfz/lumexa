@@ -49,6 +49,9 @@ import {
   computeTotals,
   sumRubric,
   summarizeObjective,
+  ShortAnswerResult,
+  applyShortAnswerMarks,
+  sumShortAnswers,
 } from './assessment-grading';
 import {
   ListTestReportsQueryDto,
@@ -476,6 +479,14 @@ export class TestReportsService {
         unanswered: objective.unanswered,
       },
       questions: results,
+      shortAnswers: report.hasShortAnswers
+        ? {
+            items:
+              (report.shortAnswerResults as unknown as ShortAnswerResult[] | null) ?? [],
+            score: report.shortAnswerScore,
+            max: report.shortAnswerMaxScore,
+          }
+        : null,
       coding: report.hasCodingProject
         ? {
             project,
@@ -546,6 +557,8 @@ export class TestReportsService {
     let results = (report.questionResults as unknown as QuestionResult[]) ?? [];
     let rubric =
       (report.codingRubricScores as unknown as RubricScore[] | null) ?? [];
+    let shortResults =
+      (report.shortAnswerResults as unknown as ShortAnswerResult[] | null) ?? [];
     try {
       if (dto.questionOverrides) {
         results = applyQuestionOverrides(
@@ -556,6 +569,23 @@ export class TestReportsService {
             note: o.note ?? null,
           })),
           nowIso,
+        );
+      }
+      if (dto.shortAnswerMarks) {
+        if (!report.hasShortAnswers)
+          throw new ReportValidationError(
+            'This test has no short answers to mark.',
+          );
+        shortResults = applyShortAnswerMarks(
+          shortResults,
+          dto.shortAnswerMarks.map((m) => ({
+            questionId: m.questionId,
+            scores: m.scores?.map((s) => ({
+              criterion: s.criterion,
+              score: s.score ?? null,
+            })),
+            comment: m.comment,
+          })),
         );
       }
       if (dto.codingRubricScores) {
@@ -593,10 +623,11 @@ export class TestReportsService {
           ? cleanText(dto.codingFeedback)
           : report.codingFeedback,
     };
-    const computed = this.recompute(report, results, rubric);
+    const computed = this.recompute(report, results, rubric, shortResults);
     const teacherEdited =
       computed.objective.overrides > 0 ||
       rubric.some((r) => r.score !== null) ||
+      shortResults.some((r) => r.rubric.some((c) => c.score !== null) || !!r.comment) ||
       Object.values(next).some((v) => !!v);
 
     const codingScoreChanged = computed.codingScore !== report.codingScore;
@@ -611,6 +642,12 @@ export class TestReportsService {
           ? (rubric as unknown as Prisma.InputJsonValue)
           : undefined,
         codingScore: computed.codingScore,
+        ...(report.hasShortAnswers
+          ? {
+              shortAnswerResults: shortResults as unknown as Prisma.InputJsonValue,
+              shortAnswerScore: computed.shortScore,
+            }
+          : {}),
         codingEvaluatedAt:
           computed.codingScore === null
             ? null
@@ -662,24 +699,32 @@ export class TestReportsService {
       codingMaxScore: number | null;
       objectiveMaxScore: number;
       passScorePct: number;
+      hasShortAnswers?: boolean;
+      shortAnswerMaxScore?: number | null;
     },
     results: QuestionResult[],
     rubric: RubricScore[],
+    shortResults: ShortAnswerResult[] = [],
   ) {
     const objective = summarizeObjective(results);
     const codingScore = report.hasCodingProject ? sumRubric(rubric) : null;
+    const hasShort = !!report.hasShortAnswers;
+    const shortScore = hasShort ? sumShortAnswers(shortResults) : null;
     const totals = computeTotals({
       objectiveScore: objective.score,
       objectiveMax: objective.max,
       codingMax: report.hasCodingProject ? (report.codingMaxScore ?? 0) : null,
       codingScore,
       passScorePct: report.passScorePct,
+      shortMax: hasShort ? (report.shortAnswerMaxScore ?? 0) : null,
+      shortScore,
     });
     const status =
-      report.hasCodingProject && codingScore === null
+      (report.hasCodingProject && codingScore === null) ||
+      (hasShort && shortScore === null)
         ? TestReportStatus.PENDING_CODE_EVALUATION
         : TestReportStatus.PENDING_REVIEW;
-    return { objective, codingScore, totals, status };
+    return { objective, codingScore, shortScore, totals, status };
   }
 
   // ─── Approve / reopen ─────────────────────────────────────────────────────
@@ -699,7 +744,14 @@ export class TestReportsService {
       (report.questionResults as unknown as QuestionResult[]) ?? [];
     const rubric =
       (report.codingRubricScores as unknown as RubricScore[] | null) ?? [];
-    const computed = this.recompute(report, results, rubric);
+    const shortResultsForApproval =
+      (report.shortAnswerResults as unknown as ShortAnswerResult[] | null) ?? [];
+    const computed = this.recompute(report, results, rubric, shortResultsForApproval);
+    if (report.hasShortAnswers && computed.shortScore === null) {
+      throw new BadRequestException(
+        'Mark every criterion of every short answer before completing the report card.',
+      );
+    }
     if (report.hasCodingProject && computed.codingScore === null) {
       throw new BadRequestException(
         'Mark every rubric criterion of the coding project before completing the report card.',
@@ -730,6 +782,7 @@ export class TestReportsService {
           status: TestReportStatus.READY_TO_SHARE,
           objectiveScore: computed.objective.score,
           codingScore: computed.codingScore,
+          ...(report.hasShortAnswers ? { shortAnswerScore: computed.shortScore } : {}),
           totalScore: totals.total,
           percentage: totals.percentage,
           passed: totals.passed,
@@ -807,7 +860,12 @@ export class TestReportsService {
       (report.questionResults as unknown as QuestionResult[]) ?? [];
     const rubric =
       (report.codingRubricScores as unknown as RubricScore[] | null) ?? [];
-    const { status } = this.recompute(report, results, rubric);
+    const { status } = this.recompute(
+      report,
+      results,
+      rubric,
+      (report.shortAnswerResults as unknown as ShortAnswerResult[] | null) ?? [],
+    );
 
     await this.prisma.$transaction(async (tx) => {
       const claimed = await tx.testReport.updateMany({

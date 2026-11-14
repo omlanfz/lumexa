@@ -1,6 +1,7 @@
 // FILE PATH: server/src/assessments/dto/assessment.dto.ts
 
 import { Type } from 'class-transformer';
+import { STRUCTURED_MAX_ANSWER_LENGTH } from '../../structured-assessments/structured.constants';
 import {
   ArrayMaxSize,
   IsArray,
@@ -53,6 +54,17 @@ export class SaveCodeDto {
 
 /** The Little Coders practical, handed in as links and a note (the files are uploaded
  *  separately, see AssessmentFilesService). Links must be https addresses. */
+/** Structured assessments, Part B: the written answer to one short-answer question. */
+export class SaveShortAnswerDto {
+  @IsString()
+  @MinLength(1)
+  questionId: string;
+
+  @IsString()
+  @MaxLength(STRUCTURED_MAX_ANSWER_LENGTH)
+  answer: string;
+}
+
 export class SavePracticalDto {
   @IsString()
   @MinLength(1)
@@ -88,6 +100,14 @@ export class SubmitAttemptDto {
   @ValidateNested({ each: true })
   @Type(() => SaveCodeDto)
   practical?: SaveCodeDto[];
+
+  /** Structured assessments: the latest written answers of Part B, saved with the submission. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => SaveShortAnswerDto)
+  shortAnswers?: SaveShortAnswerDto[];
 
   /** Little Coders: the latest links / note of the practical project, saved with the submission. */
   @IsOptional()

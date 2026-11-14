@@ -11,6 +11,7 @@ import {
   QuestionKind,
   QuestionResult,
   RubricScore,
+  ShortAnswerResult,
   computeTotals,
   summarizeObjective,
 } from './assessment-grading';
@@ -48,6 +49,17 @@ export interface SubmittedCoding {
   spec?: unknown;
 }
 
+/** Part B of a structured assessment: one written question and what the student wrote. */
+export interface SubmittedShortAnswer {
+  questionId: string;
+  order: number;
+  prompt: string;
+  answer: string;
+  maxScore: number;
+  rubric: { criterion: string; maxPoints: number; lookFor?: string }[];
+  modelAnswer: string | null;
+}
+
 export interface BuildReportInput {
   attemptId: string;
   assessmentId: string;
@@ -64,6 +76,8 @@ export interface BuildReportInput {
   /** In presentation order (the order the student saw them). */
   answers: SubmittedAnswer[];
   coding: SubmittedCoding | null;
+  /** Structured assessments only: the written Part B, in presentation order. */
+  shortAnswers?: SubmittedShortAnswer[];
 }
 
 export function buildQuestionResults(
@@ -100,12 +114,29 @@ export function buildReportCreateData(
     ...r,
     score: null,
   }));
+  const shortAnswers = input.shortAnswers ?? [];
+  const hasShort = shortAnswers.length > 0;
+  const shortResults: ShortAnswerResult[] = shortAnswers.map((s) => ({
+    questionId: s.questionId,
+    order: s.order,
+    prompt: s.prompt,
+    answer: s.answer,
+    maxScore: s.maxScore,
+    rubric: s.rubric.map((r) => ({ ...r, lookFor: r.lookFor ?? '', score: null })),
+    comment: null,
+    modelAnswer: s.modelAnswer,
+  }));
+  const shortMax = hasShort
+    ? shortAnswers.reduce((sum, s) => sum + s.maxScore, 0)
+    : null;
   const totals = computeTotals({
     objectiveScore: objective.score,
     objectiveMax: objective.max,
     codingMax: hasCoding ? input.coding!.maxScore : null,
     codingScore: null,
     passScorePct: input.passScorePct,
+    shortMax,
+    shortScore: null,
   });
 
   return {
@@ -119,9 +150,10 @@ export function buildReportCreateData(
     scheduledLessonId: input.scheduledLessonId,
     assessmentType: input.type,
     testTitle: input.testTitle,
-    status: hasCoding
-      ? TestReportStatus.PENDING_CODE_EVALUATION
-      : TestReportStatus.PENDING_REVIEW,
+    status:
+      hasCoding || hasShort
+        ? TestReportStatus.PENDING_CODE_EVALUATION
+        : TestReportStatus.PENDING_REVIEW,
     passScorePct: input.passScorePct,
     mcqTotal: objective.mcqTotal,
     trueFalseTotal: objective.trueFalseTotal,
@@ -151,6 +183,12 @@ export function buildReportCreateData(
       ? (rubric as unknown as Prisma.InputJsonValue)
       : Prisma.DbNull,
     codingScore: null,
+    hasShortAnswers: hasShort,
+    shortAnswerResults: hasShort
+      ? (shortResults as unknown as Prisma.InputJsonValue)
+      : Prisma.DbNull,
+    shortAnswerMaxScore: shortMax,
+    shortAnswerScore: null,
     totalMaxScore: totals.totalMax,
     totalScore: totals.total,
     percentage: totals.percentage,

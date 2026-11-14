@@ -44,6 +44,22 @@ export class RubricScoreDto {
   score?: number | null;
 }
 
+/** The teacher's marks for one short answer (Part B of a structured assessment): a mark for each rubric
+ *  criterion and an optional note to the student. */
+export class ShortAnswerMarkDto {
+  @IsString()
+  questionId: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => RubricScoreDto)
+  scores?: RubricScoreDto[];
+
+  @IsOptional() @IsString() @MaxLength(2000) comment?: string | null;
+}
+
 export class UpdateTestReportDto {
   @IsOptional()
   @IsArray()
@@ -58,6 +74,14 @@ export class UpdateTestReportDto {
   @ValidateNested({ each: true })
   @Type(() => RubricScoreDto)
   codingRubricScores?: RubricScoreDto[];
+
+  /** Structured assessments: the marks of Part B. */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => ShortAnswerMarkDto)
+  shortAnswerMarks?: ShortAnswerMarkDto[];
 
   @IsOptional() @IsString() @MaxLength(2000) feedback?: string | null;
   @IsOptional() @IsString() @MaxLength(1500) strengths?: string | null;
