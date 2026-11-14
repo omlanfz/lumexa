@@ -245,7 +245,7 @@ Discussion questions:
 
 **Explorer Challenge: Personal Expense Tracker**
 
-Build `expense_tracker.py`, a program that records, retrieves and organises your spending, and remembers it between runs. This is your second portfolio project of Course 2, and a guided Google Colab version is linked in the Project section below this lesson.
+Build `expense_tracker.py`, a program that records, retrieves and organises your spending, and remembers it between runs. This is Part 2 of your third portfolio project of Course 2 (you started it in Lesson 6), and a ready-to-run Google Colab version of the whole project is linked in the Project section below this lesson.
 
 1. Store every expense as a dictionary with a `date` (text like `2030-07-14`), a `category`, a `description` and an `amount` (a float). Keep them in a list.
 2. Write `load_expenses()` and `save_expenses()` that use a JSON file called `expenses.json` and cope with a first run when there is no file.
@@ -286,4 +286,4 @@ Improve your `expense_tracker.py` so that it feels like a finished product. Your
 
 ## Portfolio Connection
 
-The **Personal Expense Tracker** is the second project in your Course 2 portfolio: it combines functions, records, validation, error handling and persistent files. The same load, change and save pattern will store your **Library Management System** in the next lesson. In Course 3 you will read CSV files with Pandas instead, one line of code per file, and you will be glad you understand what happens inside.
+Today you finish the **Personal Expense Tracker** (Part 2), the third portfolio project of Course 2: it combines functions, records, validation, error handling and persistent files. The same load, change and save pattern can store your **Library Management System** too. In Course 3 you will read CSV files with Pandas instead, one line of code per file, and you will be glad you understand what happens inside.

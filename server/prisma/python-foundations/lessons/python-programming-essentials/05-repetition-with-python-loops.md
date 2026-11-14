@@ -233,7 +233,7 @@ Discussion questions:
 
 **Explorer Challenge: Number Guessing Game**
 
-Build `guessing_game.py`. This is your second portfolio project, and a guided Google Colab version is linked in the Project section below this lesson.
+Build `guessing_game.py`. This is Part 2 of your second portfolio project (you started it in Lesson 4), and a ready-to-run Google Colab version of the whole project is linked in the Project section below this lesson.
 
 1. Import `random` and choose a secret number between 1 and 100 with `random.randint(1, 100)`.
 2. Give the player at most 7 attempts. Keep an `attempts_left` counter that goes down by one for every guess.
@@ -275,4 +275,4 @@ Include comments that explain each counter and accumulator.
 
 ## Portfolio Connection
 
-Your **Number Guessing Game** is the second project in your portfolio: random numbers, attempts, hints and score tracking all rely on the loops you learned today. In Lesson 7 you will store a history of guesses in a list, and in Lesson 8 you will split the game into reusable functions. The same `while` loop idea powers the menu of your Shopping List Manager and every round of the **Python Quiz Master**.
+Today you finish your second portfolio project, the **Number Guessing Game** (Part 2): random numbers, attempts, hints and score tracking all rely on the loops you learned today. The same `while` loop idea powers the menu of your Shopping List Manager and every round of the **Python Quiz Master**, which you start in Lesson 6. In Lesson 8 you will recap the game by splitting it into reusable functions.

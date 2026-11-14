@@ -9,8 +9,42 @@ lesson pages, the assessments, the certificate emails and the downloadable curri
 | Course | Lessons | Portfolio projects |
 |---|---|---|
 | 1 · Python Programming Essentials | Python Setup and Your First Program · Variables, Data Types, and Values · User Input, Output, and Operators · Making Decisions with Conditional Logic · Repetition with Python Loops · Working with Strings · Working with Python Collections · Creating Reusable Code with Functions | Smart Calculator · Number Guessing Game · Python Quiz Master |
-| 2 · Problem Solving & Program Design | Computational Thinking & Problem Decomposition · Functions in Depth & Modular Programming · Advanced Collections & Nested Data Structures · Algorithms & Problem-Solving Patterns · Debugging, Testing & Fixing Problems · Error Handling & Input Validation · Working with Files & Structured Data · Introduction to Object-Oriented Programming | Text-Based Adventure Game · Personal Expense Tracker · Library Management System |
-| 3 · Python Tools & Data Foundations | Python Development Environment & Workflow · Python Modules, Libraries & Packages · Introduction to Jupyter Notebooks · Introduction to NumPy · Introduction to Pandas & DataFrames · Data Cleaning, Summaries & Basic Visualization · Working with APIs & JSON Data · Python Capstone: Build, Document & Share | Dataset Explorer · Live Data Explorer · Student Life Data Explorer |
+| 2 · Problem Solving & Program Design | Computational Thinking & Problem Decomposition · Functions in Depth & Modular Programming · Advanced Collections & Nested Data Structures · Algorithms & Problem-Solving Patterns · Debugging, Testing & Fixing Problems · Error Handling & Input Validation · Working with Files & Structured Data · Introduction to Object-Oriented Programming | Text-Based Adventure Game · Library Management System · Personal Expense Tracker |
+| 3 · Python Tools & Data Foundations | Python Development Environment & Workflow · Python Modules, Libraries & Packages · Introduction to Jupyter Notebooks · Introduction to NumPy · Introduction to Pandas & DataFrames · Data Cleaning, Summaries & Basic Visualization · Working with APIs & JSON Data · Python Capstone: Build, Document & Share | Student Life Data Explorer · Dataset Explorer · Live Data Explorer |
+
+The projects are listed in the order they are built (see the next section).
+
+## Which lesson builds which project
+
+Python Foundations follows the same shape as every other program. In **each course of eight lessons**:
+
+| Lesson | What happens |
+|---|---|
+| 1 | Introduction: concepts and the short coding exercises that are already in the lesson. **No portfolio project.** |
+| 2 – 3 | **Project 1**: Part 1 in lesson 2, Part 2 in lesson 3 |
+| 4 – 5 | **Project 2**: Part 1 in lesson 4, Part 2 in lesson 5 |
+| 6 – 7 | **Project 3**: Part 1 in lesson 6, Part 2 in lesson 7 |
+| 8 | **Recap** of the three projects of the course. No new project. |
+
+Each project sits on the two lessons that teach what it needs:
+
+| Course | Project | Part 1 | Part 2 |
+|---|---|---|---|
+| 1 | Smart Calculator | L2 Variables, Data Types, and Values | L3 User Input, Output, and Operators |
+| 1 | Number Guessing Game | L4 Making Decisions with Conditional Logic | L5 Repetition with Python Loops |
+| 1 | Python Quiz Master | L6 Working with Strings | L7 Working with Python Collections |
+| 2 | Text-Based Adventure Game | L2 Functions in Depth & Modular Programming | L3 Advanced Collections & Nested Data Structures |
+| 2 | Library Management System | L4 Algorithms & Problem-Solving Patterns | L5 Debugging, Testing & Fixing Problems |
+| 2 | Personal Expense Tracker | L6 Error Handling & Input Validation | L7 Working with Files & Structured Data |
+| 3 | Student Life Data Explorer | L2 Python Modules, Libraries & Packages | L3 Introduction to Jupyter Notebooks |
+| 3 | Dataset Explorer | L4 Introduction to NumPy | L5 Introduction to Pandas & DataFrames |
+| 3 | Live Data Explorer | L6 Data Cleaning, Summaries & Basic Visualization | L7 Working with APIs & JSON Data |
+
+The *checkpoint* shown on every lesson page (and the project card above it) is the standard one: *Set up your
+environment and explore what you'll build this module* (lesson 1), *Part 1 of "…"* and *Part 2 — Finish of "…"*
+(lessons 2 – 7) and *Polish, review, and synthesize all 3 projects from this module* (lesson 8). It is created by
+`assignStandardCheckpoints` in `server/src/courses/curriculum-catalog.seed.ts`, not by the lesson files. The
+order of the projects in `outline.ts` is what decides which pair of lessons each one gets.
 
 Course 3 is deliberately **introductory**. NumPy, Pandas, APIs and charts are first steps, not a data-science
 course: deeper analysis, statistics, visualization and machine learning belong to the Data Scientist and
@@ -23,9 +57,11 @@ AI Builder programs.
 | Ages, level, badges, audience (12–18 · Beginner · *Beginner friendly* · *No prior coding experience needed*) | `server/src/courses/program-facts.ts` |
 | The course row in the default catalog (title, 🐍, 28 sessions, description) | `server/src/courses/course-catalog.seed.ts` |
 | The 24 lessons, as Markdown | `server/prisma/python-foundations/lessons/<course-slug>/NN-*.md` |
-| The shape of the program (course/lesson titles, hands-on builds, projects) | `server/prisma/python-foundations/outline.ts` |
+| The shape of the program (course and lesson titles, the three projects of each course in build order) | `server/prisma/python-foundations/outline.ts` |
 | The compiled dataset the seed reads | `server/prisma/curriculum-data/python-foundations-path.json` (generated) |
 | The 9 project notebooks | `server/prisma/python-foundations/notebooks/*.ipynb` |
+| Project link rows of every lesson (empty until an admin pastes a Colab link) | `PYTHON_FOUNDATIONS_PROJECT_LINKS` in `server/src/courses/curriculum-catalog.seed.ts` |
+| Moving a database that was seeded by the previous release to this pattern | `server/src/courses/python-foundations.upgrade.ts` |
 | Visuals of every lesson | `server/src/curriculum/lesson-content/catalog/python-foundations.ts` |
 | The Mini Quiz of every lesson (5 four-option multiple-choice questions) | `server/src/curriculum/lesson-content/catalog/python-foundations-quiz.ts` |
 | 3 course tests (30 multiple-choice + 10 true/false = 40 marks) | `server/src/assessments/bank/course-tests/python-programming-essentials.ts`, `problem-solving-program-design.ts`, `python-tools-data-foundations.ts` |
@@ -53,6 +89,10 @@ Concept Explanation, Key Vocabulary, Code Example, Instructor-Guided Coding Walk
 Mistakes, Lesson Recap, Homework / Extension Mission, Portfolio Connection). The Mini Quiz is **not** in the
 Markdown: it lives in the quiz catalog so every question is exactly four-option multiple choice.
 
+The **Portfolio Connection** of a lesson says which project (and which part) the lesson belongs to. Keep it in step
+with the table above: the introduction and the recap name all three projects, every other lesson names *its*
+project and "(Part 1)" or "(Part 2)". `python-foundations.spec.ts` checks this for all 24 lessons.
+
 After editing a lesson, rebuild the dataset and check it:
 
 ```bash
@@ -71,34 +111,70 @@ Lessons that are already in a database are **not** rewritten on boot (an admin m
 what a live lesson says, edit it in **/admin/courses → Curriculum → the lesson → Edit**, or use the existing
 lesson-content upgrade tooling ([LESSON_CONTENT_UPGRADE.md](LESSON_CONTENT_UPGRADE.md)).
 
+### Moving an existing database to the project pattern
+
+A database that was seeded by the previous release of Python Foundations (each project in the one lesson that built
+it, with a *Hands-on build* checkpoint on every lesson) is brought across on the next boot by
+`upgradePythonFoundations` (`server/src/courses/python-foundations.upgrade.ts`, called from the curriculum seed). A new
+database is seeded straight into the new pattern and needs nothing.
+
+The upgrade is **admin-safe and idempotent**. For every lesson it replaces a value only while it is still *exactly*
+what the previous release wrote, so anything an administrator changed is left alone and a second boot changes nothing:
+
+| What | Replaced only while it is still… |
+|---|---|
+| the checkpoint | the previous *Hands-on build* / *Capstone project* line |
+| the lesson's project | the project the previous release attached |
+| the project-link row | the previous empty placeholder (**a pasted Colab link is never touched**) |
+| the lesson text and homework | byte-for-byte the previous text (compared by SHA-256), with the seeded quiz and visuals |
+| the order and wording of a project | what the previous release wrote |
+
+The fingerprints live in `PYTHON_FOUNDATIONS_PREVIOUS` and `PYTHON_FOUNDATIONS_PREVIOUS_PROJECTS` in the same file; the
+rules are unit-tested in `python-foundations.spec.ts`. Once every environment has been upgraded the file can be
+deleted together with its call in `seedCurriculumContent`.
+
 ## The 9 project notebooks and their Colab links
 
-Every portfolio project is a separate, Colab-ready notebook in `server/prisma/python-foundations/notebooks/`.
-They contain no saved output and run top to bottom with **Run all**.
+Every portfolio project is a separate, Colab-ready notebook in `server/prisma/python-foundations/notebooks/`. A
+notebook is deliberately simple: **one short description (text) cell and one code cell** that holds the whole
+program, with no saved output. The program is written in two parts that match the two lessons of the project: the
+code cell is divided with `PART 1 · Lesson N` and `PART 2 · Lesson M` banners, and uses only what those lessons (and
+the ones before them) teach.
 
-| # | Project | Built in | Session order | Notebook |
-|---|---|---|---|---|
-| 1 | Smart Calculator | Course 1 · Lesson 3 | 3 | `01-smart-calculator.ipynb` |
-| 2 | Number Guessing Game | Course 1 · Lesson 5 | 5 | `02-number-guessing-game.ipynb` |
-| 3 | Python Quiz Master | Course 1 · Lesson 8 (capstone) | 8 | `03-python-quiz-master.ipynb` |
-| 4 | Text-Based Adventure Game | Course 2 · Lesson 3 | 12 | `04-text-based-adventure-game.ipynb` |
-| 5 | Personal Expense Tracker | Course 2 · Lesson 7 | 16 | `05-personal-expense-tracker.ipynb` |
-| 6 | Library Management System | Course 2 · Lesson 8 (capstone) | 17 | `06-library-management-system.ipynb` |
-| 7 | Dataset Explorer | Course 3 · Lesson 5 | 23 | `07-dataset-explorer.ipynb` |
-| 8 | Live Data Explorer | Course 3 · Lesson 7 | 25 | `08-live-data-explorer.ipynb` |
-| 9 | Student Life Data Explorer | Course 3 · Lesson 8 (capstone) | 26 | `09-student-life-data-explorer.ipynb` |
+| Project | Course · lessons | Notebook |
+|---|---|---|
+| Smart Calculator | 1 · lessons 2–3 | `01-smart-calculator.ipynb` |
+| Number Guessing Game | 1 · lessons 4–5 | `02-number-guessing-game.ipynb` |
+| Python Quiz Master | 1 · lessons 6–7 | `03-python-quiz-master.ipynb` |
+| Text-Based Adventure Game | 2 · lessons 2–3 | `04-text-based-adventure-game.ipynb` |
+| Library Management System | 2 · lessons 4–5 | `06-library-management-system.ipynb` |
+| Personal Expense Tracker | 2 · lessons 6–7 | `05-personal-expense-tracker.ipynb` |
+| Student Life Data Explorer | 3 · lessons 2–3 | `09-student-life-data-explorer.ipynb` |
+| Dataset Explorer | 3 · lessons 4–5 | `07-dataset-explorer.ipynb` |
+| Live Data Explorer | 3 · lessons 6–7 | `08-live-data-explorer.ipynb` |
 
-The other fifteen lessons each end with a small hands-on build (the lesson's "checkpoint") that students write
-during the class, so they have no notebook.
+(The file numbers follow the order the projects were first listed in, not the order they are built, so use the
+project name and the lessons above when you pick a file.) Lesson 1 of each course has no project, and lesson 8 of each
+course recaps the three projects, so those lessons have no notebook of their own.
+
+> **Do not run a notebook inside `server/prisma/python-foundations/notebooks/`.** Jupyter starts the kernel in the
+> notebook's own folder, so a notebook that saves a file would leave it behind (this once put seven generated files
+> into the repository). Run a *copy* in another folder. The build check and `python-foundations.spec.ts` fail if
+> anything but the nine `.ipynb` files is in that folder.
 
 **How the notebooks behave**
 
-* Notebooks 1–6 start with a setup cell: `INTERACTIVE = False` makes a scripted `ask()` "type" the answers, so
-  *Run all* works without stopping; set `INTERACTIVE = True` to play with real `input()`.
-* Notebook 7 downloads a small public table of exoplanets and falls back to a built-in sample when offline.
-* Notebook 8 calls a free public API (`api.wheretheiss.at`, no key) and falls back to a saved response, so it never
-  fails in class if the network is down.
-* Notebook 9 carries its own invented practice survey, so it needs no download.
+* **Smart Calculator, Number Guessing Game, Python Quiz Master, Text-Based Adventure Game, Library Management System**
+  and **Personal Expense Tracker** are interactive: the student runs the cell and types the answers into the boxes
+  that appear (`input()`). The Personal Expense Tracker also saves `expenses.json` and `expenses.csv` in the files of
+  the Colab session.
+* **Student Life Data Explorer** carries its own invented practice survey, so it needs no download and prints a
+  top-to-bottom report.
+* **Dataset Explorer** downloads a small public table of exoplanets and falls back to a built-in sample when the
+  download does not work, so it never fails in class.
+* **Live Data Explorer** cleans a saved sample of ISS readings and draws three charts (Part 1), then calls a free
+  public API (`api.wheretheiss.at`, no key) for live readings (Part 2). If the API cannot be reached it uses saved
+  readings and says so.
 
 ### Adding the Colab links (admin)
 
@@ -107,14 +183,17 @@ The notebooks are not hosted anywhere yet. Until a link is added, each project l
 
 1. Upload a notebook to Google Drive and open it in Google Colab. Set sharing to *Anyone with the link can view*
    (students use *File → Save a copy in Drive*).
-2. Open **/admin/courses**, choose the **Curriculum** of *Python Foundations*, find the lesson from the table above
-   and click **Edit**.
+2. Open **/admin/courses**, choose the **Curriculum** of *Python Foundations*, find the lesson from the tables above
+   and click **Edit**. A project shows on its two lessons (for example Smart Calculator on lessons 2 and 3 of
+   Course 1) and, with the other two projects of the course, on lesson 8, so paste its link in each of those three
+   lessons.
 3. In the **💻 Project** section, paste the Colab link in the row's link field (the project name is already there)
    and **Save**.
 4. Open the lesson as a student: **Open Project** and **Copy Link** now work.
 
 Links are stored on the lesson (`Lesson.projectLinks`). The seed only creates the empty project rows when a lesson
-has no project data at all; it never overwrites a link an admin has pasted (or a row an admin deleted).
+has no project data at all; it never overwrites a link an admin has pasted (or a row an admin deleted). The same is
+true of AI Builder and Data Scientist.
 
 ## Assessments
 
@@ -139,8 +218,9 @@ Software Foundation; it is used here to say that the program teaches Python, not
 
 ## Checks that guard this program
 
-* `server/src/courses/python-foundations.spec.ts` — lessons valid, dataset fresh, 3 × 8 × 3 shape, notebooks Colab-ready,
-  project rows on the right lessons.
+* `server/src/courses/python-foundations.spec.ts` — lessons valid, dataset fresh, 3 × 8 × 3 shape, the project pattern
+  of every lesson (checkpoint, project, link rows, and what its Portfolio Connection says), the nine notebooks (two
+  cells, Colab-ready, naming the right lessons, valid Python) and the rules of the upgrade for existing databases.
 * `server/src/assessments/bank/bank.spec.ts` — bank standard and code answers.
 * `server/src/curriculum/lesson-content/*.spec.ts` — every lesson has visuals and an authored four-option quiz.
 * `server/src/courses/program-facts.spec.ts`, `curriculum-pdf.spec.ts` — facts, PDF and file names.

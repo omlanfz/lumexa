@@ -220,9 +220,9 @@ Discussion questions:
 
 ## Student Mission / Guided Challenge
 
-**Capstone Project: Python Quiz Master**
+**Recap Challenge: Python Quiz Master with Functions**
 
-Build `quiz_master.py`, an interactive quiz application, from reusable functions. This is your third portfolio project, and a guided Google Colab version is linked in the Project section below this lesson.
+Rebuild `quiz_master.py`, the interactive quiz application you made in Lessons 6 and 7, from reusable functions. This lesson recaps all three projects of the course (the Smart Calculator, the Number Guessing Game and the Python Quiz Master), and their ready-to-run Google Colab versions are linked in the Project section below this lesson.
 
 1. Store at least eight questions in a list. Each question is a tuple with the question text, a list of four answer options and the number of the correct option (1 to 4).
 2. Write `ask_question(number, question, options, correct)` that prints the question and the numbered options, asks for the answer and **returns** `True` or `False`.
@@ -265,4 +265,4 @@ Test every function on its own before testing the whole quiz, and note one bug y
 
 ## Portfolio Connection
 
-The **Python Quiz Master** is the capstone of Course 1 and the third project in your portfolio. It shows that you can combine variables, input, decisions, loops, strings, collections and functions into one finished application, and that is the foundation for Course 2. There you will learn to plan programs before you code them, find and fix bugs, handle errors, save data to files and organise your code with classes.
+Today recaps the three portfolio projects of Course 1: the **Smart Calculator**, the **Number Guessing Game** and the **Python Quiz Master**. You built each of them in two parts, and today you see how functions make them shorter, safer and easier to change. Together they show that you can combine variables, input, decisions, loops, strings, collections and functions into finished applications, and that is the foundation for Course 2. There you will learn to plan programs before you code them, find and fix bugs, handle errors, save data to files and organise your code with classes.

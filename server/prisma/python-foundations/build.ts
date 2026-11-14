@@ -148,14 +148,11 @@ export interface BuiltLesson {
     part: string;
   }[];
   sourceRefs: { lessonSource: string };
-  projectSlug: string | null;
-  checkpoint: string;
 }
 
 export interface BuiltModule {
   slug: string;
   title: string;
-  explicitCheckpoints: true;
   lessons: BuiltLesson[];
   projects: {
     slug: string;
@@ -271,8 +268,6 @@ export function buildLesson(
   const sections = sectionsOf(markdown);
   const find = (start: string) =>
     sections.find((s) => s.title.toLowerCase().startsWith(start.toLowerCase()));
-  const capstone = index === 7;
-  const label = capstone ? 'Capstone project' : 'Hands-on build';
   return {
     order: orderStart + index,
     title: lesson.title,
@@ -292,8 +287,6 @@ export function buildLesson(
     sourceRefs: {
       lessonSource: `python-foundations/${mod.slug}/${lesson.file}.md`,
     },
-    projectSlug: lesson.projectSlug,
-    checkpoint: `${label}: ${lesson.build}`,
   };
 }
 
@@ -303,7 +296,6 @@ export function buildDataset(): Dataset {
     modules: OUTLINE.map((mod) => ({
       slug: mod.slug,
       title: mod.title,
-      explicitCheckpoints: true as const,
       // Lesson `order` is the position inside the course (1–8), as in the other datasets.
       lessons: mod.lessons.map((lesson, i) => buildLesson(mod, lesson, i, 1)),
       projects: mod.projects.map((p, i) => ({
@@ -326,12 +318,7 @@ export function allProblems(): string[] {
       out.push(`${mod.slug}: has ${mod.lessons.length} lessons, expected 8`);
     if (mod.projects.length !== 3)
       out.push(`${mod.slug}: has ${mod.projects.length} projects, expected 3`);
-    const slugs = new Set(mod.projects.map((p) => p.slug));
     for (const lesson of mod.lessons) {
-      if (lesson.projectSlug !== null && !slugs.has(lesson.projectSlug))
-        out.push(
-          `${mod.slug}/${lesson.file}: unknown project "${lesson.projectSlug}"`,
-        );
       const file = lessonPath(mod, lesson);
       if (!fs.existsSync(file)) {
         out.push(`${mod.slug}/${lesson.file}: the lesson file is missing`);
@@ -346,10 +333,22 @@ export function allProblems(): string[] {
       );
     }
     for (const p of mod.projects) {
-      if (!mod.lessons.some((l) => l.projectSlug === p.slug))
-        out.push(`${mod.slug}: project "${p.slug}" is not built in any lesson`);
       if (!fs.existsSync(path.join(__dirname, 'notebooks', p.notebook)))
         out.push(`${mod.slug}: the notebook ${p.notebook} is missing`);
+    }
+  }
+  // The folder holds the project notebooks and nothing else. Running a notebook inside it leaves
+  // data files and charts behind, so run a copy somewhere else.
+  const notebooksDir = path.join(__dirname, 'notebooks');
+  const expected = new Set(
+    OUTLINE.flatMap((m) => m.projects.map((p) => p.notebook)),
+  );
+  if (fs.existsSync(notebooksDir)) {
+    for (const entry of fs.readdirSync(notebooksDir)) {
+      if (!expected.has(entry))
+        out.push(
+          `notebooks/${entry} is not a project notebook (running a notebook in this folder leaves files behind: run a copy elsewhere)`,
+        );
     }
   }
   return out;

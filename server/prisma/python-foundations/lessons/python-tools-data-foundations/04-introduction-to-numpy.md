@@ -262,4 +262,4 @@ Create a notebook `rover_sensors.ipynb` that analyses the readings of a rover's 
 
 ## Portfolio Connection
 
-NumPy is the engine that powers the next lesson. A Pandas **DataFrame**, the table at the heart of your **Dataset Explorer** and your **Student Life Data Explorer** projects, is built from NumPy arrays, and you will see the same ideas: shapes, masks and vectorized operations. The matplotlib charts you draw in Lesson 6 also take NumPy arrays as input, and the AI Builder and Data Scientist programs rely on NumPy in every lesson.
+Today you start your second portfolio project of Course 3, the **Dataset Explorer** (Part 1). Part 1 turns the numeric columns of a real dataset into NumPy arrays and explores them with shapes, masks and vectorized operations. NumPy is the engine that powers the next lesson: a Pandas **DataFrame**, the table at the heart of your **Dataset Explorer**, is built from NumPy arrays, and you will see the same ideas: shapes, masks and vectorized operations. The matplotlib charts you draw in Lesson 6 also take NumPy arrays as input, and the AI Builder and Data Scientist programs rely on NumPy in every lesson.

@@ -1,7 +1,8 @@
 // FILE PATH: server/src/assessments/bank/course-tests/python-programming-essentials.ts
 //
-// Python Foundations → "Python Programming Essentials" (8 lessons, 3 projects: Smart Calculator,
-// Number Guessing Game, Python Quiz Master).
+// Python Foundations → "Python Programming Essentials" (8 lessons, 3 projects, each built in two
+// lessons: Smart Calculator 2-3, Number Guessing Game 4-5, Python Quiz Master 6-7; lesson 8 recaps
+// all three).
 // Topics: 1 first program & syntax · 2 variables & data types · 3 input, output & operators ·
 // 4 conditional logic · 5 loops · 6 strings · 7 collections · 8 functions.
 

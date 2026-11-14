@@ -209,7 +209,7 @@ Discussion questions:
 
 **Explorer Challenge: Live Data Explorer**
 
-Build a notebook or script that retrieves information from a public API and displays selected results. This is your third portfolio project of Course 3, and a guided Google Colab version is linked in the Project section below this lesson.
+Build a notebook or script that retrieves information from a public API and displays selected results. This is Part 2 of your third portfolio project of Course 3 (you started it in Lesson 6), and a ready-to-run Google Colab version of the whole project is linked in the Project section below this lesson.
 
 1. Write a Markdown introduction that says what the API is, who provides it and that it needs **no key**. Use `https://api.wheretheiss.at/v1/satellites/25544` (the ISS), or another free, key-free API that your teacher approves.
 2. Write `fetch_json(url)` that uses a timeout, handles network errors with `try` and `except`, checks the status code and returns a dictionary or `None`.
@@ -251,4 +251,4 @@ Choose a second free, key-free public API (ask your teacher to approve it, for e
 
 ## Portfolio Connection
 
-The **Live Data Explorer** shows employers and teachers that your programs can work with live information, a skill used by every modern app. It also pulls together everything in this course: functions, error handling, JSON, notebooks and DataFrames. In Lesson 8 you will combine all of these into your capstone and learn how to document and share it.
+Today you finish the **Live Data Explorer** (Part 2), the third portfolio project of Course 3. It shows employers and teachers that your programs can work with live information, a skill used by every modern app. It also pulls together everything in this course: functions, error handling, JSON, notebooks and DataFrames. In Lesson 8 you recap all three projects of the course and learn how to document and share them.

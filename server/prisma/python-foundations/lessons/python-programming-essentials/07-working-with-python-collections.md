@@ -260,4 +260,4 @@ Add a comment above each collection that explains why you chose it.
 
 ## Portfolio Connection
 
-Collections make your portfolio projects far more powerful. The **Python Quiz Master** stores its questions in a list of tuples, the Shopping List Manager is the model for the menus in your later projects, and in Course 2 you will combine lists and dictionaries into real records for your **Text-Based Adventure Game** and **Library Management System**. Data scientists use the very same ideas when they store a column of numbers or a table of records.
+Today you finish your third portfolio project, the **Python Quiz Master** (Part 2). It stores its questions in a list, keeps the score and the wrong answers in collections and shows a results summary at the end. The Shopping List Manager is the model for the menus in your later projects, and in Course 2 you will combine lists and dictionaries into real records for your **Text-Based Adventure Game** and **Library Management System**. Data scientists use the very same ideas when they store a column of numbers or a table of records.

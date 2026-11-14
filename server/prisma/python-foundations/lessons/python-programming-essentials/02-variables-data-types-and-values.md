@@ -240,4 +240,4 @@ Finish with a comment explaining one error you ran into and how you fixed it.
 
 ## Portfolio Connection
 
-Almost every project in this program stores information in variables: scores in the **Number Guessing Game**, answers in the **Python Quiz Master**, and prices and totals later on. In Lesson 3 you will let the user type values into your variables with `input()`, and you will use the type conversions from today to turn that text into numbers for your first portfolio project, the **Smart Calculator**.
+Today you start your first portfolio project, the **Smart Calculator** (Part 1). Part 1 uses the skills from this lesson: you store numbers in variables, check their types and convert between text and numbers. In Lesson 3 you finish the project (Part 2) by letting the user type the values with `input()` and by adding all the operators. Almost every later project stores information in variables too: scores in the **Number Guessing Game**, answers in the **Python Quiz Master**, and prices and totals later on.

@@ -281,4 +281,4 @@ Create `data_validator.py` that protects a mission database from bad data. Your 
 
 ## Portfolio Connection
 
-Error handling is what makes a portfolio project feel finished. The **Personal Expense Tracker** (Lesson 7) must cope with a missing file and an amount that is not a number. The **Library Management System** (Lesson 8) must refuse to lend a book that is already out. Both use the exact tools from today: `try` and `except`, validation loops and `raise`.
+Today you start your third portfolio project of Course 2, the **Personal Expense Tracker** (Part 1). Error handling is what makes a project feel finished: Part 1 checks every amount, date and category before it accepts an expense, and keeps asking until the answer is valid. In Lesson 7 you finish the tracker (Part 2) with files, so that the expenses are still there tomorrow. Your **Library Management System** can use the same tools: it must refuse to lend a book that is already out. All of them use the exact tools from today: `try` and `except`, validation loops and `raise`.

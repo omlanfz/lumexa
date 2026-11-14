@@ -252,7 +252,7 @@ Discussion questions:
 
 **Explorer Challenge: Dataset Explorer**
 
-Load and investigate a real-world dataset in a notebook. This is your first portfolio project of Course 3, and a guided Google Colab version is linked in the Project section below this lesson. Use the exoplanet dataset at `https://raw.githubusercontent.com/mwaskom/seaborn-data/master/planets.csv` (or another dataset your teacher approves).
+Load and investigate a real-world dataset in a notebook. This is Part 2 of your second portfolio project of Course 3 (you started it in Lesson 4), and a ready-to-run Google Colab version of the whole project is linked in the Project section below this lesson. Use the exoplanet dataset at `https://raw.githubusercontent.com/mwaskom/seaborn-data/master/planets.csv` (or another dataset your teacher approves).
 
 1. Write a Markdown introduction that says what the dataset is and what questions you want to ask.
 2. Load it with `pd.read_csv()`, and display the first ten rows, the shape, the column names and the result of `info()` and `describe()`.
@@ -294,4 +294,4 @@ Create a notebook `my_dataset_explorer.ipynb` that investigates a dataset you ch
 
 ## Portfolio Connection
 
-Your **Dataset Explorer** is the second notebook-based project of your portfolio: it shows that you can load real data and ask it questions. The same DataFrame skills appear in your **Student Life Data Explorer** capstone (Lesson 8), where you will clean, summarise and chart a dataset of your own. And when you move on to the Data Scientist or AI Builder programs, a DataFrame is the object you will hand to every chart and every model.
+Today you finish your **Dataset Explorer** (Part 2), the second portfolio project of Course 3: it shows that you can load real data and ask it questions. The same DataFrame skills appear in your **Live Data Explorer** in the next two lessons, where you clean, summarise and chart readings from a live source. And when you move on to the Data Scientist or AI Builder programs, a DataFrame is the object you will hand to every chart and every model.

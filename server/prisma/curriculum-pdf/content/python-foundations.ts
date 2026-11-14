@@ -29,7 +29,7 @@ export const PYTHON_FOUNDATIONS: ProgramContent = {
     {
       big: '9',
       label: 'Real Python projects',
-      sub: 'From a calculator to a data capstone',
+      sub: 'From a calculator to live data',
     },
     {
       big: '4',
@@ -69,11 +69,11 @@ export const PYTHON_FOUNDATIONS: ProgramContent = {
         {
           id: 'python-quiz-master',
           title: 'Python Quiz Master',
-          tech: 'Python · Functions',
+          tech: 'Python · Strings · Collections',
         },
       ],
       snapshotNote:
-        'A quiz application built from reusable functions: it asks questions, checks the answers, keeps score and awards a rank.',
+        'A quiz application built with strings and collections: it asks questions, checks the answers, keeps score and awards a rank.',
       teaser: 'Write independent Python programs from the very first line.',
     }),
     withTest({
@@ -90,8 +90,8 @@ export const PYTHON_FOUNDATIONS: ProgramContent = {
         'Students move beyond single statements and learn to approach problems systematically: designing solutions, organising larger programs, finding and fixing errors, handling the unexpected and working with persistent data.',
       projects: [
         'Text-Based Adventure Game',
-        'Personal Expense Tracker',
         'Library Management System',
+        'Personal Expense Tracker',
       ],
       why: 'Writing code is only half of programming. Planning, testing, debugging and organising code into functions and classes is what turns a script into software that other people can trust.',
       lessons: moduleLessons(
@@ -116,9 +116,9 @@ export const PYTHON_FOUNDATIONS: ProgramContent = {
       overview:
         'Students explore the tools professionals use: development environments, libraries and packages, Jupyter Notebooks, NumPy, Pandas and APIs. They take their first steps with real data and learn to document and share a finished project.',
       projects: [
+        'Student Life Data Explorer',
         'Dataset Explorer',
         'Live Data Explorer',
-        'Student Life Data Explorer',
       ],
       why: 'This course is the bridge to specialisation. It introduces the workflows and libraries behind data science and AI, so students arrive at those programs with confidence in their tools.',
       lessons: moduleLessons(
@@ -133,7 +133,7 @@ export const PYTHON_FOUNDATIONS: ProgramContent = {
         },
       ],
       snapshotNote:
-        'A capstone data project: load a survey, clean it, summarise it with Pandas and tell the story in three charts.',
+        "A data project that grows through the course: a survey summarised with Python's own modules and a clear notebook report, then upgraded with Pandas and charts.",
       teaser: 'Use real tools and data: notebooks, NumPy, Pandas and APIs.',
     }),
   ],
@@ -178,10 +178,10 @@ export const PYTHON_FOUNDATIONS: ProgramContent = {
     ['Smart Calculator', 'Number Guessing Game', 'Python Quiz Master'],
     [
       'Text-Based Adventure Game',
-      'Personal Expense Tracker',
       'Library Management System',
+      'Personal Expense Tracker',
     ],
-    ['Dataset Explorer', 'Live Data Explorer', 'Student Life Data Explorer'],
+    ['Student Life Data Explorer', 'Dataset Explorer', 'Live Data Explorer'],
   ],
   ctaLine: 'Ready to start building?',
 };

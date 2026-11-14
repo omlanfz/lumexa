@@ -245,4 +245,4 @@ Then break the program on purpose in two different ways (for example a missing q
 
 ## Portfolio Connection
 
-Everything in this program is built from the idea you practised today: write instructions, run them, read what happens. In Lesson 3 you will replace fixed text with information typed by the user and build your first portfolio project, the **Smart Calculator**. Every project that follows, up to the **Python Quiz Master**, begins with a file like the one you made today.
+Everything in this program is built from the idea you practised today: write instructions, run them, read what happens. Lesson 1 is an introduction, so there is no portfolio project yet. From Lesson 2 you build one project in two parts: the **Smart Calculator** in Lessons 2 and 3, the **Number Guessing Game** in Lessons 4 and 5 and the **Python Quiz Master** in Lessons 6 and 7. In Lesson 8 you recap all three. Every one of them begins with a file like the one you made today.

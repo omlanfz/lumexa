@@ -248,4 +248,4 @@ Write a comment above each step that explains which string tool you used.
 
 ## Portfolio Connection
 
-String skills are part of every project in your portfolio: the **Smart Calculator** formats its answers, the **Number Guessing Game** prints hints, and the **Python Quiz Master** (Lesson 8) compares what the player typed with the right answer using `.strip()` and `.lower()`. Later, in Course 3, you will clean messy text columns in real data using the same methods.
+Today you start your third portfolio project, the **Python Quiz Master** (Part 1). Part 1 asks the questions and checks the answers with string tools: it compares what the player typed with the right answer using `.strip()` and `.lower()` and builds the feedback messages. String skills are part of every project in your portfolio: the **Smart Calculator** formats its answers and the **Number Guessing Game** prints hints. In Lesson 7 you finish the quiz (Part 2) with collections. Later, in Course 3, you will clean messy text columns in real data using the same methods.
