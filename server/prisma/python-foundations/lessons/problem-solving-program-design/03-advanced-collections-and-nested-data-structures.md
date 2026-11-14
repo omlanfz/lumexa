@@ -262,11 +262,11 @@ You learned that real data is nested. You built nested lists for grids and neste
 
 **Solo Mission: Text-Based Adventure Game**
 
-Open the **Text-Based Adventure Game** project notebook linked in the Project section below this lesson and complete it. This is the first portfolio project of Course 2. Your submission must include:
+Open the **Text-Based Adventure Game** project notebook linked in the Project section below this lesson, run it and then make it your own. This is the first portfolio project of Course 2 (Part 1 was in Lesson 2). Your submission must include:
 
 1. A world of at least six rooms stored in a nested dictionary, where each room has a description, a dictionary of exits and a list of items.
-2. The three engine functions from the notebook (`show_room`, `get_choice` and `move_player`) completed, with docstrings.
-3. A player stored as a dictionary with the current room, an inventory list and a health value.
+2. The three engine functions from the notebook (`show_room`, `get_choice` and `move_player`) in your own version, each with a docstring.
+3. A player stored as a dictionary with the current room, an inventory list and a health value (in the notebook it is the oxygen left).
 4. At least one item the player must pick up before they can pass a certain room, and at least one way to win and one way to lose.
 5. **Two new rooms and one puzzle of your own** that extend the story, using the same structure as the rest of the world.
 6. A short list of the edge cases you tested, such as typing a direction that does not exist, and the result of each.
@@ -275,4 +275,4 @@ Submit your finished notebook link or your `adventure.py` file.
 
 ## Portfolio Connection
 
-This lesson is the foundation of the **Text-Based Adventure Game**, the first portfolio project of Course 2: the rooms are a nested dictionary, the player is a record and the inventory is a list. The same list-of-dictionaries pattern appears in the **Personal Expense Tracker** (each expense is a record) and in the **Library Management System** (each book and borrower is a record). In Course 3 you will meet it once more as a *table*, when Pandas turns a list of dictionaries into a DataFrame.
+Today you finish the **Text-Based Adventure Game** (Part 2), the first portfolio project of Course 2: the rooms are a nested dictionary, the player is a record and the inventory is a list. The same list-of-dictionaries pattern appears in the **Library Management System** (each book and borrower is a record) and in the **Personal Expense Tracker** (each expense is a record). In Course 3 you will meet it once more as a *table*, when Pandas turns a list of dictionaries into a DataFrame.

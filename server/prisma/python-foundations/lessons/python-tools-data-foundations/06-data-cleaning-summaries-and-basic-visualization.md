@@ -322,4 +322,4 @@ Create `messy_data_detective.ipynb` that investigates a deliberately messy datas
 
 ## Portfolio Connection
 
-Cleaning, summarising and charting are the three steps of your **Student Life Data Explorer** capstone in Lesson 8. The habits from today, noting every decision, keeping the original data and labelling every chart, are what make a data project trustworthy. In the Data Scientist program, you will go much further with analysis and visualisation; today you built the foundation.
+Today you start your third portfolio project of Course 3, the **Live Data Explorer** (Part 1). Part 1 prepares the analysis on a saved sample of the readings: it cleans the data, calculates summaries with `groupby` and draws charts. Cleaning, summarising and charting are the three steps you repeat on live data in Lesson 7. The habits from today, noting every decision, keeping the original data and labelling every chart, are what make a data project trustworthy. In the Data Scientist program, you will go much further with analysis and visualisation; today you built the foundation.

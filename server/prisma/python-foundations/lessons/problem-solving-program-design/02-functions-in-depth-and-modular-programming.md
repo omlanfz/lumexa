@@ -262,4 +262,4 @@ Finish with a short note on a decision you made about which function a piece of 
 
 ## Portfolio Connection
 
-Modular thinking is behind all three portfolio projects of this course. The **Text-Based Adventure Game** is built from small functions such as `show_room()` and `get_choice()`. The **Personal Expense Tracker** keeps its file-handling code in its own functions, and the **Library Management System** goes one step further and groups functions and data into classes. The functions you reuse from your toolkit will save you time in every one of them.
+Today you start the first portfolio project of Course 2, the **Text-Based Adventure Game** (Part 1). It is built from small functions such as `show_room()` and `get_choice()` that each do one job, and from a `main()` function that starts the game. In Lesson 3 you finish it (Part 2) by storing the world in nested dictionaries. The functions you reuse from your toolkit will save you time in every project of this course, including the **Library Management System** and the **Personal Expense Tracker** that follow.

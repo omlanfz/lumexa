@@ -222,7 +222,7 @@ Discussion questions:
 
 **Explorer Challenge: Smart Calculator**
 
-Build `smart_calculator.py`. This is your first portfolio project, and a guided Google Colab version is linked in the Project section below this lesson.
+Build `smart_calculator.py`. This is Part 2 of your first portfolio project (you started it in Lesson 2), and a ready-to-run Google Colab version of the whole project is linked in the Project section below this lesson.
 
 1. Print a title banner for your calculator.
 2. Ask the user for two numbers and store them as floats.
@@ -264,4 +264,4 @@ Add a comment above any calculation where precedence matters and explain why you
 
 ## Portfolio Connection
 
-The **Smart Calculator** is the first project in your portfolio. It uses everything from today — `input()`, type conversion, operators and f-strings — and it grows with you: in Lesson 4 you will let users choose the operation with `if` statements, and in Lesson 8 you will reorganise it into reusable functions. Keep your file; you will come back to it.
+Today you finish your first portfolio project, the **Smart Calculator** (Part 2). It uses everything from the last two lessons: the variables and type conversion from Lesson 2, and `input()`, operators and f-strings from today. Keep your file. In Lesson 4 you start the next project, the **Number Guessing Game**, and you can also return to your calculator after that lesson and let the user *choose* the operation with `if` statements. In Lesson 8 you will recap it as reusable functions.

@@ -44,16 +44,14 @@ import {
   type RawModule,
   type RawPathway,
 } from './curriculum-source';
+import { upgradePythonFoundations } from './python-foundations.upgrade';
 import { isLittleCodersSlug } from '../little-coders/lc.constants';
 import { ensureLittleCodersCurriculum } from '../little-coders/migrate/little-coders.migrate';
 
 // ── Project-checkpoint assignment: the standard 8-lesson shape ─────────────
 // L1 intro · L2-3 Project1 · L4-5 Project2 · L6-7 Project3 · L8 review
 
-function assignStandardCheckpoints(mod: RawModule) {
-  // A dataset that spells out its own project placement (Python Foundations builds each
-  // project in the lesson that teaches it, not across two lessons) keeps it exactly as written.
-  if (mod.explicitCheckpoints) return;
+export function assignStandardCheckpoints(mod: RawModule) {
   const projects = mod.projects;
   mod.lessons.forEach((lesson, i) => {
     if (lesson.projectSlug !== undefined && lesson.projectSlug !== null) return; // web-developer already assigned
@@ -603,6 +601,12 @@ export async function seedCurriculumContent(
 
   await backfillProjectLinks(prisma, logger, 'ai-builder');
   await backfillProjectLinks(prisma, logger, 'data-scientist');
+  // Python Foundations moved to the standard project pattern: bring an already-seeded program across first,
+  // then fill any project row that was never set.
+  await upgradePythonFoundations(prisma, logger, {
+    assignStandardCheckpoints,
+    projectLinks: PYTHON_FOUNDATIONS_PROJECT_LINKS,
+  });
   await backfillProjectLinks(prisma, logger, 'python-foundations');
   await backfillDataScientistKeyTerminologyTables(prisma, logger);
   await backfillWebDeveloperLessonContent(prisma, logger);
@@ -764,51 +768,72 @@ const DATA_SCIENTIST_PROJECT_LINKS: Record<number, { title: string; url: string 
 
 // ── Python Foundations: portfolio-project slots ─────────────────────────────
 //
-// Each of the nine portfolio projects is a Google Colab notebook (the .ipynb files in
-// server/prisma/python-foundations/notebooks). Operations uploads them to Colab and pastes
-// each link into the lesson from /admin/lessons/<id>/edit (the "Project" section), so the URL is
-// deliberately EMPTY here: the lesson page shows the project card with "Open Project" and
-// "Copy Link" disabled ("link coming soon") until a link is added. The title is already in
-// place, so the admin only has to paste an address.
+// The same shape as AI Builder and Data Scientist above: the two lessons of a project (2-3, 4-5 and
+// 6-7 of each course) show the same project, lesson 8 (the review) shows all three, lesson 1 none.
+// Each project is a Google Colab notebook (the .ipynb files in server/prisma/python-foundations/notebooks).
+// Operations uploads them to Colab and pastes each link into the lesson from /admin/lessons/<id>/edit
+// (the "Project" section), so the URL is deliberately EMPTY here: the lesson page shows the project
+// card with "Open Project" and "Copy Link" disabled ("link coming soon") until a link is added. The
+// title is already in place, so the admin only has to paste an address.
 //
 // Keyed by the lesson's absolute `order` in the 28-session course (Course 1 = 1-8 + Test 9,
-// Course 2 = 10-17 + Test 18, Course 3 = 19-26 + Test 27, Final Test 28). The notebook for a
-// project belongs to the lesson that builds it.
+// Course 2 = 10-17 + Test 18, Course 3 = 19-26 + Test 27, Final Test 28). The order of the projects
+// inside a course is the order of `projects` in server/prisma/python-foundations/outline.ts.
 const PF_SMART_CALCULATOR = { title: 'Smart Calculator', url: '' };
 const PF_NUMBER_GUESSING_GAME = { title: 'Number Guessing Game', url: '' };
 const PF_PYTHON_QUIZ_MASTER = { title: 'Python Quiz Master', url: '' };
 const PF_TEXT_ADVENTURE_GAME = { title: 'Text-Based Adventure Game', url: '' };
-const PF_PERSONAL_EXPENSE_TRACKER = {
-  title: 'Personal Expense Tracker',
-  url: '',
-};
 const PF_LIBRARY_MANAGEMENT_SYSTEM = {
   title: 'Library Management System',
   url: '',
 };
-const PF_DATASET_EXPLORER = { title: 'Dataset Explorer', url: '' };
-const PF_LIVE_DATA_EXPLORER = { title: 'Live Data Explorer', url: '' };
+const PF_PERSONAL_EXPENSE_TRACKER = {
+  title: 'Personal Expense Tracker',
+  url: '',
+};
 const PF_STUDENT_LIFE_DATA_EXPLORER = {
   title: 'Student Life Data Explorer',
   url: '',
 };
+const PF_DATASET_EXPLORER = { title: 'Dataset Explorer', url: '' };
+const PF_LIVE_DATA_EXPLORER = { title: 'Live Data Explorer', url: '' };
 
 export const PYTHON_FOUNDATIONS_PROJECT_LINKS: Record<
   number,
   { title: string; url: string }[]
 > = {
   // python-programming-essentials (lessons 1-8; 9 = Course Test)
+  2: [PF_SMART_CALCULATOR],
   3: [PF_SMART_CALCULATOR],
+  4: [PF_NUMBER_GUESSING_GAME],
   5: [PF_NUMBER_GUESSING_GAME],
-  8: [PF_PYTHON_QUIZ_MASTER],
+  6: [PF_PYTHON_QUIZ_MASTER],
+  7: [PF_PYTHON_QUIZ_MASTER],
+  8: [PF_SMART_CALCULATOR, PF_NUMBER_GUESSING_GAME, PF_PYTHON_QUIZ_MASTER],
   // problem-solving-program-design (lessons 10-17; 18 = Course Test)
+  11: [PF_TEXT_ADVENTURE_GAME],
   12: [PF_TEXT_ADVENTURE_GAME],
+  13: [PF_LIBRARY_MANAGEMENT_SYSTEM],
+  14: [PF_LIBRARY_MANAGEMENT_SYSTEM],
+  15: [PF_PERSONAL_EXPENSE_TRACKER],
   16: [PF_PERSONAL_EXPENSE_TRACKER],
-  17: [PF_LIBRARY_MANAGEMENT_SYSTEM],
+  17: [
+    PF_TEXT_ADVENTURE_GAME,
+    PF_LIBRARY_MANAGEMENT_SYSTEM,
+    PF_PERSONAL_EXPENSE_TRACKER,
+  ],
   // python-tools-data-foundations (lessons 19-26; 27 = Course Test, 28 = Final Test)
+  20: [PF_STUDENT_LIFE_DATA_EXPLORER],
+  21: [PF_STUDENT_LIFE_DATA_EXPLORER],
+  22: [PF_DATASET_EXPLORER],
   23: [PF_DATASET_EXPLORER],
+  24: [PF_LIVE_DATA_EXPLORER],
   25: [PF_LIVE_DATA_EXPLORER],
-  26: [PF_STUDENT_LIFE_DATA_EXPLORER],
+  26: [
+    PF_STUDENT_LIFE_DATA_EXPLORER,
+    PF_DATASET_EXPLORER,
+    PF_LIVE_DATA_EXPLORER,
+  ],
 };
 
 const PROJECT_LINKS_BY_COURSE_SLUG: Record<string, Record<number, { title: string; url: string }[]>> = {

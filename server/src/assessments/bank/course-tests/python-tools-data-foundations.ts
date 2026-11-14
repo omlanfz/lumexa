@@ -1,7 +1,8 @@
 // FILE PATH: server/src/assessments/bank/course-tests/python-tools-data-foundations.ts
 //
-// Python Foundations → "Python Tools & Data Foundations" (8 lessons, 3 projects: Dataset
-// Explorer, Live Data Explorer, Student Life Data Explorer).
+// Python Foundations → "Python Tools & Data Foundations" (8 lessons, 3 projects, each built in two
+// lessons: Student Life Data Explorer 2-3, Dataset Explorer 4-5, Live Data Explorer 6-7; lesson 8
+// recaps all three).
 // Topics: 1 project workflow & version control · 2 modules, libraries & dependencies ·
 // 3 Jupyter notebooks · 4 NumPy · 5 Pandas · 6 data cleaning, summaries & charts ·
 // 7 APIs & JSON · 8 capstone: build, document & share.

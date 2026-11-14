@@ -53,12 +53,6 @@ export interface RawModule {
   title: string;
   lessons: RawLesson[];
   projects: RawProject[];
-  /**
-   * The dataset already says, lesson by lesson, which project each lesson builds (`projectSlug`,
-   * `null` for none) and its `checkpoint` line. Without this flag the seed lays the standard
-   * "two lessons per project" shape over the module (see assignStandardCheckpoints).
-   */
-  explicitCheckpoints?: boolean;
 }
 export interface RawPathway {
   slug: string;

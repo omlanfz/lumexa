@@ -244,4 +244,4 @@ Create a notebook called `space_facts.ipynb` that works as a short, readable rep
 
 ## Portfolio Connection
 
-Every remaining lesson of this course happens in notebooks, and so do your last three portfolio projects. The **Dataset Explorer** (Lesson 5) is a notebook that loads and examines a real dataset, the **Live Data Explorer** (Lesson 7) runs in a notebook too, and your **Student Life Data Explorer** capstone (Lesson 8) is a complete data story told in a notebook. The habit of explaining each step in Markdown is what makes these projects stand out in your portfolio.
+Today you finish the **Student Life Data Explorer** (Part 2): the same exploration, told as a clear notebook-style report with a title, questions, a description of the data, results and conclusions. Every remaining lesson of this course happens in notebooks, and so do your other portfolio projects: the **Dataset Explorer** (Lessons 4 and 5) loads and examines a real dataset, and the **Live Data Explorer** (Lessons 6 and 7) works with live data. The habit of explaining each step is what makes these projects stand out in your portfolio.

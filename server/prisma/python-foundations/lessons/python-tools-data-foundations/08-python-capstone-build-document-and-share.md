@@ -11,7 +11,7 @@
 
 ## Mission Brief
 
-Every space mission ends with two things: a successful landing and a **debrief**. In the debrief, the crew explains what they did, what they found and how someone else could repeat it. A project that nobody can understand, run or find is only half finished. Today is the final lesson of the Python Foundations program, and it is all about finishing well. You will plan an independent project, structure it, combine everything you have learned (functions, collections, modules, libraries and data), test it, write a README that explains it and record its history with Git. Then you will build your capstone, the **Student Life Data Explorer**.
+Every space mission ends with two things: a successful landing and a **debrief**. In the debrief, the crew explains what they did, what they found and how someone else could repeat it. A project that nobody can understand, run or find is only half finished. Today is the final lesson of the Python Foundations program, and it is all about finishing well. You will plan an independent project, structure it, combine everything you have learned (functions, collections, modules, libraries and data), test it, write a README that explains it and record its history with Git. Then you will upgrade the **Student Life Data Explorer** you began in Lessons 2 and 3 into your capstone.
 
 ## Learning Objectives
 
@@ -220,9 +220,9 @@ Discussion questions:
 
 ## Student Mission / Guided Challenge
 
-**Capstone Project: Student Life Data Explorer**
+**Capstone Recap: The Student Life Data Explorer, Upgraded**
 
-Build an independent Python application that loads a dataset about student life, processes and summarises it with Pandas and presents meaningful findings through visualisations. This is your third portfolio project of Course 3, and a guided Google Colab version is linked in the Project section below this lesson.
+Upgrade your Student Life Data Explorer from Lessons 2 and 3 into an independent Python application that loads a dataset about student life, processes and summarises it with Pandas and presents meaningful findings through visualisations. This lesson recaps all three projects of the course, and their ready-to-run Google Colab versions are linked in the Project section below this lesson.
 
 1. **Plan.** Write the problem, the audience, the inputs and outputs, and at least **three questions** the project will answer (for example: *Does more sleep go with higher scores? Do older students study more? How does screen time vary?*).
 2. **Requirements.** Write at least eight requirements sorted into Must, Should and Could.
@@ -266,4 +266,4 @@ Polish your capstone so that another person could run it and understand it witho
 
 ## Portfolio Connection
 
-Your **Student Life Data Explorer** completes the nine-project portfolio of Python Foundations: from the **Smart Calculator** to the **Python Quiz Master**, the **Text-Based Adventure Game**, **Personal Expense Tracker**, **Library Management System**, **Dataset Explorer**, **Live Data Explorer** and this capstone. Together they show a path from your first `print()` to a documented, tested data project. With these foundations you are ready for the next adventure: the AI Builder program, the Data Scientist program and beyond.
+Today recaps the three portfolio projects of Course 3: the **Student Life Data Explorer**, the **Dataset Explorer** and the **Live Data Explorer**. You built each of them in two parts, and today you plan, document and share them like a real project, with a README, a clean structure, a `requirements.txt` and a Git history. The nine-project portfolio of Python Foundations is now complete: the **Smart Calculator**, the **Number Guessing Game** and the **Python Quiz Master**, then the **Text-Based Adventure Game**, the **Library Management System** and the **Personal Expense Tracker**, and finally these three data projects. Together they show a path from your first `print()` to a documented, tested data project. With these foundations you are ready for the next adventure: the AI Builder program, the Data Scientist program and beyond.

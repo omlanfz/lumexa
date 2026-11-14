@@ -242,4 +242,4 @@ Improve your `python_foundations` workspace and document what you did. Your subm
 
 ## Portfolio Connection
 
-A tidy workspace and a clear Git history are what turn a collection of programs into a real portfolio. In Lesson 8 you will use the workspace skills from today to plan, organise, document and share your capstone project. Everything you build in the next lessons, from your first Jupyter notebook to your **Live Data Explorer**, will live in the folders you set up today.
+A tidy workspace and a clear Git history are what turn a collection of programs into a real portfolio. You build three portfolio projects in this course, each in two parts: the **Student Life Data Explorer** in Lessons 2 and 3, the **Dataset Explorer** in Lessons 4 and 5 and the **Live Data Explorer** in Lessons 6 and 7. In Lesson 8 you use the workspace skills from today to recap, document and share them. Everything you build in the next lessons, from your first Jupyter notebook to your **Live Data Explorer**, will live in the folders you set up today.

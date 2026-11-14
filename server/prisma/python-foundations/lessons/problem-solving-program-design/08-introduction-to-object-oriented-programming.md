@@ -215,9 +215,9 @@ Discussion questions:
 
 ## Student Mission / Guided Challenge
 
-**Capstone Project: Library Management System**
+**Recap Challenge: Library Management System with Classes**
 
-Build `library.py`, an object-oriented application that manages books, borrowers and borrowing records. This is your third portfolio project of Course 2, and a guided Google Colab version is linked in the Project section below this lesson.
+Rebuild `library.py`, the library you started in Lessons 4 and 5, as an object-oriented application that manages books, borrowers and borrowing records. This lesson recaps all three projects of the course, and their ready-to-run Google Colab versions are linked in the Project section below this lesson.
 
 1. Write a `Book` class with the attributes `title`, `author`, `isbn` and `available` (a Boolean that starts as `True`) and a `__str__()` method.
 2. Write a `Member` class with a `name`, a `member_id` and a list of the `isbn` numbers the member has borrowed. Add a rule that a member may borrow at most three books at a time.
@@ -258,4 +258,4 @@ Extend your Library Management System so that it behaves like a real library. Yo
 
 ## Portfolio Connection
 
-The **Library Management System** is the capstone of Course 2: it combines the planning of Lesson 1, the functions and modules of Lesson 2, the nested data of Lesson 3, the algorithms of Lesson 4, the testing of Lesson 5, the error handling of Lesson 6 and the files of Lesson 7, all inside classes. Together with the **Text-Based Adventure Game** and the **Personal Expense Tracker**, it makes a portfolio that shows you can build real programs. In Course 3 you will meet the tools that professional Python developers use, and learn to explore data with Jupyter, NumPy and Pandas.
+Today recaps the three portfolio projects of Course 2: the **Text-Based Adventure Game**, the **Library Management System** and the **Personal Expense Tracker**. You built each of them in two parts, and today you see how classes group data and behaviour: the library is rebuilt from a `Book`, a `Member` and a `Library` class that bring together the planning of Lesson 1, the functions of Lesson 2, the nested data of Lesson 3, the algorithms of Lesson 4, the testing of Lesson 5, the error handling of Lesson 6 and the files of Lesson 7. Together the three projects make a portfolio that shows you can build real programs. In Course 3 you will meet the tools that professional Python developers use, and learn to explore data with Jupyter, NumPy and Pandas.

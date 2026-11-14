@@ -1,7 +1,8 @@
 // FILE PATH: server/src/assessments/bank/course-tests/problem-solving-program-design.ts
 //
-// Python Foundations → "Problem Solving & Program Design" (8 lessons, 3 projects: Text-Based
-// Adventure Game, Personal Expense Tracker, Library Management System).
+// Python Foundations → "Problem Solving & Program Design" (8 lessons, 3 projects, each built in two
+// lessons: Text-Based Adventure Game 2-3, Library Management System 4-5, Personal Expense Tracker
+// 6-7; lesson 8 recaps all three).
 // Topics: 1 computational thinking · 2 functions in depth & modules · 3 nested collections ·
 // 4 algorithms & patterns · 5 debugging & testing · 6 error handling · 7 files, CSV & JSON ·
 // 8 object-oriented programming.
