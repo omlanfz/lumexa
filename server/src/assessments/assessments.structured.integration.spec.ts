@@ -166,6 +166,35 @@ describeDb('Structured assessment (Pre-University CSE): 45 marks in 40 minutes (
     }
   });
 
+  it('reports its real shape on every screen: 45 marks, the standard header, the three parts', async () => {
+    const classId = await makeClass(student);
+    const status = await get(`/assessments/scheduled-lessons/${classId}/status`, student);
+    expect(status.status).toBe(200);
+    expect(status.body.assessment).toMatchObject({
+      format: 'STRUCTURED_V1',
+      totalMarks: 45,
+      meetsStandard: true,
+      counts: { mcq: 10, trueFalse: 0, practical: 1, shortAnswers: 3 },
+    });
+    expect(status.body.assessment.lc).toBeUndefined();
+    expect(status.body.assessment.structured).toMatchObject({ minutes: 40, marks: 45 });
+    expect(status.body.assessment.structured.parts.map((p: { key: string; marks: number }) => [p.key, p.marks])).toEqual([
+      ['A', 10],
+      ['B', 15],
+      ['C', 20],
+    ]);
+    // The teacher's preview and the class overview say the same.
+    const preview = await get(`/assessments/${assessmentId}/preview`, teacher);
+    expect(preview.body).toMatchObject({ format: 'STRUCTURED_V1', totalMarks: 45, meetsStandard: true });
+    const overview = await get(`/assessments/scheduled-lessons/${classId}/class-status`, teacher);
+    expect(overview.body.assessment).toMatchObject({ format: 'STRUCTURED_V1', totalMarks: 45, meetsStandard: true });
+    // A bank that loses a short answer no longer meets the standard — it is reported, not hidden.
+    await prisma.shortAnswerQuestion.deleteMany({ where: { assessmentId, order: 2 } });
+    const broken = await get(`/assessments/scheduled-lessons/${classId}/status`, student);
+    expect(broken.body.assessment.meetsStandard).toBe(false);
+    expect(broken.body.assessment.counts.shortAnswers).toBe(2);
+  });
+
   it('starts with a deadline that the server freezes, and shows 10 + 3 + 1 tasks', async () => {
     const before = Date.now();
     const attempt = await startFor(student);

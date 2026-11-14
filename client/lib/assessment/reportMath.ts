@@ -62,14 +62,32 @@ export function totalsPreview(input: {
   codingMax: number | null;
   codingScore: number | null;
   passScorePct: number;
+  /** Structured assessments (Part B): the written answers' marks, null for every other test. */
+  shortMax?: number | null;
+  shortScore?: number | null;
 }) {
   const hasCoding = input.codingMax !== null;
-  const totalMax = round2(input.objectiveMax + (hasCoding ? (input.codingMax as number) : 0));
-  if (hasCoding && input.codingScore === null) return { totalMax, total: null as number | null, percentage: null as number | null, passed: null as boolean | null };
-  const total = round2(input.objectiveScore + (hasCoding ? (input.codingScore as number) : 0));
+  const hasShort = input.shortMax !== null && input.shortMax !== undefined;
+  const totalMax = round2(input.objectiveMax + (hasShort ? (input.shortMax as number) : 0) + (hasCoding ? (input.codingMax as number) : 0));
+  // No total while a part that the teacher marks by hand is still unmarked.
+  if ((hasCoding && input.codingScore === null) || (hasShort && (input.shortScore === null || input.shortScore === undefined))) {
+    return { totalMax, total: null as number | null, percentage: null as number | null, passed: null as boolean | null };
+  }
+  const total = round2(input.objectiveScore + (hasShort ? (input.shortScore as number) : 0) + (hasCoding ? (input.codingScore as number) : 0));
   if (totalMax <= 0) return { totalMax, total, percentage: 0, passed: false };
   const ratio = (total / totalMax) * 100;
   return { totalMax, total, percentage: round1(ratio), passed: ratio >= input.passScorePct };
+}
+
+/**
+ * Part B of a structured assessment while the teacher marks it: the subtotal of every written answer (null
+ * until each of its criteria is marked) and the total of Part B (null until every answer is fully marked).
+ */
+export function shortAnswersPreview(items: { rubric: PreviewRubric[] }[]): { perItem: (number | null)[]; total: number | null; max: number } {
+  const perItem = items.map((item) => rubricTotal(item.rubric));
+  const max = round2(items.reduce((sum, item) => sum + item.rubric.reduce((n, r) => n + r.maxPoints, 0), 0));
+  if (items.length === 0 || perItem.some((v) => v === null)) return { perItem, total: null, max };
+  return { perItem, total: round2((perItem as number[]).reduce((a, b) => a + b, 0)), max };
 }
 
 /** Is a typed mark acceptable for a criterion? Returns an error message or null. */

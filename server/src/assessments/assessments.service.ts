@@ -83,6 +83,7 @@ import {
   STRUCTURED_MAX_ANSWER_LENGTH,
   STRUCTURED_SUGGESTED_MINUTES,
   STRUCTURED_TIME_LIMIT_MINUTES,
+  structuredMeta,
 } from '../structured-assessments/structured.constants';
 import {
   QuestionResult,
@@ -1708,6 +1709,10 @@ export class AssessmentsService {
             ...(summary?.format === AssessmentFormat.LITTLE_CODERS_V2
               ? { lc: this.lcMeta(assessment.type) }
               : {}),
+            // Pre-University CSE: the standard header (45 marks · 40 minutes) and its three parts.
+            ...(summary?.format === AssessmentFormat.STRUCTURED_V1
+              ? { structured: structuredMeta() }
+              : {}),
           }
         : null,
       // The teacher closed this class's test before the student started it.
@@ -1794,6 +1799,9 @@ export class AssessmentsService {
       ...summary,
       ...(summary.format === AssessmentFormat.LITTLE_CODERS_V2
         ? { lc: this.lcMeta(assessment.type) }
+        : {}),
+      ...(summary.format === AssessmentFormat.STRUCTURED_V1
+        ? { structured: structuredMeta() }
         : {}),
       questions: questions.map((q, i) => ({
         id: q.id,

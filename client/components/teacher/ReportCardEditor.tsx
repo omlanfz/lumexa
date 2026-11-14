@@ -20,17 +20,20 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, Check, CheckCircle2, Copy, Loader2, Mail, Printer, RotateCcw, Save, XCircle } from 'lucide-react';
 import { approveReport, errorMessage, getReport, reopenReport, shareReport, updateReport, type ReportEdit } from '@/lib/assessment/api';
 import { formatElapsed, formatMarks, formatPercent, questionHeadline, reportStatusMeta } from '@/lib/assessment/progress';
-import { objectivePreview, rubricTotal, totalsPreview, validateMark } from '@/lib/assessment/reportMath';
+import { objectivePreview, rubricTotal, shortAnswersPreview, totalsPreview, validateMark } from '@/lib/assessment/reportMath';
 import type { ReportDetail, ReportQuestion } from '@/lib/assessment/types';
 import QuestionText from '@/components/assessment/QuestionText';
 import { themeVars } from '@/components/assessment/theme';
 import LcProjectReview from './LcProjectReview';
 import ReportStatusBadge from './ReportStatusBadge';
+import ShortAnswerMarking, { type ShortAnswerDraft } from './ShortAnswerMarking';
 
 interface Draft {
   /** per question: the teacher's decision (null = keep the automatic result) */
   overrides: Record<string, { correct: boolean | null; note: string }>;
   marks: Record<string, string>;
+  /** Structured assessments (Part B): the marks and the note of each written answer, by question id. */
+  short: Record<string, ShortAnswerDraft>;
   feedback: string;
   strengths: string;
   improvements: string;
@@ -42,9 +45,16 @@ function draftFrom(report: ReportDetail): Draft {
   for (const q of report.questions) overrides[q.questionId] = { correct: q.override?.correct ?? null, note: q.override?.note ?? '' };
   const marks: Draft['marks'] = {};
   for (const r of report.coding?.rubric ?? []) marks[r.criterion] = r.score === null ? '' : String(r.score);
+  const short: Draft['short'] = {};
+  for (const item of report.shortAnswers?.items ?? []) {
+    const itemMarks: Record<string, string> = {};
+    for (const r of item.rubric) itemMarks[r.criterion] = r.score === null ? '' : String(r.score);
+    short[item.questionId] = { marks: itemMarks, comment: item.comment ?? '' };
+  }
   return {
     overrides,
     marks,
+    short,
     feedback: report.feedback ?? '',
     strengths: report.strengths ?? '',
     improvements: report.improvements ?? '',
@@ -74,6 +84,22 @@ function buildEdit(report: ReportDetail, draft: Draft): ReportEdit | null {
     if (next !== r.score) scores.push({ criterion: r.criterion, score: next });
   }
   if (scores.length) edit.codingRubricScores = scores;
+
+  const shortMarks: NonNullable<ReportEdit['shortAnswerMarks']> = [];
+  for (const item of report.shortAnswers?.items ?? []) {
+    const d = draft.short[item.questionId];
+    if (!d) continue;
+    const changedScores: { criterion: string; score: number | null }[] = [];
+    for (const r of item.rubric) {
+      const next = parseMark(d.marks[r.criterion] ?? '');
+      if (next !== r.score) changedScores.push({ criterion: r.criterion, score: next });
+    }
+    const comment = d.comment.trim() === (item.comment ?? '').trim() ? undefined : d.comment.trim() || null;
+    if (changedScores.length || comment !== undefined) {
+      shortMarks.push({ questionId: item.questionId, ...(changedScores.length ? { scores: changedScores } : {}), ...(comment !== undefined ? { comment } : {}) });
+    }
+  }
+  if (shortMarks.length) edit.shortAnswerMarks = shortMarks;
 
   const text = (next: string, prev: string | null) => (next.trim() === (prev ?? '').trim() ? undefined : next.trim() || null);
   const feedback = text(draft.feedback, report.feedback);
@@ -137,19 +163,44 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
     const objective = objectivePreview(questions);
     const rubric = (report.coding?.rubric ?? []).map((r) => ({ criterion: r.criterion, maxPoints: r.maxPoints, score: parseMark(draft.marks[r.criterion] ?? '') }));
     const codingScore = report.coding ? rubricTotal(rubric) : null;
+    const shortItems = report.shortAnswers?.items ?? [];
+    const short = report.shortAnswers
+      ? shortAnswersPreview(
+          shortItems.map((item) => ({
+            rubric: item.rubric.map((r) => ({ criterion: r.criterion, maxPoints: r.maxPoints, score: parseMark(draft.short[item.questionId]?.marks[r.criterion] ?? '') })),
+          })),
+        )
+      : null;
     const totals = totalsPreview({
       objectiveScore: objective.score,
       objectiveMax: objective.max,
       codingMax: report.coding ? (report.coding.max ?? 0) : null,
       codingScore,
       passScorePct: report.passScorePct,
+      shortMax: short ? short.max : null,
+      shortScore: short ? short.total : null,
     });
     const markErrors: Record<string, string> = {};
     for (const r of report.coding?.rubric ?? []) {
       const m = validateMark(draft.marks[r.criterion] ?? '', r.maxPoints);
       if (m) markErrors[r.criterion] = m;
     }
-    return { objective, codingScore, totals, markErrors, hasMarkErrors: Object.keys(markErrors).length > 0 };
+    const shortErrors: Record<string, string> = {};
+    for (const item of shortItems) {
+      for (const r of item.rubric) {
+        const m = validateMark(draft.short[item.questionId]?.marks[r.criterion] ?? '', r.maxPoints);
+        if (m) shortErrors[`${item.questionId}::${r.criterion}`] = m;
+      }
+    }
+    return {
+      objective,
+      codingScore,
+      short,
+      totals,
+      markErrors,
+      shortErrors,
+      hasMarkErrors: Object.keys(markErrors).length > 0 || Object.keys(shortErrors).length > 0,
+    };
   }, [report, draft]);
 
   if (loading) {
@@ -171,6 +222,10 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
   const final = report.assessmentType === 'FINAL_TEST';
   const statusLocked = report.status === 'SHARED_WITH_PARENTS';
   const codingUnmarked = !!report.coding && preview.codingScore === null;
+  // Pre-University CSE: Part B (written answers) and Part C (the practical) are marked by hand.
+  const structured = !!report.shortAnswers;
+  const shortUnmarked = structured && preview.short?.total === null;
+  const unmarked = codingUnmarked || shortUnmarked;
   const dateTaken = new Date(report.timeline.submittedAt).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
 
   const setOverride = (q: ReportQuestion, correct: boolean | null) =>
@@ -274,9 +329,11 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
             <caption className="sr-only">Scores</caption>
             <tbody className="divide-y divide-[var(--t-border)]">
               <Score label={`Multiple choice (${preview.objective.mcqTotal} questions)`} value={`${preview.objective.mcqCorrect} / ${preview.objective.mcqTotal}`} />
-              <Score label={`True / False (${preview.objective.tfTotal} questions)`} value={`${preview.objective.tfCorrect} / ${preview.objective.tfTotal}`} />
+              {preview.objective.tfTotal > 0 && (
+                <Score label={`True / False (${preview.objective.tfTotal} questions)`} value={`${preview.objective.tfCorrect} / ${preview.objective.tfTotal}`} />
+              )}
               <Score
-                label="Objective total"
+                label={structured ? 'Part A total' : 'Objective total'}
                 strong
                 value={`${formatMarks(preview.objective.score)} / ${formatMarks(preview.objective.max)}`}
                 note={
@@ -289,9 +346,16 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
                   )
                 }
               />
+              {structured && (
+                <Score
+                  label="Part B · Short answers (marked by teacher)"
+                  value={preview.short?.total === null || !preview.short ? 'Pending manual evaluation' : `${formatMarks(preview.short.total)} / ${formatMarks(preview.short.max)}`}
+                  muted={preview.short?.total === null}
+                />
+              )}
               {report.coding && (
                 <Score
-                  label="Coding project (marked by teacher)"
+                  label={structured ? 'Part C · Practical (marked by teacher)' : "Coding project (marked by teacher)"}
                   value={preview.codingScore === null ? 'Pending manual evaluation' : `${formatMarks(preview.codingScore)} / ${formatMarks(report.coding.max)}`}
                   muted={preview.codingScore === null}
                 />
@@ -442,11 +506,39 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
         </ol>
       </section>
 
+      {/* ═══ Part B: the written answers (Pre-University CSE) ═══ */}
+      {report.shortAnswers && (
+        <section className="t-card space-y-4 p-5" aria-labelledby="short-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 id="short-title" className="font-semibold text-[var(--t-text)]">Part B · Short answers</h2>
+              <p className="text-xs text-[var(--t-text-muted)]">Read each answer, then give a mark for every criterion. The student sees the criteria and your marks once you approve.</p>
+            </div>
+            <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${shortUnmarked ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-400'}`}>
+              {shortUnmarked ? 'Pending manual evaluation' : `Evaluated · ${formatMarks(preview.short?.total ?? null)} / ${formatMarks(preview.short?.max ?? null)}`}
+            </span>
+          </div>
+          <ShortAnswerMarking
+            items={report.shortAnswers.items}
+            drafts={draft.short}
+            subtotals={preview.short?.perItem ?? []}
+            errors={preview.shortErrors}
+            editable={editable}
+            onMark={(questionId, criterion, value) =>
+              setDraft((cur) => (cur ? { ...cur, short: { ...cur.short, [questionId]: { ...(cur.short[questionId] ?? { marks: {}, comment: '' }), marks: { ...(cur.short[questionId]?.marks ?? {}), [criterion]: value } } } } : cur))
+            }
+            onComment={(questionId, value) =>
+              setDraft((cur) => (cur ? { ...cur, short: { ...cur.short, [questionId]: { ...(cur.short[questionId] ?? { marks: {}, comment: '' }), comment: value } } } : cur))
+            }
+          />
+        </section>
+      )}
+
       {/* ═══ Coding project ═══ */}
       {report.coding && (
         <section className="t-card space-y-4 p-5" aria-labelledby="coding-title">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 id="coding-title" className="font-semibold text-[var(--t-text)]">{report.coding.lc ? 'Practical project' : 'Coding project'}{report.coding.project ? ` · ${report.coding.project.title}` : ''}</h2>
+            <h2 id="coding-title" className="font-semibold text-[var(--t-text)]">{structured ? 'Part C · Practical' : report.coding.lc ? 'Practical project' : 'Coding project'}{report.coding.project ? ` · ${report.coding.project.title}` : ''}</h2>
             <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${codingUnmarked ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-400'}`}>
               {codingUnmarked ? 'Pending manual evaluation' : 'Evaluated'}
             </span>
@@ -520,7 +612,7 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
               </tbody>
               <tfoot>
                 <tr className="border-t border-[var(--t-border)]">
-                  <td className="py-2 font-semibold text-[var(--t-text)]">{report.coding.lc ? 'Practical project total' : 'Coding project total'}</td>
+                  <td className="py-2 font-semibold text-[var(--t-text)]">{structured ? 'Part C total' : report.coding.lc ? 'Practical project total' : 'Coding project total'}</td>
                   <td className="py-2 text-right font-bold tabular-nums text-[var(--t-text)]">
                     {preview.codingScore === null ? '—' : formatMarks(preview.codingScore)} / {formatMarks(report.coding.max)}
                   </td>
@@ -530,7 +622,7 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
           </div>
 
           <div>
-            <label htmlFor="coding-feedback" className="mb-1 block text-xs font-semibold text-[var(--t-text)]">{report.coding.lc ? 'Feedback on the practical project' : 'Feedback on the coding project'}</label>
+            <label htmlFor="coding-feedback" className="mb-1 block text-xs font-semibold text-[var(--t-text)]">{structured ? 'Feedback on the practical (Part C)' : report.coding.lc ? 'Feedback on the practical project' : 'Feedback on the coding project'}</label>
             <textarea
               id="coding-feedback"
               value={draft.codingFeedback}
@@ -577,9 +669,12 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
 
         {editable && (
           <>
-            {codingUnmarked && (
+            {unmarked && (
               <p className="flex items-start gap-2 text-xs text-[var(--t-warning)]">
-                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" /> Mark every rubric criterion of the {report.coding?.lc ? 'practical' : 'coding'} project to complete this report card.
+                <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                {structured
+                  ? `Mark every criterion of ${[shortUnmarked ? 'the short answers (Part B)' : '', codingUnmarked ? 'the practical (Part C)' : ''].filter(Boolean).join(' and ')} to complete this report card.`
+                  : `Mark every rubric criterion of the ${report.coding?.lc ? 'practical' : 'coding'} project to complete this report card.`}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -593,8 +688,8 @@ export default function ReportCardEditor({ reportId }: { reportId: string }) {
               {!confirmApprove ? (
                 <button
                   onClick={() => setConfirmApprove(true)}
-                  disabled={busy !== null || codingUnmarked || preview.hasMarkErrors}
-                  title={codingUnmarked ? 'Mark every rubric criterion first' : undefined}
+                  disabled={busy !== null || unmarked || preview.hasMarkErrors}
+                  title={unmarked ? 'Mark every criterion first' : undefined}
                   className="inline-flex items-center gap-2 rounded-lg bg-[var(--t-accent)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--t-accent-hover)] disabled:opacity-50"
                 >
                   <CheckCircle2 size={15} /> {final || report.coding?.lc ? 'Complete report card' : 'Approve report'}

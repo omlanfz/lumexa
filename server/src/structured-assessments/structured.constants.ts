@@ -57,6 +57,58 @@ export const STRUCTURED_MAX_ANSWER_LENGTH = 6_000;
 
 export type StructuredKind = 'COURSE_TEST' | 'FINAL_TEST';
 
+/** One part of the assessment as the intro screen and the monitors show it. */
+export interface StructuredPartMeta {
+  key: 'A' | 'B' | 'C';
+  label: string;
+  detail: string;
+  marks: number;
+  /** The suggested minutes for this part (guidance, not enforced). */
+  minutes: number;
+}
+
+/** The standard header of a structured assessment: marks, time and the three parts (like Little Coders' `lc`). */
+export interface StructuredMeta {
+  minutes: number;
+  marks: number;
+  graceSeconds: number;
+  /** Minutes the split leaves for reading everything through before the hand-in. */
+  reviewMinutes: number;
+  parts: StructuredPartMeta[];
+}
+
+export function structuredMeta(): StructuredMeta {
+  return {
+    minutes: STRUCTURED_TIME_LIMIT_MINUTES,
+    marks: STRUCTURED_MARKS.total,
+    graceSeconds: STRUCTURED_GRACE_SECONDS,
+    reviewMinutes: STRUCTURED_SUGGESTED_MINUTES.review,
+    parts: [
+      {
+        key: 'A',
+        label: 'Part A · Multiple choice',
+        detail: `${STRUCTURED_SHAPE.mcq.count} questions, ${STRUCTURED_SHAPE.mcq.marksEach} mark each. Marked automatically.`,
+        marks: STRUCTURED_MARKS.partA,
+        minutes: STRUCTURED_SUGGESTED_MINUTES.partA,
+      },
+      {
+        key: 'B',
+        label: 'Part B · Short answers',
+        detail: `${STRUCTURED_SHAPE.shortAnswer.count} written questions, ${STRUCTURED_SHAPE.shortAnswer.marksEach} marks each. Your teacher marks them.`,
+        marks: STRUCTURED_MARKS.partB,
+        minutes: STRUCTURED_SUGGESTED_MINUTES.partB,
+      },
+      {
+        key: 'C',
+        label: 'Part C · Practical problem',
+        detail: `${STRUCTURED_SHAPE.practical.count} practical task, ${STRUCTURED_SHAPE.practical.marksEach} marks. Your teacher marks it.`,
+        marks: STRUCTURED_MARKS.partC,
+        minutes: STRUCTURED_SUGGESTED_MINUTES.partC,
+      },
+    ],
+  };
+}
+
 /** The text a student reads before starting. */
 export function structuredInstructions(kind: StructuredKind): string {
   const scope =

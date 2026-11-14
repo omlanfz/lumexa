@@ -48,6 +48,7 @@ import {
 } from '../courses/curriculum-catalog.seed';
 import { canonicalCourseSlug } from '../courses/course-slug';
 import { getBankSummary } from '../assessments/bank-summary';
+import { structuredMeta } from '../structured-assessments/structured.constants';
 import { lcAssessmentMeta } from '../little-coders/assessments/lc-attempt';
 import { listPlatforms } from '../little-coders/lc.platforms';
 import { LessonVideosService } from '../little-coders/videos/lesson-videos.service';
@@ -1029,6 +1030,10 @@ export class CurriculumService {
       // Little Coders: the standardized header and sections (40 minutes · 40 marks) the launcher shows.
       ...(summary.format === AssessmentFormat.LITTLE_CODERS_V2
         ? { lc: lcAssessmentMeta(assessment.type) }
+        : {}),
+      // Pre-University CSE: the standard header (45 marks · 40 minutes) and its three parts.
+      ...(summary.format === AssessmentFormat.STRUCTURED_V1
+        ? { structured: structuredMeta() }
         : {}),
     };
   }

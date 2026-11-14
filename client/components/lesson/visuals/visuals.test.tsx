@@ -62,7 +62,11 @@ describe('every visual in the curriculum catalog', { skip: !haveServer && 'serve
       assert.ok(html.includes('lesson-visual'), `${key} / ${visual.id}: no figure`);
       assert.ok(html.includes(`aria-label="${visual.alt.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#x27;')}"`), `${key} / ${visual.id}: alt text missing`);
       assert.ok(html.includes('<figcaption>'), `${key} / ${visual.id}: caption missing`);
-      assert.ok(!/NaN|undefined|\[object Object\]|Infinity/.test(html), `${key} / ${visual.id}: broken value in output: ${(html.match(/.{30}(NaN|undefined|\[object Object\]|Infinity).{30}/) ?? [''])[0]}`);
+      // Program text (code editors, expected output) is verbatim source: a lesson about testing JavaScript
+      // legitimately shows NaN or undefined. Those programs are proved by running them (verify-code); everything
+      // else the visual draws must contain no broken number.
+      const drawn = html.replace(/<(pre|code|textarea)\b[^>]*>[\s\S]*?<\/\1>/g, ' ');
+      assert.ok(!/NaN|undefined|\[object Object\]|Infinity/.test(drawn), `${key} / ${visual.id}: broken value in output: ${(drawn.match(/[\s\S]{0,30}(NaN|undefined|\[object Object\]|Infinity)[\s\S]{0,30}/) ?? [''])[0]}`);
       assert.ok(!html.includes('not available in this version'), `${key} / ${visual.id}: no renderer`);
       // Something real was drawn (a picture, or text beyond the caption), not an empty frame.
       const text = html.replace(/<figcaption>.*?<\/figcaption>/, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();

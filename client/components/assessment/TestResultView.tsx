@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { CheckCircle2, Clock, Lock, XCircle } from 'lucide-react';
 import { elapsedMs } from '@/lib/assessment/clock';
 import { formatElapsed, formatMarks, formatPercent } from '@/lib/assessment/progress';
+import { STRUCTURED_TIME_LIMIT_MINUTES, handedInAtDeadline } from '@/lib/assessment/structured';
 import type { AttemptView } from '@/lib/assessment/types';
 import QuestionText, { OptionText } from './QuestionText';
 
@@ -20,6 +21,10 @@ export function SubmittedPanel({ attempt }: { attempt: AttemptView }) {
   // The teacher locked the test (time was up): what the student had saved was
   // submitted for them. Say so plainly — nothing they saved was lost.
   const locked = attempt.lockedByTeacher;
+  // Pre-University CSE: 10 multiple choice + 3 written answers + a practical, 40 minutes. When the clock ran out
+  // the saved work was handed in for the student (by their browser, or by the server).
+  const structured = a.format === 'STRUCTURED_V1';
+  const timeWasUp = structured && !locked && handedInAtDeadline(attempt.submittedAt, attempt.deadlineAt);
   return (
     <section
       className="mx-auto max-w-2xl space-y-4 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-5 text-center sm:p-8"
@@ -32,7 +37,9 @@ export function SubmittedPanel({ attempt }: { attempt: AttemptView }) {
         <CheckCircle2 size={38} className="mx-auto text-[var(--ar-success)]" />
       )}
       <div>
-        <h2 className="text-lg font-bold text-[var(--ar-text)]">{locked ? 'Your teacher locked the test' : 'Test submitted'}</h2>
+        <h2 className="text-lg font-bold text-[var(--ar-text)]">
+          {locked ? 'Your teacher locked the test' : structured ? (timeWasUp ? 'Time was up — your work was handed in' : 'Assessment handed in') : 'Test submitted'}
+        </h2>
         <p className="text-sm text-[var(--ar-muted)]">
           {a.title}
           {when ? ` · ${when}` : ''}
@@ -46,6 +53,12 @@ export function SubmittedPanel({ attempt }: { attempt: AttemptView }) {
             <span>Time was up, so your teacher locked the test. You can’t change your answers now.</span>
           </li>
         )}
+        {timeWasUp && (
+          <li className="flex gap-2">
+            <Clock size={16} className="mt-0.5 flex-shrink-0 text-[var(--ar-warning)]" />
+            <span>The {STRUCTURED_TIME_LIMIT_MINUTES} minutes were over, so everything you had saved was handed in automatically — nothing you saved was lost.</span>
+          </li>
+        )}
         <li className="flex gap-2">
           <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0 text-[var(--ar-success)]" />
           <span>
@@ -54,7 +67,13 @@ export function SubmittedPanel({ attempt }: { attempt: AttemptView }) {
               : `Your ${attempt.answeredCount} answer${attempt.answeredCount === 1 ? '' : 's'} (of ${a.questionCount}) were saved and graded automatically.`}
           </span>
         </li>
-        {a.hasCodingProject && (
+        {structured && (
+          <li className="flex gap-2">
+            <Clock size={16} className="mt-0.5 flex-shrink-0 text-[var(--ar-warning)]" />
+            <span>Your short answers (Part B) and your practical (Part C) were sent to your teacher, who marks them against the criteria you saw.</span>
+          </li>
+        )}
+        {a.hasCodingProject && !structured && (
           <li className="flex gap-2">
             <Clock size={16} className="mt-0.5 flex-shrink-0 text-[var(--ar-warning)]" />
             <span>
@@ -88,6 +107,8 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
   const mcqCorrect = attempt.questions.filter((q) => q.kind === 'MCQ' && q.isCorrect).length;
   const tfCorrect = attempt.questions.filter((q) => q.kind === 'TRUE_FALSE' && q.isCorrect).length;
   const lc = a.format === 'LITTLE_CODERS_V2' ? a.lc : null;
+  const structured = a.format === 'STRUCTURED_V1';
+  const partB = structured ? (r.shortAnswers ?? null) : null;
   const sectionLabel = (key: string, fallback: string) => lc?.sections.find((s) => s.key === key)?.label ?? fallback;
 
   return (
@@ -103,17 +124,27 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
           {r.passed ? `Passed (pass mark ${r.passScorePct}%)` : `Below the ${r.passScorePct}% pass mark — your teacher will help you revisit it`}
         </p>
         <dl className="mx-auto mt-4 grid max-w-md grid-cols-2 gap-2 text-left text-xs">
-          <div className="rounded-lg bg-[var(--ar-bg)] p-2.5">
-            <dt className="text-[var(--ar-faint)]">{sectionLabel('mcq', 'Multiple choice')}</dt>
+          <div className={`rounded-lg bg-[var(--ar-bg)] p-2.5 ${structured ? 'col-span-2' : ''}`}>
+            <dt className="text-[var(--ar-faint)]">{structured ? 'Part A · Multiple choice' : sectionLabel('mcq', 'Multiple choice')}</dt>
             <dd className="font-bold text-[var(--ar-text)]">{mcqCorrect} / {r.objective.mcqTotal}</dd>
           </div>
-          <div className="rounded-lg bg-[var(--ar-bg)] p-2.5">
-            <dt className="text-[var(--ar-faint)]">{sectionLabel('trueFalse', 'True / False')}</dt>
-            <dd className="font-bold text-[var(--ar-text)]">{tfCorrect} / {r.objective.trueFalseTotal}</dd>
-          </div>
+          {!structured && (
+            <div className="rounded-lg bg-[var(--ar-bg)] p-2.5">
+              <dt className="text-[var(--ar-faint)]">{sectionLabel('trueFalse', 'True / False')}</dt>
+              <dd className="font-bold text-[var(--ar-text)]">{tfCorrect} / {r.objective.trueFalseTotal}</dd>
+            </div>
+          )}
+          {partB && (
+            <div className="col-span-2 rounded-lg bg-[var(--ar-bg)] p-2.5">
+              <dt className="text-[var(--ar-faint)]">Part B · Short answers (marked by your teacher)</dt>
+              <dd className="font-bold text-[var(--ar-text)]">{formatMarks(partB.score)} / {formatMarks(partB.max)}</dd>
+            </div>
+          )}
           {r.coding && (
             <div className="col-span-2 rounded-lg bg-[var(--ar-bg)] p-2.5">
-              <dt className="text-[var(--ar-faint)]">{lc ? `${sectionLabel('practical', 'Build It!')} (marked by your teacher)` : 'Coding project (marked by your teacher)'}</dt>
+              <dt className="text-[var(--ar-faint)]">
+                {structured ? 'Part C · Practical (marked by your teacher)' : lc ? `${sectionLabel('practical', 'Build It!')} (marked by your teacher)` : 'Coding project (marked by your teacher)'}
+              </dt>
               <dd className="font-bold text-[var(--ar-text)]">{formatMarks(r.coding.score)} / {formatMarks(r.coding.max)}</dd>
             </div>
           )}
@@ -131,9 +162,43 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
           </section>
         )}
 
+        {partB && partB.items.length > 0 && (
+          <section className="space-y-3 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-4 text-sm" data-testid="part-b-result">
+            <h3 className="font-semibold text-[var(--ar-text)]">Part B · Short answers</h3>
+            <ol className="space-y-4">
+              {partB.items.map((item) => (
+                <li key={item.questionId} className="space-y-2 rounded-lg border border-[var(--ar-border)] bg-[var(--ar-bg)] p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] text-[var(--ar-faint)]">Short answer {item.order}</p>
+                      <QuestionText text={item.prompt} className="text-sm text-[var(--ar-text)]" />
+                    </div>
+                    <p className="flex-shrink-0 rounded-full border border-[var(--ar-border-strong)] px-2.5 py-0.5 text-xs font-bold tabular-nums text-[var(--ar-text)]">
+                      {formatMarks(item.score)} / {item.maxScore}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-[var(--ar-faint)]">Your answer</p>
+                    <p className="whitespace-pre-wrap break-words text-xs text-[var(--ar-text)]">{item.answer.trim() ? item.answer : 'No answer'}</p>
+                  </div>
+                  <ul className="space-y-0.5 text-xs text-[var(--ar-muted)]">
+                    {item.rubric.map((c) => (
+                      <li key={c.criterion} className="flex justify-between gap-3">
+                        <span>{c.criterion}</span>
+                        <span className="tabular-nums">{formatMarks(c.score)} / {c.maxPoints}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {item.comment && <p className="whitespace-pre-wrap text-xs text-[var(--ar-text)]">💬 {item.comment}</p>}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
         {r.coding && (r.coding.feedback || (r.coding.rubric && r.coding.rubric.length > 0)) && (
           <section className="space-y-2 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-4 text-sm">
-            <h3 className="font-semibold text-[var(--ar-text)]">{lc ? 'Practical project feedback' : 'Coding project feedback'}</h3>
+            <h3 className="font-semibold text-[var(--ar-text)]">{structured ? 'Part C · Practical feedback' : lc ? 'Practical project feedback' : 'Coding project feedback'}</h3>
             {r.coding.rubric && (
               <ul className="space-y-0.5 text-xs text-[var(--ar-muted)]">
                 {r.coding.rubric.map((c) => (
@@ -154,7 +219,7 @@ export function ResultsPanel({ attempt }: { attempt: AttemptView }) {
           className="w-full rounded-lg border border-[var(--ar-border-strong)] px-4 py-2 text-sm font-medium text-[var(--ar-text)] hover:bg-[var(--ar-surface)]"
           aria-expanded={showAnswers}
         >
-          {showAnswers ? 'Hide my answers' : 'Review my answers'}
+          {showAnswers ? (structured ? 'Hide Part A' : 'Hide my answers') : structured ? 'Review Part A (multiple choice)' : 'Review my answers'}
         </button>
 
         {showAnswers && (

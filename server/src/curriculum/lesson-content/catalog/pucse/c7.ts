@@ -1636,7 +1636,7 @@ print("Mathematics is taught by", maths.teacher.name, "and has", len(maths.enrol
     table(
       'test-cases',
       'Software testing',
-      'A table of eight test cases for the rule that a score is a whole number from 0 to 100. Normal: 72 is accepted. Boundary: 0 and 100 are accepted, and -1 and 101 are refused. Invalid: 85.5, the text "90" and NaN are refused.',
+      'A table of eight test cases for the rule that a score is a whole number from 0 to 100. Normal: 72 is accepted. Boundary: 0 and 100 are accepted, and -1 and 101 are refused. Invalid: 85.5, the text "90" and the special not-a-number value are refused.',
       'Choose cases in three kinds. The boundary cases are the ones that find off-by-one errors.',
       ['Kind of case', 'Input', 'Expected result', 'Why it is tested'],
       [
@@ -1647,7 +1647,7 @@ print("Mathematics is taught by", maths.teacher.name, "and has", len(maths.enrol
         ['Boundary', '101', 'refused', 'just above the range'],
         ['Invalid', '85.5', 'refused', 'a score is a whole number'],
         ['Invalid', '"90"', 'refused', 'text is not a number'],
-        ['Invalid', 'NaN', 'refused', 'not a number at all'],
+        ['Invalid', 'the not-a-number value', 'refused', 'not a number at all'],
       ],
       { at: 'end', highlights: [{ row: 0, col: 2, tone: 'good' }, { row: 1, col: 2, tone: 'good' }, { row: 2, col: 2, tone: 'good' }, { row: 3, col: 2, tone: 'warn' }, { row: 4, col: 2, tone: 'warn' }, { row: 5, col: 2, tone: 'warn' }, { row: 6, col: 2, tone: 'warn' }, { row: 7, col: 2, tone: 'warn' }] },
     ),

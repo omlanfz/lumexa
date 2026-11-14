@@ -276,6 +276,8 @@ export interface TestReportEmailParams {
     trueFalse: { correct: number; total: number };
   };
   coding: { score: number; max: number } | null;
+  /** Pre-University CSE: Part B, the written answers the teacher marked (null/absent for every other test). */
+  shortAnswers?: { score: number; max: number } | null;
   /** How the practical's row is named (Little Coders: "Practical project …"). Defaults to the coding project wording. */
   codingLabel?: string;
   total: number;
@@ -313,6 +315,9 @@ export function testReportEmail(params: TestReportEmailParams) {
     : `Below the ${params.passScorePct}% pass mark — a good chance to revisit the topics together`;
   const row = (label: string, value: string) =>
     `<tr><td style="padding: 8px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">${escapeHtml(label)}</td><td style="padding: 8px 0; text-align: right; font-weight: 600; border-bottom: 1px solid #e2e8f0;">${value}</td></tr>`;
+  // A structured assessment (Pre-University CSE) is three parts: Part A is the multiple choice, Part B the
+  // written answers and Part C the practical — there are no True/False questions in it.
+  const parts = !!params.shortAnswers;
 
   return {
     subject: `${params.studentName}'s ${params.testTitle} report card`,
@@ -327,12 +332,20 @@ export function testReportEmail(params: TestReportEmailParams) {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size: 14px;">
             ${row('Assessment', `${escapeHtml(params.testTypeLabel)}`)}
             ${row('Date taken', escapeHtml(formatDateTime(params.submittedAt)))}
-            ${row(
-              `Objective questions (${params.objective.mcq.total} multiple-choice + ${params.objective.trueFalse.total} True/False)`,
-              `${fmt(params.objective.score)} / ${fmt(params.objective.max)}`,
-            )}
-            ${row('Multiple-choice correct', `${params.objective.mcq.correct} / ${params.objective.mcq.total}`)}
-            ${row('True/False correct', `${params.objective.trueFalse.correct} / ${params.objective.trueFalse.total}`)}
+            ${
+              parts
+                ? row(
+                    `Part A — Multiple choice (${params.objective.mcq.total} questions)`,
+                    `${fmt(params.objective.score)} / ${fmt(params.objective.max)}`,
+                  )
+                : row(
+                    `Objective questions (${params.objective.mcq.total} multiple-choice + ${params.objective.trueFalse.total} True/False)`,
+                    `${fmt(params.objective.score)} / ${fmt(params.objective.max)}`,
+                  ) +
+                  row('Multiple-choice correct', `${params.objective.mcq.correct} / ${params.objective.mcq.total}`) +
+                  row('True/False correct', `${params.objective.trueFalse.correct} / ${params.objective.trueFalse.total}`)
+            }
+            ${params.shortAnswers ? row('Part B — Short answers (marked by the teacher)', `${fmt(params.shortAnswers.score)} / ${fmt(params.shortAnswers.max)}`) : ''}
             ${params.coding ? row(params.codingLabel ?? 'Coding project (marked by the teacher)', `${fmt(params.coding.score)} / ${fmt(params.coding.max)}`) : ''}
             ${row('Total', `${fmt(params.total)} / ${fmt(params.totalMax)}`)}
             <tr><td style="padding: 12px 0 8px; font-weight: 700;">Percentage</td><td style="padding: 12px 0 8px; text-align: right; font-size: 20px; font-weight: 800; color: ${resultColor};">${fmt(params.percentage)}%</td></tr>

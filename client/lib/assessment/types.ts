@@ -8,6 +8,8 @@ import type { LcAssessmentFile, LcAssessmentMeta, LcPracticalSpec } from '../lit
 export type QuestionKind = 'MCQ' | 'TRUE_FALSE';
 export type AttemptStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'GRADED';
 export type TestType = 'COURSE_TEST' | 'STAGE_TEST' | 'FINAL_TEST';
+/** STANDARD; LITTLE_CODERS_V2 (10 MCQ + 5 True/False + a practical project); STRUCTURED_V1 (Pre-University CSE: 10 MCQ + 3 short answers + 1 practical, 45 marks, 40 minutes). */
+export type AssessmentFormat = 'STANDARD' | 'LITTLE_CODERS_V2' | 'STRUCTURED_V1';
 export type ReportStatus = 'PENDING_REVIEW' | 'PENDING_CODE_EVALUATION' | 'READY_TO_SHARE' | 'SHARED_WITH_PARENTS';
 
 export interface AttemptQuestion {
@@ -57,7 +59,50 @@ export interface CodingProject {
   lc?: PracticalLc;
 }
 
+/** One written (Part B) question of a structured assessment, as the student sees it while taking the test. */
+export interface StructuredShortAnswer {
+  id: string;
+  order: number;
+  prompt: string;
+  maxScore: number;
+  /** The names and marks of the criteria — never what the teacher looks for. */
+  criteria: { criterion: string; maxPoints: number }[];
+  answer: string;
+  savedAt: string | null;
+}
+
+/** Everything a structured assessment needs besides the multiple-choice questions. */
+export interface StructuredAttemptInfo {
+  timeLimitMinutes: number;
+  graceSeconds: number;
+  suggestedMinutes: { partA: number; partB: number; partC: number; review: number };
+  maxAnswerLength: number;
+  marks: { partA: number; partB: number; partC: number; total: number };
+  shortAnswers: StructuredShortAnswer[];
+  practical: { deliverables: string[]; sqlSetup?: string } | null;
+}
+
+/** The released Part B of a structured assessment: the student's answers with the teacher's marks. */
+export interface ResultShortAnswers {
+  score: number | null;
+  max: number | null;
+  items: {
+    questionId: string;
+    order: number;
+    prompt: string;
+    answer: string;
+    maxScore: number;
+    score: number | null;
+    comment: string | null;
+    rubric: { criterion: string; maxPoints: number; score: number | null }[];
+    /** Staff only. */
+    modelAnswer?: string | null;
+  }[];
+}
+
 export interface AttemptResult {
+  /** Structured assessments: Part B. */
+  shortAnswers?: ResultShortAnswers | null;
   status: ReportStatus;
   objective: { score: number; max: number; mcqTotal: number; trueFalseTotal: number; autoScore?: number };
   coding: { score: number | null; max: number | null; feedback: string | null; rubric: { criterion: string; maxPoints: number; score: number | null }[] | null } | null;
@@ -91,7 +136,7 @@ export interface AttemptView {
     trueFalseCount: number;
     totalMarks: number;
     /** STANDARD, or LITTLE_CODERS_V2 (10 MCQs + 5 True/False + a 25-mark practical project). */
-    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    format?: AssessmentFormat;
     /** Little Coders: the standardized header and sections. */
     lc?: LcAssessmentMeta | null;
   };
@@ -111,6 +156,9 @@ export interface AttemptView {
   /** Added by lib/assessment/api: server clock minus this computer's clock
    *  (ms), so the stopwatch is right even when the local clock is not. */
   clockOffsetMs: number;
+  /** Structured assessments: when the student's time runs out (frozen by the server at the start). */
+  deadlineAt?: string | null;
+  structured?: StructuredAttemptInfo | null;
   report: { id: string; status: ReportStatus } | null;
   result: AttemptResult | null;
 }
@@ -126,6 +174,17 @@ export interface AttemptState {
   lockedByTeacher: boolean;
   serverTime: string;
   clockOffsetMs: number;
+  /** Structured assessments: when the time runs out. */
+  deadlineAt?: string | null;
+}
+
+/** The standard header of a structured assessment: marks, time and its three parts (the server's structuredMeta()). */
+export interface StructuredMeta {
+  minutes: number;
+  marks: number;
+  graceSeconds: number;
+  reviewMinutes: number;
+  parts: { key: 'A' | 'B' | 'C'; label: string; detail: string; marks: number; minutes: number }[];
 }
 
 export interface LessonTestStatus {
@@ -136,11 +195,13 @@ export interface LessonTestStatus {
     type: TestType;
     title: string;
     isPublished: boolean;
-    counts: { mcq: number; trueFalse: number; practical: number };
+    counts: { mcq: number; trueFalse: number; practical: number; shortAnswers?: number };
     totalMarks: number;
     meetsStandard: boolean;
-    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    format?: AssessmentFormat;
     lc?: LcAssessmentMeta;
+    /** STRUCTURED_V1 only. */
+    structured?: StructuredMeta;
   } | null;
   /** The teacher closed this class's test before the student started it. */
   closedAt: string | null;
@@ -197,7 +258,7 @@ export interface ClassTestOverview {
     counts: { mcq: number; trueFalse: number; practical: number };
     totalMarks: number;
     meetsStandard: boolean;
-    format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+    format?: AssessmentFormat;
     /** Little Coders: the version of the practical this assessment gives by default, and this class's own choice. */
     activeVariant?: string | null;
     classVariant?: string | null;
@@ -285,6 +346,21 @@ export interface ReportDetail {
     unanswered: number;
   };
   questions: ReportQuestion[];
+  /** Structured assessments: Part B, the written answers and the teacher's rubric marks. */
+  shortAnswers?: {
+    score: number | null;
+    max: number | null;
+    items: {
+      questionId: string;
+      order: number;
+      prompt: string;
+      answer: string;
+      maxScore: number;
+      rubric: ReportRubricScore[];
+      comment: string | null;
+      modelAnswer: string | null;
+    }[];
+  } | null;
   coding: {
     project: { questionId: string; title: string; instructions: string; language: string; code: string; savedAt: string | null } | null;
     rubric: ReportRubricScore[];
@@ -337,6 +413,10 @@ export interface ReportListItem {
   courseTitle: string;
   submittedAt: string;
   hasCodingProject: boolean;
+  /** Pre-University CSE: the report has written answers (Part B) that the teacher marks. */
+  hasShortAnswers?: boolean;
+  shortAnswerScore?: number | null;
+  shortAnswerMaxScore?: number | null;
   objectiveScore: number;
   autoObjectiveScore: number;
   objectiveMaxScore: number;

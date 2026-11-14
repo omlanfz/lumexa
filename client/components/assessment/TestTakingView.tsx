@@ -712,7 +712,7 @@ export default function TestTakingView({
 
 // ── One question ────────────────────────────────────────────────────────────
 
-function QuestionCard({
+export function QuestionCard({
   question,
   number,
   total,
@@ -1037,7 +1037,7 @@ function SaveHint({ state, answered }: { state: string | undefined; answered: bo
   return <span className="text-[var(--ar-faint)]">Choose one answer</span>;
 }
 
-function Badge({ tone, icon, children }: { tone: 'ok' | 'muted' | 'danger'; icon: React.ReactNode; children: React.ReactNode }) {
+export function Badge({ tone, icon, children }: { tone: 'ok' | 'muted' | 'danger'; icon: React.ReactNode; children: React.ReactNode }) {
   const cls =
     tone === 'ok'
       ? 'border-[var(--ar-success)]/40 text-[var(--ar-success)]'

@@ -14,12 +14,14 @@ import {
 import { MARKS_PER_QUESTION, TEST_SHAPES } from './bank/bank.constants';
 import { rootBankId } from './linked-assessment';
 import { LC_ASSESSMENT } from '../little-coders/lc.constants';
+import { STRUCTURED_MARKS, STRUCTURED_SHAPE } from '../structured-assessments/structured.constants';
 
 export interface BankSummary {
-  counts: { mcq: number; trueFalse: number; practical: number };
+  /** `shortAnswers` is present for a structured assessment only. */
+  counts: { mcq: number; trueFalse: number; practical: number; shortAnswers?: number };
   totalMarks: number;
   meetsStandard: boolean;
-  /** How the test is taken: STANDARD, or LITTLE_CODERS_V2 (10 + 5 + a 25-mark practical). */
+  /** How the test is taken: STANDARD, LITTLE_CODERS_V2 (10 + 5 + a 25-mark practical) or STRUCTURED_V1 (10 + 3 + 1 = 45 marks). */
   format: AssessmentFormat;
 }
 
@@ -65,6 +67,41 @@ export async function getBankSummary(
         trueFalse === LC_ASSESSMENT.trueFalse.count &&
         practical === wantPractical,
       format: AssessmentFormat.LITTLE_CODERS_V2,
+    };
+  }
+  // Pre-University CSE: 10 multiple choice (10) + 3 short answers (15) + one practical (20) = 45 marks.
+  // The marks are those of the questions themselves, so an edited bank is reported as it really is.
+  if (root?.format === AssessmentFormat.STRUCTURED_V1) {
+    const [shorts, practicals] = await Promise.all([
+      prisma.shortAnswerQuestion.findMany({
+        where: { assessmentId: rootId, isPublished: true },
+        select: { maxScore: true },
+      }),
+      prisma.practicalQuestion.findMany({
+        where: { assessmentId: rootId, isPublished: true },
+        select: { maxScore: true },
+      }),
+    ]);
+    const partA = mcq * STRUCTURED_SHAPE.mcq.marksEach;
+    const partB = shorts.reduce((sum, q) => sum + q.maxScore, 0);
+    const partC = practicals.reduce((sum, q) => sum + q.maxScore, 0);
+    return {
+      counts: {
+        mcq,
+        trueFalse,
+        practical: practicals.length,
+        shortAnswers: shorts.length,
+      },
+      totalMarks: partA + partB + partC,
+      meetsStandard:
+        mcq === STRUCTURED_SHAPE.mcq.count &&
+        trueFalse === 0 &&
+        shorts.length === STRUCTURED_SHAPE.shortAnswer.count &&
+        practicals.length === STRUCTURED_SHAPE.practical.count &&
+        partA === STRUCTURED_MARKS.partA &&
+        partB === STRUCTURED_MARKS.partB &&
+        partC === STRUCTURED_MARKS.partC,
+      format: AssessmentFormat.STRUCTURED_V1,
     };
   }
   const shape =

@@ -154,9 +154,17 @@ export default function TestEvaluationsList({ studentUserId }: { studentUserId?:
                         </span>
                       )}
                     </p>
+                    {r.hasShortAnswers && (
+                      <p>
+                        Part B{' '}
+                        <span className="font-semibold text-[var(--t-text)]">
+                          {r.shortAnswerScore === null || r.shortAnswerScore === undefined ? 'not marked' : `${formatMarks(r.shortAnswerScore)}/${formatMarks(r.shortAnswerMaxScore ?? null)}`}
+                        </span>
+                      </p>
+                    )}
                     {r.hasCodingProject && (
                       <p>
-                        Coding{' '}
+                        {r.hasShortAnswers ? 'Part C' : 'Coding'}{' '}
                         <span className="font-semibold text-[var(--t-text)]">
                           {r.codingScore === null ? 'not marked' : `${formatMarks(r.codingScore)}/${formatMarks(r.codingMaxScore)}`}
                         </span>

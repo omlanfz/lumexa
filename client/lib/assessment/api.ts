@@ -69,11 +69,17 @@ export const saveAnswer = (attemptId: string, questionId: string, selectedIndex:
 export const saveCode = (attemptId: string, questionId: string, code: string) =>
   api.post(`/assessments/attempts/${attemptId}/code`, { questionId, code }).then((r) => r.data);
 
+/** Structured assessments, Part B: autosave of one written answer. */
+export const saveShortAnswer = (attemptId: string, questionId: string, answer: string) =>
+  api.post<{ saved: boolean; savedAt: string }>(`/assessments/attempts/${attemptId}/short-answers`, { questionId, answer }).then((r) => r.data);
+
 export const submitAttempt = (
   attemptId: string,
   payload: {
     answers: { questionId: string; selectedIndex: number | null }[];
     practical?: { questionId: string; code: string }[];
+    /** Structured assessments: the latest written answers travel with the hand-in. */
+    shortAnswers?: { questionId: string; answer: string }[];
     /** Little Coders: the latest links and note travel with the submission (the files are already uploaded). */
     project?: { questionId: string; links: string[]; note?: string };
   },
@@ -135,7 +141,7 @@ export interface TestPreview {
   counts: { mcq: number; trueFalse: number; practical: number };
   totalMarks: number;
   meetsStandard: boolean;
-  format?: 'STANDARD' | 'LITTLE_CODERS_V2';
+  format?: import('./types.ts').AssessmentFormat;
   questions: { id: string; order: number; kind: 'MCQ' | 'TRUE_FALSE'; text: string; options: string[]; correctIndex?: number; explanation?: string | null }[];
   codingProjects: {
     id: string;
@@ -163,6 +169,8 @@ export const getReport = (id: string) => api.get<ReportDetail>(`/test-reports/${
 export interface ReportEdit {
   questionOverrides?: { questionId: string; correct: boolean | null; note?: string | null }[];
   codingRubricScores?: { criterion: string; score: number | null }[];
+  /** Structured assessments: the marks of Part B, criterion by criterion, and a note for the student. */
+  shortAnswerMarks?: { questionId: string; scores?: { criterion: string; score: number | null }[]; comment?: string | null }[];
   feedback?: string | null;
   strengths?: string | null;
   improvements?: string | null;

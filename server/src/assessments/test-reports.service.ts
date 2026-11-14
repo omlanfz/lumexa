@@ -104,6 +104,9 @@ const LIST_SELECT = {
   courseTitle: true,
   submittedAt: true,
   hasCodingProject: true,
+  hasShortAnswers: true,
+  shortAnswerScore: true,
+  shortAnswerMaxScore: true,
   objectiveScore: true,
   autoObjectiveScore: true,
   objectiveMaxScore: true,
@@ -284,7 +287,8 @@ export class TestReportsService {
       return {
         ...r,
         littleCoders: lc,
-        typeLabel: typeLabelFor(r.assessmentType, lc),
+        // Little Coders and Pre-University CSE call their tests "assessments".
+        typeLabel: typeLabelFor(r.assessmentType, lc || r.hasShortAnswers),
         needsAction: PENDING.includes(r.status),
       };
     });
@@ -453,7 +457,10 @@ export class TestReportsService {
       status: report.status,
       assessmentType: report.assessmentType,
       littleCoders: isLittleCoders,
-      typeLabel: typeLabelFor(report.assessmentType, isLittleCoders),
+      typeLabel: typeLabelFor(
+        report.assessmentType,
+        isLittleCoders || report.hasShortAnswers,
+      ),
       testTitle: report.testTitle,
       courseTitle: report.courseTitle,
       student: {
@@ -964,7 +971,10 @@ export class TestReportsService {
         teacherName: report.teacher.user.fullName,
         courseTitle: report.courseTitle,
         testTitle: report.testTitle,
-        testTypeLabel: typeLabelFor(report.assessmentType, isLittleCoders),
+        testTypeLabel: typeLabelFor(
+          report.assessmentType,
+          isLittleCoders || report.hasShortAnswers,
+        ),
         submittedAt: report.submittedAt,
         objective: {
           score: objective.score,
@@ -981,6 +991,19 @@ export class TestReportsService {
             : null,
         ...(isLittleCoders
           ? { codingLabel: 'Practical project (marked by the teacher)' }
+          : {}),
+        // Pre-University CSE: Part B (written answers) and Part C (the practical) are marked by hand.
+        ...(report.hasShortAnswers
+          ? {
+              shortAnswers:
+                report.shortAnswerScore !== null
+                  ? {
+                      score: report.shortAnswerScore,
+                      max: report.shortAnswerMaxScore ?? 0,
+                    }
+                  : null,
+              codingLabel: 'Part C — Practical (marked by the teacher)',
+            }
           : {}),
         total: report.totalScore,
         totalMax: report.totalMaxScore,

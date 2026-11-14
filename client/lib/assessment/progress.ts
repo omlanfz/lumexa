@@ -39,8 +39,8 @@ export function kindLabel(kind: QuestionKind): string {
 }
 
 export function testTypeLabel(type: TestType | string, format?: string): string {
-  // Little Coders calls its tests "assessments".
-  if (format === 'LITTLE_CODERS_V2') {
+  // Little Coders and Pre-University CSE call their tests "assessments".
+  if (format === 'LITTLE_CODERS_V2' || format === 'STRUCTURED_V1') {
     if (type === 'COURSE_TEST') return 'Course Assessment';
     if (type === 'FINAL_TEST') return 'Final Assessment';
   }
@@ -63,7 +63,7 @@ export function reportStatusMeta(status: ReportStatus): { label: string; tone: T
     case 'PENDING_REVIEW':
       return { label: 'Pending Review', tone: 'warning', hint: 'Auto-graded. Review it, adjust if needed, then approve.' };
     case 'PENDING_CODE_EVALUATION':
-      return { label: 'Pending Code Evaluation', tone: 'warning', hint: 'The objective part is graded. Mark the coding project to complete the report.' };
+      return { label: 'Pending Code Evaluation', tone: 'warning', hint: 'The objective part is graded. Mark the coding project (and the written answers, if there are any) to complete the report.' };
     case 'READY_TO_SHARE':
       return { label: 'Ready to Share', tone: 'info', hint: 'Approved. Share it with the parent when you are ready.' };
     case 'SHARED_WITH_PARENTS':

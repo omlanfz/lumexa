@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { objectivePreview, rubricTotal, totalsPreview, validateMark, type PreviewQuestion } from './reportMath.ts';
+import { objectivePreview, rubricTotal, shortAnswersPreview, totalsPreview, validateMark, type PreviewQuestion } from './reportMath.ts';
 
 // The SAME vectors are asserted server-side in assessment-grading.spec.ts.
 
@@ -57,4 +57,32 @@ test('validateMark', () => {
   assert.equal(validateMark('-1', 5), 'Cannot be negative.');
   assert.equal(validateMark('abc', 5), 'Enter a number.');
   assert.equal(validateMark('1.234', 5), 'Use at most 2 decimals.');
+});
+
+// Structured assessments (Pre-University CSE): the SAME vectors are asserted server-side in
+// structured.grading.spec.ts — 10 + 15 + 20 = 45 marks.
+test('structured: 8/10 + 12/15 + 15/20 = 35/45 = 77.8%', () => {
+  const t = totalsPreview({ objectiveScore: 8, objectiveMax: 10, shortMax: 15, shortScore: 12, codingMax: 20, codingScore: 15, passScorePct: 40 });
+  assert.deepEqual(t, { totalMax: 45, total: 35, percentage: 77.8, passed: true });
+});
+
+test('structured: no total while Part B or Part C is unmarked, but the maximum is still 45', () => {
+  const noB = totalsPreview({ objectiveScore: 8, objectiveMax: 10, shortMax: 15, shortScore: null, codingMax: 20, codingScore: 15, passScorePct: 40 });
+  assert.deepEqual(noB, { totalMax: 45, total: null, percentage: null, passed: null });
+  const noC = totalsPreview({ objectiveScore: 8, objectiveMax: 10, shortMax: 15, shortScore: 12, codingMax: 20, codingScore: null, passScorePct: 40 });
+  assert.deepEqual(noC, { totalMax: 45, total: null, percentage: null, passed: null });
+});
+
+test('a test without short answers is unchanged by the new fields', () => {
+  assert.deepEqual(totalsPreview({ objectiveScore: 7, objectiveMax: 10, codingMax: null, codingScore: null, passScorePct: 60 }), { totalMax: 10, total: 7, percentage: 70, passed: true });
+  assert.deepEqual(totalsPreview({ objectiveScore: 7, objectiveMax: 10, codingMax: null, codingScore: null, passScorePct: 60, shortMax: null, shortScore: null }), { totalMax: 10, total: 7, percentage: 70, passed: true });
+});
+
+test('Part B adds the criteria of each answer and is null until all are marked', () => {
+  const answer = (marks: (number | null)[], maxes: number[]) => ({ rubric: marks.map((score, i) => ({ criterion: `c${i}`, maxPoints: maxes[i], score })) });
+  const done = shortAnswersPreview([answer([2, 2, 1], [2, 2, 1]), answer([3, 1.5], [3, 2]), answer([2, 2, 1], [2, 2, 1])]);
+  assert.deepEqual(done, { perItem: [5, 4.5, 5], total: 14.5, max: 15 });
+  const partial = shortAnswersPreview([answer([2, 2, 1], [2, 2, 1]), answer([3, null], [3, 2]), answer([2, 2, 1], [2, 2, 1])]);
+  assert.deepEqual(partial, { perItem: [5, null, 5], total: null, max: 15 });
+  assert.deepEqual(shortAnswersPreview([]), { perItem: [], total: null, max: 0 });
 });

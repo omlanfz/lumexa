@@ -22,9 +22,11 @@ import Link from 'next/link';
 import { AlertTriangle, ClipboardList, Loader2, Lock, Play, RefreshCw } from 'lucide-react';
 import { errorMessage, getAttempt, getAttemptState, getTestStatus, startAttempt } from '@/lib/assessment/api';
 import { testTypeLabel } from '@/lib/assessment/progress';
+import { isStructured, pastGrace } from '@/lib/assessment/structured';
 import { HEARTBEAT_EVERY_MS, clearTestTabHeartbeat, writeTestTabHeartbeat } from '@/lib/assessment/testTab';
 import type { AttemptView, LessonTestStatus } from '@/lib/assessment/types';
 import { themeVars } from './theme';
+import StructuredTestView from './StructuredTestView';
 import TestTakingView from './TestTakingView';
 import { ResultsPanel, SubmittedPanel } from './TestResultView';
 
@@ -134,7 +136,9 @@ export default function AssessmentRunner({
     if (!attemptId) return;
     try {
       const state = await getAttemptState(attemptId);
-      if (state.status !== 'IN_PROGRESS') setAttempt(await getAttempt(attemptId));
+      // A structured test whose time (and the server's short grace) is over is handed in by the server the
+      // next time anyone reads it, so read it rather than wait for the sweeper.
+      if (state.status !== 'IN_PROGRESS' || pastGrace(state.deadlineAt, Date.now(), state.clockOffsetMs)) setAttempt(await getAttempt(attemptId));
     } catch {
       /* transient — the next tick tries again */
     }
@@ -204,7 +208,11 @@ export default function AssessmentRunner({
   if (!loading && !loadError && status?.assessment && attempt?.status === 'IN_PROGRESS') {
     return (
       <div className="@container/runner w-full text-[var(--ar-text)]" style={themeVars('page')}>
-        <TestTakingView key={attempt.id} attempt={attempt} onSubmitted={setAttempt} onClosed={() => void recheck()} />
+        {isStructured(attempt.assessment.format) && attempt.structured ? (
+          <StructuredTestView key={attempt.id} attempt={attempt} onSubmitted={setAttempt} onClosed={() => void recheck()} />
+        ) : (
+          <TestTakingView key={attempt.id} attempt={attempt} onSubmitted={setAttempt} onClosed={() => void recheck()} />
+        )}
       </div>
     );
   }
@@ -257,6 +265,9 @@ function Intro({
   onStart: () => void;
 }) {
   const a = status.assessment!;
+  if (a.format === 'STRUCTURED_V1' && a.structured) {
+    return <StructuredIntro status={status} starting={starting} startError={startError} onStart={onStart} />;
+  }
   const objective = a.counts.mcq + a.counts.trueFalse;
   const empty = objective === 0;
   const parts: string[] = [];
@@ -347,6 +358,96 @@ function Intro({
           >
             {starting ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
             {starting ? 'Starting…' : startError ? 'Try again' : 'Start test'}
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
+
+function StructuredIntro({
+  status,
+  starting,
+  startError,
+  onStart,
+}: {
+  status: LessonTestStatus;
+  starting: boolean;
+  startError: string | null;
+  onStart: () => void;
+}) {
+  const a = status.assessment!;
+  const meta = a.structured!;
+  const empty = !a.meetsStandard;
+  return (
+    <section className="space-y-4 rounded-xl border border-[var(--ar-border)] bg-[var(--ar-surface)] p-5 sm:p-6" data-testid="structured-intro">
+      <div className="flex items-start gap-3">
+        <ClipboardList size={28} className="mt-0.5 flex-shrink-0 text-[var(--ar-accent)]" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ar-faint)]">{testTypeLabel(a.type, a.format)}</p>
+          <h2 className="text-lg font-bold leading-tight text-[var(--ar-text)]">{a.title}</h2>
+        </div>
+      </div>
+
+      {empty ? (
+        <p role="alert" className="rounded-lg border border-[var(--ar-warning)]/40 bg-[var(--ar-warning)]/10 px-3 py-2 text-sm">
+          This assessment is not complete yet. Please tell your teacher so Lumexa Operations can fix it.
+        </p>
+      ) : (
+        <>
+          <div className="rounded-xl border border-[var(--ar-border-strong)] bg-[var(--ar-bg)] p-4">
+            <p className="text-xl font-extrabold leading-tight text-[var(--ar-text)]">
+              {meta.marks} marks · {meta.minutes} minutes
+            </p>
+            <ul className="mt-3 space-y-1.5 text-sm" aria-label="The three parts of this assessment">
+              {meta.parts.map((p) => (
+                <li key={p.key} className="flex items-start justify-between gap-3 rounded-lg bg-[var(--ar-surface)] px-3 py-1.5">
+                  <span className="min-w-0">
+                    <strong className="text-[var(--ar-text)]">{p.label}</strong>
+                    <span className="block text-xs text-[var(--ar-muted)]">{p.detail}</span>
+                  </span>
+                  <span className="flex-shrink-0 text-right text-xs font-semibold tabular-nums text-[var(--ar-text)]">
+                    {p.marks} marks · ~{p.minutes} min
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <ul className="space-y-1.5 text-sm text-[var(--ar-text)]">
+            <li>
+              ⏱ The countdown starts at <strong>{meta.minutes}:00</strong> when you press Start, and it follows <strong>Lumexa&apos;s clock</strong>, not your computer&apos;s.
+              You are told at 10, 5 and 1 minute. At <strong>00:00</strong> everything you saved is handed in for you.
+            </li>
+            <li>
+              💾 Your answers <strong>save automatically</strong>. If you refresh the page you continue where you left off — the clock keeps running.
+            </li>
+            <li>
+              ✍️ You can move between the parts and change any answer until the time is up. Hand in early only when you are finished.
+            </li>
+            <li>
+              🔒 When you hand in, the assessment is locked. Your teacher marks Parts B and C, then shares your result.
+            </li>
+          </ul>
+          {!a.isPublished && (
+            <p role="alert" className="rounded-lg border border-[var(--ar-warning)]/40 bg-[var(--ar-warning)]/10 px-3 py-2 text-sm">
+              This assessment hasn&apos;t been opened for students yet. Ask your teacher.
+            </p>
+          )}
+          {startError && (
+            <p role="alert" className="flex items-start gap-2 rounded-lg border border-[var(--ar-danger)]/40 bg-[var(--ar-danger)]/10 px-3 py-2 text-sm">
+              <AlertTriangle size={16} className="mt-0.5 flex-shrink-0 text-[var(--ar-danger)]" />
+              {startError}
+            </p>
+          )}
+          <button
+            type="button"
+            data-testid="start-test"
+            onClick={onStart}
+            disabled={starting || !a.isPublished}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--ar-accent)] px-4 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {starting ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+            {starting ? 'Starting…' : startError ? 'Try again' : `Start — ${meta.minutes} minutes`}
           </button>
         </>
       )}
